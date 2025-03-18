@@ -31,6 +31,7 @@ logger = init_logger(__name__)
 # yapf: disable
 _TEXT_GENERATION_MODELS = {
     # [Decoder-only]
+    "BitNetForCausalLM": ("bitnet", "BitNetForCausalLM"),
     "AquilaModel": ("llama", "LlamaForCausalLM"),
     "AquilaForCausalLM": ("llama", "LlamaForCausalLM"),  # AquilaChat2
     "ArcticForCausalLM": ("arctic", "ArcticForCausalLM"),
