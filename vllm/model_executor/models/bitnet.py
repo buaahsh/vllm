@@ -62,6 +62,24 @@ import torch.nn.functional as F
 logger = init_logger(__name__)
 
 
+
+class BitNetRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        BitNetRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+
 class WeightQuant(torch.autograd.Function):
 
     @staticmethod
@@ -112,6 +130,10 @@ class BitLinear(nn.Linear):
         return F.linear(input, weight, self.bias)
 
 
+def squared_relu(x: torch.Tensor) -> torch.Tensor:
+    return F.relu(x) ** 2
+
+
 class BitNetMLP(nn.Module):
 
     def __init__(
@@ -131,10 +153,14 @@ class BitNetMLP(nn.Module):
             raise ValueError(f"Unsupported activation: {hidden_act}. "
                              "Only silu is supported for now.")
         # self.act_fn = SiluAndMul()
-        self.act_fn = nn.SiLU()
+        # self.act_fn = nn.SiLU()
+        self.act_fn = squared_relu
+        rms_norm_eps = 1e-5
+        self.ffn_sub_norm = BitNetRMSNorm(intermediate_size, eps=rms_norm_eps)
 
     def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        # down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        down_proj = self.down_proj(self.ffn_sub_norm(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
         return down_proj
 
 
@@ -213,6 +239,9 @@ class BitNetAttention(nn.Module):
         self.k_proj = BitLinear(self.hidden_size, self.num_kv_heads * self.head_dim, bias=False)
         self.v_proj = BitLinear(self.hidden_size, self.num_kv_heads * self.head_dim, bias=False)
         self.o_proj = BitLinear(self.total_num_heads * self.head_dim, hidden_size, bias=False)
+        
+        rms_norm_eps = 1e-5
+        self.attn_sub_norm = BitNetRMSNorm(hidden_size, eps=rms_norm_eps)
 
         self.rotary_emb = get_rope(
             self.head_dim,
@@ -242,6 +271,7 @@ class BitNetAttention(nn.Module):
         v = self.v_proj(hidden_states)
         q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn(q, k, v, kv_cache, attn_metadata)
+        attn_output = self.attn_sub_norm(attn_output)
         output = self.o_proj(attn_output)
         return output
 
