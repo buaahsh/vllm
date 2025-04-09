@@ -111,6 +111,8 @@ class BitLinear(nn.Linear):
         input = ActQuant.apply(input)
         return F.linear(input, weight, self.bias)
 
+def squared_relu(x: torch.Tensor) -> torch.Tensor:
+    return F.relu(x) ** 2
 
 class BitNetMLP(nn.Module):
 
@@ -119,6 +121,7 @@ class BitNetMLP(nn.Module):
         hidden_size: int,
         intermediate_size: int,
         hidden_act: str,
+        rms_norm_eps: float = 1e-5,
         quant_config: Optional[QuantizationConfig] = None,
         prefix: str = "",
     ) -> None:
@@ -131,10 +134,11 @@ class BitNetMLP(nn.Module):
             raise ValueError(f"Unsupported activation: {hidden_act}. "
                              "Only silu is supported for now.")
         # self.act_fn = SiluAndMul()
-        self.act_fn = nn.SiLU()
+        self.act_fn = squared_relu
+        self.ffn_sub_norm = RMSNorm(intermediate_size, eps=rms_norm_eps)
 
     def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        down_proj = self.down_proj(self.ffn_sub_norm(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
         return down_proj
 
 
@@ -182,6 +186,7 @@ class BitNetAttention(nn.Module):
                  num_kv_heads: int,
                  max_position: int = 4096 * 32,
                  rope_theta: float = 10000,
+                 rms_norm_eps: float = 1e-5,
                  cache_config: Optional[CacheConfig] = None,
                  quant_config: Optional[QuantizationConfig] = None,
                  rope_scaling: Optional[Tuple] = None,
@@ -213,6 +218,7 @@ class BitNetAttention(nn.Module):
         self.k_proj = BitLinear(self.hidden_size, self.num_kv_heads * self.head_dim, bias=False)
         self.v_proj = BitLinear(self.hidden_size, self.num_kv_heads * self.head_dim, bias=False)
         self.o_proj = BitLinear(self.total_num_heads * self.head_dim, hidden_size, bias=False)
+        self.attn_sub_norm = RMSNorm(self.hidden_size, eps=rms_norm_eps)
 
         self.rotary_emb = get_rope(
             self.head_dim,
@@ -242,6 +248,7 @@ class BitNetAttention(nn.Module):
         v = self.v_proj(hidden_states)
         q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn(q, k, v, kv_cache, attn_metadata)
+        attn_output = self.attn_sub_norm(attn_output)
         output = self.o_proj(attn_output)
         return output
 
@@ -281,6 +288,7 @@ class BitNetDecoderLayer(nn.Module):
             rope_scaling=rope_scaling,
             prefix=f"{prefix}.self_attn",
             attn_type=attn_type,
+            rms_norm_eps=config.rms_norm_eps,
         )
         self.mlp = BitNetMLP(
             hidden_size=self.hidden_size,
@@ -288,6 +296,7 @@ class BitNetDecoderLayer(nn.Module):
             hidden_act=config.hidden_act,
             quant_config=quant_config,
             prefix=f"{prefix}.mlp",
+            rms_norm_eps=config.rms_norm_eps,
         )
         self.input_layernorm = RMSNorm(config.hidden_size,
                                        eps=config.rms_norm_eps)
