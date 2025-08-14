@@ -491,6 +491,17 @@ class BitNetModel(nn.Module):
                     loaded_params.add(name)
                     is_offline_quant_param = True
                     continue
+            if 'lm_head' in name:
+                print(f"Loading offline quantization weights for {name}")
+                # Loading offline quantization weights
+                param = params_dict[name]
+                weight_loader = getattr(param, "weight_loader",
+                                        default_weight_loader)
+                loaded_weight = weight_quant_offline(loaded_weight)
+                weight_loader(param, loaded_weight)
+                loaded_params.add(name)
+                is_offline_quant_param = True
+                continue
             if is_offline_quant_param:
                 continue
             if (self.quant_config is not None and
