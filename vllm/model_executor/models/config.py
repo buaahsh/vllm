@@ -48,6 +48,17 @@ class Ernie4_5_VLMoeForConditionalGenerationConfig(VerifyAndUpdateConfig):
         vllm_config.compilation_config.fast_moe_cold_start = False
 
 
+class YOCOForCausalLMConfig(VerifyAndUpdateConfig):
+    @staticmethod
+    def verify_and_update_config(vllm_config: "VllmConfig") -> None:
+        # YOCO runs the same MoE module multiple times per forward pass
+        # (universal_loop=3 over the first 10 layers re-uses each MoE block
+        # 3 times), so the fast_moe_cold_start path that indexes a static
+        # all_moe_layers list once per call can produce IndexError.  Force
+        # the runner to bake the actual layer_name into the compiled graph.
+        vllm_config.compilation_config.fast_moe_cold_start = False
+
+
 class Gemma3TextModelConfig(VerifyAndUpdateConfig):
     @staticmethod
     def verify_and_update_model_config(model_config: "ModelConfig") -> None:
@@ -692,4 +703,5 @@ MODELS_CONFIG_MAP: dict[str, type[VerifyAndUpdateConfig]] = {
     "Qwen3_5MoeForConditionalGeneration": Qwen3_5ForConditionalGenerationConfig,
     "VoyageQwen3BidirectionalEmbedModel": VoyageQwen3BidirectionalEmbedModelConfig,
     "XLMRobertaModel": JinaRobertaModelConfig,
+    "YOCOForCausalLM": YOCOForCausalLMConfig,
 }

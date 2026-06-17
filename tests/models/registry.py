@@ -595,6 +595,9 @@ _TEXT_GENERATION_EXAMPLE_MODELS = {
             "(add_prefix_space / prepend_scheme mismatch).",
         },
     ),
+    "YOCOForCausalLM": _HfExamplesInfo(
+        "yoco/yoco-moe-30a3b", trust_remote_code=True, is_available_online=False
+    ),
     "Zamba2ForCausalLM": _HfExamplesInfo("Zyphra/Zamba2-7B-instruct"),
     "MiMoForCausalLM": _HfExamplesInfo("XiaomiMiMo/MiMo-7B-RL", trust_remote_code=True),
     "MiMoV2FlashForCausalLM": _HfExamplesInfo(
