@@ -1,0 +1,80 @@
+# Recreates the locally committed image:
+#   vllm-yoco-on-023:installed
+# Intended tag:
+#   buaahsh/pytorch:26.02-b200-vllm
+#
+# The image currently on this machine was produced with docker commit after
+# running the equivalent steps below inside donglixp/pytorch:26.02-b200.
+# Build example:
+#   docker build -f /home/shaohanh/Dockerfile.pytorch-26.02-b200-vllm -t buaahsh/pytorch:26.02-b200-vllm /tmp
+
+FROM donglixp/pytorch:26.02-b200
+
+ENV PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/workspace/.cache/huggingface \
+    VLLM_TARGET_DEVICE=cuda \
+    TORCH_CUDA_ARCH_LIST=9.0 \
+    MAX_JOBS=16 \
+    NVCC_THREADS=1
+
+WORKDIR /workspace
+
+RUN git clone --depth 1 --branch shaohanh/yoco-on-0.23 --single-branch \
+        https://github.com/buaahsh/vllm.git /workspace/vllm \
+    && cd /workspace/vllm \
+    && test "$(git rev-parse HEAD)" = "45f47e675fb6d7f1fbd1f445926014aecab61c2c"
+
+WORKDIR /workspace/vllm
+
+# Strip torch/torchvision/torchaudio requirements so the NVIDIA image torch is
+# preserved. This is the required first step before pip install.
+RUN python use_existing_torch.py
+
+# Compatibility patch for donglixp/pytorch:26.02-b200:
+# torch reports as 2.11 dev, but NVIDIA's build does not provide
+# torch._opaque_base. Fall back to plain object when the module is absent.
+RUN python - <<'PY'
+from pathlib import Path
+
+path = Path("vllm/utils/torch_utils.py")
+text = path.read_text()
+old = '''HAS_OPAQUE_TYPE = is_torch_equal_or_newer("2.11.0.dev")
+
+# Allow toggling LayerName usage via environment variable.
+# Defaults to True on torch >= 2.11, False otherwise.
+# Set VLLM_USE_LAYERNAME=0 to disable even on torch >= 2.11.
+_USE_LAYERNAME = HAS_OPAQUE_TYPE and envs.VLLM_USE_LAYERNAME
+
+if HAS_OPAQUE_TYPE:
+    from torch._opaque_base import OpaqueBase
+else:
+    OpaqueBase = object  # type: ignore[misc, assignment]
+'''
+new = '''HAS_OPAQUE_TYPE = is_torch_equal_or_newer("2.11.0.dev")
+
+if HAS_OPAQUE_TYPE:
+    try:
+        from torch._opaque_base import OpaqueBase
+    except ModuleNotFoundError:
+        HAS_OPAQUE_TYPE = False
+        OpaqueBase = object  # type: ignore[misc, assignment]
+else:
+    OpaqueBase = object  # type: ignore[misc, assignment]
+
+# Allow toggling LayerName usage via environment variable.
+# Defaults to True on torch >= 2.11, False otherwise.
+# Set VLLM_USE_LAYERNAME=0 to disable even on torch >= 2.11.
+_USE_LAYERNAME = HAS_OPAQUE_TYPE and envs.VLLM_USE_LAYERNAME
+'''
+if old not in text:
+    raise SystemExit("expected OpaqueBase block not found")
+path.write_text(text.replace(old, new))
+PY
+
+RUN python -m pip install --no-cache-dir "setuptools-scm>=8" \
+    && python -m pip install --no-cache-dir -e . --no-build-isolation \
+    && python -m pip check \
+    && vllm --version \
+    && rm -rf /tmp/tmp*.build-temp /tmp/tmp*.build-lib /tmp/pip-* \
+        /root/.cache/pip /opt/vllm-venv \
+    && (find /tmp -maxdepth 1 -name 'tmpxft_*' -delete 2>/dev/null || true)
