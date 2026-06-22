@@ -61,6 +61,7 @@ from vllm.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
 )
+from vllm.forward_context import get_forward_context
 from vllm.model_executor.layers.activation import SiluAndMul
 from vllm.model_executor.layers.fused_moe import FusedMoE
 from vllm.model_executor.layers.fused_moe.router.gate_linear import GateLinear
@@ -81,6 +82,7 @@ from vllm.model_executor.layers.vocab_parallel_embedding import (
 )
 from vllm.model_executor.model_loader.weight_utils import default_weight_loader
 from vllm.sequence import IntermediateTensors
+from vllm.v1.attention.backends.utils import KVSharingFastPrefillMetadata
 
 from vllm.model_executor.models.interfaces import SupportsPP
 from vllm.model_executor.models.utils import (
@@ -619,6 +621,55 @@ class YOCODecoderLayer(nn.Module):
 
 
 # --------------------------------------------------------------------------- #
+# Cross-decoder block (compiled separately when fast prefill is enabled)      #
+# --------------------------------------------------------------------------- #
+
+
+@support_torch_compile(
+    dynamic_arg_dims={
+        "positions": 0,
+        "hidden_states": 0,
+        "yoco_key": 0,
+        "yoco_value": 0,
+    },
+    enable_if=lambda vllm_config: vllm_config.cache_config.kv_sharing_fast_prefill,
+)
+class YOCOCrossBlock(nn.Module):
+    """Wraps cross-attention layers 11..N-1 (KV-sharing layers) for separate
+    compilation when --kv-sharing-fast-prefill is enabled."""
+
+    def __init__(
+        self,
+        *,
+        vllm_config: VllmConfig,
+        prefix: str = "",
+        cross_layers: list,
+        first_cross_layer_idx: int,
+    ) -> None:
+        super().__init__()
+        # Store as plain list to avoid re-registering parameters
+        self._cross_layers = cross_layers
+        self.first_cross_layer_idx = first_cross_layer_idx
+
+    def forward(
+        self,
+        positions: torch.Tensor,
+        hidden_states: torch.Tensor,
+        yoco_key: torch.Tensor,
+        yoco_value: torch.Tensor,
+    ) -> torch.Tensor:
+        for layer in self._cross_layers:
+            hidden_states = layer(
+                positions,
+                hidden_states,
+                0,
+                yoco_key,
+                yoco_value,
+            )
+        return hidden_states
+
+
+# --------------------------------------------------------------------------- #
 # Inner model                                                                 #
 # --------------------------------------------------------------------------- #
 
@@ -629,7 +680,8 @@ class YOCODecoderLayer(nn.Module):
         "positions": -1,
         "intermediate_tensors": 0,
         "inputs_embeds": 0,
-    }
+    },
+    enable_if=lambda vllm_config: not vllm_config.cache_config.kv_sharing_fast_prefill,
 )
 class YOCOModel(nn.Module):
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = "") -> None:
@@ -712,6 +764,24 @@ class YOCOModel(nn.Module):
         self.start_layer = 0
         self.end_layer = self.num_hidden_layers
         self.norm = RMSNorm(self.hidden_size, eps=rms_eps)
+
+        # Fast prefill: create a separate compile unit for KV-sharing cross
+        # layers (layers first_cross_layer_idx+1 .. num_hidden_layers-1).
+        self.fast_prefill_enabled = cache_config.kv_sharing_fast_prefill
+        if self.fast_prefill_enabled and self.yoco_cross_layers > 1:
+            # Layers 11..19 share KV from layer 10; they are eligible for
+            # fast prefill (only decode tokens are processed).
+            kv_sharing_cross_layers = list(
+                self.layers[self.first_cross_layer_idx + 1:]
+            )
+            self.cross_block = YOCOCrossBlock(
+                vllm_config=vllm_config,
+                prefix=f"{prefix}.cross_block",
+                cross_layers=kv_sharing_cross_layers,
+                first_cross_layer_idx=self.first_cross_layer_idx + 1,
+            )
+        else:
+            self.cross_block = None
 
         self.make_empty_intermediate_tensors = (
             make_empty_intermediate_tensors_factory(
@@ -798,6 +868,9 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
 
         self.vocab_size = _cfg_int(config, "vocab_size")
         hidden_size = _cfg_int(config, "hidden_size", "d_model")
+        self.fast_prefill_enabled = (
+            vllm_config.cache_config.kv_sharing_fast_prefill
+        )
         if getattr(config, "tie_word_embeddings", False):
             self.lm_head = self.model.embed_tokens
         else:
@@ -831,12 +904,136 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        return self.model(
+        if not self.fast_prefill_enabled:
+            return self.model(
+                input_ids=input_ids,
+                positions=positions,
+                intermediate_tensors=intermediate_tensors,
+                inputs_embeds=inputs_embeds,
+            )
+        return self._fast_prefill_forward(
             input_ids=input_ids,
             positions=positions,
             intermediate_tensors=intermediate_tensors,
             inputs_embeds=inputs_embeds,
         )
+
+    def _fast_prefill_forward(
+        self,
+        input_ids: torch.Tensor | None,
+        positions: torch.Tensor,
+        intermediate_tensors: IntermediateTensors | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Forward with fast prefill: cross-attention layers that share KV
+        only process decode tokens during prefill."""
+        model = self.model
+
+        if inputs_embeds is not None:
+            hidden_states = inputs_embeds
+        else:
+            assert input_ids is not None
+            hidden_states = model.embed_tokens(input_ids)
+
+        # Self-attention layers: process ALL tokens.
+        for loop_idx in range(model.universal_loop):
+            for layer_idx in range(model.first_cross_layer_idx):
+                hidden_states = model.layers[layer_idx](
+                    positions,
+                    hidden_states,
+                    loop_idx,
+                    None,
+                    None,
+                )
+
+        # Compute shared KV for cross-attention on ALL tokens.
+        if model.yoco_cross_layers > 0:
+            assert model.yoco_norm is not None
+            assert model.yoco_k_proj is not None
+            assert model.yoco_v_proj is not None
+            h_norm = model.yoco_norm(hidden_states)
+            yoco_key, _ = model.yoco_k_proj(h_norm)
+            yoco_value, _ = model.yoco_v_proj(h_norm)
+
+            # Layer 10 (first cross layer) processes ALL tokens and writes to
+            # the shared KV cache.
+            hidden_states = model.layers[model.first_cross_layer_idx](
+                positions,
+                hidden_states,
+                0,
+                yoco_key,
+                yoco_value,
+            )
+
+            # Layers 11-19: with fast prefill, only process decode tokens.
+            if model.cross_block is not None:
+                logits_indices_padded, num_logits_indices = (
+                    self._get_fast_prefill_indices()
+                )
+
+                if logits_indices_padded is not None:
+                    # Select decode tokens only for the cross block.
+                    num_padded = logits_indices_padded.size(0)
+                    decode_hidden = hidden_states[logits_indices_padded]
+                    decode_positions = positions[logits_indices_padded]
+                    decode_yoco_key = yoco_key[logits_indices_padded]
+                    decode_yoco_value = yoco_value[logits_indices_padded]
+
+                    decode_hidden = model.cross_block(
+                        decode_positions,
+                        decode_hidden,
+                        decode_yoco_key,
+                        decode_yoco_value,
+                    )
+
+                    # Merge back: only update the real (non-padded) indices.
+                    if num_logits_indices is not None:
+                        real_indices = logits_indices_padded[:num_logits_indices]
+                        hidden_states[real_indices] = (
+                            decode_hidden[:num_logits_indices]
+                        )
+                    else:
+                        hidden_states[logits_indices_padded] = decode_hidden
+                else:
+                    # All decode (no prefill) or dummy run — run normally.
+                    for layer_idx in range(
+                        model.first_cross_layer_idx + 1,
+                        model.num_hidden_layers,
+                    ):
+                        hidden_states = model.layers[layer_idx](
+                            positions,
+                            hidden_states,
+                            0,
+                            yoco_key,
+                            yoco_value,
+                        )
+            else:
+                # No cross_block (single cross layer only), already handled.
+                pass
+
+        hidden_states = model.norm(hidden_states)
+        return hidden_states
+
+    def _get_fast_prefill_indices(
+        self,
+    ) -> tuple[torch.Tensor | None, int | None]:
+        """Retrieve logits_indices from forward context attention metadata."""
+        fwd_ctx = get_forward_context()
+        attn_metadata = fwd_ctx.attn_metadata
+        if attn_metadata is None:
+            return None, None
+        if not isinstance(attn_metadata, dict):
+            return None, None
+        # Find a KV-sharing layer's metadata to get logits_indices.
+        # Use the last layer's attention (which is a fast prefill layer).
+        last_layer = self.model.layers[-1]
+        layer_name = last_layer.self_attn.attn.layer_name
+        layer_meta = attn_metadata.get(layer_name)
+        if layer_meta is None:
+            return None, None
+        if isinstance(layer_meta, KVSharingFastPrefillMetadata):
+            return layer_meta.logits_indices_padded, layer_meta.num_logits_indices
+        return None, None
 
     def compute_logits(
         self,
