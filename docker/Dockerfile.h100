@@ -13,7 +13,7 @@ FROM donglixp/pytorch:26.02-b200
 ENV PIP_NO_CACHE_DIR=1 \
     HF_HOME=/workspace/.cache/huggingface \
     VLLM_TARGET_DEVICE=cuda \
-    TORCH_CUDA_ARCH_LIST=10.0 \
+    TORCH_CUDA_ARCH_LIST=9.0 \
     MAX_JOBS=16 \
     NVCC_THREADS=1
 
