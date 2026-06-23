@@ -670,6 +670,83 @@ class YOCOCrossBlock(nn.Module):
 
 
 # --------------------------------------------------------------------------- #
+# Self-decoder block (compiled separately when fast prefill is enabled)       #
+# --------------------------------------------------------------------------- #
+
+
+@support_torch_compile(
+    dynamic_arg_dims={
+        "input_ids": 0,
+        "positions": 0,
+        "inputs_embeds": 0,
+    },
+    enable_if=lambda vllm_config: vllm_config.cache_config.kv_sharing_fast_prefill,
+)
+class YOCOSelfBlock(nn.Module):
+    """Self-attention portion compiled as a separate unit for fast prefill.
+
+    Runs (on ALL tokens) the universal-loop self-attention layers, the
+    model-level shared-KV producer, and the first cross layer (which owns and
+    writes the shared KV cache).  Returns the hidden states together with the
+    shared ``yoco_key`` / ``yoco_value`` so the cross block can consume them.
+    Keeping this as its own ``@support_torch_compile`` unit (alongside
+    ``YOCOCrossBlock``) means the whole fast-prefill forward is an uncompiled
+    wrapper around two piecewise CUDA-graph units, which avoids nesting a
+    CUDA-graph capture inside an outer full-graph capture."""
+
+    def __init__(
+        self,
+        *,
+        vllm_config: VllmConfig,
+        prefix: str = "",
+        model: "YOCOModel",
+    ) -> None:
+        super().__init__()
+        # Hold a non-registering reference to the parent model so we reuse its
+        # already-registered parameters without duplicating them (assigning an
+        # nn.Module attribute directly would re-register it).
+        self._model_ref = [model]
+
+    def forward(
+        self,
+        input_ids: torch.Tensor | None,
+        positions: torch.Tensor,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        model = self._model_ref[0]
+        if inputs_embeds is not None:
+            hidden_states = inputs_embeds
+        else:
+            assert input_ids is not None
+            hidden_states = model.embed_tokens(input_ids)
+
+        # Self-attention layers (universal loop) — all tokens.
+        for loop_idx in range(model.universal_loop):
+            for layer_idx in range(model.first_cross_layer_idx):
+                hidden_states = model.layers[layer_idx](
+                    positions,
+                    hidden_states,
+                    loop_idx,
+                    None,
+                    None,
+                )
+
+        # Shared-KV producer + first cross layer (owns the shared KV cache);
+        # both run on ALL tokens.
+        h_norm = model.yoco_norm(hidden_states)
+        yoco_key, _ = model.yoco_k_proj(h_norm)
+        yoco_value, _ = model.yoco_v_proj(h_norm)
+        hidden_states = model.layers[model.first_cross_layer_idx](
+            positions,
+            hidden_states,
+            0,
+            yoco_key,
+            yoco_value,
+        )
+        return hidden_states, yoco_key, yoco_value
+
+
+# --------------------------------------------------------------------------- #
 # Inner model                                                                 #
 # --------------------------------------------------------------------------- #
 
@@ -765,22 +842,58 @@ class YOCOModel(nn.Module):
         self.end_layer = self.num_hidden_layers
         self.norm = RMSNorm(self.hidden_size, eps=rms_eps)
 
-        # Fast prefill: create a separate compile unit for KV-sharing cross
-        # layers (layers first_cross_layer_idx+1 .. num_hidden_layers-1).
+        # Fast prefill: split the model into two separately-compiled units so
+        # the self portion and the KV-sharing cross layers each get their own
+        # piecewise CUDA graph (mirrors gemma3n).  This is required for
+        # correctness: the cross block must be invoked during cudagraph warmup,
+        # otherwise it tries to capture a graph at inference time (disallowed).
         self.fast_prefill_enabled = cache_config.kv_sharing_fast_prefill
         if self.fast_prefill_enabled and self.yoco_cross_layers > 1:
-            # Layers 11..19 share KV from layer 10; they are eligible for
-            # fast prefill (only decode tokens are processed).
+            # Importing at top level causes issues during tests (see gemma3n).
+            from vllm.compilation.backends import set_model_tag
+
+            # Self portion: self layers + shared-KV + first cross layer.
+            with set_model_tag("self_decoder"):
+                self.self_block = YOCOSelfBlock(
+                    vllm_config=vllm_config,
+                    prefix=f"{prefix}.self_block",
+                    model=self,
+                )
+            # Cross portion: layers first_cross+1 .. N-1 share KV from layer
+            # first_cross; only decode tokens are processed during prefill.
             kv_sharing_cross_layers = list(
                 self.layers[self.first_cross_layer_idx + 1:]
             )
-            self.cross_block = YOCOCrossBlock(
-                vllm_config=vllm_config,
-                prefix=f"{prefix}.cross_block",
-                cross_layers=kv_sharing_cross_layers,
-                first_cross_layer_idx=self.first_cross_layer_idx + 1,
+            with set_model_tag("cross_decoder"):
+                self.cross_block = YOCOCrossBlock(
+                    vllm_config=vllm_config,
+                    prefix=f"{prefix}.cross_block",
+                    cross_layers=kv_sharing_cross_layers,
+                    first_cross_layer_idx=self.first_cross_layer_idx + 1,
+                )
+
+            # Static input buffers for the cross block's CUDA graph.  vLLM runs
+            # with cudagraph_copy_inputs=False, so cross-block inputs must have
+            # stable addresses across capture/replay.
+            max_num_tokens = vllm_config.scheduler_config.max_num_batched_tokens
+            dtype = self.embed_tokens.weight.dtype
+            device = self.embed_tokens.weight.device
+            key_dim = self.yoco_k_proj.weight.shape[0]
+            value_dim = self.yoco_v_proj.weight.shape[0]
+            self.fp_positions = torch.zeros(
+                max_num_tokens, dtype=torch.int64, device=device
+            )
+            self.fp_hidden_states = torch.zeros(
+                (max_num_tokens, self.hidden_size), dtype=dtype, device=device
+            )
+            self.fp_yoco_key = torch.zeros(
+                (max_num_tokens, key_dim), dtype=dtype, device=device
+            )
+            self.fp_yoco_value = torch.zeros(
+                (max_num_tokens, value_dim), dtype=dtype, device=device
             )
         else:
+            self.self_block = None
             self.cross_block = None
 
         self.make_empty_intermediate_tensors = (
@@ -926,93 +1039,76 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Forward with fast prefill: cross-attention layers that share KV
-        only process decode tokens during prefill."""
+        only process decode tokens during prefill.
+
+        The self portion and the cross portion run as two separately-compiled
+        ``@support_torch_compile`` units (``self_block`` / ``cross_block``).
+        The cross block is *always* executed — during cudagraph warmup and
+        dummy/profile runs (when no fast-prefill metadata is available) it
+        falls back to ALL tokens — so its CUDA graph is captured during warmup
+        instead of (illegally) capturing at inference time."""
         model = self.model
 
-        if inputs_embeds is not None:
-            hidden_states = inputs_embeds
-        else:
-            assert input_ids is not None
-            hidden_states = model.embed_tokens(input_ids)
-
-        # Self-attention layers: process ALL tokens.
-        for loop_idx in range(model.universal_loop):
-            for layer_idx in range(model.first_cross_layer_idx):
-                hidden_states = model.layers[layer_idx](
-                    positions,
-                    hidden_states,
-                    loop_idx,
-                    None,
-                    None,
-                )
-
-        # Compute shared KV for cross-attention on ALL tokens.
-        if model.yoco_cross_layers > 0:
-            assert model.yoco_norm is not None
-            assert model.yoco_k_proj is not None
-            assert model.yoco_v_proj is not None
-            h_norm = model.yoco_norm(hidden_states)
-            yoco_key, _ = model.yoco_k_proj(h_norm)
-            yoco_value, _ = model.yoco_v_proj(h_norm)
-
-            # Layer 10 (first cross layer) processes ALL tokens and writes to
-            # the shared KV cache.
-            hidden_states = model.layers[model.first_cross_layer_idx](
-                positions,
-                hidden_states,
-                0,
-                yoco_key,
-                yoco_value,
+        # No dedicated fast-prefill blocks (e.g. a single cross layer): fall
+        # back to the standard dense forward.
+        if model.self_block is None or model.cross_block is None:
+            return model(
+                input_ids=input_ids,
+                positions=positions,
+                intermediate_tensors=intermediate_tensors,
+                inputs_embeds=inputs_embeds,
             )
 
-            # Layers 11-19: with fast prefill, only process decode tokens.
-            if model.cross_block is not None:
-                logits_indices_padded, num_logits_indices = (
-                    self._get_fast_prefill_indices()
-                )
+        # Self portion on ALL tokens (separate piecewise CUDA graph).  Also
+        # produces the shared KV (yoco_key / yoco_value) and writes layer
+        # ``first_cross_layer_idx``'s shared KV cache.
+        hidden_states, yoco_key, yoco_value = model.self_block(
+            input_ids,
+            positions,
+            inputs_embeds,
+        )
 
-                if logits_indices_padded is not None:
-                    # Select decode tokens only for the cross block.
-                    num_padded = logits_indices_padded.size(0)
-                    decode_hidden = hidden_states[logits_indices_padded]
-                    decode_positions = positions[logits_indices_padded]
-                    decode_yoco_key = yoco_key[logits_indices_padded]
-                    decode_yoco_value = yoco_value[logits_indices_padded]
+        # Decode-token indices.  When no fast-prefill metadata is available
+        # (cudagraph capture / dummy / profile runs) fall back to ALL tokens so
+        # the cross block is always invoked (and thus captured during warmup).
+        logits_indices_padded, num_logits_indices = (
+            self._get_fast_prefill_indices()
+        )
+        if logits_indices_padded is None:
+            logits_indices_padded = torch.arange(
+                positions.size(0),
+                dtype=torch.int64,
+                device=positions.device,
+            )
 
-                    decode_hidden = model.cross_block(
-                        decode_positions,
-                        decode_hidden,
-                        decode_yoco_key,
-                        decode_yoco_value,
-                    )
+        # Clone the self-decoder output before it is potentially freed by the
+        # piecewise cudagraph machinery when multiple compile units are used.
+        out_hidden = hidden_states.clone()
 
-                    # Merge back: only update the real (non-padded) indices.
-                    if num_logits_indices is not None:
-                        real_indices = logits_indices_padded[:num_logits_indices]
-                        hidden_states[real_indices] = (
-                            decode_hidden[:num_logits_indices]
-                        )
-                    else:
-                        hidden_states[logits_indices_padded] = decode_hidden
-                else:
-                    # All decode (no prefill) or dummy run — run normally.
-                    for layer_idx in range(
-                        model.first_cross_layer_idx + 1,
-                        model.num_hidden_layers,
-                    ):
-                        hidden_states = model.layers[layer_idx](
-                            positions,
-                            hidden_states,
-                            0,
-                            yoco_key,
-                            yoco_value,
-                        )
-            else:
-                # No cross_block (single cross layer only), already handled.
-                pass
+        # Feed the cross block through static buffers — vLLM runs with
+        # cudagraph_copy_inputs=False, so inputs need stable addresses.
+        n = logits_indices_padded.size(0)
+        model.fp_positions[:n].copy_(positions[logits_indices_padded])
+        model.fp_hidden_states[:n].copy_(hidden_states[logits_indices_padded])
+        model.fp_yoco_key[:n].copy_(yoco_key[logits_indices_padded])
+        model.fp_yoco_value[:n].copy_(yoco_value[logits_indices_padded])
 
-        hidden_states = model.norm(hidden_states)
-        return hidden_states
+        decode_hidden = model.cross_block(
+            model.fp_positions[:n],
+            model.fp_hidden_states[:n],
+            model.fp_yoco_key[:n],
+            model.fp_yoco_value[:n],
+        )
+
+        # Merge cross-decoder outputs back into the full hidden states.
+        if num_logits_indices is not None:
+            assert num_logits_indices > 0
+            real_indices = logits_indices_padded[:num_logits_indices]
+            out_hidden[real_indices] = decode_hidden[:num_logits_indices]
+        else:
+            out_hidden[logits_indices_padded] = decode_hidden
+
+        return model.norm(out_hidden)
 
     def _get_fast_prefill_indices(
         self,
