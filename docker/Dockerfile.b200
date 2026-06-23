@@ -22,7 +22,7 @@ WORKDIR /workspace
 RUN git clone --depth 1 --branch shaohanh/yoco-on-0.23 --single-branch \
         https://github.com/buaahsh/vllm.git /workspace/vllm \
     && cd /workspace/vllm \
-    && test "$(git rev-parse HEAD)" = "45f47e675fb6d7f1fbd1f445926014aecab61c2c"
+    && test "$(git rev-parse HEAD)" = "cbb4d478c8466ef03ae3dc4a2e9acf252394da38"
 
 WORKDIR /workspace/vllm
 
