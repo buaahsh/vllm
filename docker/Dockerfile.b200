@@ -74,7 +74,7 @@ PY
 RUN python -m pip install --no-cache-dir "setuptools-scm>=8" \
     && python -m pip install --no-cache-dir -e . --no-build-isolation \
     && python -m pip check \
-    && vllm --version \
+    && python -c "import vllm.version; print(vllm.version.__version__)" \
     && rm -rf /tmp/tmp*.build-temp /tmp/tmp*.build-lib /tmp/pip-* \
         /root/.cache/pip /opt/vllm-venv \
     && (find /tmp -maxdepth 1 -name 'tmpxft_*' -delete 2>/dev/null || true)
