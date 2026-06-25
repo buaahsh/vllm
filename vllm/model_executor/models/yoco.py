@@ -62,7 +62,7 @@ from vllm.distributed import (
     get_tensor_model_parallel_world_size,
 )
 from vllm.forward_context import get_forward_context
-from vllm.model_executor.layers.activation import SiluAndMul
+from vllm.model_executor.layers.activation import SiluAndMul, SiluAndMulWithClamp
 from vllm.model_executor.layers.fused_moe import FusedMoE
 from vllm.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 from vllm.model_executor.layers.layernorm import RMSNorm
@@ -92,6 +92,7 @@ from vllm.model_executor.models.utils import (
 )
 
 
+
 # --------------------------------------------------------------------------- #
 # Config helpers                                                              #
 # --------------------------------------------------------------------------- #
@@ -114,6 +115,72 @@ def _cfg_int(config: PretrainedConfig, *names: str, default: int | None = None) 
     raise AttributeError(
         f"None of the config fields {names!r} are set on {type(config).__name__}"
     )
+
+
+class RMSClip(nn.Module):
+    """Weight-free RMS-based clipping for YOCO ``qk_rms_clip`` models.
+
+    Scales each ``head_dim`` slice by ``clamp(limit / rms, max=1.0)`` where
+    ``rms = sqrt(mean(x**2, -1) + eps)``.  Unlike :class:`RMSNorm` it has **no**
+    learnable weight and is the identity for vectors whose RMS is already below
+    ``limit`` — it only damps outliers.  This mirrors training's ``RMSClip``
+    (``llm/arch/rms_norm.py``) exactly.
+    """
+
+    def __init__(self, dim: int, eps: float = 1e-6, limit: float = 3.0) -> None:
+        super().__init__()
+        self.dim = dim
+        self.eps = eps
+        self.limit = limit
+
+    def extra_repr(self) -> str:
+        return f"dim={self.dim}, eps={self.eps}, limit={self.limit}"
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        rms = torch.sqrt(x.float().pow(2).mean(-1, keepdim=True) + self.eps).type_as(x)
+        clip_coef = (self.limit / rms).clamp(max=1.0)
+        return x * clip_coef
+
+
+def _build_qk_norm(config: PretrainedConfig, head_dim: int, rms_eps: float):
+    """Build the per-head Q/K normalization module for YOCO attention.
+
+    Three mutually exclusive modes, matching training (``llm/arch/attention.py``):
+    * ``qk_rms_clip=True``  -> :class:`RMSClip` (weight-free, clips outliers).
+    * ``qk_norm=True``      -> weight-free :class:`RMSNorm`.
+    * otherwise             -> ``None`` (no Q/K norm).
+
+    Returns ``None`` when no normalization should be applied so callers can skip
+    creating unused parameters.
+    """
+    if bool(getattr(config, "qk_rms_clip", False)):
+        limit = float(getattr(config, "qk_rms_limit", 3.0))
+        return RMSClip(head_dim, eps=rms_eps, limit=limit)
+    if bool(getattr(config, "qk_norm", False)):
+        return RMSNorm(head_dim, eps=rms_eps, has_weight=False)
+    return None
+
+
+def _swiglu_limit(config: PretrainedConfig) -> float:
+    """SwiGLU clamp limit, matching training (``swiglu_limit``, default 10.0).
+
+    Training clamps ``gate`` to ``max=limit`` and ``up`` to ``[-limit, limit]``
+    before ``silu(gate) * up`` (see ``llm/arch/ffn.py`` and
+    ``llm/arch/all2all_moe.py``).
+    """
+    return float(getattr(config, "swiglu_limit", 10.0))
+
+
+def _apply_per_head_norm(
+    x: torch.Tensor, num_heads: int, head_dim: int, norm: nn.Module
+) -> torch.Tensor:
+    """Apply ``norm`` independently to each head's ``head_dim`` slice.
+
+    ``x`` has shape ``(n_tokens, num_heads * head_dim)``.
+    """
+    x = x.unflatten(-1, (num_heads, head_dim))
+    x = norm(x)
+    return x.flatten(-2, -1)
 
 
 # --------------------------------------------------------------------------- #
@@ -206,8 +273,12 @@ class YOCOSelfAttention(nn.Module):
             prefix=f"{prefix}.lambda_proj",
         )
         rms_eps = float(getattr(config, "rms_norm_eps", getattr(config, "norm_eps", 1e-6)))
-        self.q_norm = RMSNorm(self.head_dim, eps=rms_eps)
-        self.k_norm = RMSNorm(self.head_dim, eps=rms_eps)
+        # Per-head Q/K normalization (RMSClip when ``qk_rms_clip``, weight-free
+        # RMSNorm when ``qk_norm``, else nothing).  ``RMSClip`` and weight-free
+        # ``RMSNorm`` carry no parameters, so the checkpoint contains no
+        # ``q_norm``/``k_norm`` weights in any of these modes.
+        self.q_norm = _build_qk_norm(config, self.head_dim, rms_eps)
+        self.k_norm = _build_qk_norm(config, self.head_dim, rms_eps)
 
         self.rotary_emb = get_rope(
             head_size=self.head_dim,
@@ -241,19 +312,6 @@ class YOCOSelfAttention(nn.Module):
     # ------------------------------------------------------------------ #
     # helpers                                                            #
     # ------------------------------------------------------------------ #
-    def _apply_head_norm(
-        self, x: torch.Tensor, num_heads: int, norm: RMSNorm
-    ) -> torch.Tensor:
-        """Apply RMSNorm independently to each head's ``head_dim`` slice.
-
-        ``x`` is shape ``(n_tokens, num_heads * head_dim)``.  After
-        ``.unflatten(-1, (num_heads, head_dim))`` RMSNorm normalises along the
-        last dim (head_dim) which is exactly the YOCO/training semantics.
-        """
-        x = x.unflatten(-1, (num_heads, self.head_dim))
-        x = norm(x)
-        return x.flatten(-2, -1)
-
     def _diff_attention_combine(
         self,
         attn_out: torch.Tensor,
@@ -284,11 +342,15 @@ class YOCOSelfAttention(nn.Module):
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
-        # Per-head QK-norm (applied independently to each head's head_dim
-        # slice).  Matches training's ``q_norm``/``k_norm`` on the un-rotated
-        # query/key tensors.
-        q = self._apply_head_norm(q, self.num_heads, self.q_norm)
-        k = self._apply_head_norm(k, self.num_kv_heads, self.k_norm)
+        # Per-head QK norm/clip on the un-rotated query/key, applied
+        # independently to each head's ``head_dim`` slice — matches training's
+        # ``q_norm``/``k_norm``.  Skipped entirely when neither ``qk_rms_clip``
+        # nor ``qk_norm`` is set.
+        if self.q_norm is not None:
+            q = _apply_per_head_norm(q, self.num_heads, self.head_dim, self.q_norm)
+            k = _apply_per_head_norm(
+                k, self.num_kv_heads, self.head_dim, self.k_norm
+            )
         q, k = self.rotary_emb(positions, q, k)
         attn_out = self.attn[loop_idx](q, k, v)
 
@@ -370,6 +432,13 @@ class YOCOCrossAttention(nn.Module):
             prefix=f"{prefix}.lambda_proj",
         )
 
+        rms_eps = float(
+            getattr(config, "rms_norm_eps", getattr(config, "norm_eps", 1e-6))
+        )
+        # Cross layers apply the same per-head Q norm/clip as self layers (the
+        # shared K is normed once at the model level on ``yoco_key``).
+        self.q_norm = _build_qk_norm(config, self.head_dim, rms_eps)
+
         if layer_idx == first_cross_layer_idx:
             kv_sharing_target = None
         else:
@@ -409,6 +478,8 @@ class YOCOCrossAttention(nn.Module):
         yoco_value: torch.Tensor,
     ) -> torch.Tensor:
         q, _ = self.q_proj(hidden_states)
+        if self.q_norm is not None:
+            q = _apply_per_head_norm(q, self.num_heads, self.head_dim, self.q_norm)
         attn_out = self.attn(q, yoco_key, yoco_value)
         lam, _ = self.lambda_proj(hidden_states)
         out = self._diff_attention_combine(attn_out, lam)
@@ -431,6 +502,7 @@ class YOCOSharedExperts(nn.Module):
         quant_config: QuantizationConfig | None,
         reduce_results: bool,
         prefix: str,
+        swiglu_limit: float = 10.0,
     ) -> None:
         super().__init__()
         self.gate_up_proj = MergedColumnParallelLinear(
@@ -448,7 +520,13 @@ class YOCOSharedExperts(nn.Module):
             reduce_results=reduce_results,
             prefix=f"{prefix}.down_proj",
         )
-        self.act_fn = SiluAndMul()
+        # Clamped SwiGLU to match training (``swiglu_limit``).  When the limit is
+        # non-positive, fall back to the plain (unclamped) activation.
+        self.swiglu_limit = float(swiglu_limit)
+        if self.swiglu_limit > 0:
+            self.act_fn = SiluAndMulWithClamp(self.swiglu_limit)
+        else:
+            self.act_fn = SiluAndMul()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         gate_up, _ = self.gate_up_proj(x)
@@ -476,6 +554,7 @@ class YOCOMoE(nn.Module):
         self.shared_intermediate_size = _cfg_int(
             config, "shared_expert_intermediate_size", "d_shared_expert"
         )
+        self.swiglu_limit = _swiglu_limit(config)
 
         # Router gate — runs in fp32 to match training.
         self.gate = GateLinear(
@@ -495,6 +574,7 @@ class YOCOMoE(nn.Module):
             quant_config=quant_config,
             reduce_results=True,
             prefix=f"{prefix}.shared_experts",
+            swiglu_limit=self.swiglu_limit,
         )
 
         # Scalar shared-expert sigmoid gate.  Replicated across TP — every
@@ -507,6 +587,21 @@ class YOCOMoE(nn.Module):
             prefix=f"{prefix}.shared_gate",
         )
 
+        # NOTE(swiglu_limit): The shared expert above applies the exact training
+        # ``swiglu_limit`` clamp (clamp-before-silu) via ``SiluAndMulWithClamp``.
+        # The ROUTED experts below do NOT yet apply ``swiglu_limit`` -- they run
+        # plain SiLU. vLLM's fused-MoE kernels (FlashInfer TRTLLM / CUTLASS / the
+        # default unquantized path) only accept an activation *enum* and provide
+        # no hook to plug ``swiglu_limit`` into the fused gemm1->act->gemm2 kernel
+        # (only specific quantized paths -- mxfp4/cutlass/marlin/gpt_oss -- honor
+        # it via ``gemm1_clamp_limit`` / ``swiglu_limit_func``). Measured routed
+        # activations can exceed the limit (shared expert peaked ~18.6 vs 10.0),
+        # so this is an exact-fidelity gap, not a no-op. Output is still coherent
+        # because limit=10.0 is loose. To make the routed path exact one must
+        # force the TRITON MoE backend AND thread ``swiglu_limit`` through
+        # ``apply_moe_activation`` (fused_moe.py:~1825 / modular_kernel.py:~886)
+        # using ``swiglu_limit_func`` (fused_moe/utils.py). TODO: implement when
+        # exact routed-expert parity with training is required.
         self.experts = FusedMoE(
             num_experts=self.num_experts,
             top_k=self.top_k,
@@ -736,6 +831,13 @@ class YOCOSelfBlock(nn.Module):
         h_norm = model.yoco_norm(hidden_states)
         yoco_key, _ = model.yoco_k_proj(h_norm)
         yoco_value, _ = model.yoco_v_proj(h_norm)
+        if model.yoco_k_norm is not None:
+            yoco_key = _apply_per_head_norm(
+                yoco_key,
+                model.yoco_num_kv_heads,
+                model.yoco_kv_head_dim,
+                model.yoco_k_norm,
+            )
         hidden_states = model.layers[model.first_cross_layer_idx](
             positions,
             hidden_states,
@@ -796,6 +898,11 @@ class YOCOModel(nn.Module):
             head_dim = _cfg_int(config, "head_dim")
             tp_size = get_tensor_model_parallel_world_size()
             assert cross_kv_head % tp_size == 0 or tp_size % cross_kv_head == 0
+            self.yoco_kv_head_dim = head_dim
+            self.yoco_num_kv_heads = max(1, cross_kv_head // tp_size)
+            # Per-head K norm/clip applied once to the shared ``yoco_key``
+            # (mirrors training's model-level ``k_norm`` in ``llm/arch/model.py``).
+            self.yoco_k_norm = _build_qk_norm(config, head_dim, rms_eps)
             self.yoco_norm = RMSNorm(self.hidden_size, eps=rms_eps)
             self.yoco_k_proj = ColumnParallelLinear(
                 input_size=self.hidden_size,
@@ -817,6 +924,7 @@ class YOCOModel(nn.Module):
             self.yoco_norm = None
             self.yoco_k_proj = None
             self.yoco_v_proj = None
+            self.yoco_k_norm = None
 
         # Decoder layers.  PP > 1 is out of scope for YOCO (the universal
         # loop and shared cross-KV both couple all layers tightly), so we
@@ -941,6 +1049,13 @@ class YOCOModel(nn.Module):
             h_norm = self.yoco_norm(hidden_states)
             yoco_key, _ = self.yoco_k_proj(h_norm)
             yoco_value, _ = self.yoco_v_proj(h_norm)
+            if self.yoco_k_norm is not None:
+                yoco_key = _apply_per_head_norm(
+                    yoco_key,
+                    self.yoco_num_kv_heads,
+                    self.yoco_kv_head_dim,
+                    self.yoco_k_norm,
+                )
             # No RoPE on cross-layer K (``rope_dim = 0`` in HF config).
             for layer_idx in range(
                 self.first_cross_layer_idx, self.num_hidden_layers
