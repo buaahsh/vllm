@@ -587,21 +587,21 @@ class YOCOMoE(nn.Module):
             prefix=f"{prefix}.shared_gate",
         )
 
-        # NOTE(swiglu_limit): The shared expert above applies the exact training
-        # ``swiglu_limit`` clamp (clamp-before-silu) via ``SiluAndMulWithClamp``.
-        # The ROUTED experts below do NOT yet apply ``swiglu_limit`` -- they run
-        # plain SiLU. vLLM's fused-MoE kernels (FlashInfer TRTLLM / CUTLASS / the
-        # default unquantized path) only accept an activation *enum* and provide
-        # no hook to plug ``swiglu_limit`` into the fused gemm1->act->gemm2 kernel
-        # (only specific quantized paths -- mxfp4/cutlass/marlin/gpt_oss -- honor
-        # it via ``gemm1_clamp_limit`` / ``swiglu_limit_func``). Measured routed
-        # activations can exceed the limit (shared expert peaked ~18.6 vs 10.0),
-        # so this is an exact-fidelity gap, not a no-op. Output is still coherent
-        # because limit=10.0 is loose. To make the routed path exact one must
-        # force the TRITON MoE backend AND thread ``swiglu_limit`` through
-        # ``apply_moe_activation`` (fused_moe.py:~1825 / modular_kernel.py:~886)
-        # using ``swiglu_limit_func`` (fused_moe/utils.py). TODO: implement when
-        # exact routed-expert parity with training is required.
+        # NOTE(swiglu_limit): The shared expert (above, via ``SiluAndMulWithClamp``)
+        # applies the training ``swiglu_limit`` clamp. The ROUTED experts below run
+        # plain SiLU and intentionally do NOT clamp, even though training applied
+        # the clamp to routed experts too.
+        #
+        # We implemented + tested the exact training-faithful routed clamp
+        # (threaded ``swiglu_limit`` -> ``FusedMoEExpertsModular.activation`` ->
+        # ``swiglu_limit_func``, gate/up ordering verified to match
+        # ``silu_and_mul``). Result: it made ``adamw-3000`` DEGENERATE under greedy
+        # decoding (endless ``*`` repetition), while the unclamped path is clean for
+        # all four checkpoints. The loose limit=10.0 introduces a hard nonlinearity
+        # near the routed activation peaks (~18.6) that, in bf16 inference, tips
+        # greedy decoding into a degenerate attractor. So unclamped is the better
+        # (more robust) choice in practice; the real 乱码 fix was the TRITON MoE
+        # backend (``--moe-backend triton``), not this clamp.
         self.experts = FusedMoE(
             num_experts=self.num_experts,
             top_k=self.top_k,
