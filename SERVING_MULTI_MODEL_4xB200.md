@@ -117,31 +117,36 @@ launching shell. Logs:
 > The router's `frequency_penalty` injection is **no longer needed** and has
 > been removed — Triton output is stable without it.
 
-### Routed-expert SwiGLU clamp — tried and REJECTED (2026-06-27)
+### Routed-expert SwiGLU clamp — ENABLED for training parity (2026-06-27)
 
-Training applied a SwiGLU clamp (`swiglu_limit=10.0`, clamp-before-silu) to the
+Training applies a SwiGLU clamp (`swiglu_limit=10.0`, clamp-before-silu) to the
 **routed** experts (training kernel `llm-train/llm/kernel/moe_ffn.py:
-_fused_silu_kernel`), but vLLM's fused-MoE routed path runs plain SiLU and
-ignores it (only the *shared* expert clamps, via `SiluAndMulWithClamp`). Routed
-activations exceed the limit (~18.6 vs 10.0), so it looked like a real
-train/inference parity gap worth closing.
+_fused_silu_kernel`). vLLM's fused-MoE routed path runs plain SiLU by default and
+ignored it (only the *shared* expert clamped, via `SiluAndMulWithClamp`). Routed
+activations exceed the limit (~18.6 vs 10.0), so this was a real train/inference
+parity gap.
 
-We **implemented and tested** the exact training-faithful routed clamp
-(threaded `swiglu_limit` from `FusedMoE(...)` → `UnquantizedFusedMoEMethod.
-forward_native` → `FusedMoEExpertsModular.activation` → `swiglu_limit_func`;
-gate/up ordering verified identical to the working `silu_and_mul`).
+**Decision (model owner):** enable the routed clamp for exact training fidelity.
+It is now implemented (config-driven, TRITON backend only):
+- `yoco.py` passes `swiglu_limit=self.swiglu_limit` into `FusedMoE(...)`.
+- `UnquantizedFusedMoEMethod.forward_native` propagates `layer.swiglu_limit`
+  onto the modular experts object.
+- `FusedMoEExpertsModular.activation()` (modular_kernel.py) applies
+  `swiglu_limit_func` (clamp-before-silu, gate/up ordering verified identical to
+  `silu_and_mul`) when the limit is set, else the plain activation — **zero
+  impact on any other model** (default `None`).
 
-**Result: REJECTED.** With the clamp on, `adamw-3000` **degenerates under greedy
-decoding** (endless `*` repetition), while the **unclamped** path is clean for
-all four checkpoints. The loose limit=10.0 introduces a hard nonlinearity right
-where the routed activation peaks sit, and in bf16 inference that tips greedy
-decoding into a degenerate attractor for at least one checkpoint. So even though
-the clamp is "theoretically" faithful to training, the **unclamped Triton path
-is the more robust choice** and is what we ship.
+Startup log confirms it is active:
+`modular_kernel.py Routed MoE experts using clamped SwiGLU (swiglu_limit=10.0)
+to match training.`
 
-Takeaway: the real 乱码 fix was the **TRITON MoE backend** (`--moe-backend
-triton`), NOT any activation clamp. The routed-expert clamp code was fully
-reverted; the model intentionally serves routed experts unclamped.
+**CAUTION — greedy decoding:** with the clamp on, `adamw-3000` was observed to
+degenerate under *pure greedy* (`temperature=0`) decoding (endless `*`), while
+the unclamped path is clean. The loose limit=10.0 adds a hard nonlinearity near
+the routed activation peaks that, in bf16, can tip greedy into a degenerate
+attractor for some checkpoints. **Use `temperature>0` (e.g. 0.7) in production**;
+sampled decoding is stable. Requires `--moe-backend triton` (the FlashInfer
+fused kernels expose no activation hook).
 
 ### Earlier (partial) investigation — kept for history
 

@@ -587,21 +587,20 @@ class YOCOMoE(nn.Module):
             prefix=f"{prefix}.shared_gate",
         )
 
-        # NOTE(swiglu_limit): The shared expert (above, via ``SiluAndMulWithClamp``)
-        # applies the training ``swiglu_limit`` clamp. The ROUTED experts below run
-        # plain SiLU and intentionally do NOT clamp, even though training applied
-        # the clamp to routed experts too.
-        #
-        # We implemented + tested the exact training-faithful routed clamp
-        # (threaded ``swiglu_limit`` -> ``FusedMoEExpertsModular.activation`` ->
-        # ``swiglu_limit_func``, gate/up ordering verified to match
-        # ``silu_and_mul``). Result: it made ``adamw-3000`` DEGENERATE under greedy
-        # decoding (endless ``*`` repetition), while the unclamped path is clean for
-        # all four checkpoints. The loose limit=10.0 introduces a hard nonlinearity
-        # near the routed activation peaks (~18.6) that, in bf16 inference, tips
-        # greedy decoding into a degenerate attractor. So unclamped is the better
-        # (more robust) choice in practice; the real 乱码 fix was the TRITON MoE
-        # backend (``--moe-backend triton``), not this clamp.
+        # NOTE(swiglu_limit): Both the shared expert (above, via
+        # ``SiluAndMulWithClamp``) and the ROUTED experts (below) apply the
+        # training ``swiglu_limit`` clamp (clamp-before-silu), for exact
+        # train/inference parity. The routed clamp is threaded via
+        # ``FusedMoE(swiglu_limit=...)`` -> ``UnquantizedFusedMoEMethod.
+        # forward_native`` -> ``FusedMoEExpertsModular.activation`` ->
+        # ``swiglu_limit_func`` (gate/up ordering verified identical to
+        # ``silu_and_mul``). Requires the TRITON MoE backend
+        # (``--moe-backend triton``) -- the FlashInfer fused kernels expose no
+        # activation hook (and are numerically broken for this model's
+        # ``moe_ffn_dim=1280``, not 128-aligned). CAUTION: the loose limit=10.0
+        # can make some checkpoints (observed: adamw-3000) degenerate under pure
+        # greedy decoding; use temperature>0 in production. Kept on per owner's
+        # request for training fidelity.
         self.experts = FusedMoE(
             num_experts=self.num_experts,
             top_k=self.top_k,
@@ -611,6 +610,7 @@ class YOCOMoE(nn.Module):
             quant_config=quant_config,
             use_grouped_topk=False,
             scoring_func="softmax",
+            swiglu_limit=self.swiglu_limit,
             prefix=f"{prefix}.experts",
         )
 

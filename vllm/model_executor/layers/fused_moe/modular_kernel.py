@@ -43,6 +43,9 @@ from vllm.v1.worker.workspace import current_workspace_manager
 
 logger = init_logger(__name__)
 
+# One-time log guard for the routed-expert clamped-SwiGLU (training-parity) path.
+_SWIGLU_LIMIT_LOGGED = False
+
 #
 # This file defines a set of base classes used to make MoE kernels more modular.
 # The goal is to be able to utilize different communication mechanisms with
@@ -883,7 +886,25 @@ class FusedMoEExpertsModular(FusedMoEExperts):
     def activation(
         self, activation: MoEActivation, output: torch.Tensor, input: torch.Tensor
     ) -> None:
-        apply_moe_activation(activation, output, input)
+        # Optional clamped-SwiGLU (clamp-before-silu) matching training. Enabled
+        # only when an experts instance sets ``self.swiglu_limit`` (YOCO routed
+        # experts); default ``None`` keeps the plain activation so every other
+        # model is unaffected.
+        swiglu_limit = getattr(self, "swiglu_limit", None)
+        if swiglu_limit and activation == MoEActivation.SILU:
+            from vllm.model_executor.layers.fused_moe.utils import swiglu_limit_func
+
+            global _SWIGLU_LIMIT_LOGGED
+            if not _SWIGLU_LIMIT_LOGGED:
+                logger.info(
+                    "Routed MoE experts using clamped SwiGLU (swiglu_limit=%s) "
+                    "to match training.",
+                    float(swiglu_limit),
+                )
+                _SWIGLU_LIMIT_LOGGED = True
+            swiglu_limit_func(output, input, float(swiglu_limit))
+        else:
+            apply_moe_activation(activation, output, input)
 
     @abstractmethod
     def finalize_weight_and_reduce_impl(self) -> TopKWeightAndReduce:

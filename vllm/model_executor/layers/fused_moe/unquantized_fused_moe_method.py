@@ -309,6 +309,11 @@ class UnquantizedFusedMoEMethod(FusedMoEMethodBase, CustomOp):
         shared_experts_input: torch.Tensor | None,
     ) -> torch.Tensor:
         assert self.moe_kernel is not None
+        # Propagate the model's SwiGLU clamp limit to the routed experts so the
+        # fused activation matches training (no-op when unset / for other models).
+        _fe = getattr(self.moe_kernel, "fused_experts", None)
+        if _fe is not None:
+            _fe.swiglu_limit = getattr(layer, "swiglu_limit", None)
         return self.moe_kernel.apply(
             hidden_states=x,
             w1=layer.w13_weight,
