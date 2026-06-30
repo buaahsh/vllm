@@ -1,28 +1,26 @@
 # Recreates the locally committed image:
 #   vllm-yoco-on-023:installed
 # Intended tag:
-#   buaahsh/pytorch:26.02-h100-vllm
+#   buaahsh/pytorch:26.02-a100-vllm
 #
 # The image currently on this machine was produced with docker commit after
 # running the equivalent steps below inside donglixp/pytorch:26.02-b200.
 # Build example:
-#   docker build -f docker/Dockerfile.h100 -t buaahsh/pytorch:26.02-h100-vllm /tmp
+#   docker build -f docker/Dockerfile.a100 -t buaahsh/pytorch:26.02-a100-vllm /tmp
 
 FROM donglixp/pytorch:26.02-b200
 
 ENV PIP_NO_CACHE_DIR=1 \
     HF_HOME=/workspace/.cache/huggingface \
     VLLM_TARGET_DEVICE=cuda \
-    TORCH_CUDA_ARCH_LIST=9.0 \
+    TORCH_CUDA_ARCH_LIST="8.0 8.6" \
     MAX_JOBS=16 \
     NVCC_THREADS=1
 
 WORKDIR /workspace
 
 RUN git clone --depth 1 --branch shaohanh/yoco-on-0.23 --single-branch \
-        https://github.com/buaahsh/vllm.git /workspace/vllm \
-    && cd /workspace/vllm 
-    # && test "$(git rev-parse HEAD)" = "cbb4d478c8466ef03ae3dc4a2e9acf252394da38"
+        https://github.com/buaahsh/vllm.git /workspace/vllm
 
 WORKDIR /workspace/vllm
 
