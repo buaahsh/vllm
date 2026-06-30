@@ -222,6 +222,9 @@ class Mxfp8OnlineMoEMethod(OnlineMoEMethodBase):
             a2_scale=a2_scale,
             block_shape=self.weight_block_size,
         )
+        swiglu_limit = getattr(layer, "swiglu_limit", None)
+        if swiglu_limit is not None and swiglu_limit > 0:
+            quant_config.gemm1_clamp_limit = float(swiglu_limit)
 
         self._maybe_inject_biases(quant_config, layer)
         return quant_config

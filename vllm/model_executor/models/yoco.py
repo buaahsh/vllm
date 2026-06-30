@@ -48,9 +48,9 @@ cases BOS appears exactly once.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Optional
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 from transformers import PretrainedConfig
 
@@ -98,6 +98,16 @@ from vllm.model_executor.models.utils import (
 # --------------------------------------------------------------------------- #
 
 
+YOCO_PACKED_MODULES_MAPPING = {
+    "qkv_proj": ["q_proj", "k_proj", "v_proj"],
+}
+
+
+YOCO_ONLINE_QUANT_IGNORE = [
+    "re:.*\\.self_attn\\.lambda_proj$",
+]
+
+
 def _cfg_int(config: PretrainedConfig, *names: str, default: int | None = None) -> int:
     """Read the first attribute from ``config`` whose name is in ``names``.
 
@@ -115,6 +125,20 @@ def _cfg_int(config: PretrainedConfig, *names: str, default: int | None = None) 
     raise AttributeError(
         f"None of the config fields {names!r} are set on {type(config).__name__}"
     )
+
+
+def _maybe_build_yoco_quant_config(
+    quant_config: QuantizationConfig | None,
+) -> QuantizationConfig | None:
+    if quant_config is None:
+        return None
+    quant_config.packed_modules_mapping = YOCO_PACKED_MODULES_MAPPING
+    ignored_layers = getattr(quant_config, "ignored_layers", None)
+    if ignored_layers is not None:
+        for pattern in YOCO_ONLINE_QUANT_IGNORE:
+            if pattern not in ignored_layers:
+                ignored_layers.append(pattern)
+    return quant_config
 
 
 class RMSClip(nn.Module):
@@ -137,9 +161,12 @@ class RMSClip(nn.Module):
         return f"dim={self.dim}, eps={self.eps}, limit={self.limit}"
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        rms = torch.sqrt(x.float().pow(2).mean(-1, keepdim=True) + self.eps).type_as(x)
-        clip_coef = (self.limit / rms).clamp(max=1.0)
-        return x * clip_coef
+        orig_dtype = x.dtype
+        x = x.to(torch.float32)
+        variance = x.pow(2).mean(dim=-1, keepdim=True)
+        clip_coef = (self.limit * torch.rsqrt(variance + self.eps)).clamp(max=1.0)
+        x = x * clip_coef
+        return x.to(orig_dtype)
 
 
 def _build_qk_norm(config: PretrainedConfig, head_dim: int, rms_eps: float):
@@ -561,6 +588,7 @@ class YOCOMoE(nn.Module):
             input_size=self.hidden_size,
             output_size=self.num_experts,
             bias=False,
+            params_dtype=torch.float32,
             force_fp32_compute=True,
             prefix=f"{prefix}.gate",
         )
@@ -583,6 +611,7 @@ class YOCOMoE(nn.Module):
             input_size=self.hidden_size,
             output_size=1,
             bias=False,
+            params_dtype=torch.float32,
             quant_config=None,
             prefix=f"{prefix}.shared_gate",
         )
@@ -628,7 +657,11 @@ class YOCOMoE(nn.Module):
         # rank; applying it to the already-reduced shared output is equivalent
         # to applying it before reduction.
         shared_out = self.shared_experts(hidden_states)
-        scale, _ = self.shared_gate(hidden_states)
+        # Training keeps shared_gate as an FP32 master weight but casts it to
+        # the activation dtype for the actual MixPrecisionLinear matmul.
+        scale = F.linear(
+            hidden_states, self.shared_gate.weight.to(hidden_states.dtype)
+        )
         shared_out = torch.sigmoid(scale) * shared_out
 
         # ``routed_out`` (reduced inside FusedMoE) and ``shared_out`` (reduced
@@ -867,7 +900,8 @@ class YOCOModel(nn.Module):
         super().__init__()
         config: PretrainedConfig = vllm_config.model_config.hf_config
         cache_config = vllm_config.cache_config
-        quant_config = vllm_config.quant_config
+        quant_config = _maybe_build_yoco_quant_config(vllm_config.quant_config)
+        vllm_config.quant_config = quant_config
 
         self.config = config
         self.quant_config = quant_config
@@ -1078,16 +1112,15 @@ class YOCOModel(nn.Module):
 
 
 class YOCOForCausalLM(nn.Module, SupportsPP):
-    packed_modules_mapping = {
-        # Self-attention layers ship q/k/v separately; we fuse into qkv_proj.
-        "qkv_proj": ["q_proj", "k_proj", "v_proj"],
-    }
+    # Self-attention layers ship q/k/v separately; we fuse into qkv_proj.
+    packed_modules_mapping = YOCO_PACKED_MODULES_MAPPING
 
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = "") -> None:
         super().__init__()
         config: PretrainedConfig = vllm_config.model_config.hf_config
         self.config = config
-        self.quant_config = vllm_config.quant_config
+        self.quant_config = _maybe_build_yoco_quant_config(vllm_config.quant_config)
+        vllm_config.quant_config = self.quant_config
 
         self.model = YOCOModel(
             vllm_config=vllm_config,

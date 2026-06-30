@@ -258,6 +258,7 @@ def create_hf_config(metadata: dict, output_dir: str) -> dict:
     head_dim = ma.get("head_dim") or ma["d_model"] // ma["head"]
     cross_kv_head = ma.get("cross_kv_head", ma["kv_head"])
     cross_head = ma.get("cross_head", ma["head"])
+    qk_rms_clip = ma.get("qk_rms_clip", False)
 
     config = {
         "architectures": ["YOCOForCausalLM"],
@@ -280,8 +281,8 @@ def create_hf_config(metadata: dict, output_dir: str) -> dict:
         # Norm / attention flags
         "norm_eps": ma["norm_eps"],
         "rope_theta": ma["rope_theta"],
-        "qk_norm": ma.get("qk_norm", False),
-        "qk_rms_clip": ma.get("qk_rms_clip", False),
+        "qk_norm": False if qk_rms_clip else ma.get("qk_norm", False),
+        "qk_rms_clip": qk_rms_clip,
         "qk_rms_limit": ma.get("qk_rms_limit", 3.0),
         "attention_bias": ma.get("attention_bias", False),
         "weight_tying": ma.get("weight_tying", False),
@@ -413,6 +414,14 @@ def copy_tokenizer_files(output_dir: str) -> None:
 # ---------------------------------------------------------------------------
 # Sharded safetensors save
 # ---------------------------------------------------------------------------
+def keep_fp32_in_export(key: str) -> bool:
+    # Keep the native checkpoint's FP32 gate master weights.
+    return key.endswith((
+        ".mlp.gate.weight",
+        ".mlp.shared_gate.weight",
+    ))
+
+
 def save_sharded(state_dict: Dict[str, torch.Tensor], output_dir: str,
                  max_shard_size: int = 5 * 1024 * 1024 * 1024) -> None:
     sorted_keys = sorted(state_dict.keys())
@@ -423,7 +432,7 @@ def save_sharded(state_dict: Dict[str, torch.Tensor], output_dir: str,
     current_size = 0
     for key in sorted_keys:
         tensor = state_dict[key]
-        if tensor.dtype == torch.float32:
+        if tensor.dtype == torch.float32 and not keep_fp32_in_export(key):
             tensor = tensor.to(torch.bfloat16)
         size = tensor.numel() * tensor.element_size()
         if current and current_size + size > max_shard_size:
