@@ -244,6 +244,14 @@ def add_bos_post_processor(tokenizer_json_path: str) -> None:
     print("   Patched tokenizer.json to add <sop> when add_special_tokens=True")
 
 
+def ensure_chat_template_has_bos(chat_template: str) -> str:
+    """Make chat-template rendering start with the GLM BOS token."""
+    stripped = chat_template.lstrip()
+    if stripped.startswith("<sop>") or stripped.startswith("{{ bos_token") or stripped.startswith("{{- bos_token"):
+        return chat_template
+    return "<sop>\n" + chat_template
+
+
 def create_hf_config(metadata: dict, output_dir: str) -> dict:
     ma = metadata.get("modelargs", metadata)
 
@@ -362,9 +370,10 @@ def copy_tokenizer_files(output_dir: str) -> None:
     chat_template = None
     if os.path.exists(chat_tpl_src):
         with open(chat_tpl_src, "r", encoding="utf-8") as f:
-            chat_template = f.read()
-        shutil.copy2(chat_tpl_src, os.path.join(output_dir, "chat_template.jinja"))
-        print("   Copied chat_template.jinja")
+            chat_template = ensure_chat_template_has_bos(f.read())
+        with open(os.path.join(output_dir, "chat_template.jinja"), "w", encoding="utf-8") as f:
+            f.write(chat_template)
+        print("   Wrote chat_template.jinja with <sop> prefix")
 
     # Build a clean tokenizer_config.json:
     #   - tokenizer_class = PreTrainedTokenizerFast so HF AutoTokenizer loads it.
