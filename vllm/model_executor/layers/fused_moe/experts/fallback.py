@@ -161,6 +161,8 @@ class FallbackExperts(mk.FusedMoEExpertsModular, ABC):
         apply_router_weight_on_input: bool,
     ):
         experts = self._select_experts_impl(hidden_states, w1, w2)
+        if hasattr(self, "swiglu_limit"):
+            experts.swiglu_limit = self.swiglu_limit
         experts.apply(
             output,
             hidden_states,

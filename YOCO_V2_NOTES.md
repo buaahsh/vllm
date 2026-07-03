@@ -144,6 +144,92 @@ Artifacts for the new RMSClip run:
   this conda env's installed `flash_attn` binary is ABI-incompatible with the
   current Torch build.
 
+## 2026-07-01 Docker 0630 validation and native MXFP8
+
+Validation script:
+`/data/users/shaohanh/vllm/tools/yoco_alignment/logprob_kl.py`.
+
+Fresh acceptance source:
+
+- Model-only shards:
+  `/data/users/shaohanh/local_models/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-1000`
+- Fresh merged checkpoint:
+  `/data/users/shaohanh/local_models/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/acceptance_merged_0000-1000`
+- Fresh HF export:
+  `/data/users/shaohanh/local_models/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/acceptance_hf_0000-1000`
+
+### Image compatibility
+
+- `buaahsh/pytorch:26.02-b200-vllm-0630` is a B200/sm100 image. On this H100
+  host (`NVIDIA H100 PCIe`, compute capability `(9, 0)`), vLLM fails with
+  `CUDA error: no kernel image is available for execution on the device`.
+  Overriding `TORCH_CUDA_ARCH_LIST=9.0` was not enough; the image should be
+  validated on a B200 host.
+- The H100-matched image `buaahsh/pytorch:26.02-h100-vllm-0630` runs on this
+  host. It has working `flash_attn`, `deep_gemm`, and vLLM.
+
+### H100 Docker BF16 / fp8_per_block vs native BF16
+
+Native reference in these two rows is BF16 because checkpoint metadata has
+`quant_mode=bfloat16`.
+
+| Candidate | Mean KL native->vLLM | Mean KL vLLM->native | Mean JS | Mean max abs logprob diff | Mean abs logprob diff | Top1 |
+|---|---:|---:|---:|---:|---:|---:|
+| H100 Docker BF16 + `--moe-backend triton` | 0.006539 | 0.006442 | 0.001616 | 0.477966 | 0.093054 | 4/5 |
+| H100 Docker `--quantization fp8_per_block --moe-backend triton` | 0.031455 | 0.032669 | 0.007853 | 1.457787 | 0.243259 | 5/5 |
+
+Per-prompt KL native->vLLM:
+
+| Candidate | short_hello | short_fact | medium_english | short_zh | long_zh |
+|---|---:|---:|---:|---:|---:|
+| H100 Docker BF16 + Triton | 0.000444 | 0.000615 | 0.002722 | 0.008580 | 0.020334 |
+| H100 Docker fp8_per_block + Triton | 0.002472 | 0.002137 | 0.020630 | 0.012932 | 0.119102 |
+
+Artifacts:
+
+- `/data/users/shaohanh/results/docker_h100_vllm_0630_yoco_alignment/native_mixed5.pt`
+- `/data/users/shaohanh/results/docker_h100_vllm_0630_yoco_alignment/vllm_bf16_triton_mixed5.pt`
+- `/data/users/shaohanh/results/docker_h100_vllm_0630_yoco_alignment/bf16_triton_summary.json`
+- `/data/users/shaohanh/results/docker_h100_vllm_0630_yoco_alignment/vllm_fp8_per_block_triton_mixed5.pt`
+- `/data/users/shaohanh/results/docker_h100_vllm_0630_yoco_alignment/fp8_per_block_triton_summary.json`
+
+### Native MXFP8 reference vs vLLM candidates
+
+The metadata checkpoint is BF16, so native MXFP8 was run by overriding:
+
+```bash
+--native-quant-mode mxfp8 --native-quant-block-size 128
+```
+
+Direct native MXFP8 with the llm-train Triton activation quant kernel failed
+on short prompts with CUDA illegal memory access. For this mixed5 validation,
+the native reference used `--native-use-torch-fp8-quant`, which swaps in
+llm-train's torch FP8 quant fallback (`_per_token_cast_to_fp8_torch` and
+`_per_block_cast_to_fp8_torch`). This keeps the same `ceil_to_ue8m0` scale
+formula but avoids the short-sequence Triton kernel issue.
+
+| Reference | Candidate | Mean KL ref->cand | Mean KL cand->ref | Mean JS | Mean max abs logprob diff | Mean abs logprob diff | Top1 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| native MXFP8 torch-quant | vLLM `fp8_per_block + triton` | 0.030285 | 0.030210 | 0.007462 | 1.427271 | 0.214497 | 4/5 |
+| native MXFP8 torch-quant | vLLM BF16 + triton | 0.012737 | 0.012446 | 0.003123 | 0.870903 | 0.151367 | 5/5 |
+
+Per-prompt KL native MXFP8 -> candidate:
+
+| Candidate | short_hello | short_fact | medium_english | short_zh | long_zh |
+|---|---:|---:|---:|---:|---:|
+| vLLM fp8_per_block + Triton | 0.003021 | 0.011923 | 0.032593 | 0.021221 | 0.082667 |
+| vLLM BF16 + Triton | 0.001472 | 0.004586 | 0.004019 | 0.021571 | 0.032039 |
+
+Artifacts:
+
+- `/data/users/shaohanh/results/docker_h100_vllm_0630_yoco_alignment/native_mxfp8_torch_quant_mixed5.pt`
+- `/data/users/shaohanh/results/docker_h100_vllm_0630_yoco_alignment/native_mxfp8_torch_quant_vs_vllm_fp8_per_block_triton_summary.json`
+- `/data/users/shaohanh/results/docker_h100_vllm_0630_yoco_alignment/native_mxfp8_torch_quant_vs_vllm_bf16_triton_summary.json`
+
+Conclusion: current vLLM `fp8_per_block` is still not aligned with native
+YOCO MXFP8. Matching the block shape is not sufficient; the online FP8 scale
+rounding still needs to be aligned with training's `ceil_to_ue8m0`.
+
 ## How To Run Setting 5 / MXFP8
 
 Recommended conversion command for router/shared-gate FP32 + RMSClip FP32:

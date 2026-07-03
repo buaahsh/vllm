@@ -77,6 +77,14 @@ direct_register_custom_op(
 )
 
 
+@triton.jit
+def _ceil_to_ue8m0_tl(x):
+    bits = tl.cast(tl.abs(x).to(tl.float32), tl.int32, bitcast=True)
+    exp = ((bits >> 23) & 0xFF) + ((bits & 0x7FFFFF) != 0).to(tl.int32)
+    exp = tl.minimum(tl.maximum(exp, 1), 254)
+    return tl.cast(exp << 23, tl.float32, bitcast=True)
+
+
 def input_to_float8(
     x: torch.Tensor, dtype: torch.dtype | None = None
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -142,7 +150,7 @@ def _per_token_group_quant_fp8(
     # representable-value boundaries).
     _absmax = tl.maximum(tl.max(tl.abs(y)), eps)
     scale_raw = _absmax * (1.0 / fp8_max)
-    y_s = tl.math.exp2(tl.ceil(tl.log2(scale_raw))) if use_ue8m0 else scale_raw
+    y_s = _ceil_to_ue8m0_tl(scale_raw) if use_ue8m0 else scale_raw
     y_q = tl.clamp(y / y_s, fp8_min, fp8_max).to(y_q_ptr.dtype.element_ty)
 
     tl.store(y_q_ptr + cols, y_q, mask=mask)
@@ -159,6 +167,7 @@ def _silu_mul_quant_fp8_packed_kernel(
     output_q_stride_m,
     output_scale_stride_k,
     clamp_limit,
+    row_scale_ptr,
     N: tl.constexpr,
     NUM_GROUPS: tl.constexpr,
     fp8_min: tl.constexpr,
@@ -166,6 +175,7 @@ def _silu_mul_quant_fp8_packed_kernel(
     GROUP_SIZE: tl.constexpr,
     BLOCK_M: tl.constexpr,
     HAS_CLAMP: tl.constexpr,
+    HAS_ROW_SCALE: tl.constexpr,
 ):
     N_2: tl.constexpr = N // 2
 
@@ -205,14 +215,18 @@ def _silu_mul_quant_fp8_packed_kernel(
                 mul_f32 = tl.clamp(mul_f32, -clamp_limit, clamp_limit)
 
             y = (act_f32 / (1.0 + tl.exp(-act_f32))) * mul_f32
+            if HAS_ROW_SCALE:
+                row_scale = tl.load(
+                    row_scale_ptr + m_offset + offs_m, mask=row_mask, other=0.0
+                ).to(tl.float32)
+                y = y * row_scale[:, None]
             # Round through bf16 to match unfused precision path
             y = y.to(tl.bfloat16).to(tl.float32)
 
             absmax = tl.max(tl.abs(y), axis=1)
 
             scale_raw = tl.maximum(absmax / fp8_max, 1e-10)
-            exponent = tl.ceil(tl.log2(scale_raw))
-            scale = tl.math.exp2(exponent)
+            scale = _ceil_to_ue8m0_tl(scale_raw)
 
             y_q = tl.clamp(y / scale[:, None], fp8_min, fp8_max)
 
@@ -223,7 +237,8 @@ def _silu_mul_quant_fp8_packed_kernel(
                 mask=row_mask[:, None],
             )
 
-            exponent_biased = tl.clamp(exponent + 127.0, 0.0, 255.0).to(tl.int32)
+            scale_bits = tl.cast(scale, tl.int32, bitcast=True)
+            exponent_biased = (scale_bits >> 23) & 0xFF
             packed_scale = packed_scale | (exponent_biased << (pack_idx * 8))
 
     scale_ptrs = output_scale_ptr + pid_pack * output_scale_stride_k + m_offset + offs_m
@@ -235,6 +250,7 @@ def silu_mul_quant_fp8_packed_triton(
     group_size: int = 128,
     output_q: torch.Tensor | None = None,
     clamp_limit: float | None = None,
+    row_scale: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     assert input.dim() == 2
     assert input.is_contiguous()
@@ -268,6 +284,7 @@ def silu_mul_quant_fp8_packed_triton(
     num_stages = 2
 
     has_clamp = clamp_limit is not None
+    has_row_scale = row_scale is not None
     _silu_mul_quant_fp8_packed_kernel[grid](
         input,
         output_q,
@@ -277,6 +294,7 @@ def silu_mul_quant_fp8_packed_triton(
         output_q.stride(0),
         output_scale_packed.stride(1),
         clamp_limit if has_clamp else 0.0,
+        row_scale if has_row_scale else input,
         N=N,
         NUM_GROUPS=num_groups_per_row,
         fp8_min=fp8_min,
@@ -284,6 +302,7 @@ def silu_mul_quant_fp8_packed_triton(
         GROUP_SIZE=group_size,
         BLOCK_M=BLOCK_M,
         HAS_CLAMP=has_clamp,
+        HAS_ROW_SCALE=has_row_scale,
         num_warps=num_warps,
         num_stages=num_stages,
     )
@@ -305,10 +324,14 @@ def _silu_mul_per_token_group_quant_fp8_colmajor(
     fp8_min: tl.constexpr,
     fp8_max: tl.constexpr,
     use_ue8m0: tl.constexpr,
+    clamp_limit,
+    row_scale_ptr,
     # Meta-parameters
     GROUP_SIZE: tl.constexpr,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
+    HAS_CLAMP: tl.constexpr,
+    HAS_ROW_SCALE: tl.constexpr,
 ):
     # TODO(varun) : Add expert_ids so we may early-exit no-op thread blocks.
     """
@@ -338,14 +361,25 @@ def _silu_mul_per_token_group_quant_fp8_colmajor(
 
     # silu & mul
     act_in = act_in.to(tl.float32)
+    mul_in = mul_in.to(tl.float32)
+    if HAS_CLAMP:
+        act_in = tl.minimum(act_in, clamp_limit)
+        mul_in = tl.clamp(mul_in, -clamp_limit, clamp_limit)
     one_f32 = tl.cast(1, tl.float32)
     silu_out = (act_in / (one_f32 + tl.exp(-act_in))).to(y_ptr.dtype.element_ty)
     y = (silu_out * mul_in).to(tl.float32)
+    if HAS_ROW_SCALE:
+        row_scale = tl.load(
+            row_scale_ptr + m_offset + offs_m,
+            mask=(m_offset + offs_m) < M,
+            other=0.0,
+        ).to(tl.float32)
+        y = y * row_scale[:, None]
 
     # quant
     _absmax = tl.maximum(tl.max(tl.abs(y), axis=1), eps)
     scale_raw = _absmax * (1.0 / fp8_max)
-    y_s = tl.math.exp2(tl.ceil(tl.log2(scale_raw))) if use_ue8m0 else scale_raw
+    y_s = _ceil_to_ue8m0_tl(scale_raw) if use_ue8m0 else scale_raw
     y_s = tl.reshape(y_s, (BLOCK_M, 1))
     y_q = tl.clamp(y / y_s, fp8_min, fp8_max).to(y_q_ptr.dtype.element_ty)
 
@@ -366,6 +400,8 @@ def silu_mul_per_token_group_quant_fp8_colmajor(
     input: torch.Tensor,  # [M, N]
     output: torch.Tensor | None = None,  # [M, N // 2]
     use_ue8m0: bool | None = None,
+    clamp_limit: float | None = None,
+    row_scale: torch.Tensor | None = None,
     eps: float = 1e-10,
 ):
     """
@@ -408,6 +444,8 @@ def silu_mul_per_token_group_quant_fp8_colmajor(
     assert M % BLOCK_M == 0
     assert N_2 % BLOCK_N == 0
     grid = (M // BLOCK_M, N_2 // BLOCK_N)
+    has_clamp = clamp_limit is not None
+    has_row_scale = row_scale is not None
 
     _silu_mul_per_token_group_quant_fp8_colmajor[grid](
         input,
@@ -420,9 +458,13 @@ def silu_mul_per_token_group_quant_fp8_colmajor(
         fp8_min,
         fp8_max,
         use_ue8m0,
+        clamp_limit if has_clamp else 0.0,
+        row_scale if has_row_scale else input,
         GROUP_SIZE,
         BLOCK_M,
         BLOCK_N,
+        has_clamp,
+        has_row_scale,
     )
 
     return output, output_scales

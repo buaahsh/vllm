@@ -241,7 +241,7 @@ class Fp8PerBlockOnlineLinearMethod(_Fp8OnlineLinearBase):
         block_size = self.weight_block_size
 
         qweight, weight_scale_inv = per_block_cast_to_fp8(
-            layer.weight, block_size=block_size, use_ue8m0=False
+            layer.weight, block_size=block_size, use_ue8m0=True
         )
 
         replace_parameter(layer, "weight", qweight.data)
@@ -486,12 +486,12 @@ class Fp8PerBlockOnlineMoEMethod(_Fp8OnlineMoEBase):
             w13[expert], w13_scale[expert] = per_block_cast_to_fp8(
                 layer.w13_weight[expert],
                 block_size=block_size,
-                use_ue8m0=False,
+                use_ue8m0=True,
             )
             w2[expert], w2_scale[expert] = per_block_cast_to_fp8(
                 layer.w2_weight[expert],
                 block_size=block_size,
-                use_ue8m0=False,
+                use_ue8m0=True,
             )
 
         layer.weight_block_size = block_size

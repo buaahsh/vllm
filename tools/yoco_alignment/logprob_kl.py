@@ -116,6 +116,18 @@ def parse_args() -> argparse.Namespace:
                              default="/data/users/shaohanh/llm-train")
             sub.add_argument("--native-dtype", choices=("bfloat16",),
                              default="bfloat16")
+            sub.add_argument("--native-quant-mode",
+                             choices=("bfloat16", "mxfp8"))
+            sub.add_argument("--native-quant-block-size", type=int)
+            sub.add_argument(
+                "--native-use-torch-fp8-quant",
+                action="store_true",
+                help=(
+                    "Use llm-train's torch FP8 quant fallback for native "
+                    "mxfp8. Useful for short prompt probes because the "
+                    "training Triton quant kernel assumes padded token counts."
+                ),
+            )
         elif name == "hf":
             sub.add_argument("--device", default="cuda:0")
             sub.add_argument("--dtype", choices=("bfloat16", "float16",
@@ -319,6 +331,13 @@ def run_native(args: argparse.Namespace) -> None:
     llm_dir = Path(args.llm_train_dir).resolve() / "llm"
     sys.path.insert(0, str(llm_dir))
     from arch.model import Model, ModelArgs, create_kv_cache
+    if args.native_use_torch_fp8_quant:
+        import arch.linear as arch_linear
+        import kernel.quant as kernel_quant
+
+        print("[native-kl] using torch FP8 quant fallback", flush=True)
+        arch_linear.per_token_cast_to_fp8 = kernel_quant._per_token_cast_to_fp8_torch
+        arch_linear.per_block_cast_to_fp8 = kernel_quant._per_block_cast_to_fp8_torch
 
     if not dist.is_initialized():
         dist.init_process_group(backend="nccl")
@@ -333,6 +352,22 @@ def run_native(args: argparse.Namespace) -> None:
     modelargs = ModelArgs()
     for key, value in metadata["modelargs"].items():
         setattr(modelargs, key, value)
+    if args.native_quant_mode is not None:
+        print(
+            f"[native-kl] overriding quant_mode: "
+            f"{getattr(modelargs, 'quant_mode', None)} -> "
+            f"{args.native_quant_mode}",
+            flush=True,
+        )
+        modelargs.quant_mode = args.native_quant_mode
+    if args.native_quant_block_size is not None:
+        print(
+            f"[native-kl] overriding quant_block_size: "
+            f"{getattr(modelargs, 'quant_block_size', None)} -> "
+            f"{args.native_quant_block_size}",
+            flush=True,
+        )
+        modelargs.quant_block_size = args.native_quant_block_size
     modelargs.use_cute = False
 
     init_device_mesh("cuda", mesh_shape=(world_size,), mesh_dim_names=["dp"])

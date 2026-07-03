@@ -105,6 +105,7 @@ YOCO_PACKED_MODULES_MAPPING = {
 
 YOCO_ONLINE_QUANT_IGNORE = [
     "re:.*\\.self_attn\\.lambda_proj$",
+    "lm_head",
 ]
 
 
@@ -734,18 +735,20 @@ class YOCODecoderLayer(nn.Module):
         yoco_value: torch.Tensor | None,
     ) -> torch.Tensor:
         residual = hidden_states
-        x = self.input_layernorm(hidden_states)
+        x = self.input_layernorm(hidden_states.to(self.input_layernorm.weight.dtype))
         if self.is_self_layer:
             x = self.self_attn(positions, x, loop_idx)
         else:
             assert yoco_key is not None and yoco_value is not None
             x = self.self_attn(x, yoco_key, yoco_value)
-        x = residual + x
+        x = residual + x.float()
 
         residual = x
-        x = self.post_attention_layernorm(x)
+        x = self.post_attention_layernorm(
+            x.to(self.post_attention_layernorm.weight.dtype)
+        )
         x = self.mlp(x)
-        return residual + x
+        return residual + x.float()
 
 
 # --------------------------------------------------------------------------- #
@@ -843,10 +846,10 @@ class YOCOSelfBlock(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         model = self._model_ref[0]
         if inputs_embeds is not None:
-            hidden_states = inputs_embeds
+            hidden_states = inputs_embeds.float()
         else:
             assert input_ids is not None
-            hidden_states = model.embed_tokens(input_ids)
+            hidden_states = model.embed_tokens(input_ids).float()
 
         # Self-attention layers (universal loop) — all tokens.
         for loop_idx in range(model.universal_loop):
@@ -861,7 +864,7 @@ class YOCOSelfBlock(nn.Module):
 
         # Shared-KV producer + first cross layer (owns the shared KV cache);
         # both run on ALL tokens.
-        h_norm = model.yoco_norm(hidden_states)
+        h_norm = model.yoco_norm(hidden_states.to(model.yoco_norm.weight.dtype))
         yoco_key, _ = model.yoco_k_proj(h_norm)
         yoco_value, _ = model.yoco_v_proj(h_norm)
         if model.yoco_k_norm is not None:
@@ -1018,7 +1021,6 @@ class YOCOModel(nn.Module):
             # with cudagraph_copy_inputs=False, so cross-block inputs must have
             # stable addresses across capture/replay.
             max_num_tokens = vllm_config.scheduler_config.max_num_batched_tokens
-            dtype = self.embed_tokens.weight.dtype
             device = self.embed_tokens.weight.device
             key_dim = self.yoco_k_proj.weight.shape[0]
             value_dim = self.yoco_v_proj.weight.shape[0]
@@ -1026,13 +1028,17 @@ class YOCOModel(nn.Module):
                 max_num_tokens, dtype=torch.int64, device=device
             )
             self.fp_hidden_states = torch.zeros(
-                (max_num_tokens, self.hidden_size), dtype=dtype, device=device
+                (max_num_tokens, self.hidden_size), dtype=torch.float32, device=device
             )
             self.fp_yoco_key = torch.zeros(
-                (max_num_tokens, key_dim), dtype=dtype, device=device
+                (max_num_tokens, key_dim),
+                dtype=self.yoco_k_proj.weight.dtype,
+                device=device,
             )
             self.fp_yoco_value = torch.zeros(
-                (max_num_tokens, value_dim), dtype=dtype, device=device
+                (max_num_tokens, value_dim),
+                dtype=self.yoco_v_proj.weight.dtype,
+                device=device,
             )
         else:
             self.self_block = None
@@ -1045,10 +1051,10 @@ class YOCOModel(nn.Module):
         )
 
     def get_input_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
-        return self.embed_tokens(input_ids)
+        return self.embed_tokens(input_ids).float()
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
-        return self.embed_tokens(input_ids)
+        return self.embed_tokens(input_ids).float()
 
     def forward(
         self,
@@ -1058,10 +1064,10 @@ class YOCOModel(nn.Module):
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if inputs_embeds is not None:
-            hidden_states = inputs_embeds
+            hidden_states = inputs_embeds.float()
         else:
             assert input_ids is not None
-            hidden_states = self.embed_tokens(input_ids)
+            hidden_states = self.embed_tokens(input_ids).float()
 
         # Universal loop: run layers 0..first_cross_layer_idx-1
         # ``universal_loop`` times.
@@ -1080,7 +1086,7 @@ class YOCOModel(nn.Module):
             assert self.yoco_norm is not None
             assert self.yoco_k_proj is not None
             assert self.yoco_v_proj is not None
-            h_norm = self.yoco_norm(hidden_states)
+            h_norm = self.yoco_norm(hidden_states.to(self.yoco_norm.weight.dtype))
             yoco_key, _ = self.yoco_k_proj(h_norm)
             yoco_value, _ = self.yoco_v_proj(h_norm)
             if self.yoco_k_norm is not None:
@@ -1102,7 +1108,7 @@ class YOCOModel(nn.Module):
                     yoco_value,
                 )
 
-        hidden_states = self.norm(hidden_states)
+        hidden_states = self.norm(hidden_states.to(self.norm.weight.dtype))
         return hidden_states
 
 
@@ -1256,7 +1262,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         else:
             out_hidden[logits_indices_padded] = decode_hidden
 
-        return model.norm(out_hidden)
+        return model.norm(out_hidden.to(model.norm.weight.dtype))
 
     def _get_fast_prefill_indices(
         self,

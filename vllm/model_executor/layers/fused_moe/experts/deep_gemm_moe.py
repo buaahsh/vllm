@@ -127,6 +127,7 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         assert quant_config.quant_dtype == torch.float8_e4m3fn
         assert not quant_config.per_act_token_quant
         assert not quant_config.per_out_ch_quant
+        self.gemm1_clamp_limit = quant_config.gemm1_clamp_limit
 
     @staticmethod
     def activation_format() -> mk.FusedMoEActivationFormat:
@@ -193,7 +194,11 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         return (workspace1, workspace2, output)
 
     def _act_mul_quant(
-        self, input: torch.Tensor, output: torch.Tensor, activation: MoEActivation
+        self,
+        input: torch.Tensor,
+        output: torch.Tensor,
+        activation: MoEActivation,
+        routed_weights: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         assert self.block_shape is not None
         block_k = self.block_shape[1]
@@ -205,15 +210,22 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         # 1. DeepGemm UE8M0: fused SiLU+mul+clamp+quant+pack
         if scale_fmt == DeepGemmQuantScaleFMT.UE8M0:
             if activation == MoEActivation.SILU:
+                clamp_limit = self.gemm1_clamp_limit or getattr(
+                    self, "swiglu_limit", None
+                )
                 return fused_silu_mul_fp8_quant_packed(
                     input=input,
                     output_q=output,
                     group_size=block_k,
+                    clamp_limit=clamp_limit,
+                    row_scale=routed_weights,
                 )
             act_out = torch.empty(
                 (M_sum, activation_out_dim), dtype=input.dtype, device=input.device
             )
             self.activation(activation, act_out, input)
+            if routed_weights is not None:
+                act_out *= routed_weights.unsqueeze(-1)
             a2q, a2q_scale = per_token_group_quant_fp8_packed_for_deepgemm(
                 act_out,
                 block_k,
@@ -224,10 +236,15 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         # 2. Hopper / non‑E8M0: prefer the fused SiLU+mul+quant kernel
         if activation == MoEActivation.SILU:
             use_ue8m0 = scale_fmt == DeepGemmQuantScaleFMT.FLOAT32_CEIL_UE8M0
+            clamp_limit = self.gemm1_clamp_limit or getattr(
+                self, "swiglu_limit", None
+            )
             return silu_mul_per_token_group_quant_fp8_colmajor(
                 input=input,
                 output=output,
                 use_ue8m0=use_ue8m0,
+                clamp_limit=clamp_limit,
+                row_scale=routed_weights,
             )
 
         # 3. fallback path for non-SiLU activations in non‑UE8M0 cases.
@@ -235,6 +252,8 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             (M_sum, activation_out_dim), dtype=input.dtype, device=input.device
         )
         self.activation(activation, act_out, input)
+        if routed_weights is not None:
+            act_out *= routed_weights.unsqueeze(-1)
         return per_token_group_quant_fp8(
             act_out, block_k, column_major_scales=True, out_q=output
         )
@@ -265,6 +284,7 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
 
         a1q = hidden_states
         _, N, K = w1.size()
+        block_k = self.block_shape[1]
 
         local_num_experts = w1.size(0)
         if global_num_experts == -1:
@@ -299,12 +319,26 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             (a1q, a1q_scale), (w1, self.w1_scale), mm1_out, expert_ids
         )
 
+        # llm-train applies routed probabilities after SwiGLU and before
+        # quantizing the GEMM2 input. Doing it after GEMM2 changes the A2 FP8
+        # scales and is not numerically equivalent for MXFP8.
+        routed_weights = torch.ones(
+            (M_sum,), dtype=topk_weights.dtype, device=topk_weights.device
+        )
+        routed_weights.scatter_(
+            0, inv_perm.reshape(-1).long(), topk_weights.reshape(-1)
+        )
+
         activation_out_dim = self.adjust_N_for_activation(N, activation)
         quant_out = _resize_cache(
             workspace13.view(dtype=torch.float8_e4m3fn), (M_sum, activation_out_dim)
         )
+        mm1_out = mm1_out.view(-1, N)
         a2q, a2q_scale = self._act_mul_quant(
-            input=mm1_out.view(-1, N), output=quant_out, activation=activation
+            input=mm1_out,
+            output=quant_out,
+            activation=activation,
+            routed_weights=routed_weights,
         )
 
         mm2_out = _resize_cache(workspace2, (M_sum, K))
@@ -312,8 +346,7 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             (a2q, a2q_scale), (w2, self.w2_scale), mm2_out, expert_ids
         )
 
-        if apply_router_weight_on_input:
-            topk_weights = torch.ones_like(topk_weights)
+        topk_weights = torch.ones_like(topk_weights)
 
         deepgemm_unpermute_and_reduce(
             a=mm2_out,
