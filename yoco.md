@@ -4,9 +4,9 @@
 
 Current 2026-06-28 images:
 
-- B200 / Blackwell: `buaahsh/pytorch:26.02-b200-vllm-0628`
-- H100 / Hopper: `buaahsh/pytorch:26.02-h100-vllm-0628`
-- A100 / Ampere: `buaahsh/pytorch:26.02-a100-vllm-0628`
+- B200 / Blackwell: `buaahsh/pytorch:26.02-b200-vllm-0630`
+- H100 / Hopper: `buaahsh/pytorch:26.02-h100-vllm-0630`
+- A100 / Ampere: `buaahsh/pytorch:26.02-a100-vllm-0630`
 
 ## Convert Checkpoint
 
