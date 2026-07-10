@@ -193,8 +193,10 @@ def convert_state_dict(state_dict: Dict[str, torch.Tensor], verbose: bool = Fals
 # Token IDs for the GLM-5.1 ``agens_tokenizer`` (must match llm-train/llm/data/tokenizer.py)
 BOS_TOKEN_ID = 154824  # <sop>
 EOS_TOKEN_ID = 154820  # <|endoftext|>
+EOS_TOKEN_IDS = [154820, 154827, 154829]
 PAD_TOKEN_ID = 154856  # <|reserved_154856|>
 UNK_TOKEN_ID = 154857  # <|reserved_154857|>
+MIN_MODEL_MAX_LENGTH = 131072
 
 
 def add_bos_post_processor(tokenizer_json_path: str) -> None:
@@ -259,6 +261,7 @@ def create_hf_config(metadata: dict, output_dir: str) -> dict:
     cross_kv_head = ma.get("cross_kv_head", ma["kv_head"])
     cross_head = ma.get("cross_head", ma["head"])
     qk_rms_clip = ma.get("qk_rms_clip", False)
+    max_seq_len = max(MIN_MODEL_MAX_LENGTH, ma["max_seq_len"])
 
     config = {
         "architectures": ["YOCOForCausalLM"],
@@ -276,7 +279,7 @@ def create_hf_config(metadata: dict, output_dir: str) -> dict:
         "cross_head_dim": head_dim,
         "n_layers": ma["n_layers"],
         "vocab_size": ma["vocab_size"],
-        "max_seq_len": ma["max_seq_len"],
+        "max_seq_len": max_seq_len,
 
         # Norm / attention flags
         "norm_eps": ma["norm_eps"],
@@ -309,7 +312,7 @@ def create_hf_config(metadata: dict, output_dir: str) -> dict:
         "num_attention_heads": ma["head"],
         "num_key_value_heads": ma["kv_head"],
         "num_hidden_layers": ma["n_layers"],
-        "max_position_embeddings": ma["max_seq_len"],
+        "max_position_embeddings": max_seq_len,
         "rms_norm_eps": ma["norm_eps"],
         "tie_word_embeddings": ma.get("weight_tying", False),
 
@@ -333,7 +336,7 @@ def create_hf_config(metadata: dict, output_dir: str) -> dict:
 def create_generation_config(output_dir: str) -> None:
     gen_cfg = {
         "bos_token_id": BOS_TOKEN_ID,
-        "eos_token_id": EOS_TOKEN_ID,
+        "eos_token_id": EOS_TOKEN_IDS,
         "pad_token_id": PAD_TOKEN_ID,
         "do_sample": True,
         "transformers_version": "4.36.0",
