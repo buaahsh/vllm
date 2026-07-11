@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -45,6 +46,90 @@ logger = init_logger(__name__)
 
 # One-time log guard for the routed-expert clamped-SwiGLU (training-parity) path.
 _SWIGLU_LIMIT_LOGGED = False
+_YOCO_MOE_PREPARE_DEBUG_MATCH_CALL = 0
+
+
+def _yoco_moe_env_int_set(name: str) -> set[int] | None:
+    spec = os.getenv(name)
+    if not spec:
+        return None
+    return {int(item) for item in spec.replace(" ", "").split(",") if item}
+
+
+def _yoco_moe_prepare_debug_target(token_count: int) -> tuple[str, int] | None:
+    dump_dir = os.getenv("YOCO_MOE_DEBUG_DUMP_DIR")
+    if not dump_dir:
+        return None
+    token_counts = _yoco_moe_env_int_set("YOCO_MOE_DEBUG_TOKEN_COUNT")
+    if token_counts is not None and token_count not in token_counts:
+        return None
+
+    global _YOCO_MOE_PREPARE_DEBUG_MATCH_CALL
+    call_idx = _YOCO_MOE_PREPARE_DEBUG_MATCH_CALL
+    _YOCO_MOE_PREPARE_DEBUG_MATCH_CALL += 1
+
+    calls = _yoco_moe_env_int_set("YOCO_MOE_DEBUG_CALLS")
+    if calls is not None and call_idx not in calls:
+        return None
+    return dump_dir, call_idx
+
+
+def _yoco_cpu_debug_tensor(tensor: torch.Tensor | None) -> torch.Tensor | None:
+    if tensor is None:
+        return None
+    return tensor.detach().cpu()
+
+
+def _yoco_quant_config_debug(quant_config: FusedMoEQuantConfig) -> dict[str, object]:
+    return {
+        "quant_dtype": str(quant_config.quant_dtype),
+        "block_shape": quant_config.block_shape,
+        "per_act_token_quant": quant_config.per_act_token_quant,
+        "is_scale_swizzled": quant_config.is_scale_swizzled,
+        "mx_alignment": quant_config.mx_alignment,
+        "use_nvfp4_w4a4": quant_config.use_nvfp4_w4a4,
+    }
+
+
+def _dump_yoco_moe_prepare_debug(
+    target: tuple[str, int] | None,
+    *,
+    layer_name: str | None,
+    token_count: int,
+    quant_config: FusedMoEQuantConfig,
+    apply_router_weight_on_input: bool,
+    defer_input_quant: bool,
+    global_num_experts: int,
+    tensors: dict[str, torch.Tensor | None],
+) -> None:
+    if target is None:
+        return
+    dump_dir, call_idx = target
+    os.makedirs(dump_dir, exist_ok=True)
+    label = os.getenv("YOCO_MOE_DEBUG_LABEL", "vllm")
+    safe_layer = (layer_name or "unknown").replace(".", "_")
+    path = os.path.join(
+        dump_dir, f"{label}_prepare_call{call_idx:03d}_{safe_layer}.pt"
+    )
+    torch.save(
+        {
+            "backend": "vllm",
+            "stage": "prepare_after_input_quant",
+            "call_index": call_idx,
+            "layer_name": layer_name,
+            "token_count": token_count,
+            "global_num_experts": int(global_num_experts),
+            "apply_router_weight_on_input": bool(apply_router_weight_on_input),
+            "defer_input_quant": bool(defer_input_quant),
+            "quant_config": _yoco_quant_config_debug(quant_config),
+            "tensors": {
+                name: _yoco_cpu_debug_tensor(tensor)
+                for name, tensor in tensors.items()
+                if tensor is not None
+            },
+        },
+        path,
+    )
 
 #
 # This file defines a set of base classes used to make MoE kernels more modular.
@@ -1146,6 +1231,24 @@ class FusedMoEKernelModularImpl:
         The _prepare method is a wrapper around self.prepare_finalize.prepare
         that handles DBO and async.
         """
+        input_topk_weights = topk_weights
+        input_topk_ids = topk_ids
+        defer_input_quant = self.fused_experts.expects_unquantized_inputs
+        debug_target = _yoco_moe_prepare_debug_target(topk_ids.size(0))
+        debug_inputs = None
+        if debug_target is not None:
+            # prepare may reuse its input buffers before receiver() returns.
+            # Snapshot them at the call boundary so the debug payload reflects
+            # the actual token rows and routing decisions.
+            debug_inputs = {
+                "hidden_states_pre_quant": hidden_states.detach().clone(),
+                "topk_ids_input": input_topk_ids.detach().clone(),
+                "topk_weights_input": input_topk_weights.detach().clone(),
+                "expert_map": (
+                    expert_map.detach().clone() if expert_map is not None else None
+                ),
+            }
+
         if not self.prepare_finalize.supports_async():
             # We shouldn't be running an a2a kernel that doesn't
             # support async prepare/finalize
@@ -1166,7 +1269,7 @@ class FusedMoEKernelModularImpl:
                 expert_map,
                 apply_router_weight_on_input,
                 self.fused_experts.quant_config,
-                defer_input_quant=self.fused_experts.expects_unquantized_inputs,
+                defer_input_quant=defer_input_quant,
             )
         else:
             # Overlap shared expert compute with all2all dispatch.
@@ -1179,7 +1282,7 @@ class FusedMoEKernelModularImpl:
                 expert_map,
                 apply_router_weight_on_input,
                 self.fused_experts.quant_config,
-                defer_input_quant=self.fused_experts.expects_unquantized_inputs,
+                defer_input_quant=defer_input_quant,
             )
 
             # TODO(lucas): refactor this in the alternative schedules followup
@@ -1211,6 +1314,42 @@ class FusedMoEKernelModularImpl:
         topk_ids = topk_ids if _expert_topk_ids is None else _expert_topk_ids
         topk_weights = (
             topk_weights if _expert_topk_weights is None else _expert_topk_weights
+        )
+
+        _dump_yoco_moe_prepare_debug(
+            debug_target,
+            layer_name=getattr(self.fused_experts, "layer_name", None),
+            token_count=topk_ids.size(0),
+            quant_config=self.fused_experts.quant_config,
+            apply_router_weight_on_input=apply_router_weight_on_input,
+            defer_input_quant=defer_input_quant,
+            global_num_experts=global_num_experts,
+            tensors={
+                "hidden_states_pre_quant": (
+                    debug_inputs["hidden_states_pre_quant"]
+                    if debug_inputs is not None
+                    else hidden_states
+                ),
+                "a1q_unpermuted": a1q,
+                "a1q_scale_unpermuted": a1q_scale,
+                "topk_ids_input": (
+                    debug_inputs["topk_ids_input"]
+                    if debug_inputs is not None
+                    else input_topk_ids
+                ),
+                "topk_weights_input": (
+                    debug_inputs["topk_weights_input"]
+                    if debug_inputs is not None
+                    else input_topk_weights
+                ),
+                "topk_ids_prepared": topk_ids,
+                "topk_weights_prepared": topk_weights,
+                "expert_map": (
+                    debug_inputs["expert_map"]
+                    if debug_inputs is not None
+                    else expert_map
+                ),
+            },
         )
 
         return a1q, a1q_scale, expert_tokens_meta, topk_ids, topk_weights

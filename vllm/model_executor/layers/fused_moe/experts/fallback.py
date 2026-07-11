@@ -161,6 +161,13 @@ class FallbackExperts(mk.FusedMoEExpertsModular, ABC):
         apply_router_weight_on_input: bool,
     ):
         experts = self._select_experts_impl(hidden_states, w1, w2)
+        for attr in (
+            "swiglu_limit",
+            "layer_name",
+            "apply_router_weight_before_w2",
+        ):
+            if hasattr(self, attr):
+                setattr(experts, attr, getattr(self, attr))
         experts.apply(
             output,
             hidden_states,

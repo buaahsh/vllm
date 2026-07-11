@@ -67,7 +67,26 @@ def _flatten_proj(tensor: torch.Tensor) -> torch.Tensor:
     return tensor
 
 
-def convert_state_dict(state_dict: Dict[str, torch.Tensor], verbose: bool = False) -> Dict[str, torch.Tensor]:
+def _normalize_router_weight_for_export(weight: torch.Tensor) -> torch.Tensor:
+    """Match llm-train's CUDA FP32 row-wise router normalization once."""
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "CUDA is required for conversion-time router normalization. "
+            "CPU reduction order changes FP32 router weights; use "
+            "--router-normalization runtime on a CPU-only host."
+        )
+    weight_cuda = weight.to(device="cuda", dtype=torch.float32)
+    normalized = weight_cuda / weight_cuda.norm(
+        dim=1, keepdim=True
+    ).clamp_min(1e-6)
+    return normalized.cpu()
+
+
+def convert_state_dict(
+    state_dict: Dict[str, torch.Tensor],
+    verbose: bool = False,
+    router_normalization: str = "cuda",
+) -> Dict[str, torch.Tensor]:
     """Rename training keys to HF keys and reshape per-head projections."""
     new_state: Dict[str, torch.Tensor] = {}
 
@@ -120,17 +139,14 @@ def convert_state_dict(state_dict: Dict[str, torch.Tensor], verbose: bool = Fals
             sub = rest[len("mlp."):]
 
             # MoE routing gate (small Linear).
-            # Training's GateLinear applies row-wise L2 normalization to the
-            # weight before the matmul (see llm-train/llm/arch/linear.py:
-            # norm_linear -> weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)).
-            # vLLM's gate is a plain ReplicatedLinear with no such normalization,
-            # so bake the per-expert-row normalization into the exported weight
-            # to preserve router-logit parity. Done in fp32 (the gate runs in
-            # fp32 during training: self.gate(x.float())).
+            # llm-train normalizes every FP32 router row on CUDA before the
+            # linear. Precomputing the same CUDA reduction removes that work
+            # from every inference forward without changing router logits.
             if sub == "gate.weight":
-                gate_w = value.float()
-                gate_w = gate_w / gate_w.norm(dim=1, keepdim=True).clamp_min(1e-6)
-                add(f"{prefix}.mlp.gate.weight", gate_w, key)
+                gate = value.float()
+                if router_normalization == "cuda":
+                    gate = _normalize_router_weight_for_export(gate)
+                add(f"{prefix}.mlp.gate.weight", gate, key)
                 continue
 
             # MoE experts (3D tensors flattened on dim 0 for vLLM FusedMoE)
@@ -252,13 +268,27 @@ def ensure_chat_template_has_bos(chat_template: str) -> str:
     return "<sop>\n" + chat_template
 
 
-def create_hf_config(metadata: dict, output_dir: str) -> dict:
+def create_hf_config(
+    metadata: dict,
+    output_dir: str,
+    quant_mode: str | None = None,
+    quant_block_size: int | None = None,
+    router_weights_normalized: bool = True,
+) -> dict:
     ma = metadata.get("modelargs", metadata)
 
     head_dim = ma.get("head_dim") or ma["d_model"] // ma["head"]
     cross_kv_head = ma.get("cross_kv_head", ma["kv_head"])
     cross_head = ma.get("cross_head", ma["head"])
     qk_rms_clip = ma.get("qk_rms_clip", False)
+    quant_mode = (
+        quant_mode if quant_mode is not None else ma.get("quant_mode", "bfloat16")
+    )
+    quant_block_size = (
+        quant_block_size
+        if quant_block_size is not None
+        else ma.get("quant_block_size", 128)
+    )
 
     config = {
         "architectures": ["YOCOForCausalLM"],
@@ -302,10 +332,17 @@ def create_hf_config(metadata: dict, output_dir: str) -> dict:
         "d_shared_expert": ma.get("d_shared_expert", 0),
         "dense_layers": ma.get("dense_layers", 0),
         "swiglu_limit": ma.get("swiglu_limit", 10.0),
+        "router_weights_normalized": router_weights_normalized,
+        "quant_mode": quant_mode,
+        "quant_block_size": quant_block_size,
 
         # HF aliases
         "hidden_size": ma["d_model"],
         "intermediate_size": ma["d_ffn"],
+        "num_experts": ma.get("moe_expert_num", 0),
+        "num_experts_per_tok": ma.get("moe_top_k", 0),
+        "moe_intermediate_size": ma.get("moe_ffn_dim", 0),
+        "shared_expert_intermediate_size": ma.get("d_shared_expert", 0),
         "num_attention_heads": ma["head"],
         "num_key_value_heads": ma["kv_head"],
         "num_hidden_layers": ma["n_layers"],
@@ -415,11 +452,9 @@ def copy_tokenizer_files(output_dir: str) -> None:
 # Sharded safetensors save
 # ---------------------------------------------------------------------------
 def keep_fp32_in_export(key: str) -> bool:
-    # Keep the native checkpoint's FP32 gate master weights.
-    return key.endswith((
-        ".mlp.gate.weight",
-        ".mlp.shared_gate.weight",
-    ))
+    # Keep the native checkpoint's FP32 router gate master weights. shared_gate
+    # uses llm-train's default MixPrecisionLinear dtype and is exported as BF16.
+    return key.endswith(".mlp.gate.weight")
 
 
 def save_sharded(state_dict: Dict[str, torch.Tensor], output_dir: str,
@@ -471,7 +506,19 @@ def save_sharded(state_dict: Dict[str, torch.Tensor], output_dir: str,
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
-def convert_checkpoint(input_dir: str, output_dir: str, verbose: bool = False) -> None:
+def convert_checkpoint(
+    input_dir: str,
+    output_dir: str,
+    verbose: bool = False,
+    quant_mode: str | None = None,
+    quant_block_size: int | None = None,
+    router_normalization: str = "cuda",
+) -> None:
+    if router_normalization == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError(
+            "--router-normalization cuda requires a CUDA device. Use "
+            "--router-normalization runtime on a CPU-only conversion host."
+        )
     os.makedirs(output_dir, exist_ok=True)
     print(f"Output directory: {output_dir}")
 
@@ -485,7 +532,13 @@ def convert_checkpoint(input_dir: str, output_dir: str, verbose: bool = False) -
           f"universal_loop={ma.get('universal_loop')}  updates={metadata.get('updates')}")
 
     print("\n2. Writing config.json ...")
-    create_hf_config(metadata, output_dir)
+    create_hf_config(
+        metadata,
+        output_dir,
+        quant_mode=quant_mode,
+        quant_block_size=quant_block_size,
+        router_weights_normalized=router_normalization == "cuda",
+    )
 
     print("\n3. Writing generation_config.json ...")
     create_generation_config(output_dir)
@@ -498,7 +551,11 @@ def convert_checkpoint(input_dir: str, output_dir: str, verbose: bool = False) -
     print(f"   Loaded {len(state_dict)} parameters")
 
     print("\n6. Converting parameter names / shapes ...")
-    new_state = convert_state_dict(state_dict, verbose=verbose)
+    new_state = convert_state_dict(
+        state_dict,
+        verbose=verbose,
+        router_normalization=router_normalization,
+    )
     print(f"   Produced {len(new_state)} parameters")
 
     print("\n7. Saving sharded safetensors ...")
@@ -523,6 +580,28 @@ def main() -> int:
                         help="HF output directory")
     parser.add_argument("--verbose", action="store_true",
                         help="Print every renamed key")
+    parser.add_argument("--quant_mode", "--quant-mode",
+                        choices=("bfloat16", "mxfp8"),
+                        default=None,
+                        help=("Precision metadata to write into config.json. "
+                              "Defaults to checkpoint metadata, or bfloat16 "
+                              "when absent. vLLM runtime quantization is still "
+                              "controlled by the serve-time --quantization flag."))
+    parser.add_argument("--quant_block_size", "--quant-block-size",
+                        type=int,
+                        default=None,
+                        help=("MXFP8 block size metadata to write into "
+                              "config.json. Defaults to checkpoint metadata, "
+                              "or 128 when absent."))
+    parser.add_argument(
+        "--router-normalization",
+        choices=("cuda", "runtime"),
+        default="cuda",
+        help=(
+            "Normalize FP32 router rows once during conversion using CUDA "
+            "(default), or preserve raw weights and normalize every forward."
+        ),
+    )
     args = parser.parse_args()
 
     if not os.path.isdir(args.input_dir):
@@ -534,7 +613,14 @@ def main() -> int:
             return 1
 
     try:
-        convert_checkpoint(args.input_dir, args.output_dir, verbose=args.verbose)
+        convert_checkpoint(
+            args.input_dir,
+            args.output_dir,
+            verbose=args.verbose,
+            quant_mode=args.quant_mode,
+            quant_block_size=args.quant_block_size,
+            router_normalization=args.router_normalization,
+        )
         return 0
     except Exception as e:
         print(f"\nConversion failed: {e}")

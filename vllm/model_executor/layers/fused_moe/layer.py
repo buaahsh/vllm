@@ -128,6 +128,7 @@ class FusedMoE(PluggableLayer):
         swiglu_limit: float | None = None,
         e_score_correction_bias: torch.Tensor | None = None,
         apply_router_weight_on_input: bool = False,
+        apply_router_weight_before_w2: bool = False,
         activation: str = "silu",
         is_act_and_mul: bool = True,
         enable_eplb: bool = False,
@@ -296,6 +297,7 @@ class FusedMoE(PluggableLayer):
 
         self.hash_indices_table = hash_indices_table
         self.apply_router_weight_on_input = apply_router_weight_on_input
+        self.apply_router_weight_before_w2 = apply_router_weight_before_w2
         self.activation = MoEActivation.from_str(activation)
 
         # TODO(bnell): we should not have to create a router if the kernel is

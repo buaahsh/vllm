@@ -240,8 +240,9 @@ class Fp8PerBlockOnlineLinearMethod(_Fp8OnlineLinearBase):
         layer.input_scale = None
         block_size = self.weight_block_size
 
+        use_ue8m0 = getattr(self.fp8_linear, "use_deep_gemm_e8m0", False)
         qweight, weight_scale_inv = per_block_cast_to_fp8(
-            layer.weight, block_size=block_size, use_ue8m0=False
+            layer.weight, block_size=block_size, use_ue8m0=use_ue8m0
         )
 
         replace_parameter(layer, "weight", qweight.data)
@@ -482,16 +483,21 @@ class Fp8PerBlockOnlineMoEMethod(_Fp8OnlineMoEBase):
             device=w2.device,
         )
 
+        use_ue8m0 = (
+            self.fp8_backend.name in ("DEEPGEMM", "BATCHED_DEEPGEMM")
+            and envs.VLLM_USE_DEEP_GEMM_E8M0
+        )
+
         for expert in range(num_experts):
             w13[expert], w13_scale[expert] = per_block_cast_to_fp8(
                 layer.w13_weight[expert],
                 block_size=block_size,
-                use_ue8m0=False,
+                use_ue8m0=use_ue8m0,
             )
             w2[expert], w2_scale[expert] = per_block_cast_to_fp8(
                 layer.w2_weight[expert],
                 block_size=block_size,
-                use_ue8m0=False,
+                use_ue8m0=use_ue8m0,
             )
 
         layer.weight_block_size = block_size

@@ -352,6 +352,7 @@ def deepgemm_moe_permute(
     expert_map: torch.Tensor | None,
     expert_tokens_meta: mk.ExpertTokensMetadata | None,
     aq_out: torch.Tensor | None = None,
+    use_psum_layout: bool = False,
 ):
     assert aq.ndim == 2
     assert topk_ids.dtype.is_signed, "The kernel uses -1 to represent invalid topk_ids"
@@ -401,6 +402,13 @@ def deepgemm_moe_permute(
             topk_ids, local_num_experts, expert_map
         )
 
+    if use_psum_layout:
+        grouped_layout = (
+            ((expert_num_tokens + block_m - 1) // block_m) * block_m
+        ).cumsum(0).to(torch.int32)
+    else:
+        grouped_layout = expert_ids
+
     ep_scatter(
         recv_x=aq,
         recv_x_scale=aq_scale,
@@ -414,7 +422,10 @@ def deepgemm_moe_permute(
         output_index=inv_perm,
     )
 
-    return aq_out, aq_scale_out, expert_ids, inv_perm
+    # Keep the statically sized M_sum buffers. grouped_layout already tells
+    # DeepGEMM where each expert's valid rows end, so slicing to its final
+    # device value is redundant and would require a capture-unsafe .item().
+    return aq_out, aq_scale_out, grouped_layout, inv_perm
 
 
 def deepgemm_unpermute_and_reduce(

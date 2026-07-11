@@ -33,13 +33,24 @@ from vllm.utils.import_utils import has_deep_ep, has_mori, has_nixl_ep
 
 logger = init_logger(__name__)
 
+DeepEPHTPrepareAndFinalize = None
+DeepEPLLPrepareAndFinalize = None
+DEEPEP_QUANT_BLOCK_SHAPE = None
+
 if current_platform.is_cuda_alike():
     if has_deep_ep():
-        from .prepare_finalize.deepep_ht import DeepEPHTPrepareAndFinalize
-        from .prepare_finalize.deepep_ll import (
-            DEEPEP_QUANT_BLOCK_SHAPE,
-            DeepEPLLPrepareAndFinalize,
-        )
+        try:
+            from .prepare_finalize.deepep_ht import DeepEPHTPrepareAndFinalize
+            from .prepare_finalize.deepep_ll import (
+                DEEPEP_QUANT_BLOCK_SHAPE,
+                DeepEPLLPrepareAndFinalize,
+            )
+        except (ImportError, OSError) as e:
+            logger.warning_once(
+                "DeepEP is installed but cannot be imported; DeepEP all2all "
+                "kernels will be unavailable. Import error: %s",
+                e,
+            )
     if has_mori():
         from .prepare_finalize.mori import MoriPrepareAndFinalize
     if has_nixl_ep():
@@ -69,11 +80,15 @@ def maybe_roundup_layer_hidden_size(
         Original hidden size otherwise.
     """
     if moe_parallel_config.use_deepep_ht_kernels:
+        if DeepEPHTPrepareAndFinalize is None:
+            raise RuntimeError("DeepEP HT kernels were requested but DeepEP is unavailable")
         hidden_size = DeepEPHTPrepareAndFinalize.maybe_roundup_layer_hidden_size(
             hidden_size, act_dtype
         )
 
     if moe_parallel_config.use_deepep_ll_kernels:
+        if DeepEPLLPrepareAndFinalize is None:
+            raise RuntimeError("DeepEP LL kernels were requested but DeepEP is unavailable")
         hidden_size = DeepEPLLPrepareAndFinalize.maybe_roundup_layer_hidden_size(
             hidden_size
         )
@@ -136,6 +151,8 @@ def maybe_make_prepare_finalize(
     prepare_finalize: FusedMoEPrepareAndFinalize | None = None
 
     if moe.use_deepep_ht_kernels:
+        if DeepEPHTPrepareAndFinalize is None:
+            raise RuntimeError("DeepEP HT kernels were requested but DeepEP is unavailable")
         assert moe.dp_size == all2all_manager.dp_world_size
 
         all_to_all_args: dict[str, Any] = dict()
@@ -148,6 +165,8 @@ def maybe_make_prepare_finalize(
         )
 
     elif moe.use_deepep_ll_kernels:
+        if DeepEPLLPrepareAndFinalize is None or DEEPEP_QUANT_BLOCK_SHAPE is None:
+            raise RuntimeError("DeepEP LL kernels were requested but DeepEP is unavailable")
         assert quant_config is not None
         global_to_physical = physical_to_global = local_expert_global_ids = None
         if routing_tables is not None:

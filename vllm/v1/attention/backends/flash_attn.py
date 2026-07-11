@@ -3,6 +3,7 @@
 """Attention layer with FlashAttention."""
 
 import copy
+import os
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -257,6 +258,7 @@ class FlashAttentionMetadata:
     max_num_splits: int = 0
 
     causal: bool = True
+    is_pure_prefill: bool = False
 
 
 def _get_sliding_window_configs(
@@ -404,9 +406,19 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
         max_seq_len = common_attn_metadata.max_seq_len
         query_start_loc = common_attn_metadata.query_start_loc
         seq_lens = common_attn_metadata.seq_lens
+        seq_lens_cpu_upper_bound = common_attn_metadata.seq_lens_cpu_upper_bound
         block_table_tensor = common_attn_metadata.block_table_tensor
         slot_mapping = common_attn_metadata.slot_mapping
         causal = common_attn_metadata.causal
+        is_pure_prefill = False
+        if seq_lens_cpu_upper_bound is not None:
+            query_lens_cpu = (
+                common_attn_metadata.query_start_loc_cpu[1 : num_reqs + 1]
+                - common_attn_metadata.query_start_loc_cpu[:num_reqs]
+            )
+            is_pure_prefill = bool(
+                torch.equal(seq_lens_cpu_upper_bound[:num_reqs], query_lens_cpu)
+            )
 
         # Disable AOT schedule for spec-decode proposer (not worth the overhead)
         # and for batch invariance (schedule varies with max_seqlen_q/k).
@@ -576,6 +588,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
             prefix_scheduler_metadata=prefix_scheduler_metadata,
             max_num_splits=max_num_splits,
             causal=causal,
+            is_pure_prefill=is_pure_prefill,
         )
         return attn_metadata
 
@@ -634,10 +647,23 @@ class FlashAttentionImpl(AttentionImpl):
         self.num_queries_per_kv = self.num_heads // self.num_kv_heads
 
         self.attn_type = attn_type
+        vllm_config = get_current_vllm_config_or_none()
+        model_type = None
+        if vllm_config is not None and vllm_config.model_config is not None:
+            model_type = getattr(
+                vllm_config.model_config.hf_text_config, "model_type", None
+            )
         self.vllm_flash_attn_version = get_flash_attn_version(
             requires_alibi=alibi_slopes is not None,
             head_size=head_size,
         )
+        if model_type == "yoco" and self.vllm_flash_attn_version != 2:
+            logger.info_once(
+                "Forcing FlashAttention version 2 for YOCO alignment "
+                "(was %s)",
+                self.vllm_flash_attn_version,
+            )
+            self.vllm_flash_attn_version = 2
         logger.info_once(
             "Using FlashAttention version %s",
             self.vllm_flash_attn_version,
@@ -662,7 +688,7 @@ class FlashAttentionImpl(AttentionImpl):
 
         self.supports_quant_query_input = flash_attn_supports_quant_query_input()
 
-        vllm_config = get_current_vllm_config_or_none()
+        self.use_direct_prefill_qkv = model_type == "yoco"
         dcp_a2a = (
             vllm_config is not None
             and vllm_config.parallel_config.decode_context_parallel_size > 1
@@ -806,6 +832,55 @@ class FlashAttentionImpl(AttentionImpl):
                     if self.sliding_window is not None
                     else None
                 )
+                if (
+                    self.use_direct_prefill_qkv
+                    and attn_metadata.is_pure_prefill
+                    and not is_quantized_kv_cache(self.kv_cache_dtype)
+                ):
+                    if os.getenv("VLLM_YOCO_NATIVE_FA2_PREFILL") == "1":
+                        from flash_attn.flash_attn_interface import (
+                            flash_attn_varlen_func as native_flash_attn_varlen_func,
+                        )
+
+                        native_output = native_flash_attn_varlen_func(
+                            query[:num_actual_tokens],
+                            key[:num_actual_tokens],
+                            value[:num_actual_tokens],
+                            cu_seqlens_q,
+                            cu_seqlens_q,
+                            max_seqlen_q,
+                            max_seqlen_k,
+                            softmax_scale=self.scale,
+                            causal=attn_metadata.causal,
+                            alibi_slopes=self.alibi_slopes,
+                            window_size=(
+                                tuple(sliding_window_size)
+                                if sliding_window_size is not None
+                                else (-1, -1)
+                            ),
+                            softcap=self.logits_soft_cap,
+                        )
+                        output[:num_actual_tokens].copy_(native_output)
+                        return output
+                    flash_attn_varlen_func(
+                        q=query[:num_actual_tokens],
+                        k=key[:num_actual_tokens],
+                        v=value[:num_actual_tokens],
+                        out=output[:num_actual_tokens],
+                        cu_seqlens_q=cu_seqlens_q,
+                        cu_seqlens_k=cu_seqlens_q,
+                        max_seqlen_q=max_seqlen_q,
+                        max_seqlen_k=max_seqlen_k,
+                        softmax_scale=self.scale,
+                        causal=attn_metadata.causal,
+                        alibi_slopes=self.alibi_slopes,
+                        window_size=sliding_window_size,
+                        softcap=self.logits_soft_cap,
+                        fa_version=self.vllm_flash_attn_version,
+                        num_splits=attn_metadata.max_num_splits,
+                        s_aux=self.sinks,
+                    )
+                    return output
                 flash_attn_varlen_func(
                     q=query[:num_actual_tokens],
                     k=key_cache,

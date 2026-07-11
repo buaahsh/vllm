@@ -209,14 +209,11 @@ def fused_topk_bias(
         ) + e_score_correction_bias.unsqueeze(0)
     else:
         scores_for_choice = scores.view(-1, n_routed_experts)
-    # For batch invariance, use sorted=True to ensure deterministic expert selection
+    # Match torch.topk's default ordering in llm-train's topk_routing.
     if hash_indices_table is not None:
         topk_indices = hash_indices_table[input_tokens]
     else:
-        use_sorted = envs.VLLM_BATCH_INVARIANT
-        topk_indices = torch.topk(scores_for_choice, k=topk, dim=-1, sorted=use_sorted)[
-            1
-        ]
+        topk_indices = torch.topk(scores_for_choice, k=topk, dim=-1, sorted=True)[1]
     topk_weights = scores.gather(1, topk_indices)
     if renormalize:
         topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)

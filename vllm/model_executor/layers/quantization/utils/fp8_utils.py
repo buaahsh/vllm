@@ -154,6 +154,8 @@ def _silu_mul_quant_fp8_packed_kernel(
     input_ptr,
     output_q_ptr,
     output_scale_ptr,
+    row_weights_ptr,
+    negative_row_weights_ptr,
     M,
     input_stride_m,
     output_q_stride_m,
@@ -166,6 +168,8 @@ def _silu_mul_quant_fp8_packed_kernel(
     GROUP_SIZE: tl.constexpr,
     BLOCK_M: tl.constexpr,
     HAS_CLAMP: tl.constexpr,
+    HAS_ROW_WEIGHTS: tl.constexpr,
+    HAS_NEGATIVE_ROW_WEIGHTS: tl.constexpr,
 ):
     N_2: tl.constexpr = N // 2
 
@@ -204,13 +208,30 @@ def _silu_mul_quant_fp8_packed_kernel(
                 act_f32 = tl.minimum(act_f32, clamp_limit)
                 mul_f32 = tl.clamp(mul_f32, -clamp_limit, clamp_limit)
 
-            y = (act_f32 / (1.0 + tl.exp(-act_f32))) * mul_f32
+            y = (act_f32 * tl.sigmoid(act_f32)) * mul_f32
+            if HAS_ROW_WEIGHTS:
+                row_weights = tl.load(
+                    row_weights_ptr + m_offset + offs_m, mask=row_mask, other=0.0
+                ).to(tl.float32)
+                if HAS_NEGATIVE_ROW_WEIGHTS:
+                    negative_row_weights = tl.load(
+                        negative_row_weights_ptr + m_offset + offs_m,
+                        mask=row_mask,
+                        other=0.0,
+                    ).to(tl.float32)
+                    y *= tl.where(
+                        y < 0.0,
+                        negative_row_weights[:, None],
+                        row_weights[:, None],
+                    )
+                else:
+                    y *= row_weights[:, None]
             # Round through bf16 to match unfused precision path
             y = y.to(tl.bfloat16).to(tl.float32)
 
             absmax = tl.max(tl.abs(y), axis=1)
 
-            scale_raw = tl.maximum(absmax / fp8_max, 1e-10)
+            scale_raw = tl.maximum(absmax / fp8_max, 1e-4 / fp8_max)
             exponent = tl.ceil(tl.log2(scale_raw))
             scale = tl.math.exp2(exponent)
 
@@ -235,6 +256,8 @@ def silu_mul_quant_fp8_packed_triton(
     group_size: int = 128,
     output_q: torch.Tensor | None = None,
     clamp_limit: float | None = None,
+    row_weights: torch.Tensor | None = None,
+    negative_row_weights: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     assert input.dim() == 2
     assert input.is_contiguous()
@@ -254,6 +277,14 @@ def silu_mul_quant_fp8_packed_triton(
 
     if output_q is None:
         output_q = torch.empty((M, N_2), dtype=fp8_dtype, device=input.device)
+    if row_weights is not None:
+        assert row_weights.dim() == 1
+        assert row_weights.numel() == M
+        assert row_weights.is_contiguous()
+    if negative_row_weights is not None:
+        assert row_weights is not None
+        assert negative_row_weights.shape == row_weights.shape
+        assert negative_row_weights.is_contiguous()
 
     output_scale_packed = torch.zeros(
         (num_packed_groups, tma_aligned_M),
@@ -268,10 +299,14 @@ def silu_mul_quant_fp8_packed_triton(
     num_stages = 2
 
     has_clamp = clamp_limit is not None
+    has_row_weights = row_weights is not None
+    has_negative_row_weights = negative_row_weights is not None
     _silu_mul_quant_fp8_packed_kernel[grid](
         input,
         output_q,
         output_scale_packed,
+        row_weights if has_row_weights else input,
+        negative_row_weights if has_negative_row_weights else input,
         M,
         input.stride(0),
         output_q.stride(0),
@@ -284,6 +319,8 @@ def silu_mul_quant_fp8_packed_triton(
         GROUP_SIZE=group_size,
         BLOCK_M=BLOCK_M,
         HAS_CLAMP=has_clamp,
+        HAS_ROW_WEIGHTS=has_row_weights,
+        HAS_NEGATIVE_ROW_WEIGHTS=has_negative_row_weights,
         num_warps=num_warps,
         num_stages=num_stages,
     )
@@ -495,7 +532,7 @@ def _per_token_group_quant_fp8_colmajor(
 def per_token_group_quant_fp8(
     x: torch.Tensor,
     group_size: int,
-    eps: float = 1e-10,
+    eps: float = 1e-4,
     dtype: torch.dtype | None = None,
     column_major_scales: bool = False,
     tma_aligned_scales: bool = False,
@@ -560,7 +597,11 @@ def per_token_group_quant_fp8(
 
     # prefer CUDA kernel if available
     # TODO(bnell): this causes some fp8 moe test to fail.
-    if current_platform.is_cuda() and x.is_contiguous():
+    if (
+        current_platform.is_cuda()
+        and x.is_contiguous()
+        and os.getenv("VLLM_FP8_GROUP_QUANT_FORCE_TRITON") != "1"
+    ):
         torch.ops._C.per_token_group_fp8_quant(
             x,
             x_q,
@@ -622,7 +663,7 @@ def per_token_group_quant_fp8(
 def per_token_group_quant_fp8_packed_for_deepgemm(
     x: torch.Tensor,
     group_size: int,
-    eps: float = 1e-10,
+    eps: float = 1e-4,
     use_ue8m0: bool | None = None,
     out_q: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -993,6 +1034,7 @@ def deepgemm_post_process_fp8_weight_block(
     use_e8m0: bool,
     is_bmm: bool = False,
     bmm_batch_size: int = 0,
+    skip_sf_transform: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     assert wq.dtype == torch.float8_e4m3fn, (
         "Expected quantized tensor dtype "
@@ -1010,6 +1052,9 @@ def deepgemm_post_process_fp8_weight_block(
         )
         if use_e8m0:
             requant_weight_ue8m0_inplace(wq, ws, block_size=quant_block_shape)
+
+    if skip_sf_transform:
+        return wq, ws
 
     if is_bmm:
         # Reshape 2D weight/scale to 3D for grouped BMM (einsum):
@@ -1071,17 +1116,20 @@ def prepare_fp8_moe_layer_for_deepgemm(
     w2_scale: torch.Tensor,
     block_shape: tuple[int],
 ):
+    skip_sf_transform = os.getenv("VLLM_DEEPGEMM_MOE_RAW_SCALES") == "1"
     w13, w13_scale = deepgemm_post_process_fp8_weight_block(
         wq=w13,
         ws=w13_scale,
         quant_block_shape=block_shape,
         use_e8m0=is_deep_gemm_e8m0_used(),
+        skip_sf_transform=skip_sf_transform,
     )
     w2, w2_scale = deepgemm_post_process_fp8_weight_block(
         wq=w2,
         ws=w2_scale,
         quant_block_shape=block_shape,
         use_e8m0=is_deep_gemm_e8m0_used(),
+        skip_sf_transform=skip_sf_transform,
     )
 
     return w13, w2, w13_scale, w2_scale

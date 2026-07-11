@@ -146,7 +146,9 @@ def _fp8_quantize(
         assert not per_act_token
         assert len(block_shape) == 2
         _, block_k = block_shape[0], block_shape[1]
-        A, A_scale = per_token_group_quant_fp8(A, block_k)
+        # llm-train's MXFP8 path clamps the per-token group amax at 1e-4
+        # before computing UE8M0 scales. Keep MoE input quantization aligned.
+        A, A_scale = per_token_group_quant_fp8(A, block_k, eps=1e-4)
         assert cdiv(A.size(-1), block_k) == A_scale.size(-1)
 
     return A, A_scale

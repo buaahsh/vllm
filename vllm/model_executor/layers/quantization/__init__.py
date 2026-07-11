@@ -112,7 +112,6 @@ def get_quantization_config(quantization: str) -> type[QuantizationConfig]:
     # lazy import to avoid triggering `torch.compile` too early
     from vllm.config.quantization import _ONLINE_SHORTHANDS
     from vllm.model_executor.layers.quantization.quark.quark import QuarkConfig
-    from vllm.model_executor.models.deepseek_v4 import DeepseekV4FP8Config
 
     from .awq import AWQConfig
     from .awq_marlin import AWQMarlinConfig
@@ -164,11 +163,14 @@ def get_quantization_config(quantization: str) -> type[QuantizationConfig]:
         "inc": INCConfig,
         "mxfp4": Mxfp4Config,
         "gpt_oss_mxfp4": GptOssMxfp4Config,
-        "deepseek_v4_fp8": DeepseekV4FP8Config,
         "cpu_awq": CPUAWQConfig,
         "humming": HummingConfig,
         "online": OnlineQuantizationConfig,
     }
+    if quantization == "deepseek_v4_fp8":
+        from vllm.model_executor.models.deepseek_v4 import DeepseekV4FP8Config
+
+        method_to_config["deepseek_v4_fp8"] = DeepseekV4FP8Config
 
     # Register online shorthands as quantization methods so the user can
     # specify "LLM(..., quantization='fp8_per_tensor')" as shorthand for

@@ -14,17 +14,21 @@ Use the updated converter. By default it now:
 
 - exports YOCO router gate weights as FP32;
 - writes `qk_rms_clip=true` / `qk_norm=false` when the native checkpoint uses RMSClip;
-- leaves runtime quantization in BF16 (`quant_mode=bfloat16`).
+- writes `quant_mode` / `quant_block_size` metadata from the checkpoint, or from
+  explicit converter overrides.
 
 ```bash
 cd /data/users/shaohanh/vllm
 python convert_to_hf.py \
   --input_dir /path/to/merged-native-checkpoint \
-  --output_dir /path/to/hf-yoco
+  --output_dir /path/to/hf-yoco \
+  --quant_mode bfloat16
 ```
 
-No converter flag is needed for MXFP8. Use the vLLM launch-time `--quantization mxfp8`
-switch instead. If `--quantization mxfp8` is not passed, serving stays BF16.
+The converter `quant_mode` field records precision metadata for parity audits;
+vLLM runtime quantization is still controlled by the launch-time
+`--quantization mxfp8` switch. If `--quantization mxfp8` is not passed, serving
+stays BF16.
 
 ## Serve BF16
 

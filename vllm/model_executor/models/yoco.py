@@ -62,10 +62,9 @@ from vllm.distributed import (
     get_tensor_model_parallel_world_size,
 )
 from vllm.forward_context import get_forward_context
-from vllm.model_executor.layers.activation import SiluAndMul, SiluAndMulWithClamp
+from vllm.model_executor.layers.activation import SiluAndMul
 from vllm.model_executor.layers.fused_moe import FusedMoE
 from vllm.model_executor.layers.fused_moe.router.gate_linear import GateLinear
-from vllm.model_executor.layers.layernorm import RMSNorm
 from vllm.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
@@ -75,7 +74,6 @@ from vllm.model_executor.layers.linear import (
 )
 from vllm.model_executor.layers.logits_processor import LogitsProcessor
 from vllm.model_executor.layers.quantization import QuantizationConfig
-from vllm.model_executor.layers.rotary_embedding import get_rope
 from vllm.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
@@ -90,7 +88,166 @@ from vllm.model_executor.models.utils import (
     make_empty_intermediate_tensors_factory,
     maybe_prefix,
 )
+from vllm.platforms import current_platform
+from vllm.triton_utils import HAS_TRITON, tl, triton, tldevice
+from vllm.utils.torch_utils import direct_register_custom_op
 
+
+if HAS_TRITON:
+
+    @triton.jit
+    def _yoco_rms_clip_kernel(
+        x_ptr,
+        output_ptr,
+        num_rows,
+        eps: tl.constexpr,
+        limit: tl.constexpr,
+        HEAD_DIM: tl.constexpr,
+        BLOCK_ROWS: tl.constexpr,
+    ):
+        rows = tl.program_id(0) * BLOCK_ROWS + tl.arange(0, BLOCK_ROWS)[:, None]
+        cols = tl.arange(0, HEAD_DIM)[None, :]
+        row_mask = rows < num_rows
+        values = tl.load(
+            x_ptr + rows * HEAD_DIM + cols,
+            mask=row_mask,
+            other=0.0,
+        ).to(tl.float32)
+        square_sum = tl.sum(tl.where(row_mask, values * values, 0.0), axis=1)[
+            :, None
+        ]
+        clip_coef = limit * tl.extra.cuda.libdevice.rsqrt(
+            square_sum / HEAD_DIM + eps
+        )
+        clip_coef = tl.minimum(clip_coef, 1.0)
+        tl.store(
+            output_ptr + rows * HEAD_DIM + cols,
+            values * clip_coef,
+            mask=row_mask,
+        )
+
+    @triton.jit
+    def _yoco_rms_norm_kernel(
+        x_ptr,
+        weight_ptr,
+        output_ptr,
+        num_rows,
+        eps: tl.constexpr,
+        HIDDEN_SIZE: tl.constexpr,
+        REDUCTION_BLOCK: tl.constexpr,
+    ):
+        row = tl.program_id(0)
+        cols = tl.arange(0, REDUCTION_BLOCK)
+        square_acc = tl.zeros([REDUCTION_BLOCK], dtype=tl.float32)
+
+        for offset in tl.range(0, HIDDEN_SIZE, REDUCTION_BLOCK):
+            hidden_offsets = offset + cols
+            mask = hidden_offsets < HIDDEN_SIZE
+            values = tl.load(
+                x_ptr + row * HIDDEN_SIZE + hidden_offsets,
+                mask=mask,
+                other=0.0,
+                eviction_policy="evict_last",
+            ).to(tl.float32)
+            square_acc += tl.where(mask, values * values, 0.0)
+
+        square_sum = tl.sum(square_acc, axis=0)
+        inv_rms = tldevice.rsqrt(square_sum / HIDDEN_SIZE + eps)
+
+        for offset in tl.range(0, HIDDEN_SIZE, REDUCTION_BLOCK):
+            hidden_offsets = offset + cols
+            mask = hidden_offsets < HIDDEN_SIZE
+            values = tl.load(
+                x_ptr + row * HIDDEN_SIZE + hidden_offsets,
+                mask=mask,
+                other=0.0,
+                eviction_policy="evict_first",
+            ).to(tl.float32)
+            weight = tl.load(
+                weight_ptr + hidden_offsets,
+                mask=mask,
+                other=0.0,
+                eviction_policy="evict_last",
+            ).to(tl.float32)
+            tl.store(
+                output_ptr + row * HIDDEN_SIZE + hidden_offsets,
+                values * inv_rms * weight,
+                mask=mask,
+            )
+
+
+def _yoco_rms_clip_cuda(
+    x: torch.Tensor,
+    eps: float,
+    limit: float,
+) -> torch.Tensor:
+    x_contiguous = x.contiguous()
+    output = torch.empty_like(x_contiguous)
+    num_rows = x_contiguous.numel() // x_contiguous.shape[-1]
+    _yoco_rms_clip_kernel[(triton.cdiv(num_rows, 8),)](
+        x_contiguous,
+        output,
+        num_rows,
+        eps=eps,
+        limit=limit,
+        HEAD_DIM=128,
+        BLOCK_ROWS=8,
+        num_warps=4,
+        num_stages=1,
+    )
+    return output
+
+
+def _yoco_rms_clip_fake(
+    x: torch.Tensor,
+    eps: float,
+    limit: float,
+) -> torch.Tensor:
+    return torch.empty_like(x)
+
+
+def _yoco_rms_norm_cuda(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float,
+) -> torch.Tensor:
+    x_contiguous = x.contiguous()
+    weight_contiguous = weight.to(torch.bfloat16).contiguous()
+    output = torch.empty_like(x_contiguous, dtype=torch.bfloat16)
+    num_rows = x_contiguous.numel() // x_contiguous.shape[-1]
+    _yoco_rms_norm_kernel[(num_rows,)](
+        x_contiguous,
+        weight_contiguous,
+        output,
+        num_rows,
+        eps=eps,
+        HIDDEN_SIZE=x_contiguous.shape[-1],
+        REDUCTION_BLOCK=1024,
+        num_warps=8,
+        num_stages=1,
+    )
+    return output
+
+
+def _yoco_rms_norm_fake(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float,
+) -> torch.Tensor:
+    return torch.empty_like(x, dtype=torch.bfloat16)
+
+
+if HAS_TRITON and current_platform.is_cuda():
+    direct_register_custom_op(
+        op_name="yoco_rms_clip",
+        op_func=_yoco_rms_clip_cuda,
+        fake_impl=_yoco_rms_clip_fake,
+    )
+    direct_register_custom_op(
+        op_name="yoco_rms_norm",
+        op_func=_yoco_rms_norm_cuda,
+        fake_impl=_yoco_rms_norm_fake,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -161,12 +318,160 @@ class RMSClip(nn.Module):
         return f"dim={self.dim}, eps={self.eps}, limit={self.limit}"
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if (
+            HAS_TRITON
+            and x.is_cuda
+            and x.dtype == torch.bfloat16
+            and x.shape[-1] == 128
+            and current_platform.is_cuda()
+        ):
+            return torch.ops.vllm.yoco_rms_clip(x, self.eps, self.limit)
         orig_dtype = x.dtype
         x = x.to(torch.float32)
         variance = x.pow(2).mean(dim=-1, keepdim=True)
         clip_coef = (self.limit * torch.rsqrt(variance + self.eps)).clamp(max=1.0)
         x = x * clip_coef
         return x.to(orig_dtype)
+
+
+class RMSNorm(nn.Module):
+    """RMSNorm matching llm-train's compiled reduction semantics.
+
+    Inductor keeps the residual input and reduction in FP32, loads the BF16
+    weight as FP32, and casts only the output to BF16.  The CUDA path below
+    also preserves Inductor's 1024-wide reduction order for hidden size 3072.
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        eps: float = 1e-6,
+        has_weight: bool = True,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        self.dim = dim
+        self.eps = eps
+        weight = torch.ones(dim, dtype=dtype or torch.get_default_dtype())
+        if has_weight:
+            self.weight = nn.Parameter(weight)
+        else:
+            self.register_buffer("weight", weight)
+
+    def extra_repr(self) -> str:
+        return f"dim={self.dim}, eps={self.eps}"
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if (
+            HAS_TRITON
+            and x.is_cuda
+            and x.dtype == torch.float32
+            and x.shape[-1] == 3072
+            and current_platform.is_cuda()
+        ):
+            return torch.ops.vllm.yoco_rms_norm(x, self.weight, self.eps)
+        return F.rms_norm(
+            x.to(torch.bfloat16),
+            (x.shape[-1],),
+            weight=self.weight.to(torch.bfloat16),
+            eps=self.eps,
+        )
+
+
+@torch.compile
+def _yoco_apply_rotary_emb(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    cos = cos.unsqueeze(-2)
+    sin = sin.unsqueeze(-2)
+
+    def apply(x: torch.Tensor) -> torch.Tensor:
+        x1, x2 = torch.chunk(x.to(torch.float32), 2, dim=-1)
+        y1 = x1 * cos - x2 * sin
+        y2 = x2 * cos + x1 * sin
+        return torch.cat((y1, y2), dim=-1).to(x.dtype)
+
+    return apply(query), apply(key)
+
+
+@torch.compile
+def _yoco_diff_attention(
+    attn1: torch.Tensor,
+    attn2: torch.Tensor,
+    lam: torch.Tensor,
+) -> torch.Tensor:
+    return attn1 - torch.sigmoid(lam).unsqueeze(-1) * attn2
+
+
+def _yoco_normalized_router_linear(
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+) -> torch.Tensor:
+    weight = weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
+    return F.linear(hidden_states, weight)
+
+
+class YOCORotaryEmbedding(nn.Module):
+    """YOCO RoPE with llm-train's FP32 cos/sin cache semantics."""
+
+    def __init__(
+        self,
+        head_size: int,
+        max_position_embeddings: int,
+        base: float,
+    ) -> None:
+        super().__init__()
+        self.head_size = head_size
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+        self.register_buffer("cos_sin_cache", None, persistent=False)
+
+    def _get_cos_sin_cache(self, device: torch.device) -> torch.Tensor:
+        cache = self.cos_sin_cache
+        if cache is not None and cache.device == device:
+            return cache
+        # llm-train constructs RoPE while the default device is CUDA. Generate
+        # the FP32 cache on the execution device as well: CPU-generated trig
+        # values differ by a few ULPs and can cross BF16/FP8 boundaries.
+        inv_freq = 1.0 / (
+            self.base
+            ** (
+                torch.arange(
+                    0,
+                    self.head_size,
+                    2,
+                    dtype=torch.float32,
+                    device=device,
+                )
+                / self.head_size
+            )
+        )
+        positions = torch.arange(
+            self.max_position_embeddings,
+            dtype=torch.float32,
+            device=device,
+        )
+        freqs = torch.einsum("i,j -> ij", positions, inv_freq)
+        cache = torch.cat((freqs.cos(), freqs.sin()), dim=-1)
+        self.cos_sin_cache = cache
+        return cache
+
+    def forward(
+        self,
+        positions: torch.Tensor,
+        query: torch.Tensor,
+        key: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        cache = self._get_cos_sin_cache(query.device)
+        cos_sin = cache.index_select(0, positions.to(device=query.device, dtype=torch.long))
+        cos, sin = cos_sin.chunk(2, dim=-1)
+        query = query.view(query.shape[0], -1, self.head_size)
+        key = key.view(key.shape[0], -1, self.head_size)
+        query, key = _yoco_apply_rotary_emb(query, key, cos, sin)
+        return query.flatten(-2), key.flatten(-2)
 
 
 def _build_qk_norm(config: PretrainedConfig, head_dim: int, rms_eps: float):
@@ -296,7 +601,9 @@ class YOCOSelfAttention(nn.Module):
             output_size=self.total_num_heads,
             bias=False,
             gather_output=False,
-            quant_config=quant_config,
+            # llm-train constructs lambda_proj with default MixPrecisionLinear,
+            # so it stays BF16 even when the rest of attention uses MXFP8.
+            quant_config=None,
             prefix=f"{prefix}.lambda_proj",
         )
         rms_eps = float(getattr(config, "rms_norm_eps", getattr(config, "norm_eps", 1e-6)))
@@ -307,11 +614,10 @@ class YOCOSelfAttention(nn.Module):
         self.q_norm = _build_qk_norm(config, self.head_dim, rms_eps)
         self.k_norm = _build_qk_norm(config, self.head_dim, rms_eps)
 
-        self.rotary_emb = get_rope(
+        self.rotary_emb = YOCORotaryEmbedding(
             head_size=self.head_dim,
-            max_position=max_position,
-            is_neox_style=True,
-            rope_parameters={"rope_theta": rope_theta},
+            max_position_embeddings=max_position,
+            base=rope_theta,
         )
 
         # Build one Attention module per universal-loop iteration.  Each gets
@@ -354,8 +660,7 @@ class YOCOSelfAttention(nn.Module):
         attn_view = attn_out.view(-1, 2 * num_heads_per_pair, self.head_dim)
         attn1 = attn_view[:, 0::2, :]
         attn2 = attn_view[:, 1::2, :]
-        lam = torch.sigmoid(lam).unsqueeze(-1)
-        out = attn1 - lam * attn2
+        out = _yoco_diff_attention(attn1, attn2, lam)
         return out.reshape(-1, num_heads_per_pair * self.head_dim)
 
     # ------------------------------------------------------------------ #
@@ -455,7 +760,8 @@ class YOCOCrossAttention(nn.Module):
             output_size=self.total_num_heads,
             bias=False,
             gather_output=False,
-            quant_config=quant_config,
+            # llm-train leaves lambda_proj at default BF16 precision.
+            quant_config=None,
             prefix=f"{prefix}.lambda_proj",
         )
 
@@ -494,8 +800,7 @@ class YOCOCrossAttention(nn.Module):
         attn_view = attn_out.view(-1, 2 * self.num_lambda_heads, self.head_dim)
         attn1 = attn_view[:, 0::2, :]
         attn2 = attn_view[:, 1::2, :]
-        lam = torch.sigmoid(lam).unsqueeze(-1)
-        out = attn1 - lam * attn2
+        out = _yoco_diff_attention(attn1, attn2, lam)
         return out.reshape(-1, self.num_lambda_heads * self.head_dim)
 
     def forward(
@@ -517,6 +822,18 @@ class YOCOCrossAttention(nn.Module):
 # --------------------------------------------------------------------------- #
 # MoE block                                                                   #
 # --------------------------------------------------------------------------- #
+
+
+class YOCOClampedSwiGLU(nn.Module):
+    def __init__(self, swiglu_limit: float) -> None:
+        super().__init__()
+        self.swiglu_limit = float(swiglu_limit)
+
+    def forward(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.float().chunk(2, dim=-1)
+        gate = gate.clamp(max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        return (F.silu(gate) * up).to(gate_up.dtype)
 
 
 class YOCOSharedExperts(nn.Module):
@@ -551,7 +868,7 @@ class YOCOSharedExperts(nn.Module):
         # non-positive, fall back to the plain (unclamped) activation.
         self.swiglu_limit = float(swiglu_limit)
         if self.swiglu_limit > 0:
-            self.act_fn = SiluAndMulWithClamp(self.swiglu_limit)
+            self.act_fn = YOCOClampedSwiGLU(self.swiglu_limit)
         else:
             self.act_fn = SiluAndMul()
 
@@ -574,7 +891,7 @@ class YOCOMoE(nn.Module):
         super().__init__()
         self.hidden_size = _cfg_int(config, "hidden_size", "d_model")
         self.num_experts = _cfg_int(config, "num_experts", "moe_expert_num")
-        self.top_k = _cfg_int(config, "num_experts_per_tok", "top_k")
+        self.top_k = _cfg_int(config, "num_experts_per_tok", "moe_top_k", "top_k")
         self.moe_intermediate_size = _cfg_int(
             config, "moe_intermediate_size", "moe_ffn_dim"
         )
@@ -582,6 +899,9 @@ class YOCOMoE(nn.Module):
             config, "shared_expert_intermediate_size", "d_shared_expert"
         )
         self.swiglu_limit = _swiglu_limit(config)
+        self.router_weights_normalized = bool(
+            getattr(config, "router_weights_normalized", False)
+        )
 
         # Router gate — runs in fp32 to match training.
         self.gate = GateLinear(
@@ -611,22 +931,20 @@ class YOCOMoE(nn.Module):
             input_size=self.hidden_size,
             output_size=1,
             bias=False,
-            params_dtype=torch.float32,
             quant_config=None,
             prefix=f"{prefix}.shared_gate",
         )
 
         # NOTE(swiglu_limit): Both the shared expert (above, via
-        # ``SiluAndMulWithClamp``) and the ROUTED experts (below) apply the
+        # ``YOCOClampedSwiGLU``) and the ROUTED experts (below) apply the
         # training ``swiglu_limit`` clamp (clamp-before-silu), for exact
         # train/inference parity. The routed clamp is threaded via
         # ``FusedMoE(swiglu_limit=...)`` -> ``UnquantizedFusedMoEMethod.
         # forward_native`` -> ``FusedMoEExpertsModular.activation`` ->
         # ``swiglu_limit_func`` (gate/up ordering verified identical to
-        # ``silu_and_mul``). Requires the TRITON MoE backend
-        # (``--moe-backend triton``) -- the FlashInfer fused kernels expose no
-        # activation hook (and are numerically broken for this model's
-        # ``moe_ffn_dim=1280``, not 128-aligned). CAUTION: the loose limit=10.0
+        # ``silu_and_mul``). The W8A8 parity path uses DeepGEMM, which also
+        # applies routing probabilities before W2 input quantization. CAUTION:
+        # the loose limit=10.0
         # can make some checkpoints (observed: adamw-3000) degenerate under pure
         # greedy decoding; use temperature>0 in production. Kept on per owner's
         # request for training fidelity.
@@ -640,14 +958,28 @@ class YOCOMoE(nn.Module):
             use_grouped_topk=False,
             scoring_func="softmax",
             swiglu_limit=self.swiglu_limit,
+            apply_router_weight_before_w2=True,
             prefix=f"{prefix}.experts",
+        )
+
+    def _shared_gate_linear(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # llm-train builds shared_gate with default MixPrecisionLinear settings:
+        # no MXFP8 path and the parameter follows the module default dtype.
+        return F.linear(
+            hidden_states,
+            self.shared_gate.weight.to(hidden_states.dtype),
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        router_logits, _ = self.gate(hidden_states)
+        if self.router_weights_normalized:
+            router_logits = F.linear(hidden_states.float(), self.gate.weight)
+        else:
+            router_logits = _yoco_normalized_router_linear(
+                hidden_states.float(), self.gate.weight
+            )
         routed_out = self.experts(
             hidden_states=hidden_states, router_logits=router_logits
         )
@@ -656,13 +988,10 @@ class YOCOMoE(nn.Module):
         # ``shared_gate`` is replicated, so ``scale`` is identical on every TP
         # rank; applying it to the already-reduced shared output is equivalent
         # to applying it before reduction.
-        shared_out = self.shared_experts(hidden_states)
-        # Training keeps shared_gate as an FP32 master weight but casts it to
-        # the activation dtype for the actual MixPrecisionLinear matmul.
-        scale = F.linear(
-            hidden_states, self.shared_gate.weight.to(hidden_states.dtype)
-        )
-        shared_out = torch.sigmoid(scale) * shared_out
+        shared_out_unscaled = self.shared_experts(hidden_states)
+        scale = self._shared_gate_linear(hidden_states)
+        shared_gate_sigmoid = torch.sigmoid(scale)
+        shared_out = shared_gate_sigmoid * shared_out_unscaled
 
         # ``routed_out`` (reduced inside FusedMoE) and ``shared_out`` (reduced
         # inside YOCOSharedExperts.down_proj) are both already tensor-parallel
@@ -740,12 +1069,12 @@ class YOCODecoderLayer(nn.Module):
         else:
             assert yoco_key is not None and yoco_value is not None
             x = self.self_attn(x, yoco_key, yoco_value)
-        x = residual + x
+        x = residual + x.float()
 
         residual = x
         x = self.post_attention_layernorm(x)
         x = self.mlp(x)
-        return residual + x
+        return residual + x.float()
 
 
 # --------------------------------------------------------------------------- #
@@ -843,10 +1172,10 @@ class YOCOSelfBlock(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         model = self._model_ref[0]
         if inputs_embeds is not None:
-            hidden_states = inputs_embeds
+            hidden_states = inputs_embeds.float()
         else:
             assert input_ids is not None
-            hidden_states = model.embed_tokens(input_ids)
+            hidden_states = model.embed_tokens(input_ids).float()
 
         # Self-attention layers (universal loop) — all tokens.
         for loop_idx in range(model.universal_loop):
@@ -1018,7 +1347,7 @@ class YOCOModel(nn.Module):
             # with cudagraph_copy_inputs=False, so cross-block inputs must have
             # stable addresses across capture/replay.
             max_num_tokens = vllm_config.scheduler_config.max_num_batched_tokens
-            dtype = self.embed_tokens.weight.dtype
+            kv_dtype = self.embed_tokens.weight.dtype
             device = self.embed_tokens.weight.device
             key_dim = self.yoco_k_proj.weight.shape[0]
             value_dim = self.yoco_v_proj.weight.shape[0]
@@ -1026,13 +1355,13 @@ class YOCOModel(nn.Module):
                 max_num_tokens, dtype=torch.int64, device=device
             )
             self.fp_hidden_states = torch.zeros(
-                (max_num_tokens, self.hidden_size), dtype=dtype, device=device
+                (max_num_tokens, self.hidden_size), dtype=torch.float32, device=device
             )
             self.fp_yoco_key = torch.zeros(
-                (max_num_tokens, key_dim), dtype=dtype, device=device
+                (max_num_tokens, key_dim), dtype=kv_dtype, device=device
             )
             self.fp_yoco_value = torch.zeros(
-                (max_num_tokens, value_dim), dtype=dtype, device=device
+                (max_num_tokens, value_dim), dtype=kv_dtype, device=device
             )
         else:
             self.self_block = None
@@ -1058,10 +1387,10 @@ class YOCOModel(nn.Module):
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if inputs_embeds is not None:
-            hidden_states = inputs_embeds
+            hidden_states = inputs_embeds.float()
         else:
             assert input_ids is not None
-            hidden_states = self.embed_tokens(input_ids)
+            hidden_states = self.embed_tokens(input_ids).float()
 
         # Universal loop: run layers 0..first_cross_layer_idx-1
         # ``universal_loop`` times.
@@ -1301,12 +1630,6 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
             ("self_attn.qkv_proj", "self_attn.k_proj", "k"),
             ("self_attn.qkv_proj", "self_attn.v_proj", "v"),
         ]
-        # Shared-expert fused gate/up mapping.
-        merged_mappings = [
-            ("mlp.shared_experts.gate_up_proj", 0, "mlp.shared_experts.gate_proj"),
-            ("mlp.shared_experts.gate_up_proj", 1, "mlp.shared_experts.up_proj"),
-        ]
-
         first_cross_layer_idx = (
             _cfg_int(self.config, "num_hidden_layers", "n_layers")
             - _cfg_int(self.config, "yoco_cross_layers", default=0)
