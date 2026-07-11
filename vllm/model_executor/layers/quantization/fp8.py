@@ -912,7 +912,6 @@ class Fp8MoEMethod(FusedMoEMethodBase):
         fused_experts = getattr(self.moe_kernel, "fused_experts", None)
         if fused_experts is not None:
             fused_experts.swiglu_limit = getattr(layer, "swiglu_limit", None)
-            fused_experts.layer_name = getattr(layer, "layer_name", None)
             fused_experts.apply_router_weight_before_w2 = getattr(
                 layer, "apply_router_weight_before_w2", False
             )

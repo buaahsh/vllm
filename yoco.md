@@ -13,12 +13,13 @@ Current 2026-06-28 images:
 Use the updated converter. By default it now:
 
 - exports YOCO router gate weights as FP32;
+- normalizes router rows once on CUDA and marks them as pre-normalized;
 - writes `qk_rms_clip=true` / `qk_norm=false` when the native checkpoint uses RMSClip;
 - writes `quant_mode` / `quant_block_size` metadata from the checkpoint, or from
   explicit converter overrides.
 
 ```bash
-cd /data/users/shaohanh/vllm
+cd /root/code2/vllm
 python convert_to_hf.py \
   --input_dir /path/to/merged-native-checkpoint \
   --output_dir /path/to/hf-yoco \
@@ -29,6 +30,31 @@ The converter `quant_mode` field records precision metadata for parity audits;
 vLLM runtime quantization is still controlled by the launch-time
 `--quantization mxfp8` switch. If `--quantization mxfp8` is not passed, serving
 stays BF16.
+
+On a CPU-only conversion host, pass `--router-normalization runtime`. This
+preserves raw router weights and keeps the compatible runtime normalization
+path; CPU-side normalization is not used because its FP32 reduction differs
+from CUDA.
+
+## Precision-Aligned W8A8
+
+Use DeepGEMM with the YOCO alignment paths enabled:
+
+```bash
+export VLLM_YOCO_NATIVE_FA2_PREFILL=1
+export VLLM_DEEPGEMM_MOE_PSUM_LAYOUT=1
+export VLLM_DEEPGEMM_MOE_FUSED_ROW_WEIGHTS=1
+export VLLM_YOCO_COMPILED_TOPK_ROUTING=1
+
+vllm serve /path/to/hf-yoco \
+  --quantization fp8_per_block \
+  --moe-backend deep_gemm \
+  --attention-backend FLASH_ATTN \
+  --compilation-config '{"mode":0,"cudagraph_mode":"FULL"}'
+```
+
+The graph-only configuration preserves the eager numerical path. The default
+vLLM compile mode changes the aligned reductions and is not used for parity.
 
 ## Serve BF16
 

@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-import os
-
 import torch
 
 import vllm.envs as envs
@@ -10,7 +8,6 @@ from vllm.config import get_current_vllm_config
 from vllm.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
 from vllm.model_executor.layers.quantization.utils.fp8_utils import (
     deepgemm_post_process_fp8_weight_block,
-    per_token_group_quant_fp8,
 )
 from vllm.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
@@ -36,9 +33,6 @@ class DeepGemmFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
     def __init__(self, config: FP8ScaledMMLinearLayerConfig):
         super().__init__(config)
         self.use_deep_gemm_e8m0 = is_deep_gemm_e8m0_used()
-        self.use_llmtrain_raw_scales = (
-            os.getenv("VLLM_DEEPGEMM_LINEAR_RAW_SCALES") == "1"
-        )
         act_scale_descriptor = config.activation_quant_key.scale
         self.is_deep_gemm_supported = is_deep_gemm_supported()
         self.quant_fp8 = QuantFP8(
@@ -88,8 +82,6 @@ class DeepGemmFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         return True, None
 
     def process_weights_after_loading(self, layer):
-        if self.use_llmtrain_raw_scales:
-            return
         super().process_weights_after_loading(layer)
         params = self._get_layer_params(layer)
         assert layer.weight_block_size is not None
@@ -113,50 +105,6 @@ class DeepGemmFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
             )
             replace_parameter(layer, params.WEIGHT, dg_weight)
             replace_parameter(layer, scale_attr, dg_weight_scale)
-
-    def apply_weights(
-        self,
-        layer: torch.nn.Module,
-        x: torch.Tensor,
-        bias: torch.Tensor | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        if not self.use_llmtrain_raw_scales:
-            return super().apply_weights(layer, x, bias, **kwargs)
-
-        params = self._get_layer_params(layer)
-        weight_scale = (
-            params.weight_scale
-            if params.weight_scale_inv is None
-            else params.weight_scale_inv
-        )
-        assert layer.weight_block_size is not None
-        block_m, block_k = layer.weight_block_size
-
-        input_2d = x.reshape(-1, x.shape[-1])
-        output_shape = [*x.shape[:-1], params.weight.shape[0]]
-        q_input, input_scale = per_token_group_quant_fp8(
-            input_2d,
-            group_size=block_k,
-            dtype=current_platform.fp8_dtype(),
-            use_ue8m0=self.use_deep_gemm_e8m0,
-        )
-        output = torch.empty(
-            (q_input.shape[0], params.weight.shape[0]),
-            dtype=self.config.out_dtype,
-            device=q_input.device,
-        )
-        fp8_gemm_nt(
-            (q_input, input_scale),
-            (params.weight, weight_scale),
-            output,
-            recipe_a=(1, block_k),
-            recipe_b=(block_m, block_k),
-            is_deep_gemm_e8m0_used=self.use_deep_gemm_e8m0,
-        )
-        if bias is not None:
-            output = output + bias
-        return output.view(*output_shape)
 
     def apply_block_scaled_mm(
         self,

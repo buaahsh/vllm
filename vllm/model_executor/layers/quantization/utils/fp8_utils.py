@@ -597,11 +597,7 @@ def per_token_group_quant_fp8(
 
     # prefer CUDA kernel if available
     # TODO(bnell): this causes some fp8 moe test to fail.
-    if (
-        current_platform.is_cuda()
-        and x.is_contiguous()
-        and os.getenv("VLLM_FP8_GROUP_QUANT_FORCE_TRITON") != "1"
-    ):
+    if current_platform.is_cuda() and x.is_contiguous():
         torch.ops._C.per_token_group_fp8_quant(
             x,
             x_q,
@@ -1034,7 +1030,6 @@ def deepgemm_post_process_fp8_weight_block(
     use_e8m0: bool,
     is_bmm: bool = False,
     bmm_batch_size: int = 0,
-    skip_sf_transform: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     assert wq.dtype == torch.float8_e4m3fn, (
         "Expected quantized tensor dtype "
@@ -1052,9 +1047,6 @@ def deepgemm_post_process_fp8_weight_block(
         )
         if use_e8m0:
             requant_weight_ue8m0_inplace(wq, ws, block_size=quant_block_shape)
-
-    if skip_sf_transform:
-        return wq, ws
 
     if is_bmm:
         # Reshape 2D weight/scale to 3D for grouped BMM (einsum):
@@ -1116,20 +1108,17 @@ def prepare_fp8_moe_layer_for_deepgemm(
     w2_scale: torch.Tensor,
     block_shape: tuple[int],
 ):
-    skip_sf_transform = os.getenv("VLLM_DEEPGEMM_MOE_RAW_SCALES") == "1"
     w13, w13_scale = deepgemm_post_process_fp8_weight_block(
         wq=w13,
         ws=w13_scale,
         quant_block_shape=block_shape,
         use_e8m0=is_deep_gemm_e8m0_used(),
-        skip_sf_transform=skip_sf_transform,
     )
     w2, w2_scale = deepgemm_post_process_fp8_weight_block(
         wq=w2,
         ws=w2_scale,
         quant_block_shape=block_shape,
         use_e8m0=is_deep_gemm_e8m0_used(),
-        skip_sf_transform=skip_sf_transform,
     )
 
     return w13, w2, w13_scale, w2_scale

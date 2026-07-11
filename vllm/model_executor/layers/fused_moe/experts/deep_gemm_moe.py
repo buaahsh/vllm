@@ -86,154 +86,6 @@ def _scatter_routed_row_weights(
     )
 
 
-def _layer_index_from_name(layer_name: str | None) -> int | None:
-    if not layer_name:
-        return None
-    parts = layer_name.split(".")
-    for idx, part in enumerate(parts[:-1]):
-        if part == "layers" and parts[idx + 1].isdigit():
-            return int(parts[idx + 1])
-    return None
-
-
-def _probs_before_w2_enabled(layer_name: str | None) -> bool:
-    if os.getenv("VLLM_DEEPGEMM_MOE_PROBS_BEFORE_W2") == "1":
-        return True
-    layer_spec = os.getenv("VLLM_DEEPGEMM_MOE_PROBS_BEFORE_W2_LAYERS")
-    if not layer_spec:
-        return False
-    layer_idx = _layer_index_from_name(layer_name)
-    if layer_idx is None:
-        return False
-    enabled_layers = {
-        int(item)
-        for item in layer_spec.replace(" ", "").split(",")
-        if item.isdigit()
-    }
-    return layer_idx in enabled_layers
-
-
-_MOE_DEBUG_MATCH_CALL = 0
-
-
-def _env_int_set(name: str) -> set[int] | None:
-    spec = os.getenv(name)
-    if not spec:
-        return None
-    return {int(item) for item in spec.replace(" ", "").split(",") if item}
-
-
-def _moe_debug_target(token_count: int) -> tuple[str, int] | None:
-    dump_dir = os.getenv("YOCO_MOE_DEBUG_DUMP_DIR")
-    if not dump_dir:
-        return None
-    token_counts = _env_int_set("YOCO_MOE_DEBUG_TOKEN_COUNT")
-    if token_counts is not None and token_count not in token_counts:
-        return None
-
-    global _MOE_DEBUG_MATCH_CALL
-    call_idx = _MOE_DEBUG_MATCH_CALL
-    _MOE_DEBUG_MATCH_CALL += 1
-
-    calls = _env_int_set("YOCO_MOE_DEBUG_CALLS")
-    if calls is not None and call_idx not in calls:
-        return None
-    return dump_dir, call_idx
-
-
-def _cpu_debug_tensor(tensor: torch.Tensor | None) -> torch.Tensor | None:
-    if tensor is None:
-        return None
-    return tensor.detach().cpu()
-
-
-def _dump_moe_debug(
-    target: tuple[str, int] | None,
-    *,
-    layer_name: str | None,
-    token_count: int,
-    row_count: int,
-    tensors: dict[str, torch.Tensor | None],
-) -> None:
-    if target is None:
-        return
-    dump_dir, call_idx = target
-    os.makedirs(dump_dir, exist_ok=True)
-    label = os.getenv("YOCO_MOE_DEBUG_LABEL", "vllm")
-    safe_layer = (layer_name or "unknown").replace(".", "_")
-    path = os.path.join(dump_dir, f"{label}_call{call_idx:03d}_{safe_layer}.pt")
-    torch.save(
-        {
-            "backend": "vllm",
-            "call_index": call_idx,
-            "layer_name": layer_name,
-            "token_count": token_count,
-            "row_count": row_count,
-            "tensors": {
-                name: _cpu_debug_tensor(tensor)
-                for name, tensor in tensors.items()
-                if tensor is not None
-            },
-        },
-        path,
-    )
-
-
-def _build_vllm_dispatch_row_map(
-    *,
-    topk_ids: torch.Tensor,
-    topk_weights: torch.Tensor,
-    inv_perm: torch.Tensor,
-    row_count: int,
-    expert_map: torch.Tensor | None,
-) -> dict[str, torch.Tensor]:
-    device = topk_ids.device
-    num_tokens, topk = topk_ids.shape
-
-    row_valid = torch.zeros((row_count,), device=device, dtype=torch.bool)
-    row_token = torch.full((row_count,), -1, device=device, dtype=torch.int64)
-    row_topk = torch.full((row_count,), -1, device=device, dtype=torch.int64)
-    row_expert = torch.full((row_count,), -1, device=device, dtype=torch.int64)
-    row_expert_local = torch.full((row_count,), -1, device=device, dtype=torch.int64)
-    row_prob = torch.zeros((row_count,), device=device, dtype=torch.float32)
-
-    expert_ids = topk_ids.to(torch.int64)
-    if expert_map is None:
-        local_expert_ids = expert_ids
-        valid = expert_ids >= 0
-    else:
-        mapped = torch.full_like(expert_ids, -1)
-        valid_global = expert_ids >= 0
-        mapped[valid_global] = expert_map[expert_ids[valid_global]].to(torch.int64)
-        local_expert_ids = mapped
-        valid = mapped >= 0
-
-    token_idx = torch.arange(num_tokens, device=device, dtype=torch.int64)
-    token_idx = token_idx.view(-1, 1).expand(num_tokens, topk)
-    topk_idx = torch.arange(topk, device=device, dtype=torch.int64)
-    topk_idx = topk_idx.view(1, -1).expand(num_tokens, topk)
-
-    rows = inv_perm.to(torch.int64)
-    valid = valid & (rows >= 0) & (rows < row_count)
-    flat_rows = rows[valid]
-    if flat_rows.numel() > 0:
-        row_valid[flat_rows] = True
-        row_token[flat_rows] = token_idx[valid]
-        row_topk[flat_rows] = topk_idx[valid]
-        row_expert[flat_rows] = expert_ids[valid]
-        row_expert_local[flat_rows] = local_expert_ids[valid]
-        row_prob[flat_rows] = topk_weights[valid].float()
-
-    return {
-        "row_valid": row_valid,
-        "row_token": row_token,
-        "row_topk": row_topk,
-        "row_expert": row_expert,
-        "row_expert_local": row_expert_local,
-        "row_prob": row_prob,
-    }
-
-
 def _valid_deep_gemm_shape(M: int, N: int, K: int) -> bool:
     align = get_mk_alignment_for_contiguous_layout()[0]
     return align <= M and N % align == 0 and K % align == 0
@@ -395,13 +247,10 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         M_sum, N = input.size()
         activation_out_dim = self.adjust_N_for_activation(N, activation)
         swiglu_limit = getattr(self, "swiglu_limit", None)
-        raw_act_scales = os.getenv("VLLM_DEEPGEMM_MOE_RAW_ACT_SCALES") == "1"
-
         if row_weights is not None:
             if (
                 os.getenv("VLLM_DEEPGEMM_MOE_FUSED_ROW_WEIGHTS") == "1"
                 and scale_fmt == DeepGemmQuantScaleFMT.UE8M0
-                and not raw_act_scales
                 and activation == MoEActivation.SILU
             ):
                 return fused_silu_mul_fp8_quant_packed(
@@ -541,16 +390,7 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             alignment=block_m,
             expert_tokens_meta=expert_tokens_meta,
         )
-        debug_target = _moe_debug_target(topk_ids.size(0))
-        debug_a1q = None
-        debug_a1q_scale = None
-        debug_mm1_out = None
-        debug_a2q = None
-        debug_a2q_scale = None
-        debug_mm2_out = None
-
         use_psum_layout = os.getenv("VLLM_DEEPGEMM_MOE_PSUM_LAYOUT") == "1"
-        topk_weights_original = topk_weights
 
         a1q_perm = _resize_cache(
             workspace13.view(dtype=torch.float8_e4m3fn), (M_sum, K)
@@ -567,21 +407,12 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         )
         assert use_psum_layout or a1q.size(0) == M_sum
         m_gemm = a1q.size(0)
-        if debug_target is not None:
-            debug_a1q = a1q.detach().clone()
-            debug_a1q_scale = a1q_scale.detach().clone()
-
         mm1_out = _resize_cache(workspace2, (m_gemm, N))
         grouped_gemm_kwargs = {}
         if use_psum_layout:
             grouped_gemm_kwargs.update({
                 "use_psum_layout": True,
                 "expected_m_for_psum_layout": m_gemm,
-            })
-        if os.getenv("VLLM_DEEPGEMM_MOE_RECIPE") == "1":
-            grouped_gemm_kwargs.update({
-                "recipe_a": (1, block_k),
-                "recipe_b": (block_m, block_k),
             })
         m_grouped_fp8_gemm_nt_contiguous(
             (a1q, a1q_scale),
@@ -590,17 +421,11 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             grouped_layout,
             **grouped_gemm_kwargs,
         )
-        if debug_target is not None:
-            debug_mm1_out = mm1_out.detach().clone()
-
         activation_out_dim = self.adjust_N_for_activation(N, activation)
         quant_out = _resize_cache(
             workspace13.view(dtype=torch.float8_e4m3fn), (m_gemm, activation_out_dim)
         )
         probs_before_w2 = getattr(self, "apply_router_weight_before_w2", False)
-        probs_before_w2 = probs_before_w2 or _probs_before_w2_enabled(
-            getattr(self, "layer_name", None)
-        )
         row_weights = None
         negative_row_weights = None
         if probs_before_w2:
@@ -624,10 +449,6 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             row_weights=row_weights,
             negative_row_weights=negative_row_weights,
         )
-        if debug_target is not None:
-            debug_a2q = a2q.detach().clone()
-            debug_a2q_scale = a2q_scale.detach().clone()
-
         mm2_out = _resize_cache(workspace2, (m_gemm, K))
         m_grouped_fp8_gemm_nt_contiguous(
             (a2q, a2q_scale),
@@ -636,9 +457,6 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             grouped_layout,
             **grouped_gemm_kwargs,
         )
-        if debug_target is not None:
-            debug_mm2_out = mm2_out.detach().clone()
-
         if apply_router_weight_on_input or probs_before_w2:
             topk_weights = torch.ones_like(topk_weights)
 
@@ -650,46 +468,6 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             expert_map=expert_map,
             output=output,
         )
-
-        row_map = {}
-        if debug_target is not None:
-            row_map = _build_vllm_dispatch_row_map(
-                topk_ids=topk_ids,
-                topk_weights=topk_weights_original,
-                inv_perm=inv_perm,
-                row_count=m_gemm,
-                expert_map=expert_map,
-            )
-
-        _dump_moe_debug(
-            debug_target,
-            layer_name=getattr(self, "layer_name", None),
-            token_count=topk_ids.size(0),
-            row_count=m_gemm,
-            tensors={
-                "a1q": debug_a1q if debug_a1q is not None else a1q,
-                "a1q_scale": (
-                    debug_a1q_scale if debug_a1q_scale is not None else a1q_scale
-                ),
-                "w1_scale": self.w1_scale,
-                "w2_scale": self.w2_scale,
-                "topk_ids": topk_ids,
-                "topk_weights_original": topk_weights_original,
-                "topk_weights": topk_weights,
-                "grouped_layout": grouped_layout,
-                "inv_perm": inv_perm,
-                "mm1_out": debug_mm1_out if debug_mm1_out is not None else mm1_out,
-                "row_weights": row_weights,
-                "a2q": debug_a2q if debug_a2q is not None else a2q,
-                "a2q_scale": (
-                    debug_a2q_scale if debug_a2q_scale is not None else a2q_scale
-                ),
-                "mm2_out": debug_mm2_out if debug_mm2_out is not None else mm2_out,
-                "output": output,
-                **row_map,
-            },
-        )
-
 
 class DeepGemmFP4Experts(mk.FusedMoEExpertsModular):
     """DeepGemm-based fused MoE expert implementation for FP4 weights.
