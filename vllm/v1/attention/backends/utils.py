@@ -734,6 +734,7 @@ class KVSharingFastPrefillMetadata(Protocol):
 def create_fast_prefill_custom_backend(
     prefix: str,
     underlying_attn_backend: type[AttentionBackend],
+    min_query_len: int = 0,
 ) -> type[AttentionBackend]:
     underlying_builder = underlying_attn_backend.get_builder_cls()
 
@@ -744,8 +745,13 @@ def create_fast_prefill_custom_backend(
             common_attn_metadata: CommonAttentionMetadata,
             fast_build: bool = False,
         ) -> AttentionMetadata:
+            use_fast_prefill = common_attn_metadata.max_query_len > min_query_len
             new_common_attn_metadata = (
-                make_kv_sharing_fast_prefill_common_attn_metadata(common_attn_metadata)
+                make_kv_sharing_fast_prefill_common_attn_metadata(
+                    common_attn_metadata
+                )
+                if use_fast_prefill
+                else common_attn_metadata
             )
             metadata = super().build(
                 common_prefix_len, new_common_attn_metadata, fast_build
@@ -762,8 +768,14 @@ def create_fast_prefill_custom_backend(
 
                     self.logits_indices_padded = (
                         common_attn_metadata.logits_indices_padded
+                        if use_fast_prefill
+                        else None
                     )
-                    self.num_logits_indices = common_attn_metadata.num_logits_indices
+                    self.num_logits_indices = (
+                        common_attn_metadata.num_logits_indices
+                        if use_fast_prefill
+                        else None
+                    )
 
             return KVSharingFastPrefillAttentionMetadata(metadata, common_attn_metadata)
 

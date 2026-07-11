@@ -6453,9 +6453,15 @@ class GPUModelRunner(
                 attn_backend = layers[layer_name].get_attn_backend()
 
                 if layer_name in self.kv_sharing_fast_prefill_eligible_layers:
+                    min_query_len = (
+                        8
+                        if self.model_config.hf_config.model_type == "yoco"
+                        else 0
+                    )
                     attn_backend = create_fast_prefill_custom_backend(
                         "FastPrefill",
                         attn_backend,  # type: ignore[arg-type]
+                        min_query_len=min_query_len,
                     )
 
                 full_cls_name = attn_backend.full_cls_name()

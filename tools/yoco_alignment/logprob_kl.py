@@ -120,6 +120,8 @@ def parse_args() -> argparse.Namespace:
                              default="bfloat16")
             sub.add_argument("--native-quant-mode", choices=("bfloat16", "mxfp8"))
             sub.add_argument("--native-quant-block-size", type=int)
+            sub.add_argument("--native-use-cute", action="store_true")
+            sub.add_argument("--native-no-kv-cache", action="store_true")
         elif name == "hf":
             sub.add_argument("--device", default="cuda:0")
             sub.add_argument("--dtype", choices=("bfloat16", "float16",
@@ -323,6 +325,8 @@ def _payload_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 @torch.no_grad()
 def run_native(args: argparse.Namespace) -> None:
+    import importlib
+
     import torch.distributed as dist
     from torch.distributed.device_mesh import init_device_mesh
 
@@ -347,7 +351,9 @@ def run_native(args: argparse.Namespace) -> None:
         modelargs.quant_mode = args.native_quant_mode
     if args.native_quant_block_size is not None:
         modelargs.quant_block_size = args.native_quant_block_size
-    modelargs.use_cute = False
+    modelargs.use_cute = args.native_use_cute
+    if args.native_no_kv_cache:
+        modelargs.moe_fwd_bwd_overlap = False
 
     init_device_mesh("cuda", mesh_shape=(world_size,), mesh_dim_names=["dp"])
     default_device = torch.get_default_device()
@@ -369,7 +375,29 @@ def run_native(args: argparse.Namespace) -> None:
         if not key.startswith("moe_loss.")
     }
     model.load_state_dict(state)
-    print("[native-kl] model loaded", flush=True)
+    print(
+        f"[native-kl] model loaded use_cute={modelargs.use_cute} "
+        f"kv_cache={not args.native_no_kv_cache}",
+        flush=True,
+    )
+
+    cute_call_count = [0]
+    patched_cute_funcs = []
+    if args.native_use_cute:
+        for module_name in (
+            "nnscaler.customized_ops.ring_attention.sliding_window_attn",
+            "nnscaler.customized_ops.ring_attention.ring_attn_varlen",
+            "nnscaler.customized_ops.ring_attention.zigzag_allgather_attn_varlen",
+        ):
+            module = importlib.import_module(module_name)
+            original = module.flash_attn_cute_varlen_func
+
+            def counted_cute(*call_args, _original=original, **call_kwargs):
+                cute_call_count[0] += 1
+                return _original(*call_args, **call_kwargs)
+
+            patched_cute_funcs.append((module, original))
+            module.flash_attn_cute_varlen_func = counted_cute
 
     tokenizer, records = _prompt_records(
         args.model, args.prompt_suite, args.prompt_index, args.prompt_limit
@@ -387,19 +415,22 @@ def run_native(args: argparse.Namespace) -> None:
         seqlen = len(token_ids)
         cu_seqlens = torch.tensor([0, seqlen], device=device, dtype=torch.int32)
         positions = torch.arange(0, seqlen, device=device, dtype=torch.int32)
-        kv_cache = create_kv_cache(
-            model.args, 1, args.max_model_len, _dtype(args.native_dtype), device
-        )
         context = {
-            "kv_cache": kv_cache,
             "cu_seqlens_q": cu_seqlens,
             "cu_seqlens_k": cu_seqlens,
             "max_seqlen_q": seqlen,
             "max_seqlen_k": seqlen,
             "positions": positions,
-            "slot_mapping": positions,
-            "layer_index": 0,
         }
+        if not args.native_no_kv_cache:
+            context.update({
+                "kv_cache": create_kv_cache(
+                    model.args, 1, args.max_model_len,
+                    _dtype(args.native_dtype), device
+                ),
+                "slot_mapping": positions,
+                "layer_index": 0,
+            })
         hidden, _, _ = model(prefill_tokens, context=context, last_hidden_only=True)
         logits = model.output(hidden[-1]).float()
         logprobs = torch.log_softmax(logits, dim=-1).cpu()
@@ -420,6 +451,10 @@ def run_native(args: argparse.Namespace) -> None:
 
     _save(args.out, {"backend": "native", "model": args.model, "results": results})
     print(f"[native-kl] saved {args.out}", flush=True)
+    if args.native_use_cute:
+        print(f"[native-kl] flash_attn.cute calls={cute_call_count[0]}", flush=True)
+        for module, original in patched_cute_funcs:
+            module.flash_attn_cute_varlen_func = original
 
     if dist.is_initialized():
         dist.destroy_process_group()

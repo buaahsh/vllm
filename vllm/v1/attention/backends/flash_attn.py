@@ -657,7 +657,10 @@ class FlashAttentionImpl(AttentionImpl):
             requires_alibi=alibi_slopes is not None,
             head_size=head_size,
         )
-        if model_type == "yoco" and self.vllm_flash_attn_version != 2:
+        if (
+            model_type == "yoco"
+            and self.vllm_flash_attn_version not in (2, 4)
+        ):
             logger.info_once(
                 "Forcing FlashAttention version 2 for YOCO alignment "
                 "(was %s)",

@@ -18,9 +18,10 @@ from vllm.platforms.cpu import CpuPlatform
 # CudaPlatform and RocmPlatform import their respective compiled C extensions
 # at module level, raising ModuleNotFoundError on incompatible builds.
 try:
-    from vllm.platforms.cuda import CudaPlatform
+    from vllm.platforms.cuda import CudaPlatform, _get_backend_priorities
 except (ImportError, ModuleNotFoundError):
     CudaPlatform = None
+    _get_backend_priorities = None
 
 try:
     from vllm.platforms.rocm import RocmPlatform
@@ -29,6 +30,30 @@ except (ImportError, ModuleNotFoundError):
 
 from vllm.v1.attention.backends.registry import AttentionBackendEnum
 from vllm.v1.attention.selector import _cached_get_attn_backend, get_attn_backend
+
+
+@pytest.mark.parametrize(
+    ("major", "expected_first"),
+    [
+        (9, AttentionBackendEnum.FLASH_ATTN),
+        (10, AttentionBackendEnum.FLASH_ATTN),
+    ],
+)
+def test_cuda_regular_attention_backend_priority(major, expected_first):
+    if _get_backend_priorities is None:
+        pytest.skip("CUDA platform is unavailable")
+
+    from vllm.platforms.interface import DeviceCapability
+
+    priorities = _get_backend_priorities(
+        use_mla=False,
+        device_capability=DeviceCapability(major, 0),
+    )
+
+    assert priorities[0] == expected_first
+    assert priorities.index(AttentionBackendEnum.FLASH_ATTN) < priorities.index(
+        AttentionBackendEnum.FLASHINFER
+    )
 
 
 @pytest.fixture(autouse=True)
