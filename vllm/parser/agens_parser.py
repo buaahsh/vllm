@@ -60,7 +60,19 @@ class AgensParser(DelegatingParser):
             prompt_token_ids=prompt_token_ids,
         )
         if reasoning_delta is None:
-            return message
+            if message is None or message.reasoning is None:
+                return message
+            return message.model_copy(
+                update={
+                    "reasoning": None,
+                    "reasoning_content": message.reasoning,
+                }
+            )
         if message is None:
-            return DeltaMessage(reasoning=reasoning_delta)
-        return message.model_copy(update={"reasoning": reasoning_delta})
+            return DeltaMessage(reasoning_content=reasoning_delta)
+        return message.model_copy(
+            update={
+                "reasoning": None,
+                "reasoning_content": reasoning_delta,
+            }
+        )
