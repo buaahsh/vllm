@@ -11,10 +11,33 @@
   `/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000`
 - nnScaler merged checkpoint:
   `/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-merged`
-- 本轮 GPU 转换后的 HF checkpoint:
-  `/workspace/shaohanh/yoco-6000-hf-gpu`
+- GPU 转换后的 HF checkpoint:
+  `/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu`
+
+HF checkpoint 共 21 个文件，大小为 `64,477,415,770` bytes；从本地转换目录
+复制到上述路径后，所有文件均通过 SHA256 校验。
 
 旧的 `0000-6000-hf/config.json` 在文件末尾缺少 `}`，不要直接用于验收。
+
+## 对齐原则
+
+KL 只有在 vLLM 和 llm-train Native 使用相同计算条件时才有意义。每次对齐前
+必须先固定并记录以下因素：
+
+1. **精度模式一致**：MXFP8 对齐要求两侧都使用 MXFP8；BF16 对齐要求两侧
+   都使用 BF16，不能用 MXFP8 vLLM 对比 BF16 Native。
+2. **量化配置一致**：MXFP8 两侧都使用 128-element block。Native 使用
+   `quant_mode=mxfp8`、`quant_block_size=128`；vLLM 使用
+   `--quantization fp8_per_block`。Native 的 torch activation quant fallback
+   只是替换不稳定的 Triton 实现，不改变 MXFP8 数值格式。
+3. **Attention 一致**：FA2 只能和 FA2 reference 比较；FA4 只能和 FA4
+   reference 比较。当前正式验收矩阵使用 FA2，FA4 matched matrix 仍是 TODO。
+4. **执行形状一致**：batch size、scheduler forward shape、prompt 顺序、
+   chunk 切分位置和 KV-cache 语义必须一致。batch 16 当前使用与 vLLM
+   scheduler 一致的 `1 + 15` Native forward shape。
+5. **并行和功能开关一致**：TP、EP、KV-sharing fast prefill、chunked
+   prefill、CUDA Graph 范围都必须逐项匹配，不能把不同配置的结果混在同一
+   个 KL 结论中。
 
 ## 当前结论
 
@@ -70,6 +93,29 @@ tokens，也得到连续、可读的输出。
 batch 大于 1 时不要求逐元素一致，验收标准是完整词表 aggregate mean KL
 小于 `1e-2`，同时 decoding 不重复、不乱码。Native reference 使用和 vLLM
 scheduler 一致的 `1 + 15` forward shape。
+
+## TODO 与当前对齐程度
+
+- [ ] **FA4 matched matrix**
+    - 当前状态：未验收。FA4 在 YOCO full CUDA Graph 下会导致 self-attention
+    和共享 cross-attention replay 错误，生产配置因此使用 FA2。
+    - 下一步：确保 vLLM 和 llm-train 同时使用 FA4，在 eager 和 graph
+    decode 中分别比较完整词表 KL；不能用 Native FA4 对比 vLLM FA2。
+- [ ] **Batch invariance**
+    - 当前状态：已达到 aggregate 验收线，但不是 exact。MXFP8 batch 16 mean
+    KL 为 `0.00758594`，BF16 batch 16 mean KL 为 `0.00414718`。
+    - 下一步：继续降低 scheduler shape 和 packed-row geometry 导致的差异，
+    并验证更多 batch size；所有 Native reference 必须复现 vLLM 的实际
+    forward shape。
+- [ ] **真实 chunked prefill**
+    - 当前状态：未达到 `< 0.01`。110-token prompt 在两侧都按 `64 + 46`
+    切分时 KL 为 `0.0279867`；约 4.7K-token prompt 在两侧都按
+    `4096 + remainder` 切分时 KL 为 `0.0647879`。
+    - 下一步：定位 cache-backed prefill 中 attention 与 MoE shape drift；
+    在通过前，开启 `--enable-chunked-prefill` 不等于真实切分路径已对齐。
+- [ ] **BF16 batch 1 exact**
+    - 当前状态：mean KL 为 `0.00550893`，满足 `< 0.01`，但未达到 exact zero。
+    - 下一步：实现与 Native grouped DeepGEMM BF16 routed MoE 等价的路径。
 
 ### CUDA Graph 状态
 
@@ -128,8 +174,8 @@ VLLM_YOCO_COMPILED_TOPK_ROUTING
 
 ```bash
 CUDA_VISIBLE_DEVICES=5 .venv/bin/python convert_to_hf.py \
-  --input_dir /path/to/0000-6000-hf-merged \
-  --output_dir /path/to/yoco-6000-hf-gpu \
+  --input_dir /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-merged \
+  --output_dir /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
   --quant_mode mxfp8 \
   --quant_block_size 128
 ```
@@ -142,7 +188,8 @@ CUDA_VISIBLE_DEVICES=5 .venv/bin/python convert_to_hf.py \
 ### 直接运行当前仓库
 
 ```bash
-vllm serve /workspace/shaohanh/yoco-6000-hf-gpu \
+vllm serve \
+  /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
   --host 0.0.0.0 \
   --port 8001 \
   --served-model-name yoco \
@@ -170,7 +217,7 @@ docker run --rm \
   --ulimit memlock=-1 \
   --ulimit stack=67108864 \
   -p 8001:8001 \
-  -v /workspace/shaohanh/yoco-6000-hf-gpu:/model:ro \
+  -v /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu:/model:ro \
   buaahsh/pytorch:26.02-b200-vllm-0716 \
   vllm serve /model \
     --host 0.0.0.0 \
@@ -199,13 +246,12 @@ reference 使用 `1 + 15` forward shape：
 ```bash
 CUDA_VISIBLE_DEVICES=5 .venv/bin/python \
   tools/yoco_alignment/logprob_kl.py native \
-  --model /workspace/shaohanh/yoco-6000-hf-gpu \
-  --native-checkpoint /path/to/0000-6000-merged \
+  --model /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
+  --native-checkpoint /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-merged \
   --llm-train-dir /workspace/shaohanh/llm-train \
   --native-quant-mode mxfp8 \
   --native-quant-block-size 128 \
   --native-use-torch-fp8-quant \
-  --native-use-cute \
   --prompt-suite mixed16 \
   --first-batch-size 1 \
   --batch-size 15 \
@@ -217,7 +263,7 @@ CUDA_VISIBLE_DEVICES=5 .venv/bin/python \
 ```bash
 CUDA_VISIBLE_DEVICES=5 .venv/bin/python \
   tools/yoco_alignment/logprob_kl.py vllm \
-  --model /workspace/shaohanh/yoco-6000-hf-gpu \
+  --model /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
   --prompt-suite mixed16 \
   --batch-size 16 \
   --max-num-seqs 16 \
@@ -238,7 +284,7 @@ CUDA_VISIBLE_DEVICES=5 .venv/bin/python \
 .venv/bin/python tools/yoco_alignment/logprob_kl.py compare \
   --reference /tmp/yoco-native-mxfp8-mixed16.pt \
   --candidate /tmp/yoco-vllm-mxfp8-mixed16.pt \
-  --model /workspace/shaohanh/yoco-6000-hf-gpu \
+  --model /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
   --out-json /tmp/yoco-compare-mxfp8-mixed16.json
 ```
 
