@@ -350,6 +350,64 @@ docker build \
 该 Dockerfile 保留 `donglixp/pytorch:26.02-b200` 中的 Python、PyTorch 和
 CUDA 环境，只在固定的 vLLM 基线提交上覆盖本次需要的 Python runtime 文件。
 
+### 快速迭代
+
+`Dockerfile.b200` 已将耗时的 vLLM 安装放在 Python overlay 之前。同一台机器上
+只修改 overlay 清单内的 Python 文件时，直接重复执行上面的 `docker build`
+会命中 native extension 和依赖安装缓存，只重新执行末尾的 `COPY` 和镜像导出。
+2026-07-16 的 reasoning 修复重建中，所有安装层均为 `CACHED`，没有重新编译
+CUDA/C++；约 154 秒主要消耗在导出 30.9 GB 本地镜像。
+
+开发阶段可以完全跳过 build，将单个改动文件 bind mount 到已有镜像。例如在
+下文“运行发布镜像”的 `docker run` 命令中额外加入：
+
+```bash
+-v "$PWD/vllm/entrypoints/openai/chat_completion/protocol.py:/workspace/vllm/vllm/entrypoints/openai/chat_completion/protocol.py:ro" \
+-v "$PWD/vllm/parser/agens_parser.py:/workspace/vllm/vllm/parser/agens_parser.py:ro"
+```
+
+容器内使用 editable install，因此重新创建容器后会直接加载挂载的 Python
+文件。不要挂载整个本地 `vllm/` 到 `/workspace/vllm/vllm/`，否则会遮住镜像
+内已经编译好的 `_C*.so` 等 native extension。修改 C++、CUDA、构建依赖或
+Dockerfile 安装步骤时仍必须完整重建。
+
+发布 Python-only 改动时可以让 BuildKit 直接推送，避免先将完整镜像导出到本地
+Docker image store：
+
+```bash
+docker buildx build \
+  --progress=plain \
+  --push \
+  -f docker/Dockerfile.b200 \
+  -t buaahsh/pytorch:26.02-b200-vllm-0716 \
+  .
+```
+
+如果需要在不同机器或 CI 之间复用编译缓存，使用支持 registry cache 的
+`docker-container` builder。第一次仍需完整构建，之后可从 Docker Hub 恢复
+缓存：
+
+```bash
+docker buildx create \
+  --name yoco-b200-builder \
+  --driver docker-container \
+  --use
+docker buildx inspect --bootstrap
+
+docker buildx build \
+  --progress=plain \
+  --cache-from type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0716-buildcache \
+  --cache-to type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0716-buildcache,mode=max \
+  --push \
+  -f docker/Dockerfile.b200 \
+  -t buaahsh/pytorch:26.02-b200-vllm-0716 \
+  .
+```
+
+进一步降低发布延迟时，可以将固定 commit 的完整编译结果发布为不可变
+`vllm-base` tag，再用只包含 Python `COPY` 的薄 overlay image 作为最终 tag。
+这样 Python-only 发布不会再次经过 vLLM 安装阶段，也不依赖构建机的本地缓存。
+
 ## 相关文件
 
 ```text
@@ -360,5 +418,7 @@ vllm/model_executor/models/config.py
 vllm/model_executor/layers/fused_moe/deep_gemm_utils.py
 vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
 vllm/v1/attention/backends/flash_attn.py
+vllm/entrypoints/openai/chat_completion/protocol.py
+vllm/parser/agens_parser.py
 docker/Dockerfile.b200
 ```
