@@ -64,15 +64,17 @@ class AgensParser(DelegatingParser):
                 return message
             return message.model_copy(
                 update={
-                    "reasoning": None,
                     "reasoning_content": message.reasoning,
                 }
             )
         if message is None:
-            return DeltaMessage(reasoning_content=reasoning_delta)
+            return DeltaMessage(
+                reasoning=reasoning_delta,
+                reasoning_content=reasoning_delta,
+            )
         return message.model_copy(
             update={
-                "reasoning": None,
+                "reasoning": reasoning_delta,
                 "reasoning_content": reasoning_delta,
             }
         )
