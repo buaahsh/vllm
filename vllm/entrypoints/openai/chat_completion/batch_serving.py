@@ -15,7 +15,10 @@ from vllm.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionResponseChoice,
     ChatMessage,
 )
-from vllm.entrypoints.openai.chat_completion.serving import OpenAIServingChat
+from vllm.entrypoints.openai.chat_completion.serving import (
+    OpenAIServingChat,
+    _convert_reasoning_output_field,
+)
 from vllm.entrypoints.openai.engine.protocol import (
     ErrorResponse,
     RequestResponseMetadata,
@@ -276,6 +279,7 @@ class OpenAIServingChatBatch(OpenAIServingChat):
                     content = output.text
 
                 message = ChatMessage(role=role, reasoning=reasoning, content=content)
+                message = _convert_reasoning_output_field(message, reasoning_parser)
 
                 if request.echo:
                     conversation = all_conversations[prompt_idx]

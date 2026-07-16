@@ -208,6 +208,24 @@ vllm serve \
 BF16 使用相同 graph/attention 配置，但去掉 `--quantization`，并改为
 `--moe-backend triton`。
 
+### Agens reasoning 与 tool parser
+
+Agens 模型需要同时启用新增的 reasoning parser 和 tool parser：
+
+```text
+--reasoning-parser agens
+--enable-auto-tool-choice
+--tool-call-parser agens
+```
+
+`agens` reasoning parser 基于 DeepSeek V3 thinking parser，并将 streaming
+reasoning 输出到兼容 CCR 的 `reasoning_content` 字段。`agens` tool parser
+基于 GLM-4.7 parser，会合并同一个 tool-call index 在单个 delta 内拆开的
+function name 和 arguments。
+
+这些 parser 只处理服务层输出，不参与模型 forward、KV cache、sampling 或
+logits 计算，因此不会改变本文件记录的 prefill KL 和 decoding 数值对齐结果。
+
 ### 运行发布镜像
 
 ```bash

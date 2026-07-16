@@ -96,6 +96,7 @@ from vllm.v1.attention.backends.mla.indexer import (
 )
 from vllm.v1.kv_cache_interface import KVCacheSpec, MLAAttentionSpec
 
+from .deepseek_v2_utils import should_skip_indexer_topk
 from .interfaces import (
     MixtureOfExperts,
     SupportsEagle,
@@ -1004,19 +1005,9 @@ class DeepseekV2MLAAttention(nn.Module):
                 f"{prefix}.indexer",
             )
 
-            # Enable IndexCache for DeepSeek models to reduce redundant top-k
-            # token selection computations in sparse attention.
-            use_index_cache = getattr(config, "use_index_cache", False)
-            if use_index_cache:
-                # IndexCache config
-                # Refer: https://arxiv.org/abs/2603.12201 for more details.
-                _index_topk_freq = getattr(config, "index_topk_freq", 1)
-                _index_topk_pattern = getattr(config, "index_topk_pattern", None)
-                layer_id = extract_layer_index(prefix)
-                if _index_topk_pattern is None:
-                    _skip_topk = max(layer_id - 1, 0) % _index_topk_freq != 0
-                elif 0 <= layer_id < len(_index_topk_pattern):
-                    _skip_topk = _index_topk_pattern[layer_id] == "S"
+            # IndexCache config
+            # Refer: https://arxiv.org/abs/2603.12201 for more details.
+            _skip_topk = should_skip_indexer_topk(config, extract_layer_index(prefix))
 
         else:
             self.indexer_rope_emb = None

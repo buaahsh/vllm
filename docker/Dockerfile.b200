@@ -81,6 +81,10 @@ RUN python -m pip install --no-cache-dir "setuptools-scm==10.2.0" \
 # rebuilding the native extensions pinned above.
 COPY vllm/model_executor/models/config.py \
     /workspace/vllm/vllm/model_executor/models/config.py
+COPY vllm/model_executor/models/deepseek_v2.py \
+    /workspace/vllm/vllm/model_executor/models/deepseek_v2.py
+COPY vllm/model_executor/models/deepseek_v2_utils.py \
+    /workspace/vllm/vllm/model_executor/models/deepseek_v2_utils.py
 COPY vllm/model_executor/models/yoco.py \
     /workspace/vllm/vllm/model_executor/models/yoco.py
 COPY vllm/model_executor/layers/fused_moe/deep_gemm_utils.py \
@@ -89,6 +93,26 @@ COPY vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py \
     /workspace/vllm/vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
 COPY vllm/v1/attention/backends/flash_attn.py \
     /workspace/vllm/vllm/v1/attention/backends/flash_attn.py
+COPY vllm/entrypoints/openai/chat_completion/protocol.py \
+    /workspace/vllm/vllm/entrypoints/openai/chat_completion/protocol.py
+COPY vllm/entrypoints/openai/chat_completion/batch_serving.py \
+    /workspace/vllm/vllm/entrypoints/openai/chat_completion/batch_serving.py
+COPY vllm/entrypoints/openai/chat_completion/serving.py \
+    /workspace/vllm/vllm/entrypoints/openai/chat_completion/serving.py
+COPY vllm/entrypoints/openai/responses/streaming_events.py \
+    /workspace/vllm/vllm/entrypoints/openai/responses/streaming_events.py
+COPY vllm/parser/__init__.py \
+    /workspace/vllm/vllm/parser/__init__.py
+COPY vllm/parser/agens_parser.py \
+    /workspace/vllm/vllm/parser/agens_parser.py
+COPY vllm/reasoning/__init__.py \
+    /workspace/vllm/vllm/reasoning/__init__.py
+COPY vllm/reasoning/agens_reasoning_parser.py \
+    /workspace/vllm/vllm/reasoning/agens_reasoning_parser.py
+COPY vllm/tool_parsers/__init__.py \
+    /workspace/vllm/vllm/tool_parsers/__init__.py
+COPY vllm/tool_parsers/agens_tool_parser.py \
+    /workspace/vllm/vllm/tool_parsers/agens_tool_parser.py
 COPY tools/yoco_alignment/logprob_kl.py \
     /workspace/vllm/tools/yoco_alignment/logprob_kl.py
 COPY yoco.md /workspace/vllm/yoco.md

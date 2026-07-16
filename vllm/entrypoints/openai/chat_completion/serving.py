@@ -79,6 +79,22 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 
+def _convert_reasoning_output_field(
+    message: ChatMessage, reasoning_parser: ReasoningParser | None
+) -> ChatMessage:
+    if (
+        getattr(reasoning_parser, "reasoning_output_field", None) == "reasoning_content"
+        and message.reasoning is not None
+    ):
+        return message.model_copy(
+            update={
+                "reasoning": None,
+                "reasoning_content": message.reasoning,
+            }
+        )
+    return message
+
+
 class OpenAIServingChat(OpenAIServing):
     def __init__(
         self,
@@ -1305,6 +1321,7 @@ class OpenAIServingChat(OpenAIServing):
                     "completion."
                 )
                 message = ChatMessage(role=role, reasoning=reasoning, content=content)
+            message = _convert_reasoning_output_field(message, reasoning_parser)
             # In OpenAI's API, when a tool is called, the finish_reason is:
             # "tool_calls" for "auto" or "required" tool calls,
             # and "stop" for named tool calls.

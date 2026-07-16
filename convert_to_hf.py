@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Convert YOCO checkpoint from training format to HuggingFace format.
 
 Designed for the *new* nnscaler training code in ``llm-train`` that uses the
@@ -24,11 +26,9 @@ import argparse
 import json
 import os
 import shutil
-from typing import Dict
 
 import torch
 from safetensors.torch import save_file
-
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TOKENIZER_DIR_NAME = "agens_tokenizer_0622"
@@ -41,7 +41,7 @@ def load_metadata(checkpoint_dir: str) -> dict:
     metadata_path = os.path.join(checkpoint_dir, "metadata.json")
     if not os.path.exists(metadata_path):
         raise FileNotFoundError(f"metadata.json not found at {metadata_path}")
-    with open(metadata_path, "r") as f:
+    with open(metadata_path) as f:
         return json.load(f)
 
 
@@ -50,7 +50,9 @@ def load_model_state(checkpoint_dir: str) -> dict:
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"model_state_rank_0.pth not found at {model_path}")
     print(f"Loading checkpoint from {model_path} ...")
-    checkpoint = torch.load(model_path, map_location="cpu", mmap=True, weights_only=False)
+    checkpoint = torch.load(
+        model_path, map_location="cpu", mmap=True, weights_only=False
+    )
     if isinstance(checkpoint, dict) and "model" in checkpoint:
         return checkpoint["model"]
     return checkpoint
@@ -76,19 +78,17 @@ def _normalize_router_weight_for_export(weight: torch.Tensor) -> torch.Tensor:
             "--router-normalization runtime on a CPU-only host."
         )
     weight_cuda = weight.to(device="cuda", dtype=torch.float32)
-    normalized = weight_cuda / weight_cuda.norm(
-        dim=1, keepdim=True
-    ).clamp_min(1e-6)
+    normalized = weight_cuda / weight_cuda.norm(dim=1, keepdim=True).clamp_min(1e-6)
     return normalized.cpu()
 
 
 def convert_state_dict(
-    state_dict: Dict[str, torch.Tensor],
+    state_dict: dict[str, torch.Tensor],
     verbose: bool = False,
     router_normalization: str = "cuda",
-) -> Dict[str, torch.Tensor]:
+) -> dict[str, torch.Tensor]:
     """Rename training keys to HF keys and reshape per-head projections."""
-    new_state: Dict[str, torch.Tensor] = {}
+    new_state: dict[str, torch.Tensor] = {}
 
     def add(new_key: str, tensor: torch.Tensor, orig: str):
         if new_key in new_state:
@@ -113,7 +113,9 @@ def convert_state_dict(
             continue
 
         if not key.startswith("layers."):
-            print(f"  [WARN] unknown top-level key skipped: {key}  {tuple(value.shape)}")
+            print(
+                f"  [WARN] unknown top-level key skipped: {key}  {tuple(value.shape)}"
+            )
             continue
 
         # layers.{idx}.<rest>
@@ -122,12 +124,16 @@ def convert_state_dict(
 
         # --- self-attention block ---
         if rest.startswith("self_attn."):
-            sub = rest[len("self_attn."):]
+            sub = rest[len("self_attn.") :]
             # Per-head 3D projections that need flattening
             if sub in ("q_proj.weight", "k_proj.weight", "v_proj.weight"):
                 add(f"{prefix}.self_attn.{sub}", _flatten_proj(value), key)
-            elif sub in ("o_proj.weight", "lambda_proj.weight",
-                         "q_norm.weight", "k_norm.weight"):
+            elif sub in (
+                "o_proj.weight",
+                "lambda_proj.weight",
+                "q_norm.weight",
+                "k_norm.weight",
+            ):
                 add(f"{prefix}.self_attn.{sub}", value, key)
             else:
                 # gate_proj.weight (when gated_attention=True), etc.
@@ -136,7 +142,7 @@ def convert_state_dict(
 
         # --- MLP / MoE block ---
         if rest.startswith("mlp."):
-            sub = rest[len("mlp."):]
+            sub = rest[len("mlp.") :]
 
             # MoE routing gate (small Linear).
             # llm-train normalizes every FP32 router row on CUDA before the
@@ -206,16 +212,19 @@ def convert_state_dict(
 # ---------------------------------------------------------------------------
 # Config / tokenizer files
 # ---------------------------------------------------------------------------
-# Token IDs for the GLM-5.1 ``agens_tokenizer`` (must match llm-train/llm/data/tokenizer.py)
+# Token IDs for the GLM-5.1 ``agens_tokenizer``.
+# These must match llm-train/llm/data/tokenizer.py.
 BOS_TOKEN_ID = 154824  # <sop>
 EOS_TOKEN_ID = 154820  # <|endoftext|>
+EOS_TOKEN_IDS = [154820, 154827, 154829]
 PAD_TOKEN_ID = 154856  # <|reserved_154856|>
 UNK_TOKEN_ID = 154857  # <|reserved_154857|>
+MIN_MODEL_MAX_LENGTH = 131072
 
 
 def add_bos_post_processor(tokenizer_json_path: str) -> None:
     """Make HF fast-tokenizer add <sop> when add_special_tokens=True."""
-    with open(tokenizer_json_path, "r", encoding="utf-8") as f:
+    with open(tokenizer_json_path, encoding="utf-8") as f:
         tokenizer_json = json.load(f)
 
     bos_template = {
@@ -263,7 +272,11 @@ def add_bos_post_processor(tokenizer_json_path: str) -> None:
 def ensure_chat_template_has_bos(chat_template: str) -> str:
     """Make chat-template rendering start with the GLM BOS token."""
     stripped = chat_template.lstrip()
-    if stripped.startswith("<sop>") or stripped.startswith("{{ bos_token") or stripped.startswith("{{- bos_token"):
+    if (
+        stripped.startswith("<sop>")
+        or stripped.startswith("{{ bos_token")
+        or stripped.startswith("{{- bos_token")
+    ):
         return chat_template
     return "<sop>\n" + chat_template
 
@@ -289,12 +302,12 @@ def create_hf_config(
         if quant_block_size is not None
         else ma.get("quant_block_size", 128)
     )
+    max_seq_len = max(MIN_MODEL_MAX_LENGTH, ma["max_seq_len"])
 
     config = {
         "architectures": ["YOCOForCausalLM"],
         "model_type": "yoco",
         "torch_dtype": "bfloat16",
-
         # Core dims
         "d_model": ma["d_model"],
         "d_ffn": ma["d_ffn"],
@@ -306,8 +319,7 @@ def create_hf_config(
         "cross_head_dim": head_dim,
         "n_layers": ma["n_layers"],
         "vocab_size": ma["vocab_size"],
-        "max_seq_len": ma["max_seq_len"],
-
+        "max_seq_len": max_seq_len,
         # Norm / attention flags
         "norm_eps": ma["norm_eps"],
         "rope_theta": ma["rope_theta"],
@@ -318,12 +330,10 @@ def create_hf_config(
         "weight_tying": ma.get("weight_tying", False),
         "gated_attention": ma.get("gated_attention", False),
         "diff_attention": ma.get("diff_attention", False),
-
         # YOCO
         "yoco_cross_layers": ma.get("yoco_cross_layers", 0),
         "yoco_window_size": ma.get("yoco_window_size", 512),
         "universal_loop": ma.get("universal_loop", 1),
-
         # MoE
         "moe": ma.get("moe", False),
         "moe_expert_num": ma.get("moe_expert_num", 0),
@@ -335,7 +345,6 @@ def create_hf_config(
         "router_weights_normalized": router_weights_normalized,
         "quant_mode": quant_mode,
         "quant_block_size": quant_block_size,
-
         # HF aliases
         "hidden_size": ma["d_model"],
         "intermediate_size": ma["d_ffn"],
@@ -346,16 +355,14 @@ def create_hf_config(
         "num_attention_heads": ma["head"],
         "num_key_value_heads": ma["kv_head"],
         "num_hidden_layers": ma["n_layers"],
-        "max_position_embeddings": ma["max_seq_len"],
+        "max_position_embeddings": max_seq_len,
         "rms_norm_eps": ma["norm_eps"],
         "tie_word_embeddings": ma.get("weight_tying", False),
-
         # Token IDs
         "bos_token_id": BOS_TOKEN_ID,
         "eos_token_id": EOS_TOKEN_ID,
         "pad_token_id": PAD_TOKEN_ID,
         "unk_token_id": UNK_TOKEN_ID,
-
         "transformers_version": "4.36.0",
         "use_cache": True,
     }
@@ -370,7 +377,7 @@ def create_hf_config(
 def create_generation_config(output_dir: str) -> None:
     gen_cfg = {
         "bos_token_id": BOS_TOKEN_ID,
-        "eos_token_id": EOS_TOKEN_ID,
+        "eos_token_id": EOS_TOKEN_IDS,
         "pad_token_id": PAD_TOKEN_ID,
         "do_sample": True,
         "transformers_version": "4.36.0",
@@ -393,7 +400,8 @@ def copy_tokenizer_files(output_dir: str) -> None:
             f"Tokenizer dir not found: {src}\n"
             f"Download with:\n"
             f"  python {SCRIPT_DIR}/blob_skill/blob_skill.py download \\\n"
-            f"      --url https://msranlp.blob.core.windows.net/unilm/yutao/hf_cache/agens_tokenizer/ "
+            "      --url https://msranlp.blob.core.windows.net/unilm/yutao/"
+            "hf_cache/agens_tokenizer/ "
             f"-o {src}/"
         )
 
@@ -407,9 +415,11 @@ def copy_tokenizer_files(output_dir: str) -> None:
     chat_tpl_src = os.path.join(src, "chat_template.jinja")
     chat_template = None
     if os.path.exists(chat_tpl_src):
-        with open(chat_tpl_src, "r", encoding="utf-8") as f:
+        with open(chat_tpl_src, encoding="utf-8") as f:
             chat_template = ensure_chat_template_has_bos(f.read())
-        with open(os.path.join(output_dir, "chat_template.jinja"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(output_dir, "chat_template.jinja"), "w", encoding="utf-8"
+        ) as f:
             f.write(chat_template)
         print("   Wrote chat_template.jinja with <sop> prefix")
 
@@ -457,8 +467,11 @@ def keep_fp32_in_export(key: str) -> bool:
     return key.endswith(".mlp.gate.weight")
 
 
-def save_sharded(state_dict: Dict[str, torch.Tensor], output_dir: str,
-                 max_shard_size: int = 5 * 1024 * 1024 * 1024) -> None:
+def save_sharded(
+    state_dict: dict[str, torch.Tensor],
+    output_dir: str,
+    max_shard_size: int = 5 * 1024 * 1024 * 1024,
+) -> None:
     sorted_keys = sorted(state_dict.keys())
 
     # First pass: decide shard assignments
@@ -485,10 +498,10 @@ def save_sharded(state_dict: Dict[str, torch.Tensor], output_dir: str,
     weight_map = {}
     total_size = 0
     for i, shard in enumerate(shards):
-        name = f"model-{i+1:05d}-of-{num_shards:05d}.safetensors"
+        name = f"model-{i + 1:05d}-of-{num_shards:05d}.safetensors"
         path = os.path.join(output_dir, name)
-        print(f"   Saving shard {i+1}/{num_shards}: {name} "
-              f"({sum(t.numel() * t.element_size() for t in shard.values()) / 1024**3:.2f} GB)")
+        shard_gib = sum(t.numel() * t.element_size() for t in shard.values()) / 1024**3
+        print(f"   Saving shard {i + 1}/{num_shards}: {name} ({shard_gib:.2f} GB)")
         save_file(shard, path, metadata={"format": "pt"})
         for k, t in shard.items():
             weight_map[k] = name
@@ -525,11 +538,13 @@ def convert_checkpoint(
     print("\n1. Loading metadata ...")
     metadata = load_metadata(input_dir)
     ma = metadata["modelargs"]
-    print(f"   d_model={ma['d_model']}  n_layers={ma['n_layers']}  "
-          f"head={ma['head']}  kv_head={ma['kv_head']}  "
-          f"moe={ma.get('moe')}  diff_attn={ma.get('diff_attention')}  "
-          f"yoco_cross_layers={ma.get('yoco_cross_layers')}  "
-          f"universal_loop={ma.get('universal_loop')}  updates={metadata.get('updates')}")
+    print(
+        f"   d_model={ma['d_model']}  n_layers={ma['n_layers']}  "
+        f"head={ma['head']}  kv_head={ma['kv_head']}  "
+        f"moe={ma.get('moe')}  diff_attn={ma.get('diff_attention')}  "
+        f"yoco_cross_layers={ma.get('yoco_cross_layers')}  "
+        f"universal_loop={ma.get('universal_loop')}  updates={metadata.get('updates')}"
+    )
 
     print("\n2. Writing config.json ...")
     create_hf_config(
@@ -568,31 +583,46 @@ def convert_checkpoint(
     for f in sorted(os.listdir(output_dir)):
         print(f"  - {f}")
     print("\nServe with vLLM:")
-    print(f"  python {SCRIPT_DIR}/serve_yoco.py --model {output_dir} --trust-remote-code ...")
+    print(f"  python {SCRIPT_DIR}/serve_yoco.py --model {output_dir} \\")
+    print("      --trust-remote-code ...")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Convert new-format YOCO checkpoint to HuggingFace/vLLM format")
-    parser.add_argument("--input_dir", required=True,
-                        help="Dir containing model_state_rank_0.pth + metadata.json")
-    parser.add_argument("--output_dir", required=True,
-                        help="HF output directory")
-    parser.add_argument("--verbose", action="store_true",
-                        help="Print every renamed key")
-    parser.add_argument("--quant_mode", "--quant-mode",
-                        choices=("bfloat16", "mxfp8"),
-                        default=None,
-                        help=("Precision metadata to write into config.json. "
-                              "Defaults to checkpoint metadata, or bfloat16 "
-                              "when absent. vLLM runtime quantization is still "
-                              "controlled by the serve-time --quantization flag."))
-    parser.add_argument("--quant_block_size", "--quant-block-size",
-                        type=int,
-                        default=None,
-                        help=("MXFP8 block size metadata to write into "
-                              "config.json. Defaults to checkpoint metadata, "
-                              "or 128 when absent."))
+        description="Convert new-format YOCO checkpoint to HuggingFace/vLLM format"
+    )
+    parser.add_argument(
+        "--input_dir",
+        required=True,
+        help="Dir containing model_state_rank_0.pth + metadata.json",
+    )
+    parser.add_argument("--output_dir", required=True, help="HF output directory")
+    parser.add_argument(
+        "--verbose", action="store_true", help="Print every renamed key"
+    )
+    parser.add_argument(
+        "--quant_mode",
+        "--quant-mode",
+        choices=("bfloat16", "mxfp8"),
+        default=None,
+        help=(
+            "Precision metadata to write into config.json. "
+            "Defaults to checkpoint metadata, or bfloat16 "
+            "when absent. vLLM runtime quantization is still "
+            "controlled by the serve-time --quantization flag."
+        ),
+    )
+    parser.add_argument(
+        "--quant_block_size",
+        "--quant-block-size",
+        type=int,
+        default=None,
+        help=(
+            "MXFP8 block size metadata to write into "
+            "config.json. Defaults to checkpoint metadata, "
+            "or 128 when absent."
+        ),
+    )
     parser.add_argument(
         "--router-normalization",
         choices=("cuda", "runtime"),
@@ -625,6 +655,7 @@ def main() -> int:
     except Exception as e:
         print(f"\nConversion failed: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

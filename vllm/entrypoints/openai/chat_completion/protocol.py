@@ -62,6 +62,7 @@ class ChatMessage(OpenAIBaseModel):
 
     # vLLM-specific fields that are not in OpenAI spec
     reasoning: str | None = None
+    reasoning_content: str | None = None
 
 
 class ChatCompletionLogProb(OpenAIBaseModel):

@@ -61,7 +61,7 @@ from openai.types.responses.response_reasoning_item import (
 from openai_harmony import Message as HarmonyMessage
 
 from vllm.entrypoints.mcp.tool_server import ToolServer
-from vllm.entrypoints.openai.engine.protocol import DeltaMessage
+from vllm.entrypoints.openai.engine.protocol import DeltaMessage, DeltaToolCall
 from vllm.entrypoints.openai.parser.harmony_utils import (
     extract_function_from_recipient,
     is_function_recipient,
@@ -1160,17 +1160,18 @@ class SimpleStreamingEventProcessor:
         """
         Decide which state the next delta belongs to.
 
-        Priority: TOOL_CALL > REASONING > CONTENT, fallback to NONE.
+        Compound reasoning/tool deltas resolve to REASONING so emit_delta()
+        can close reasoning and open the tool call without dropping either.
         For TOOL_CALL the first tool_call object is also returned so
         callers can detect a switch between consecutive tools.
         """
+        if delta_message.reasoning is not None:
+            return _StateType.REASONING, None
         if (
             delta_message.tool_calls
             and delta_message.tool_calls[0].function is not None
         ):
             return _StateType.TOOL_CALL, delta_message.tool_calls[0]
-        if delta_message.reasoning is not None:
-            return _StateType.REASONING, None
         if delta_message.content:
             return _StateType.CONTENT, None
         return _StateType.NONE, None
@@ -1233,6 +1234,28 @@ class SimpleStreamingEventProcessor:
         handlers = self._STATE_HANDLERS[self.state.current_state]
         events: list[StreamingResponsesResponse] = []
 
+        # Special case: reasoning -> tool call inside a single delta.
+        if (
+            self.state.current_state == _StateType.REASONING
+            and delta_message.reasoning is not None
+            and delta_message.tool_calls
+            and delta_message.tool_calls[0].function is not None
+        ):
+            events.extend(handlers.delta_fn(self.state, delta_message.reasoning))
+            events.extend(self.close_current())
+            if delta_message.content is not None:
+                events.extend(self.open(_StateType.CONTENT))
+                content_handlers = self._STATE_HANDLERS[_StateType.CONTENT]
+                logprobs = get_logprobs(output) if get_logprobs else []
+                events.extend(
+                    content_handlers.delta_fn(
+                        self.state, delta_message.content, logprobs
+                    )
+                )
+                events.extend(self.close_current())
+            events.extend(self._emit_tool_calls(delta_message.tool_calls))
+            return events
+
         # Special case: reasoning -> content inside a single delta.
         if (
             self.state.current_state == _StateType.REASONING
@@ -1250,12 +1273,7 @@ class SimpleStreamingEventProcessor:
             return events
 
         if self.state.current_state == _StateType.TOOL_CALL:
-            assert delta_message.tool_calls is not None
-            tool_call_function = delta_message.tool_calls[0].function
-            assert tool_call_function is not None
-            if tool_call_function.arguments:
-                return handlers.delta_fn(self.state, tool_call_function.arguments)
-            return []
+            return self._emit_tool_calls(delta_message.tool_calls)
         elif self.state.current_state == _StateType.REASONING:
             assert delta_message.reasoning is not None
             return handlers.delta_fn(self.state, delta_message.reasoning)
@@ -1264,3 +1282,24 @@ class SimpleStreamingEventProcessor:
             logprobs = get_logprobs(output) if get_logprobs else []
             return handlers.delta_fn(self.state, delta_message.content, logprobs)
         return []
+
+    def _emit_tool_calls(
+        self, tool_calls: list[DeltaToolCall]
+    ) -> list[StreamingResponsesResponse]:
+        events: list[StreamingResponsesResponse] = []
+        handlers = self._STATE_HANDLERS[_StateType.TOOL_CALL]
+
+        for tool_call in tool_calls:
+            if tool_call.function is None:
+                continue
+            if (
+                self.state.current_state != _StateType.TOOL_CALL
+                or self.state.tool_call_index != tool_call.index
+            ):
+                events.extend(self.close_current())
+                events.extend(self.open(_StateType.TOOL_CALL, tool_call))
+            if tool_call.function.arguments:
+                events.extend(
+                    handlers.delta_fn(self.state, tool_call.function.arguments)
+                )
+        return events
