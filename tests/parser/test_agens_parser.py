@@ -34,7 +34,7 @@ def _make_agens_parser() -> AgensParser:
     return parser
 
 
-def test_chat_completion_uses_reasoning_content(monkeypatch):
+def test_chat_completion_preserves_reasoning_fields(monkeypatch):
     monkeypatch.setattr(
         DelegatingParser,
         "parse_delta",
@@ -45,7 +45,7 @@ def test_chat_completion_uses_reasoning_content(monkeypatch):
     result = _make_agens_parser().parse_delta("", [], request)
 
     assert result is not None
-    assert result.reasoning is None
+    assert result.reasoning == "thinking"
     assert result.reasoning_content == "thinking"
 
 
