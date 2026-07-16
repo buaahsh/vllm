@@ -79,6 +79,10 @@ MXFP8、BF16、KV-sharing fast prefill 和 TP2/EP2 均已在
 token 重复或单 token collapse。最终容器使用四个中英文请求并发生成 16
 tokens，也得到连续、可读的输出。
 
+合并 `shaohanh/yoco-on-0.23` 后重新构建同名镜像并复测，MXFP8 batch 16
+仍为 `0.00758594`。启用 Agens parser 后，四个中英文并发 Chat 请求输出
+连续可读，Responses API 也可正常返回；parser 合并未改变 YOCO logits。
+
 ### 尚未通过的矩阵
 
 - 真实 chunked prefill：110-token 输入按 `64 + 46` 分块，并与同样分块的
@@ -201,6 +205,9 @@ vllm serve \
   --gpu-memory-utilization 0.90 \
   --quantization fp8_per_block \
   --moe-backend deep_gemm \
+  --reasoning-parser agens \
+  --enable-auto-tool-choice \
+  --tool-call-parser agens \
   --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":2}' \
   --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
 ```
@@ -249,6 +256,9 @@ docker run --rm \
     --gpu-memory-utilization 0.90 \
     --quantization fp8_per_block \
     --moe-backend deep_gemm \
+    --reasoning-parser agens \
+    --enable-auto-tool-choice \
+    --tool-call-parser agens \
     --attention-config \
       '{"backend":"FLASH_ATTN","flash_attn_version":2}' \
     --compilation-config \
