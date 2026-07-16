@@ -33,6 +33,7 @@ from vllm.v1.attention.backends.utils import get_dcp_local_seq_lens
 from vllm.v1.attention.ops.common import cp_lse_ag_out_rs
 from vllm.v1.attention.ops.dcp_alltoall import dcp_a2a_lse_reduce
 from vllm.v1.attention.ops.merge_attn_states import merge_attn_states
+from vllm.v1.attention.ops.triton_unified_attention import unified_attention
 from vllm.v1.worker.workspace import current_workspace_manager
 
 if is_flash_attn_varlen_func_available():
@@ -62,7 +63,7 @@ from vllm.v1.attention.backend import (
 from vllm.v1.attention.backends.utils import (
     get_kv_cache_layout,
 )
-from vllm.v1.kv_cache_interface import AttentionSpec
+from vllm.v1.kv_cache_interface import AttentionSpec, get_kv_quant_mode
 
 logger = init_logger(__name__)
 
@@ -657,13 +658,9 @@ class FlashAttentionImpl(AttentionImpl):
             requires_alibi=alibi_slopes is not None,
             head_size=head_size,
         )
-        if (
-            model_type == "yoco"
-            and self.vllm_flash_attn_version not in (2, 4)
-        ):
+        if model_type == "yoco" and self.vllm_flash_attn_version not in (2, 4):
             logger.info_once(
-                "Forcing FlashAttention version 2 for YOCO alignment "
-                "(was %s)",
+                "Forcing FlashAttention version 2 for YOCO alignment (was %s)",
                 self.vllm_flash_attn_version,
             )
             self.vllm_flash_attn_version = 2
@@ -692,6 +689,16 @@ class FlashAttentionImpl(AttentionImpl):
         self.supports_quant_query_input = flash_attn_supports_quant_query_input()
 
         self.use_direct_prefill_qkv = model_type == "yoco"
+        cudagraph_mode = (
+            vllm_config.compilation_config.cudagraph_mode
+            if vllm_config is not None
+            else None
+        )
+        self.use_triton_yoco_decode = (
+            model_type == "yoco"
+            and cudagraph_mode is not None
+            and cudagraph_mode.has_full_cudagraphs()
+        )
         dcp_a2a = (
             vllm_config is not None
             and vllm_config.parallel_config.decode_context_parallel_size > 1
@@ -835,9 +842,35 @@ class FlashAttentionImpl(AttentionImpl):
                     if self.sliding_window is not None
                     else None
                 )
+                if self.use_triton_yoco_decode and attn_metadata.max_query_len == 1:
+                    unified_attention(
+                        q=query[:num_actual_tokens],
+                        k=key_cache,
+                        v=value_cache,
+                        out=output[:num_actual_tokens],
+                        cu_seqlens_q=cu_seqlens_q,
+                        max_seqlen_q=max_seqlen_q,
+                        seqused_k=seqused_k,
+                        max_seqlen_k=max_seqlen_k,
+                        softmax_scale=self.scale,
+                        causal=True,
+                        alibi_slopes=self.alibi_slopes,
+                        window_size=self.sliding_window,
+                        block_table=block_table,
+                        softcap=self.logits_soft_cap,
+                        q_descale=None,
+                        k_descale=k_descale,
+                        v_descale=v_descale,
+                        sinks=self.sinks,
+                        kv_quant_mode=get_kv_quant_mode(self.kv_cache_dtype),
+                    )
+                    return output
+                # The direct path omits cached prefix KV, so it is valid only
+                # for a fresh prefill rather than a later chunk.
                 if (
                     self.use_direct_prefill_qkv
                     and attn_metadata.is_pure_prefill
+                    and max_seqlen_k == max_seqlen_q
                     and not is_quantized_kv_cache(self.kv_cache_dtype)
                 ):
                     if os.getenv("VLLM_YOCO_NATIVE_FA2_PREFILL") == "1":

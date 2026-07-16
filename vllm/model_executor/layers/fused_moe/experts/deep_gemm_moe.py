@@ -36,6 +36,7 @@ from vllm.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Static128BlockSym,
     kMxfp4Static,
 )
+from vllm.triton_utils import tl, triton
 from vllm.utils.deep_gemm import (
     DeepGemmQuantScaleFMT,
     get_mk_alignment_for_contiguous_layout,
@@ -44,7 +45,6 @@ from vllm.utils.deep_gemm import (
     m_grouped_fp8_gemm_nt_contiguous,
 )
 from vllm.utils.import_utils import has_deep_gemm
-from vllm.triton_utils import tl, triton
 
 logger = init_logger(__name__)
 
@@ -56,6 +56,7 @@ def _scatter_routed_row_weights_kernel(
     inv_perm_ptr,
     row_weights_ptr,
     numel,
+    num_rows,
     BLOCK_SIZE: tl.constexpr,
 ):
     offsets = tl.program_id(0) * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
@@ -63,6 +64,7 @@ def _scatter_routed_row_weights_kernel(
     expert_ids = tl.load(topk_ids_ptr + offsets, mask=in_bounds, other=-1)
     valid = in_bounds & (expert_ids >= 0)
     rows = tl.load(inv_perm_ptr + offsets, mask=valid, other=0).to(tl.int64)
+    valid &= (rows >= 0) & (rows < num_rows)
     weights = tl.load(topk_weights_ptr + offsets, mask=valid, other=0.0)
     tl.store(row_weights_ptr + rows, weights, mask=valid)
 
@@ -80,6 +82,7 @@ def _scatter_routed_row_weights(
         inv_perm,
         row_weights,
         numel,
+        row_weights.numel(),
         BLOCK_SIZE=256,
         num_warps=4,
         num_stages=1,
@@ -249,8 +252,7 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         swiglu_limit = getattr(self, "swiglu_limit", None)
         if row_weights is not None:
             if (
-                os.getenv("VLLM_DEEPGEMM_MOE_FUSED_ROW_WEIGHTS") == "1"
-                and scale_fmt == DeepGemmQuantScaleFMT.UE8M0
+                scale_fmt == DeepGemmQuantScaleFMT.UE8M0
                 and activation == MoEActivation.SILU
             ):
                 return fused_silu_mul_fp8_quant_packed(
@@ -270,15 +272,6 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             )
             self.activation(activation, act_out, input)
             act_out.mul_(row_weights.to(act_out.dtype).unsqueeze(-1))
-            if raw_act_scales:
-                return per_token_group_quant_fp8(
-                    act_out,
-                    block_k,
-                    eps=1e-4,
-                    column_major_scales=False,
-                    use_ue8m0=True,
-                    out_q=output,
-                )
             if scale_fmt == DeepGemmQuantScaleFMT.UE8M0:
                 return per_token_group_quant_fp8_packed_for_deepgemm(
                     act_out,
@@ -295,19 +288,6 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
 
         # 1. DeepGemm UE8M0: fused SiLU+mul+clamp+quant+pack
         if scale_fmt == DeepGemmQuantScaleFMT.UE8M0:
-            if raw_act_scales:
-                act_out = torch.empty(
-                    (M_sum, activation_out_dim), dtype=input.dtype, device=input.device
-                )
-                self.activation(activation, act_out, input)
-                return per_token_group_quant_fp8(
-                    act_out,
-                    block_k,
-                    eps=1e-4,
-                    column_major_scales=False,
-                    use_ue8m0=True,
-                    out_q=output,
-                )
             if activation == MoEActivation.SILU:
                 return fused_silu_mul_fp8_quant_packed(
                     input=input,
@@ -382,7 +362,6 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         assert w2.size(1) == K
 
         block_m = get_mk_alignment_for_contiguous_layout()[0]
-        block_k = self.block_shape[1]
         M_sum = compute_aligned_M(
             M=topk_ids.size(0),
             num_topk=topk_ids.size(1),
@@ -390,7 +369,10 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             alignment=block_m,
             expert_tokens_meta=expert_tokens_meta,
         )
-        use_psum_layout = os.getenv("VLLM_DEEPGEMM_MOE_PSUM_LAYOUT") == "1"
+        probs_before_w2 = getattr(self, "apply_router_weight_before_w2", False)
+        use_psum_layout = (
+            probs_before_w2 or os.getenv("VLLM_DEEPGEMM_MOE_PSUM_LAYOUT") == "1"
+        )
 
         a1q_perm = _resize_cache(
             workspace13.view(dtype=torch.float8_e4m3fn), (M_sum, K)
@@ -405,15 +387,25 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             aq_out=a1q_perm,
             use_psum_layout=use_psum_layout,
         )
+        if (
+            use_psum_layout
+            and not torch.cuda.is_current_stream_capturing()
+            and not torch.compiler.is_compiling()
+        ):
+            actual_m = int(grouped_layout[-1].item())
+            a1q = a1q[:actual_m]
+            a1q_scale = a1q_scale[:actual_m]
         assert use_psum_layout or a1q.size(0) == M_sum
         m_gemm = a1q.size(0)
         mm1_out = _resize_cache(workspace2, (m_gemm, N))
         grouped_gemm_kwargs = {}
         if use_psum_layout:
-            grouped_gemm_kwargs.update({
-                "use_psum_layout": True,
-                "expected_m_for_psum_layout": m_gemm,
-            })
+            grouped_gemm_kwargs.update(
+                {
+                    "use_psum_layout": True,
+                    "expected_m_for_psum_layout": m_gemm,
+                }
+            )
         m_grouped_fp8_gemm_nt_contiguous(
             (a1q, a1q_scale),
             (w1, self.w1_scale),
@@ -425,22 +417,14 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         quant_out = _resize_cache(
             workspace13.view(dtype=torch.float8_e4m3fn), (m_gemm, activation_out_dim)
         )
-        probs_before_w2 = getattr(self, "apply_router_weight_before_w2", False)
         row_weights = None
         negative_row_weights = None
         if probs_before_w2:
             row_weights = torch.zeros(
                 (m_gemm,), device=topk_weights.device, dtype=topk_weights.dtype
             )
-            _scatter_routed_row_weights(
-                row_weights, topk_ids, topk_weights, inv_perm
-            )
-            if os.getenv("VLLM_YOCO_COMPILED_TOPK_ROUTING") == "1":
-                negative_row_weights = row_weights
-            else:
-                negative_row_weights = torch.nextafter(
-                    row_weights, torch.zeros_like(row_weights)
-                )
+            _scatter_routed_row_weights(row_weights, topk_ids, topk_weights, inv_perm)
+            negative_row_weights = row_weights
 
         a2q, a2q_scale = self._act_mul_quant(
             input=mm1_out.view(-1, N),
@@ -468,6 +452,7 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             expert_map=expert_map,
             output=output,
         )
+
 
 class DeepGemmFP4Experts(mk.FusedMoEExpertsModular):
     """DeepGemm-based fused MoE expert implementation for FP4 weights.

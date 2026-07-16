@@ -1,14 +1,9 @@
-# Recreates the locally committed image:
-#   vllm-yoco-on-023:installed
-# Intended tag:
-#   buaahsh/pytorch:26.02-b200-vllm
-#
-# The image currently on this machine was produced with docker commit after
-# running the equivalent steps below inside donglixp/pytorch:26.02-b200.
+# Builds the validated YOCO runtime on top of the NVIDIA B200 environment.
 # Build example:
-#   docker build -f /home/shaohanh/Dockerfile.pytorch-26.02-b200-vllm -t buaahsh/pytorch:26.02-b200-vllm /tmp
+#   docker build -f docker/Dockerfile.b200 \
+#     -t buaahsh/pytorch:26.02-b200-vllm-0716 .
 
-FROM donglixp/pytorch:26.02-b200
+FROM donglixp/pytorch:26.02-b200@sha256:cdbdc71b773142a98a303d488816d2faf6b9d85d179a4639b92263fca6da4769
 
 ENV PIP_NO_CACHE_DIR=1 \
     HF_HOME=/workspace/.cache/huggingface \
@@ -19,10 +14,12 @@ ENV PIP_NO_CACHE_DIR=1 \
 
 WORKDIR /workspace
 
-RUN git clone --depth 1 --branch shaohanh/yoco-on-0.23 --single-branch \
-        https://github.com/buaahsh/vllm.git /workspace/vllm \
-    && cd /workspace/vllm 
-    # && test "$(git rev-parse HEAD)" = "cbb4d478c8466ef03ae3dc4a2e9acf252394da38"
+RUN git init /workspace/vllm \
+    && cd /workspace/vllm \
+    && git remote add origin https://github.com/buaahsh/vllm.git \
+    && git fetch --depth 1 origin d4eb9942f9dc81c773d82b737b27dffda40cd56d \
+    && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "d4eb9942f9dc81c773d82b737b27dffda40cd56d"
 
 WORKDIR /workspace/vllm
 
@@ -71,10 +68,27 @@ if old not in text:
 path.write_text(text.replace(old, new))
 PY
 
-RUN python -m pip install --no-cache-dir "setuptools-scm>=8" \
+RUN python -m pip install --no-cache-dir "setuptools-scm==10.2.0" \
     && python -m pip install --no-cache-dir -e . --no-build-isolation \
     && python -m pip check \
     && python -c "import vllm.version; print(vllm.version.__version__)" \
     && rm -rf /tmp/tmp*.build-temp /tmp/tmp*.build-lib /tmp/pip-* \
         /root/.cache/pip /opt/vllm-venv \
     && (find /tmp -maxdepth 1 -name 'tmpxft_*' -delete 2>/dev/null || true)
+
+# The editable install resolves Python modules from /workspace/vllm, so these
+# source overlays apply the local YOCO alignment implementation without
+# rebuilding the native extensions pinned above.
+COPY vllm/model_executor/models/config.py \
+    /workspace/vllm/vllm/model_executor/models/config.py
+COPY vllm/model_executor/models/yoco.py \
+    /workspace/vllm/vllm/model_executor/models/yoco.py
+COPY vllm/model_executor/layers/fused_moe/deep_gemm_utils.py \
+    /workspace/vllm/vllm/model_executor/layers/fused_moe/deep_gemm_utils.py
+COPY vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py \
+    /workspace/vllm/vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
+COPY vllm/v1/attention/backends/flash_attn.py \
+    /workspace/vllm/vllm/v1/attention/backends/flash_attn.py
+COPY tools/yoco_alignment/logprob_kl.py \
+    /workspace/vllm/tools/yoco_alignment/logprob_kl.py
+COPY yoco.md /workspace/vllm/yoco.md

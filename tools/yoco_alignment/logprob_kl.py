@@ -38,8 +38,9 @@ class PromptSpec:
 
 DEFAULT_PROMPTS = [
     PromptSpec(name="hello_name", kind="completion", text="Hello, my name is"),
-    PromptSpec(name="france_capital", kind="completion",
-               text="The capital of France is"),
+    PromptSpec(
+        name="france_capital", kind="completion", text="The capital of France is"
+    ),
     PromptSpec(
         name="harry_potter",
         kind="completion",
@@ -93,6 +94,24 @@ MIXED5_PROMPTS = [
     ),
 ]
 
+MIXED16_PROMPTS = [
+    (f"{name}_{repeat}", text) for repeat in range(4) for name, text in MIXED5_PROMPTS
+][:16]
+
+CHUNK4K_PROMPTS = [
+    (
+        "long_english_4k",
+        (
+            "Harry Potter and the Philosopher's Stone is a fantasy novel "
+            "written by J.K. Rowling and the first book in the Harry Potter "
+            "series. The story follows an orphaned boy who learns on his "
+            "eleventh birthday that he is a wizard, then leaves his ordinary "
+            "life behind to attend Hogwarts School of Witchcraft and Wizardry. "
+        )
+        * 72,
+    ),
+]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -102,37 +121,93 @@ def parse_args() -> argparse.Namespace:
 
     for name in ("native", "hf", "vllm"):
         sub = subparsers.add_parser(name)
-        sub.add_argument("--model", required=True,
-                         help="HF/vLLM model path or Hugging Face repo id")
+        sub.add_argument(
+            "--model", required=True, help="HF/vLLM model path or Hugging Face repo id"
+        )
         sub.add_argument("--out", required=True, help="Output .pt path")
-        sub.add_argument("--prompt-suite", choices=("default", "mixed5"),
-                         default="mixed5")
+        sub.add_argument(
+            "--prompt-suite",
+            choices=("default", "mixed5", "mixed16", "chunk4k"),
+            default="mixed5",
+        )
         sub.add_argument("--prompt-index", type=int, default=0)
+        sub.add_argument("--prompt-start", type=int, default=0)
         sub.add_argument("--prompt-limit", type=int)
+        sub.add_argument(
+            "--batch-size",
+            type=int,
+            default=1,
+            help="Number of prompts to execute together in each model forward.",
+        )
+        sub.add_argument(
+            "--first-batch-size",
+            type=int,
+            help=(
+                "Optional size of the first forward before using --batch-size "
+                "for the remaining prompts."
+            ),
+        )
         sub.add_argument("--max-model-len", type=int, default=8192)
         sub.add_argument("--seed", type=int, default=0)
+        sub.add_argument(
+            "--trace-out",
+            help="Optional output path for layer-by-layer hidden-state traces.",
+        )
 
         if name == "native":
             sub.add_argument("--native-checkpoint", required=True)
-            sub.add_argument("--llm-train-dir",
-                             default="/data/users/shaohanh/llm-train")
-            sub.add_argument("--native-dtype", choices=("bfloat16",),
-                             default="bfloat16")
+            sub.add_argument(
+                "--llm-train-dir", default="/data/users/shaohanh/llm-train"
+            )
+            sub.add_argument(
+                "--native-dtype", choices=("bfloat16",), default="bfloat16"
+            )
             sub.add_argument("--native-quant-mode", choices=("bfloat16", "mxfp8"))
             sub.add_argument("--native-quant-block-size", type=int)
             sub.add_argument("--native-use-cute", action="store_true")
             sub.add_argument("--native-no-kv-cache", action="store_true")
+            sub.add_argument("--native-prefill-chunk-size", type=int)
+            sub.add_argument(
+                "--native-use-torch-fp8-quant",
+                action="store_true",
+                help=(
+                    "Use llm-train's torch activation quantization reference "
+                    "instead of its Triton kernel."
+                ),
+            )
+            sub.add_argument(
+                "--native-forward-repeats",
+                type=int,
+                default=1,
+                help=(
+                    "Repeat each Native forward in the same process and report "
+                    "the maximum logprob drift."
+                ),
+            )
         elif name == "hf":
             sub.add_argument("--device", default="cuda:0")
-            sub.add_argument("--dtype", choices=("bfloat16", "float16",
-                                                 "float32"),
-                             default="bfloat16")
+            sub.add_argument(
+                "--dtype",
+                choices=("bfloat16", "float16", "float32"),
+                default="bfloat16",
+            )
             sub.add_argument("--attn-implementation")
         else:
-            sub.add_argument("--dtype", choices=("auto", "bfloat16", "float16",
-                                                 "float32"), default="auto")
+            sub.add_argument(
+                "--dtype",
+                choices=("auto", "bfloat16", "float16", "float32"),
+                default="auto",
+            )
             sub.add_argument("--tensor-parallel-size", type=int, default=1)
+            sub.add_argument("--enable-expert-parallel", action="store_true")
             sub.add_argument("--gpu-memory-utilization", type=float, default=0.9)
+            sub.add_argument("--max-num-seqs", type=int)
+            sub.add_argument("--max-num-batched-tokens", type=int)
+            sub.add_argument(
+                "--enable-chunked-prefill",
+                action=argparse.BooleanOptionalAction,
+                default=None,
+            )
             sub.add_argument("--kv-sharing-fast-prefill", action="store_true")
             sub.add_argument("--enforce-eager", action="store_true")
             sub.add_argument("--compilation-config-json")
@@ -140,16 +215,22 @@ def parse_args() -> argparse.Namespace:
             sub.add_argument("--quantization-config-json")
             sub.add_argument("--quantization-ignore", action="append", default=[])
             sub.add_argument("--attention-backend")
+            sub.add_argument("--flash-attn-version", type=int)
             sub.add_argument("--moe-backend", default=None)
             sub.add_argument("--max-logprobs", type=int, default=-1)
 
     cmp_parser = subparsers.add_parser("compare")
-    cmp_parser.add_argument("--reference", "--native", dest="reference",
-                            required=True)
-    cmp_parser.add_argument("--candidate", "--vllm", dest="candidate",
-                            required=True)
+    cmp_parser.add_argument("--reference", "--native", dest="reference", required=True)
+    cmp_parser.add_argument("--candidate", "--vllm", dest="candidate", required=True)
     cmp_parser.add_argument("--out-json", required=True)
     cmp_parser.add_argument("--top-k", type=int, default=20)
+    cmp_parser.add_argument(
+        "--model",
+        help=(
+            "Tokenizer path for comparison. Use this when artifacts were "
+            "created with container-local model paths."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -196,8 +277,7 @@ def _bos_id(tokenizer: Any) -> int | None:
     return None
 
 
-def _apply_chat_template(tokenizer: Any,
-                         messages: list[dict[str, str]]) -> str:
+def _apply_chat_template(tokenizer: Any, messages: list[dict[str, str]]) -> str:
     try:
         return tokenizer.apply_chat_template(
             messages,
@@ -219,9 +299,7 @@ def _default_prompt_records(
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     specs = (
-        DEFAULT_PROMPTS[:prompt_limit]
-        if prompt_limit is not None
-        else DEFAULT_PROMPTS
+        DEFAULT_PROMPTS[:prompt_limit] if prompt_limit is not None else DEFAULT_PROMPTS
     )
     bos_id = _bos_id(tokenizer)
     for spec in specs:
@@ -237,30 +315,37 @@ def _default_prompt_records(
             token_ids = _tokenizer_encode(tokenizer, prompt_text)
         else:
             raise ValueError(f"Unknown prompt kind: {spec.kind}")
-        records.append({
-            "name": spec.name,
-            "kind": spec.kind,
-            "prompt_text": prompt_text,
-            "prompt_token_ids": token_ids,
-            "prompt_len": len(token_ids),
-        })
+        records.append(
+            {
+                "name": spec.name,
+                "kind": spec.kind,
+                "prompt_text": prompt_text,
+                "prompt_token_ids": token_ids,
+                "prompt_len": len(token_ids),
+            }
+        )
     return records
 
 
-def _mixed5_prompt_records(tokenizer: Any) -> list[dict[str, Any]]:
+def _mixed_prompt_records(
+    tokenizer: Any,
+    prompt_specs: list[tuple[str, str]],
+) -> list[dict[str, Any]]:
     bos_id = _bos_id(tokenizer)
     records = []
-    for name, text in MIXED5_PROMPTS:
+    for name, text in prompt_specs:
         token_ids = tokenizer.encode(text, add_special_tokens=False)
         if bos_id is not None:
             token_ids = [bos_id] + token_ids
-        records.append({
-            "name": name,
-            "kind": "completion",
-            "prompt_text": text,
-            "prompt_token_ids": token_ids,
-            "prompt_len": len(token_ids),
-        })
+        records.append(
+            {
+                "name": name,
+                "kind": "completion",
+                "prompt_text": text,
+                "prompt_token_ids": token_ids,
+                "prompt_len": len(token_ids),
+            }
+        )
     return records
 
 
@@ -268,18 +353,28 @@ def _prompt_records(
     model_dir: str,
     prompt_suite: str,
     prompt_index: int,
+    prompt_start: int,
     prompt_limit: int | None,
 ) -> tuple[Any, list[dict[str, Any]]]:
     from transformers import AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
-    if prompt_suite == "mixed5":
-        records = _mixed5_prompt_records(tokenizer)
+    if prompt_suite in ("mixed5", "mixed16", "chunk4k"):
+        prompt_specs = {
+            "mixed5": MIXED5_PROMPTS,
+            "mixed16": MIXED16_PROMPTS,
+            "chunk4k": CHUNK4K_PROMPTS,
+        }[prompt_suite]
+        records = _mixed_prompt_records(tokenizer, prompt_specs)
         if prompt_limit is not None:
-            records = records[:prompt_limit]
+            records = records[prompt_start : prompt_start + prompt_limit]
+        elif prompt_start:
+            records = records[prompt_start:]
         elif prompt_index:
             records = [records[prompt_index]]
         return tokenizer, records
+    if prompt_start:
+        raise ValueError("--prompt-start is only supported for mixed prompt suites")
 
     if prompt_limit is not None:
         records = _default_prompt_records(tokenizer, prompt_limit)
@@ -323,6 +418,27 @@ def _payload_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return payload.get("results", [payload])
 
 
+def _record_batches(
+    records: list[dict[str, Any]],
+    batch_size: int,
+    first_batch_size: int | None = None,
+) -> list[list[dict[str, Any]]]:
+    if batch_size < 1:
+        raise ValueError(f"batch_size must be positive, got {batch_size}")
+    if first_batch_size is not None and first_batch_size < 1:
+        raise ValueError(f"first_batch_size must be positive, got {first_batch_size}")
+    batches = []
+    start = 0
+    if first_batch_size is not None:
+        batches.append(records[:first_batch_size])
+        start = first_batch_size
+    batches.extend(
+        records[offset : offset + batch_size]
+        for offset in range(start, len(records), batch_size)
+    )
+    return [batch for batch in batches if batch]
+
+
 @torch.no_grad()
 def run_native(args: argparse.Namespace) -> None:
     import importlib
@@ -334,12 +450,47 @@ def run_native(args: argparse.Namespace) -> None:
     sys.path.insert(0, str(llm_dir))
     from arch.model import Model, ModelArgs, create_kv_cache
 
+    if args.native_prefill_chunk_size is not None:
+        import arch.attention as native_attention
+
+        native_flash_attn_with_kvcache = native_attention.flash_attn_with_kvcache
+
+        def flash_attn_with_chunked_kvcache(
+            query: torch.Tensor,
+            *flash_args,
+            **flash_kwargs,
+        ) -> torch.Tensor:
+            if query.shape[1] == 1 and query.shape[0] > 1:
+                output = native_flash_attn_with_kvcache(
+                    query.transpose(0, 1),
+                    *flash_args,
+                    **flash_kwargs,
+                )
+                return output.transpose(0, 1)
+            return native_flash_attn_with_kvcache(
+                query,
+                *flash_args,
+                **flash_kwargs,
+            )
+
+        native_attention.flash_attn_with_kvcache = flash_attn_with_chunked_kvcache
+
+    if args.native_use_torch_fp8_quant:
+        import arch.linear as linear
+        import kernel.moe_ffn as moe_ffn
+        import kernel.quant as quant
+
+        linear.per_token_cast_to_fp8 = quant._per_token_cast_to_fp8_torch
+        moe_ffn.per_token_cast_to_fp8 = quant._per_token_cast_to_fp8_torch
+        print("[native-kl] using torch FP8 activation quantization", flush=True)
+
     if not dist.is_initialized():
         dist.init_process_group(backend="nccl")
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
-    torch.cuda.set_device(local_rank)
+    torch.accelerator.set_device_index(local_rank)
     device = torch.device("cuda")
+    torch.manual_seed(args.seed)
 
     metadata_path = Path(args.native_checkpoint) / "metadata.json"
     with metadata_path.open(encoding="utf-8") as reader:
@@ -371,8 +522,7 @@ def run_native(args: argparse.Namespace) -> None:
         mmap=True,
     )
     state = {
-        key: value for key, value in state.items()
-        if not key.startswith("moe_loss.")
+        key: value for key, value in state.items() if not key.startswith("moe_loss.")
     }
     model.load_state_dict(state)
     print(
@@ -380,6 +530,305 @@ def run_native(args: argparse.Namespace) -> None:
         f"kv_cache={not args.native_no_kv_cache}",
         flush=True,
     )
+
+    trace_records: list[dict[str, Any]] = []
+    trace_handles = []
+    trace_counts: dict[str, int] = {}
+    native_moe_patches = []
+    if args.trace_out:
+        trace_prompt_records = _prompt_records(
+            args.model,
+            args.prompt_suite,
+            args.prompt_index,
+            args.prompt_start,
+            args.prompt_limit,
+        )[1]
+        if (
+            len(trace_prompt_records) != 1
+            or args.batch_size != 1
+            or args.first_batch_size not in (None, 1)
+        ):
+            raise ValueError("--trace-out requires exactly one prompt and batch-size=1")
+        if args.native_forward_repeats != 1:
+            raise ValueError("--trace-out requires --native-forward-repeats=1")
+
+        def record_trace(name: str, tensor: torch.Tensor) -> None:
+            count = trace_counts.get(name, 0)
+            trace_counts[name] = count + 1
+            key = name if count == 0 else f"{name}#{count}"
+            trace_records.append(
+                {
+                    "name": key,
+                    "tensor": tensor.detach().float().cpu(),
+                }
+            )
+
+        def trace_hook(name: str):
+            def hook(_module, _inputs, output):
+                tensor = output[0] if isinstance(output, tuple) else output
+                if not isinstance(tensor, torch.Tensor):
+                    return
+                record_trace(name, tensor)
+
+            return hook
+
+        def trace_rope_hook(name: str):
+            def hook(_module, _inputs, output):
+                if not isinstance(output, tuple) or len(output) != 2:
+                    return
+                record_trace(f"{name}.q_rotary", output[0])
+                record_trace(f"{name}.k_rotary", output[1])
+
+            return hook
+
+        active_mlp = [""]
+        active_attn = [""]
+        trace_handles.append(
+            model.tok_embeddings.register_forward_hook(trace_hook("embed"))
+        )
+        for layer_idx, layer in enumerate(model.layers):
+            prefix = f"layer.{layer_idx}"
+            mlp_prefix = f"{prefix}.mlp"
+            attn_prefix = f"{prefix}.self_attn"
+
+            def set_active_mlp(_module, _inputs, name=mlp_prefix):
+                active_mlp[0] = name
+
+            def clear_active_mlp(_module, _inputs, _output):
+                active_mlp[0] = ""
+
+            def set_active_attn(_module, _inputs, name=attn_prefix):
+                active_attn[0] = name
+
+            def clear_active_attn(_module, _inputs, _output):
+                active_attn[0] = ""
+
+            trace_handles.extend(
+                [
+                    layer.input_layernorm.register_forward_hook(
+                        trace_hook(f"{prefix}.input_norm")
+                    ),
+                    layer.self_attn.register_forward_pre_hook(set_active_attn),
+                    layer.self_attn.register_forward_hook(
+                        trace_hook(f"{prefix}.attn_out")
+                    ),
+                    layer.self_attn.register_forward_hook(clear_active_attn),
+                    layer.self_attn.o_proj.register_forward_hook(
+                        trace_hook(f"{attn_prefix}.output")
+                    ),
+                    layer.post_attention_layernorm.register_forward_hook(
+                        trace_hook(f"{prefix}.post_attn_norm")
+                    ),
+                    layer.mlp.register_forward_pre_hook(set_active_mlp),
+                    layer.mlp.register_forward_hook(trace_hook(f"{prefix}.mlp_out")),
+                    layer.mlp.register_forward_hook(clear_active_mlp),
+                    layer.register_forward_hook(trace_hook(f"{prefix}.output")),
+                    layer.mlp.gate.register_forward_hook(
+                        trace_hook(f"{mlp_prefix}.router_logits")
+                    ),
+                    layer.mlp.shared_gate.register_forward_hook(
+                        trace_hook(f"{mlp_prefix}.shared_gate_linear")
+                    ),
+                    layer.mlp.shared.up_proj.register_forward_hook(
+                        trace_hook(f"{mlp_prefix}.shared_up")
+                    ),
+                    layer.mlp.shared.gate_proj.register_forward_hook(
+                        trace_hook(f"{mlp_prefix}.shared_gate")
+                    ),
+                    layer.mlp.shared.down_proj.register_forward_hook(
+                        trace_hook(f"{mlp_prefix}.shared_down")
+                    ),
+                    layer.mlp.shared.register_forward_hook(
+                        trace_hook(f"{mlp_prefix}.shared_out_unscaled")
+                    ),
+                ]
+            )
+            trace_handles.append(
+                layer.self_attn.q_norm.register_forward_hook(
+                    trace_hook(f"{attn_prefix}.q_norm")
+                )
+            )
+            if hasattr(layer.self_attn, "k_norm"):
+                trace_handles.append(
+                    layer.self_attn.k_norm.register_forward_hook(
+                        trace_hook(f"{attn_prefix}.k_norm")
+                    )
+                )
+            if layer.self_attn.rope is not None:
+                trace_handles.append(
+                    layer.self_attn.rope.register_forward_hook(
+                        trace_rope_hook(attn_prefix)
+                    )
+                )
+            if layer.self_attn.lambda_proj is not None:
+                trace_handles.append(
+                    layer.self_attn.lambda_proj.register_forward_hook(
+                        trace_hook(f"{attn_prefix}.lambda")
+                    )
+                )
+        if model.args.yoco_cross_layers > 0:
+            trace_handles.extend(
+                [
+                    model.yoco_norm.register_forward_hook(trace_hook("yoco_norm")),
+                    model.k_proj.register_forward_hook(trace_hook("yoco_key")),
+                    model.v_proj.register_forward_hook(trace_hook("yoco_value")),
+                    model.k_norm.register_forward_hook(trace_hook("yoco_key_norm")),
+                ]
+            )
+        trace_handles.append(model.norm.register_forward_hook(trace_hook("norm")))
+
+        import arch.attention as native_attention
+        import arch.moe as native_moe
+        import arch.moe_utils_v2 as native_moe_utils
+        import kernel.moe_ffn as native_moe_ffn
+
+        original_topk_routing = native_moe.topk_routing
+        original_qkv_linear = native_attention.qkv_mix_precision_mxfp8_linear
+        original_sliding_attention = native_attention.wrap_sliding_window_attn_func
+        original_cached_attention = native_attention.flash_attn_with_kvcache
+        original_varlen_attention = native_attention.flash_attn_varlen_func
+        original_routed_moe = native_moe.nnscaler_all2all_moe_gmm
+        original_te_unpermute = native_moe_utils.moe_unpermute
+        original_fused_silu = native_moe_ffn.fused_silu
+        original_per_block_cast_to_fp8 = native_moe_ffn.per_block_cast_to_fp8
+
+        def traced_topk_routing(*call_args, **call_kwargs):
+            outputs = original_topk_routing(*call_args, **call_kwargs)
+            if active_mlp[0]:
+                record_trace(f"{active_mlp[0]}.routing_probs", outputs[0])
+                record_trace(f"{active_mlp[0]}.routing_map", outputs[1])
+            return outputs
+
+        def traced_qkv_linear(*call_args, **call_kwargs):
+            outputs = original_qkv_linear(*call_args, **call_kwargs)
+            if active_attn[0]:
+                record_trace(f"{active_attn[0]}.q_pre_norm", outputs[0])
+                record_trace(f"{active_attn[0]}.k_pre_norm", outputs[1])
+                record_trace(f"{active_attn[0]}.value", outputs[2])
+            return outputs
+
+        def traced_sliding_attention(*call_args, **call_kwargs):
+            output = original_sliding_attention(*call_args, **call_kwargs)
+            tensor = output[0] if isinstance(output, tuple) else output
+            if active_attn[0]:
+                record_trace(f"{active_attn[0]}.raw_attn", tensor)
+            return output
+
+        def traced_cached_attention(*call_args, **call_kwargs):
+            output = original_cached_attention(*call_args, **call_kwargs)
+            if active_attn[0]:
+                record_trace(f"{active_attn[0]}.raw_attn", output)
+            return output
+
+        def traced_varlen_attention(*call_args, **call_kwargs):
+            output = original_varlen_attention(*call_args, **call_kwargs)
+            if active_attn[0]:
+                record_trace(f"{active_attn[0]}.raw_attn", output)
+            return output
+
+        def traced_routed_moe(*call_args, **call_kwargs):
+            output = original_routed_moe(*call_args, **call_kwargs)
+            if active_mlp[0]:
+                record_trace(f"{active_mlp[0]}.routed_out", output)
+            return output
+
+        def traced_te_unpermute(
+            inp,
+            row_id_map,
+            merging_probs=None,
+            restore_shape=None,
+            pad_offsets=None,
+            **call_kwargs,
+        ):
+            if active_mlp[0]:
+                record_trace(f"{active_mlp[0]}.expert_out_rows", inp)
+                record_trace(f"{active_mlp[0]}.row_id_map", row_id_map)
+                if pad_offsets is not None:
+                    record_trace(f"{active_mlp[0]}.pad_offsets", pad_offsets)
+            return original_te_unpermute(
+                inp,
+                row_id_map,
+                merging_probs=merging_probs,
+                restore_shape=restore_shape,
+                pad_offsets=pad_offsets,
+                **call_kwargs,
+            )
+
+        def traced_fused_silu(y13, routing_weights, *call_args, **call_kwargs):
+            if active_mlp[0]:
+                record_trace(f"{active_mlp[0]}.mm1_rows", y13)
+                record_trace(
+                    f"{active_mlp[0]}.permuted_routing_weights",
+                    routing_weights,
+                )
+            output = original_fused_silu(
+                y13, routing_weights, *call_args, **call_kwargs
+            )
+            if active_mlp[0]:
+                record_trace(f"{active_mlp[0]}.w2_input_rows", output)
+            return output
+
+        def traced_per_block_cast_to_fp8(weight, *call_args, **call_kwargs):
+            weight_quant, weight_scale = original_per_block_cast_to_fp8(
+                weight, *call_args, **call_kwargs
+            )
+            if (
+                active_mlp[0] == "layer.1.mlp"
+                and weight.ndim == 3
+                and weight.shape[-2:] == (3072, 1280)
+            ):
+                record_trace(
+                    f"{active_mlp[0]}.expert10_w2_quant",
+                    weight_quant[10],
+                )
+                record_trace(
+                    f"{active_mlp[0]}.expert10_w2_scale",
+                    weight_scale[10],
+                )
+            return weight_quant, weight_scale
+
+        native_attention.qkv_mix_precision_mxfp8_linear = traced_qkv_linear
+        native_attention.wrap_sliding_window_attn_func = traced_sliding_attention
+        native_attention.flash_attn_with_kvcache = traced_cached_attention
+        native_attention.flash_attn_varlen_func = traced_varlen_attention
+        native_moe.topk_routing = traced_topk_routing
+        native_moe.nnscaler_all2all_moe_gmm = traced_routed_moe
+        native_moe_utils.moe_unpermute = traced_te_unpermute
+        native_moe_ffn.fused_silu = traced_fused_silu
+        native_moe_ffn.per_block_cast_to_fp8 = traced_per_block_cast_to_fp8
+        native_moe_patches.extend(
+            [
+                (
+                    native_attention,
+                    "qkv_mix_precision_mxfp8_linear",
+                    original_qkv_linear,
+                ),
+                (
+                    native_attention,
+                    "wrap_sliding_window_attn_func",
+                    original_sliding_attention,
+                ),
+                (
+                    native_attention,
+                    "flash_attn_with_kvcache",
+                    original_cached_attention,
+                ),
+                (
+                    native_attention,
+                    "flash_attn_varlen_func",
+                    original_varlen_attention,
+                ),
+                (native_moe, "topk_routing", original_topk_routing),
+                (native_moe, "nnscaler_all2all_moe_gmm", original_routed_moe),
+                (native_moe_utils, "moe_unpermute", original_te_unpermute),
+                (native_moe_ffn, "fused_silu", original_fused_silu),
+                (
+                    native_moe_ffn,
+                    "per_block_cast_to_fp8",
+                    original_per_block_cast_to_fp8,
+                ),
+            ]
+        )
 
     cute_call_count = [0]
     patched_cute_funcs = []
@@ -400,56 +849,228 @@ def run_native(args: argparse.Namespace) -> None:
             module.flash_attn_cute_varlen_func = counted_cute
 
     tokenizer, records = _prompt_records(
-        args.model, args.prompt_suite, args.prompt_index, args.prompt_limit
+        args.model,
+        args.prompt_suite,
+        args.prompt_index,
+        args.prompt_start,
+        args.prompt_limit,
     )
     results = []
-    for record in records:
-        token_ids = record["prompt_token_ids"]
-        if max(token_ids) >= model.args.vocab_size:
-            raise ValueError(
-                f"Prompt {record['name']} contains token id {max(token_ids)} "
-                f">= model vocab_size {model.args.vocab_size}"
-            )
+    for batch in _record_batches(records, args.batch_size, args.first_batch_size):
+        token_lists = [record["prompt_token_ids"] for record in batch]
+        for record, token_ids in zip(batch, token_lists):
+            if max(token_ids) >= model.args.vocab_size:
+                raise ValueError(
+                    f"Prompt {record['name']} contains token id {max(token_ids)} "
+                    f">= model vocab_size {model.args.vocab_size}"
+                )
 
-        prefill_tokens = torch.tensor(token_ids, dtype=torch.long, device=device)
-        seqlen = len(token_ids)
-        cu_seqlens = torch.tensor([0, seqlen], device=device, dtype=torch.int32)
-        positions = torch.arange(0, seqlen, device=device, dtype=torch.int32)
+        if args.native_prefill_chunk_size is not None:
+            if len(batch) != 1:
+                raise ValueError("--native-prefill-chunk-size requires batch-size=1")
+            if args.native_no_kv_cache:
+                raise ValueError(
+                    "--native-prefill-chunk-size requires the Native KV cache"
+                )
+            if args.native_prefill_chunk_size <= 0:
+                raise ValueError("--native-prefill-chunk-size must be positive")
+            if args.native_forward_repeats != 1:
+                raise ValueError(
+                    "--native-prefill-chunk-size requires --native-forward-repeats=1"
+                )
+
+            record = batch[0]
+            token_ids = token_lists[0]
+            kv_cache = create_kv_cache(
+                model.args,
+                1,
+                args.max_model_len,
+                _dtype(args.native_dtype),
+                device,
+            )
+            hidden = None
+            for chunk_start in range(0, len(token_ids), args.native_prefill_chunk_size):
+                chunk_end = min(
+                    chunk_start + args.native_prefill_chunk_size,
+                    len(token_ids),
+                )
+                chunk_tokens = torch.tensor(
+                    token_ids[chunk_start:chunk_end],
+                    dtype=torch.long,
+                    device=device,
+                )
+                positions = torch.arange(
+                    chunk_start,
+                    chunk_end,
+                    device=device,
+                    dtype=torch.int32,
+                )
+                chunk_len = chunk_end - chunk_start
+                context = {
+                    "cu_seqlens_q": torch.tensor(
+                        [0, chunk_len], device=device, dtype=torch.int32
+                    ),
+                    "cu_seqlens_k": torch.tensor(
+                        [0, chunk_end], device=device, dtype=torch.int32
+                    ),
+                    "max_seqlen_q": chunk_len,
+                    "max_seqlen_k": chunk_end,
+                    "positions": positions,
+                    "kv_cache": kv_cache,
+                    "slot_mapping": positions,
+                    "layer_index": 0,
+                }
+                if chunk_start:
+                    context["cache_seqlens"] = torch.tensor(
+                        [chunk_end], device=device, dtype=torch.int32
+                    )
+                hidden, _, _ = model(
+                    chunk_tokens,
+                    context=context,
+                    last_hidden_only=True,
+                )
+
+            assert hidden is not None
+            logprobs = torch.log_softmax(model.output(hidden[-1:]).float(), dim=-1)[
+                0
+            ].cpu()
+            payload = _result_payload(
+                backend="native",
+                model_dir=args.model,
+                record=record,
+                logprobs=logprobs,
+            )
+            results.append(payload)
+            top1 = int(payload["top_ids"][0])
+            print(
+                f"[native-kl] {record['name']}: top1={top1} "
+                f"{tokenizer.decode([top1], skip_special_tokens=False)!r} "
+                f"{float(payload['top_logprobs'][0]):.6f}",
+                flush=True,
+            )
+            continue
+
+        seqlens = torch.tensor(
+            [len(token_ids) for token_ids in token_lists],
+            device=device,
+            dtype=torch.int32,
+        )
+        prefill_tokens = torch.cat(
+            [
+                torch.tensor(token_ids, dtype=torch.long, device=device)
+                for token_ids in token_lists
+            ]
+        )
+        cu_seqlens = torch.cat(
+            [
+                torch.zeros(1, device=device, dtype=torch.int32),
+                seqlens.cumsum(dim=0).to(torch.int32),
+            ]
+        )
+        positions = torch.cat(
+            [
+                torch.arange(len(token_ids), device=device, dtype=torch.int32)
+                for token_ids in token_lists
+            ]
+        )
+        max_seqlen = int(seqlens.max())
         context = {
             "cu_seqlens_q": cu_seqlens,
             "cu_seqlens_k": cu_seqlens,
-            "max_seqlen_q": seqlen,
-            "max_seqlen_k": seqlen,
+            "max_seqlen_q": max_seqlen,
+            "max_seqlen_k": max_seqlen,
             "positions": positions,
         }
         if not args.native_no_kv_cache:
-            context.update({
-                "kv_cache": create_kv_cache(
-                    model.args, 1, args.max_model_len,
-                    _dtype(args.native_dtype), device
-                ),
-                "slot_mapping": positions,
-                "layer_index": 0,
-            })
-        hidden, _, _ = model(prefill_tokens, context=context, last_hidden_only=True)
-        logits = model.output(hidden[-1]).float()
-        logprobs = torch.log_softmax(logits, dim=-1).cpu()
-        payload = _result_payload(
-            backend="native",
-            model_dir=args.model,
-            record=record,
-            logprobs=logprobs,
-        )
-        results.append(payload)
-        top1 = int(payload["top_ids"][0])
-        print(
-            f"[native-kl] {record['name']}: top1={top1} "
-            f"{tokenizer.decode([top1], skip_special_tokens=False)!r} "
-            f"{float(payload['top_logprobs'][0]):.6f}",
-            flush=True,
-        )
+            batch_indices = torch.cat(
+                [
+                    torch.full(
+                        (len(token_ids),),
+                        batch_index,
+                        device=device,
+                        dtype=torch.int32,
+                    )
+                    for batch_index, token_ids in enumerate(token_lists)
+                ]
+            )
+            context.update(
+                {
+                    "kv_cache": create_kv_cache(
+                        model.args,
+                        len(batch),
+                        args.max_model_len,
+                        _dtype(args.native_dtype),
+                        device,
+                    ),
+                    "slot_mapping": batch_indices * args.max_model_len + positions,
+                    "layer_index": 0,
+                }
+            )
+        if args.native_forward_repeats < 1:
+            raise ValueError(
+                "native_forward_repeats must be positive, got "
+                f"{args.native_forward_repeats}"
+            )
+        repeated_logprobs = []
+        for _ in range(args.native_forward_repeats):
+            if "layer_index" in context:
+                context["layer_index"] = 0
+            hidden, _, _ = model(prefill_tokens, context=context, last_hidden_only=True)
+            last_hidden = hidden[cu_seqlens[1:].long() - 1]
+            repeated_logprobs.append(
+                torch.log_softmax(model.output(last_hidden).float(), dim=-1).cpu()
+            )
+        batch_logprobs = repeated_logprobs[-1]
+        if len(repeated_logprobs) > 1:
+            max_repeat_diff = max(
+                float((repeat - repeated_logprobs[0]).abs().max())
+                for repeat in repeated_logprobs[1:]
+            )
+            print(
+                f"[native-kl] same-process repeat max logprob diff="
+                f"{max_repeat_diff:.9g}",
+                flush=True,
+            )
+        for record, logprobs in zip(batch, batch_logprobs):
+            payload = _result_payload(
+                backend="native",
+                model_dir=args.model,
+                record=record,
+                logprobs=logprobs,
+            )
+            results.append(payload)
+            top1 = int(payload["top_ids"][0])
+            print(
+                f"[native-kl] {record['name']}: top1={top1} "
+                f"{tokenizer.decode([top1], skip_special_tokens=False)!r} "
+                f"{float(payload['top_logprobs'][0]):.6f}",
+                flush=True,
+            )
 
-    _save(args.out, {"backend": "native", "model": args.model, "results": results})
+    _save(
+        args.out,
+        {
+            "backend": "native",
+            "model": args.model,
+            "batch_size": args.batch_size,
+            "first_batch_size": args.first_batch_size,
+            "results": results,
+        },
+    )
+    if args.trace_out:
+        _save(
+            args.trace_out,
+            {
+                "backend": "native",
+                "model": args.model,
+                "records": trace_records,
+            },
+        )
+        print(f"[native-kl] saved trace {args.trace_out}", flush=True)
+        for handle in trace_handles:
+            handle.remove()
+        for module, name, original in native_moe_patches:
+            setattr(module, name, original)
     print(f"[native-kl] saved {args.out}", flush=True)
     if args.native_use_cute:
         print(f"[native-kl] flash_attn.cute calls={cute_call_count[0]}", flush=True)
@@ -464,8 +1085,16 @@ def run_native(args: argparse.Namespace) -> None:
 def run_hf(args: argparse.Namespace) -> None:
     from transformers import AutoModelForCausalLM
 
+    if args.batch_size != 1 or args.first_batch_size is not None:
+        raise ValueError(
+            "The HF backend supports only --batch-size=1 without --first-batch-size"
+        )
     tokenizer, records = _prompt_records(
-        args.model, args.prompt_suite, args.prompt_index, args.prompt_limit
+        args.model,
+        args.prompt_suite,
+        args.prompt_index,
+        args.prompt_start,
+        args.prompt_limit,
     )
     kwargs: dict[str, Any] = {
         "dtype": _dtype(args.dtype),
@@ -570,20 +1199,32 @@ def run_vllm(args: argparse.Namespace) -> None:
     from vllm import LLM, SamplingParams
 
     tokenizer, records = _prompt_records(
-        args.model, args.prompt_suite, args.prompt_index, args.prompt_limit
+        args.model,
+        args.prompt_suite,
+        args.prompt_index,
+        args.prompt_start,
+        args.prompt_limit,
     )
+    if args.trace_out:
+        raise ValueError("--trace-out is only supported by the Native backend")
     llm_kwargs: dict[str, Any] = {
         "model": args.model,
         "trust_remote_code": True,
         "dtype": args.dtype,
         "tensor_parallel_size": args.tensor_parallel_size,
         "max_model_len": args.max_model_len,
-        "max_num_batched_tokens": args.max_model_len,
+        "max_num_batched_tokens": (args.max_num_batched_tokens or args.max_model_len),
         "gpu_memory_utilization": args.gpu_memory_utilization,
         "seed": args.seed,
         "max_logprobs": args.max_logprobs,
         "enforce_eager": args.enforce_eager,
     }
+    if args.max_num_seqs is not None:
+        llm_kwargs["max_num_seqs"] = args.max_num_seqs
+    if args.enable_expert_parallel:
+        llm_kwargs["enable_expert_parallel"] = True
+    if args.enable_chunked_prefill is not None:
+        llm_kwargs["enable_chunked_prefill"] = args.enable_chunked_prefill
     if args.kv_sharing_fast_prefill:
         llm_kwargs["kv_sharing_fast_prefill"] = True
     if args.quantization:
@@ -598,8 +1239,13 @@ def run_vllm(args: argparse.Namespace) -> None:
         quantization_config["ignore"] = args.quantization_ignore
     if quantization_config is not None:
         llm_kwargs["quantization_config"] = quantization_config
-    if args.attention_backend:
-        llm_kwargs["attention_config"] = {"backend": args.attention_backend}
+    if args.attention_backend or args.flash_attn_version is not None:
+        attention_config = {}
+        if args.attention_backend:
+            attention_config["backend"] = args.attention_backend
+        if args.flash_attn_version is not None:
+            attention_config["flash_attn_version"] = args.flash_attn_version
+        llm_kwargs["attention_config"] = attention_config
     if args.moe_backend:
         llm_kwargs["moe_backend"] = args.moe_backend
     if args.compilation_config_json:
@@ -611,37 +1257,52 @@ def run_vllm(args: argparse.Namespace) -> None:
     )
     vocab_size = int(llm.llm_engine.model_config.get_vocab_size())
     results = []
-    for record in records:
+    for batch in _record_batches(records, args.batch_size, args.first_batch_size):
         outputs = llm.generate(
-            [{"prompt_token_ids": record["prompt_token_ids"],
-              "prompt": record["prompt_text"]}],
+            [
+                {
+                    "prompt_token_ids": record["prompt_token_ids"],
+                    "prompt": record["prompt_text"],
+                }
+                for record in batch
+            ],
             sampling_params=params,
             use_tqdm=False,
         )
-        output = outputs[0].outputs[0]
-        logprobs = _vllm_logprob_tensor(output.logprobs[0], vocab_size).cpu()
-        finite = torch.isfinite(logprobs).sum().item()
-        if finite != vocab_size:
-            raise RuntimeError(
-                f"Expected full vocab logprobs for {record['name']}, "
-                f"got {finite}/{vocab_size}"
+        for record, request_output in zip(batch, outputs):
+            output = request_output.outputs[0]
+            logprobs = _vllm_logprob_tensor(output.logprobs[0], vocab_size).cpu()
+            finite = torch.isfinite(logprobs).sum().item()
+            if finite != vocab_size:
+                raise RuntimeError(
+                    f"Expected full vocab logprobs for {record['name']}, "
+                    f"got {finite}/{vocab_size}"
+                )
+            payload = _result_payload(
+                backend="vllm",
+                model_dir=args.model,
+                record=record,
+                logprobs=logprobs,
+                chosen_token_id=int(output.token_ids[0]),
             )
-        payload = _result_payload(
-            backend="vllm",
-            model_dir=args.model,
-            record=record,
-            logprobs=logprobs,
-            chosen_token_id=int(output.token_ids[0]),
-        )
-        results.append(payload)
-        top1 = int(payload["top_ids"][0])
-        print(
-            f"[vllm-kl] {record['name']}: top1={top1} "
-            f"{tokenizer.decode([top1], skip_special_tokens=False)!r} "
-            f"{float(payload['top_logprobs'][0]):.6f}",
-            flush=True,
-        )
-    _save(args.out, {"backend": "vllm", "model": args.model, "results": results})
+            results.append(payload)
+            top1 = int(payload["top_ids"][0])
+            print(
+                f"[vllm-kl] {record['name']}: top1={top1} "
+                f"{tokenizer.decode([top1], skip_special_tokens=False)!r} "
+                f"{float(payload['top_logprobs'][0]):.6f}",
+                flush=True,
+            )
+    _save(
+        args.out,
+        {
+            "backend": "vllm",
+            "model": args.model,
+            "batch_size": args.batch_size,
+            "first_batch_size": args.first_batch_size,
+            "results": results,
+        },
+    )
     print(f"[vllm-kl] saved {args.out}", flush=True)
 
 
@@ -653,12 +1314,14 @@ def _top_rows(
     for rank, (token_id, logprob) in enumerate(
         zip(top.indices.tolist(), top.values.tolist()), start=1
     ):
-        rows.append({
-            "rank": rank,
-            "token_id": int(token_id),
-            "token": tokenizer.decode([int(token_id)], skip_special_tokens=False),
-            "logprob": float(logprob),
-        })
+        rows.append(
+            {
+                "rank": rank,
+                "token_id": int(token_id),
+                "token": tokenizer.decode([int(token_id)], skip_special_tokens=False),
+                "logprob": float(logprob),
+            }
+        )
     return rows
 
 
@@ -710,7 +1373,9 @@ def compare(args: argparse.Namespace) -> None:
     if not names:
         raise ValueError("No overlapping prompt names in compared payloads")
 
-    model_for_tokenizer = candidate_payload.get("model", reference_payload.get("model"))
+    model_for_tokenizer = args.model or candidate_payload.get(
+        "model", reference_payload.get("model")
+    )
     tokenizer = AutoTokenizer.from_pretrained(
         model_for_tokenizer, trust_remote_code=True
     )

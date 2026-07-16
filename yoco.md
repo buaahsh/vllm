@@ -1,231 +1,148 @@
-# YOCO vLLM 精度对齐与使用说明
+# YOCO vLLM B200 对齐与运行说明
 
-本文记录 YOCO 在 vLLM 与 `llm-train` Native 实现之间已经验证有效的精度改进，
-以及 B200 上 W8A8、FA4 CuTe、DeepGEMM、KV-sharing fast prefill 和 CUDA Graph
-的推荐配置。
+本文记录 YOCO-30B-A3B 在 B200 上与
+`/workspace/shaohanh/llm-train` 对齐后的实现、验证结果和推荐运行方式。
+对应代码分支为 `shaohanh/yoco-0716`，容器镜像为
+`buaahsh/pytorch:26.02-b200-vllm-0716`。
 
-## 验证范围
+## 已验证模型
 
-本轮验证使用：
+- Native checkpoint:
+  `/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000`
+- nnScaler merged checkpoint:
+  `/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-merged`
+- 本轮 GPU 转换后的 HF checkpoint:
+  `/workspace/shaohanh/yoco-6000-hf-gpu`
 
-- vLLM：`/root/code2/vllm`
-- llm-train：`/root/code2/llm-train`
-- 原始 checkpoint：
-  `/mnt/pvc/lidong1/exp/agens/30A3B-36M-RMSClip3/updates_73750`
-- 转换后的 HF 模型：
-  `/mnt/pvc/lidong1/exp/agens/30A3B-36M-RMSClip3/updates_73750_hf_codex_mxfp8_router_runtime_norm`
-- GPU：NVIDIA B200，SM100
-- Runtime quantization：W8A8 `fp8_per_block`
-- Attention：FA4 CuTe
-- MoE：DeepGEMM
+旧的 `0000-6000-hf/config.json` 在文件末尾缺少 `}`，不要直接用于验收。
 
-不要使用 `/workspace/shaohanh/vllm`。运行测试和服务前应确认当前目录和
-`PYTHONPATH` 指向 `/root/code2/vllm`。
+## 当前结论
 
-## 最终精度
+### 推荐生产配置
 
-使用 Native FA4 reference，与开启 FULL CUDA Graph 的 vLLM 比较完整词表的
-next-token logprob：
+以下配置不使用 eager，并同时满足 MXFP8 batch prefill 和稳定 decoding：
 
-| Case | Native -> vLLM KL | Max logprob diff |
-|---|---:|---:|
-| `short_hello` | `0` | `0` |
-| `short_fact` | `0` | `0` |
-| `medium_english` | `0` | `0` |
-| `short_zh` | `0` | `0` |
-| `long_zh` | `0` | `0` |
-| **Mean** | **`0`** | **`0`** |
-
-验证结果表明，当前组合不仅达到 `e-3` 量级，五个 case 的完整词表 logprob
-均逐元素一致。
-
-## 有效实现改进
-
-### 1. FP32 embedding 和 residual stream
-
-`llm-train` 会将 embedding output 转成 FP32，并使用 FP32 residual。vLLM 的
-YOCO 路径已保持相同行为：
-
-- embedding output 转为 FP32；
-- attention/MLP 输出在 residual addition 前提升精度；
-- residual hidden state 保持 FP32；
-- 各层使用统一实现。
-
-此前 attention `o_proj` same-input replay 的误差约为 `1.03e-4`，但 residual
-相加后的 post-attention RMSNorm 误差会放大到约 `2.96e-3`。根因主要是
-residual 输入精度，而不是 RMSNorm 公式本身。
-
-### 2. 对齐 YOCO RMSNorm 和 RMSClip
-
-YOCO 使用专用 RMSNorm/RMSClip 路径，对齐 Native 的：
-
-- FP32 square accumulation 和 reciprocal RMS；
-- BF16 affine weight 使用方式；
-- BF16 operator boundary；
-- Q/K RMSClip 配置和执行顺序。
-
-转换脚本会根据 Native checkpoint 写入 `qk_rms_clip`、`qk_norm` 等配置。
-
-### 3. Router gate FP32 与 row-wise L2 normalization
-
-Router gate master weight 保持 FP32。转换脚本默认在 CUDA 上提前执行逐行 L2
-normalization，并将结果写入 checkpoint，避免每次 forward 重复 normalization。
-
-这样同时满足：
-
-- 与 Native CUDA reduction 结果对齐；
-- 删除 runtime normalization 的额外开销；
-- 避免 CPU normalization 与 CUDA reduction 的细小差异。
-
-如果转换机器没有 CUDA，可以使用 `--router-normalization runtime`，但生产模型
-优先使用默认的 CUDA offline normalization。
-
-### 4. Native-compatible top-k routing
-
-YOCO routing 路径对齐 `llm-train` 的：
-
-- FP32 softmax；
-- `torch.topk(..., sorted=True)` expert selection；
-- selected weight renormalization reduction order；
-- router weight 应用位置。
-
-这些 FP32 ULP 差异可能在后续 BF16/FP8 quant boundary 被放大，因此 routing
-对齐对 `long_zh` 等长输入很重要。
-
-### 5. DeepGEMM routed-row layout
-
-DeepGEMM MoE 路径增加了与 Native 一致的：
-
-- routed token permutation/grouped layout；
-- psum row layout；
-- router row weight 与 activation quant 融合；
-- W2 前 router weight 处理。
-
-这部分由三个运行时开关启用，当前仍需手动设置，详见后文。
-
-### 6. B200 默认选择 FA4 CuTe
-
-B200 的自动选择顺序已经调整为：
-
-```text
-FLASH_ATTN -> FLASHINFER -> TRITON_ATTN -> FLEX_ATTENTION
-```
-
-SM100 上 `FLASH_ATTN` 会默认选择 FlashAttention version 4，即 FA4 CuTe。
-因此 B200 不再要求手动传入：
-
-```bash
---attention-backend FLASH_ATTN
---attention-config.flash_attn_version 4
-```
-
-如果需要固定配置以防默认策略变化，仍可显式传入这两个参数。
-
-FA4 same-input replay 已验证 Native CuTe 和 vLLM FA4 的 attention output/LSE
-bitwise identical。此前的误差不是 FA4 kernel 本身导致的。
-
-### 7. KV-sharing fast prefill 的短 query 对齐
-
-原始 fast-prefill 会将 cross layers 缩减为 logits-only query rows。对于短输入，
-这会改变 W8A8 quantization 和 MoE grouped-row layout，即使 FA4 attention output
-本身完全一致，也可能产生最终 KL。
-
-当前 YOCO 策略为：
-
-- `max_query_len <= 8`：cross block 保留完整 token rows；
-- `max_query_len > 8`：继续使用 logits-only fast-prefill；
-- 其他模型保持原有默认行为。
-
-该策略使 `short_fact` 从约 `1.09e-3` 恢复到 `0`，同时保留长输入的
-fast-prefill 优化。
-
-### 8. FULL CUDA Graph 不改变精度
-
-已经验证以下组合：
+- `--max-num-seqs 16`
+- `--attention-config '{"backend":"FLASH_ATTN","flash_attn_version":2}'`
+- `--quantization fp8_per_block`
+- `--moe-backend deep_gemm`
+- compilation config:
 
 ```json
-{"mode": 0, "cudagraph_mode": "FULL"}
+{
+  "mode": 0,
+  "cudagraph_mode": "FULL_DECODE_ONLY",
+  "cudagraph_capture_sizes": [1, 2, 4, 8, 16]
+}
 ```
 
-其含义是：
+prefill 继续使用 FA2。CUDA Graph 单 token decode 在 FA2 backend 内切换到
+Triton 2D paged attention，避免 FA2 graph replay 的 KV metadata 错误。
 
-- 关闭 torch compile/Inductor graph rewrite；
-- 保留 eager operator numerics；
-- 开启 FULL CUDA Graph replay。
+| 验证矩阵 | Native -> vLLM mean KL | 结论 |
+| --- | ---: | --- |
+| MXFP8，batch 1 | `0` | 完全一致 |
+| MXFP8，batch 16 | `0.00758594` | 通过 `< 0.01` |
+| BF16，batch 1 | `0.00550893` | 通过 `< 0.01`，但不是 exact |
+| BF16，batch 16 | `0.00414718` | 通过 `< 0.01` |
+| MXFP8，KV-sharing fast prefill，batch 16 | `0.00735566` | 通过 `< 0.01` |
+| MXFP8，TP2 + EP2，batch 16 | `0.00898775` | 通过 `< 0.01` |
 
-B200 实测捕获 51 个 decode graph，graph pool 实际占用约 `0.47 GiB`。开启后
-mixed5 五项 KL 仍全部为 `0`。
+BF16 batch 1 当前 mean KL 为 `0.00550893`，尚未达到逐元素一致。主要差异是
+Native 使用 DeepGEMM grouped BF16 routed MoE，而 vLLM 使用 Triton BF16 MoE。
 
-## 转换 checkpoint
+MXFP8、BF16、KV-sharing fast prefill 和 TP2/EP2 均已在
+`FULL_DECODE_ONLY` 下完成单请求及多请求 greedy decode，没有乱码、连续首
+token 重复或单 token collapse。最终容器使用四个中英文请求并发生成 16
+tokens，也得到连续、可读的输出。
 
-使用仓库中的 `convert_to_hf.py`：
+### 尚未通过的矩阵
+
+- 真实 chunked prefill：110-token 输入按 `64 + 46` 分块，并与同样分块的
+  Native KV-cache reference 比较时 KL 为 `0.0279867`；约 4.7K-token 输入
+  按 `4096 + remainder` 分块时为 `0.0647879`。因此可以开启
+  `--enable-chunked-prefill`，但不能把真正发生切分的长 prompt 标记为已对齐。
+- BF16 batch 1：mean KL `0.00550893`，不是 exact zero。
+- FA4：仍是低优先级矩阵；FULL graph replay 对 YOCO 不安全。
+
+### Batch invariance
+
+batch 大于 1 时不要求逐元素一致，验收标准是完整词表 aggregate mean KL
+小于 `1e-2`，同时 decoding 不重复、不乱码。Native reference 使用和 vLLM
+scheduler 一致的 `1 + 15` forward shape。
+
+### CUDA Graph 状态
+
+已验收配置：
+
+```json
+{
+  "mode": 0,
+  "cudagraph_mode": "FULL_DECODE_ONLY",
+  "cudagraph_capture_sizes": [1, 2, 4, 8, 16]
+}
+```
+
+已确认不安全的组合：
+
+- FA4 + full CUDA Graph：self-attention 和共享 cross-attention replay 错误。
+- 不包含当前 FA2-backend Triton decode 修复的旧代码：FA2
+  `FULL_DECODE_ONLY` 会重复首 token。
+
+## 实现要点
+
+### Router
+
+- Router gate 使用 FP32 TF32 GEMM，与 llm-train 一致；
+- routing 使用固定 geometry 的 Native 等价 Triton dense graph：
+  `softmax -> topk -> renorm -> scatter`，不依赖 Inductor autotune cache；
+- routing probabilities 在 W2 activation quantization 前应用。
+
+### RMSNorm
+
+- residual 和 reduction 使用 FP32；
+- affine weight 按 BF16 operator boundary 读取；
+- token rows 少于 128 时使用 2048 reduction block；
+- token rows 至少 128 时使用 4096 reduction block。
+
+### DeepGEMM
+
+- YOCO 自动启用 psum layout 和 W2 前 routed-row weighting；
+- eager、非 compile 路径使用真实 active expert row count；
+- graph capture 保留静态安全上界。
+- EP 下将非本地 expert 的 inverse permutation 初始化为 `-1`，并在
+  routed-row weight scatter 时检查 row bounds；这修复了 TP2/EP2 profile 的
+  illegal memory 和错误权重写入。
+
+以下旧环境变量不再需要，最终命令不应设置它们：
+
+```text
+VLLM_DEEPGEMM_MOE_PSUM_LAYOUT
+VLLM_DEEPGEMM_MOE_FUSED_ROW_WEIGHTS
+VLLM_YOCO_COMPILED_TOPK_ROUTING
+```
+
+## GPU 转换 checkpoint
+
+从 merged checkpoint 转换：
 
 ```bash
-cd /root/code2/vllm
-
-python convert_to_hf.py \
-  --input_dir /path/to/merged-native-checkpoint \
-  --output_dir /path/to/hf-yoco \
+CUDA_VISIBLE_DEVICES=5 .venv/bin/python convert_to_hf.py \
+  --input_dir /path/to/0000-6000-hf-merged \
+  --output_dir /path/to/yoco-6000-hf-gpu \
   --quant_mode mxfp8 \
   --quant_block_size 128
 ```
 
-默认行为包括：
+默认会在 CUDA 上执行 router row-wise L2 normalization，并写入
+`qk_rms_clip`、`qk_rms_limit`、`swiglu_limit` 和 quantization metadata。
 
-- Router gate 以 FP32 导出；
-- 在 CUDA 上提前执行 router row-wise L2 normalization；
-- 写入 RMSClip/QK norm 配置；
-- 写入 Native quantization metadata。
+## 推荐生产启动命令
 
-`--quant_mode` 记录 checkpoint 精度元数据。vLLM serving 时是否使用 W8A8，仍由
-`--quantization fp8_per_block` 决定。
-
-CPU-only 转换环境使用：
+### 直接运行当前仓库
 
 ```bash
-python convert_to_hf.py \
-  --input_dir /path/to/merged-native-checkpoint \
-  --output_dir /path/to/hf-yoco \
-  --quant_mode mxfp8 \
-  --quant_block_size 128 \
-  --router-normalization runtime
-```
-
-## B200 推荐启动方式
-
-### 必需环境变量
-
-当前三个开关仍通过 `os.getenv()` 控制，默认关闭，因此需要显式设置：
-
-```bash
-export VLLM_DEEPGEMM_MOE_PSUM_LAYOUT=1
-export VLLM_DEEPGEMM_MOE_FUSED_ROW_WEIGHTS=1
-export VLLM_YOCO_COMPILED_TOPK_ROUTING=1
-```
-
-它们尚未登记到 `vllm/envs.py`，日志可能提示
-`Unknown vLLM environment variable`，但代码仍会读取并生效。
-
-必须删除旧的 FA2 prefill 开关：
-
-```bash
-unset VLLM_YOCO_NATIVE_FA2_PREFILL
-```
-
-`VLLM_YOCO_NATIVE_FA2_PREFILL=1` 会绕过 FA4 pure-prefill 路径并调用 Native
-FA2，与当前 B200 默认 FA4 CuTe 的目标冲突。
-
-### 推荐生产命令
-
-```bash
-cd /root/code2/vllm
-
-unset VLLM_YOCO_NATIVE_FA2_PREFILL
-export VLLM_DEEPGEMM_MOE_PSUM_LAYOUT=1
-export VLLM_DEEPGEMM_MOE_FUSED_ROW_WEIGHTS=1
-export VLLM_YOCO_COMPILED_TOPK_ROUTING=1
-
-vllm serve /path/to/hf-yoco \
+vllm serve /workspace/shaohanh/yoco-6000-hf-gpu \
   --host 0.0.0.0 \
   --port 8001 \
   --served-model-name yoco \
@@ -233,150 +150,141 @@ vllm serve /path/to/hf-yoco \
   --tensor-parallel-size 1 \
   --max-model-len 8192 \
   --max-num-batched-tokens 8192 \
+  --max-num-seqs 16 \
   --gpu-memory-utilization 0.90 \
   --quantization fp8_per_block \
-  --kv-sharing-fast-prefill \
   --moe-backend deep_gemm \
-  --compilation-config '{"mode":0,"cudagraph_mode":"FULL"}'
+  --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":2}' \
+  --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
 ```
 
-预期日志应包含：
+BF16 使用相同 graph/attention 配置，但去掉 `--quantization`，并改为
+`--moe-backend triton`。
 
-```text
-Using FLASH_ATTN attention backend
-Using FlashAttention version 4
-Using DEEPGEMM Fp8 MoE backend
-Capturing CUDA graphs (decode, FULL)
-```
-
-### 显式固定 FA4
-
-默认不需要，但需要完全固定 backend 时可以额外添加：
+### 运行发布镜像
 
 ```bash
---attention-backend FLASH_ATTN \
---attention-config.flash_attn_version 4
+docker run --rm \
+  --device nvidia.com/gpu=5 \
+  --ipc=host \
+  --ulimit memlock=-1 \
+  --ulimit stack=67108864 \
+  -p 8001:8001 \
+  -v /workspace/shaohanh/yoco-6000-hf-gpu:/model:ro \
+  buaahsh/pytorch:26.02-b200-vllm-0716 \
+  vllm serve /model \
+    --host 0.0.0.0 \
+    --port 8001 \
+    --served-model-name yoco \
+    --trust-remote-code \
+    --tensor-parallel-size 1 \
+    --max-model-len 8192 \
+    --max-num-batched-tokens 8192 \
+    --max-num-seqs 16 \
+    --gpu-memory-utilization 0.90 \
+    --quantization fp8_per_block \
+    --moe-backend deep_gemm \
+    --attention-config \
+      '{"backend":"FLASH_ATTN","flash_attn_version":2}' \
+    --compilation-config \
+      '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
 ```
 
-### Eager 排障模式
+## 完整词表 KL 验证
 
-排查 kernel 或 CUDA Graph 问题时，可以临时移除 `--compilation-config` 并添加：
-
-```bash
---enforce-eager
-```
-
-不要同时使用 `--enforce-eager` 和 FULL CUDA Graph 配置。
-
-## KL 精度验证
-
-### 1. 生成 Native FA4 reference
-
-Native 必须真正调用 CuTe。使用 `--native-no-kv-cache`，避免 Native KV-cache
-路径绕过 CuTe attention：
+Native MXFP8 必须使用 torch activation quant fallback；训练侧 Triton
+activation quant kernel 在短 prompt 上可能触发 illegal memory。batch 16
+reference 使用 `1 + 15` forward shape：
 
 ```bash
-cd /root/code2/vllm
-
-CUDA_VISIBLE_DEVICES=1 \
-python tools/yoco_alignment/logprob_kl.py native \
-  --model /path/to/hf-yoco \
-  --native-checkpoint /path/to/merged-native-checkpoint \
-  --llm-train-dir /root/code2/llm-train \
+CUDA_VISIBLE_DEVICES=5 .venv/bin/python \
+  tools/yoco_alignment/logprob_kl.py native \
+  --model /workspace/shaohanh/yoco-6000-hf-gpu \
+  --native-checkpoint /path/to/0000-6000-merged \
+  --llm-train-dir /workspace/shaohanh/llm-train \
   --native-quant-mode mxfp8 \
   --native-quant-block-size 128 \
+  --native-use-torch-fp8-quant \
   --native-use-cute \
-  --native-no-kv-cache \
-  --prompt-suite mixed5 \
-  --out /tmp/yoco_native_fa4_mixed5.pt
+  --prompt-suite mixed16 \
+  --first-batch-size 1 \
+  --batch-size 15 \
+  --out /tmp/yoco-native-mxfp8-mixed16.pt
 ```
 
-日志应显示非零的 CuTe 调用次数，例如：
+非 eager vLLM batch 16：
+
+```bash
+CUDA_VISIBLE_DEVICES=5 .venv/bin/python \
+  tools/yoco_alignment/logprob_kl.py vllm \
+  --model /workspace/shaohanh/yoco-6000-hf-gpu \
+  --prompt-suite mixed16 \
+  --batch-size 16 \
+  --max-num-seqs 16 \
+  --max-model-len 8192 \
+  --max-num-batched-tokens 8192 \
+  --quantization fp8_per_block \
+  --moe-backend deep_gemm \
+  --attention-backend FLASH_ATTN \
+  --flash-attn-version 2 \
+  --compilation-config-json \
+    '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}' \
+  --out /tmp/yoco-vllm-mxfp8-mixed16.pt
+```
+
+比较：
+
+```bash
+.venv/bin/python tools/yoco_alignment/logprob_kl.py compare \
+  --reference /tmp/yoco-native-mxfp8-mixed16.pt \
+  --candidate /tmp/yoco-vllm-mxfp8-mixed16.pt \
+  --model /workspace/shaohanh/yoco-6000-hf-gpu \
+  --out-json /tmp/yoco-compare-mxfp8-mixed16.json
+```
+
+`logprob_kl.py` 只检查 next-token 分布；还必须执行至少 8 tokens 的单/多请求
+greedy decoding。
+
+TP2/EP2 验证在 vLLM 命令中追加：
 
 ```text
-[native-kl] flash_attn.cute calls=200
+--tensor-parallel-size 2 --enable-expert-parallel
 ```
 
-### 2. 生成 vLLM FULL CUDA Graph 结果
+KV-sharing fast prefill 验证追加：
+
+```text
+--kv-sharing-fast-prefill
+```
+
+该配置的 MXFP8 batch 16 mean KL 为 `0.00735566`，graph decode 正常。真实
+chunked prefill 尚未通过，不能仅凭 `--enable-chunked-prefill` 启动成功判定
+对齐。
+
+## 构建 B200 image
+
+`docker/Dockerfile.b200` clone 固定 commit，并 overlay 当前 YOCO Python 实现和
+对齐工具：
 
 ```bash
-cd /root/code2/vllm
-
-unset VLLM_YOCO_NATIVE_FA2_PREFILL
-export VLLM_DEEPGEMM_MOE_PSUM_LAYOUT=1
-export VLLM_DEEPGEMM_MOE_FUSED_ROW_WEIGHTS=1
-export VLLM_YOCO_COMPILED_TOPK_ROUTING=1
-
-CUDA_VISIBLE_DEVICES=1 \
-python tools/yoco_alignment/logprob_kl.py vllm \
-  --model /path/to/hf-yoco \
-  --out /tmp/yoco_vllm_fa4_cudagraph_mixed5.pt \
-  --prompt-suite mixed5 \
-  --max-model-len 8192 \
-  --gpu-memory-utilization 0.90 \
-  --quantization fp8_per_block \
-  --kv-sharing-fast-prefill \
-  --moe-backend deep_gemm \
-  --compilation-config-json '{"mode":0,"cudagraph_mode":"FULL"}'
+docker build \
+  -f docker/Dockerfile.b200 \
+  -t buaahsh/pytorch:26.02-b200-vllm-0716 \
+  .
 ```
 
-### 3. 比较完整词表 KL
-
-```bash
-python tools/yoco_alignment/logprob_kl.py compare \
-  --reference /tmp/yoco_native_fa4_mixed5.pt \
-  --candidate /tmp/yoco_vllm_fa4_cudagraph_mixed5.pt \
-  --out-json /tmp/yoco_fa4_cudagraph_compare.json \
-  --top-k 20
-```
-
-目标是每个 case 至少达到 `e-3` 量级。当前已验证结果为五项 KL 全部为 `0`。
-
-## FA4 same-input replay
-
-需要确认 attention kernel 本身时，使用：
-
-```bash
-python tools/yoco_alignment/replay_fa4_same_input.py --help
-```
-
-该工具比较：
-
-- Native `flash_attn.cute`；
-- vLLM public FA4 interface；
-- vLLM vendored FA4 interface；
-- split 0/1 和 GQA packing variants；
-- output 和 LSE；
-- full-query last row 与 single-query/full-KV。
-
-`short_fact` 和 `long_zh` 的 40 次 attention calls 已验证 bitwise identical。
-
-## 常见误区
-
-- 不要设置 `VLLM_YOCO_NATIVE_FA2_PREFILL=1`，否则不会走完整 FA4 prefill。
-- 不要遗漏三个 DeepGEMM/routing 环境变量；当前默认值仍是关闭。
-- 不要用默认 torch compile 配置做严格 parity；使用
-  `mode=0,cudagraph_mode=FULL`。
-- 不要仅比较生成文本或 top-1 token；应比较完整词表 next-token logprob。
-- `Using FlashInfer for top-p & top-k sampling` 只表示 sampler 使用 FlashInfer，
-  不代表 attention backend 是 FlashInfer。
-- W8A8 应使用 `--quantization fp8_per_block --moe-backend deep_gemm`，不应进入
-  `deep_gemm.fp8_fp4_gemm_nt`。
-- 如果短输入在开启 fast-prefill 后单独退化，优先检查 cross-block token row
-  layout，而不是先修改 FA4 attention kernel。
+该 Dockerfile 保留 `donglixp/pytorch:26.02-b200` 中的 Python、PyTorch 和
+CUDA 环境，只在固定的 vLLM 基线提交上覆盖本次需要的 Python runtime 文件。
 
 ## 相关文件
 
 ```text
 convert_to_hf.py
 tools/yoco_alignment/logprob_kl.py
-tools/yoco_alignment/replay_fa4_same_input.py
 vllm/model_executor/models/yoco.py
+vllm/model_executor/models/config.py
+vllm/model_executor/layers/fused_moe/deep_gemm_utils.py
 vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
-vllm/model_executor/layers/fused_moe/router/fused_topk_router.py
-vllm/v1/attention/backends/fa_utils.py
 vllm/v1/attention/backends/flash_attn.py
-vllm/v1/attention/backends/utils.py
-vllm/v1/worker/gpu_model_runner.py
-vllm/platforms/cuda.py
+docker/Dockerfile.b200
 ```

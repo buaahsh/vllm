@@ -102,8 +102,8 @@ Priority is **1 = highest** (tried first).
 
 | Priority | Backend |
 | -------- | ------- |
-| 1 | `FLASHINFER` |
-| 2 | `FLASH_ATTN` |
+| 1 | `FLASH_ATTN` |
+| 2 | `FLASHINFER` |
 | 3 | `TRITON_ATTN` |
 | 4 | `FLEX_ATTENTION` |
 | 5 | `TURBOQUANT` |

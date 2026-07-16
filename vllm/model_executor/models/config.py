@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+import os
 from copy import deepcopy
 from typing import TYPE_CHECKING
 
@@ -57,6 +58,55 @@ class YOCOForCausalLMConfig(VerifyAndUpdateConfig):
         # all_moe_layers list once per call can produce IndexError.  Force
         # the runner to bake the actual layer_name into the compiled graph.
         vllm_config.compilation_config.fast_moe_cold_start = False
+
+        if os.environ.get("VLLM_ALLOW_UNSAFE_YOCO_FA4_FULL_GRAPH") == "1":
+            return
+
+        compilation_config = vllm_config.compilation_config
+        cudagraph_mode = compilation_config.cudagraph_mode
+        if cudagraph_mode is None or not cudagraph_mode.has_full_cudagraphs():
+            return
+
+        if compilation_config.cudagraph_capture_sizes is None:
+            compilation_config.cudagraph_capture_sizes = [1, 2, 4]
+            logger.warning(
+                "Limiting YOCO full CUDA graph capture sizes to [1, 2, 4]. "
+                "Larger request batches will use eager fallback."
+            )
+
+        from vllm.v1.attention.backends.registry import AttentionBackendEnum
+
+        attention_config = vllm_config.attention_config
+        backend = attention_config.backend
+        fa_version = attention_config.flash_attn_version
+        if fa_version is None:
+            from vllm.platforms import current_platform
+
+            capability = current_platform.get_device_capability()
+            if capability is not None and capability.major == 10:
+                fa_version = 4
+
+        if fa_version == 4 and backend in (
+            None,
+            AttentionBackendEnum.FLASH_ATTN,
+        ):
+            attention_config.backend = AttentionBackendEnum.TRITON_ATTN
+            backend = AttentionBackendEnum.TRITON_ATTN
+            logger.warning(
+                "YOCO FlashAttention 4 produces incorrect multi-token decode "
+                "results with full CUDA graphs. Forcing TRITON_ATTN. Use eager "
+                "execution to run YOCO with FlashAttention 4."
+            )
+
+        if (
+            backend == AttentionBackendEnum.TRITON_ATTN
+            and vllm_config.cache_config.kv_sharing_fast_prefill
+        ):
+            vllm_config.cache_config.kv_sharing_fast_prefill = False
+            logger.warning(
+                "Disabling YOCO KV-sharing fast prefill because it is not "
+                "compatible with TRITON_ATTN full CUDA graph capture."
+            )
 
 
 class Gemma3TextModelConfig(VerifyAndUpdateConfig):

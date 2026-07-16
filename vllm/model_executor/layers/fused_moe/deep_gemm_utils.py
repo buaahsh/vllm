@@ -392,7 +392,11 @@ def deepgemm_moe_permute(
         device=device,
         dtype=torch.int32,
     )
-    inv_perm = torch.empty(topk_ids.shape, device=device, dtype=torch.int32)
+    # Entries for non-local experts are not written by ep_scatter. Keep them
+    # invalid so auxiliary consumers cannot interpret uninitialized indices.
+    inv_perm = torch.full(
+        topk_ids.shape, fill_value=-1, device=device, dtype=torch.int32
+    )
 
     expert_num_tokens = None
     if expert_tokens_meta is not None:
@@ -404,8 +408,10 @@ def deepgemm_moe_permute(
 
     if use_psum_layout:
         grouped_layout = (
-            ((expert_num_tokens + block_m - 1) // block_m) * block_m
-        ).cumsum(0).to(torch.int32)
+            (((expert_num_tokens + block_m - 1) // block_m) * block_m)
+            .cumsum(0)
+            .to(torch.int32)
+        )
     else:
         grouped_layout = expert_ids
 
