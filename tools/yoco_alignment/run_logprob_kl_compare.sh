@@ -1,0 +1,443 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." && pwd)
+PROBE="${SCRIPT_DIR}/logprob_kl.py"
+
+usage() {
+    cat <<'EOF'
+Run YOCO native-vs-vLLM full-vocabulary alignment for BF16 and FP8-per-block.
+
+Usage:
+  run_logprob_kl_compare.sh --model MODEL --native-checkpoint DIR [options]
+
+Required:
+  --model PATH                 Converted HF/vLLM model and tokenizer path.
+  --native-checkpoint PATH     Merged llm-train native checkpoint directory.
+
+Options:
+    --output-dir PATH            Output directory (default: ../logs/yoco_alignment_results).
+    --llm-train-dir PATH         llm-train checkout (default: /data/yanqi/yanqi/yoco_mxfp8/llm-train).
+    --native-python PATH         Native Python (default: .venv-yoco-native).
+    --vllm-python PATH           vLLM Python (default: .venv-yoco-mxfp8).
+    --compare-python PATH        Comparison Python (default: vLLM Python).
+    --python PATH                Use one Python for all stages (compatibility alias).
+    --attention-version VERSION  2, 4, fa2, or fa4 (default: 2).
+    --prompt-suite NAME          mixed5, mixed16, or default (default: mixed5).
+  --prompt-index N             Select one prompt when supported (default: 0).
+  --prompt-limit N             Limit the number of prompts.
+    --batch-size N               Prompts per Native/vLLM forward (default: 1).
+  --max-model-len N            Maximum model length (default: 8192).
+  --tensor-parallel-size N     vLLM tensor parallel size (default: 1).
+  --gpu-memory-utilization F   vLLM GPU memory utilization (default: 0.9).
+    --moe-backend NAME           vLLM MoE backend (default: triton).
+    --variants LIST              Variants: bf16, fp8, or bf16,fp8
+                                                             (default: bf16,fp8).
+  --seed N                     Random seed (default: 0).
+  --top-k N                    Tokens included in comparison JSON (default: 20).
+  --kv-sharing-fast-prefill    Enable fast prefill in both vLLM runs.
+    --enforce-eager              Use eager execution instead of the vLLM default.
+    --compiled                   Use the default non-eager path (compatibility alias).
+  -h, --help                   Show this help.
+
+Outputs (subject to --variants):
+    native_bf16_fa{2,4}.pt
+    native_mxfp8_fa{2,4}.pt
+    vllm_bf16_fa{2,4}.pt
+    vllm_fp8_per_block_fa{2,4}.pt
+    native_bf16_fa{2,4}_vs_vllm.json
+    native_mxfp8_fa{2,4}_vs_vllm_fp8_per_block.json
+
+Native execution is single-rank and bypasses NNScaler ring attention.
+When TransformerEngine is unavailable, the probe pads MoE rows to DeepGEMM's
+128-row alignment and unpermutes them deterministically.
+The vLLM runner follows its default non-eager execution path.
+Use --enforce-eager for a separate eager-mode validation.
+EOF
+}
+
+MODEL=""
+NATIVE_CHECKPOINT=""
+OUTPUT_DIR="${REPO_ROOT}/../logs/yoco_alignment_results"
+LLM_TRAIN_DIR="/data/yanqi/yanqi/yoco_mxfp8/llm-train"
+NATIVE_PYTHON_BIN=${NATIVE_PYTHON_BIN:-"${REPO_ROOT}/../../.venv-yoco-native/bin/python"}
+VLLM_PYTHON_BIN=${VLLM_PYTHON_BIN:-"${REPO_ROOT}/../../.venv-yoco-mxfp8/bin/python"}
+COMPARE_PYTHON_BIN=${COMPARE_PYTHON_BIN:-}
+ATTENTION_VERSION=2
+PROMPT_SUITE="mixed5"
+PROMPT_INDEX=0
+PROMPT_LIMIT=""
+BATCH_SIZE=1
+MAX_MODEL_LEN=8192
+TENSOR_PARALLEL_SIZE=1
+GPU_MEMORY_UTILIZATION=0.9
+MOE_BACKEND="triton"
+VARIANTS="bf16,fp8"
+SEED=0
+TOP_K=20
+KV_SHARING_FAST_PREFILL=0
+ENFORCE_EAGER=0
+
+while (($#)); do
+    case "$1" in
+        --model)
+            MODEL=${2:?"--model requires a value"}
+            shift 2
+            ;;
+        --native-checkpoint)
+            NATIVE_CHECKPOINT=${2:?"--native-checkpoint requires a value"}
+            shift 2
+            ;;
+        --output-dir)
+            OUTPUT_DIR=${2:?"--output-dir requires a value"}
+            shift 2
+            ;;
+        --llm-train-dir)
+            LLM_TRAIN_DIR=${2:?"--llm-train-dir requires a value"}
+            shift 2
+            ;;
+        --native-python)
+            NATIVE_PYTHON_BIN=${2:?"--native-python requires a value"}
+            shift 2
+            ;;
+        --vllm-python)
+            VLLM_PYTHON_BIN=${2:?"--vllm-python requires a value"}
+            shift 2
+            ;;
+        --compare-python)
+            COMPARE_PYTHON_BIN=${2:?"--compare-python requires a value"}
+            shift 2
+            ;;
+        --python)
+            NATIVE_PYTHON_BIN=${2:?"--python requires a value"}
+            VLLM_PYTHON_BIN=${NATIVE_PYTHON_BIN}
+            COMPARE_PYTHON_BIN=${NATIVE_PYTHON_BIN}
+            shift 2
+            ;;
+        --attention-version)
+            ATTENTION_VERSION=${2:?"--attention-version requires a value"}
+            shift 2
+            ;;
+        --prompt-suite)
+            PROMPT_SUITE=${2:?"--prompt-suite requires a value"}
+            shift 2
+            ;;
+        --prompt-index)
+            PROMPT_INDEX=${2:?"--prompt-index requires a value"}
+            shift 2
+            ;;
+        --prompt-limit)
+            PROMPT_LIMIT=${2:?"--prompt-limit requires a value"}
+            shift 2
+            ;;
+        --batch-size)
+            BATCH_SIZE=${2:?"--batch-size requires a value"}
+            shift 2
+            ;;
+        --max-model-len)
+            MAX_MODEL_LEN=${2:?"--max-model-len requires a value"}
+            shift 2
+            ;;
+        --tensor-parallel-size)
+            TENSOR_PARALLEL_SIZE=${2:?"--tensor-parallel-size requires a value"}
+            shift 2
+            ;;
+        --gpu-memory-utilization)
+            GPU_MEMORY_UTILIZATION=${2:?"--gpu-memory-utilization requires a value"}
+            shift 2
+            ;;
+        --moe-backend)
+            MOE_BACKEND=${2:?"--moe-backend requires a value"}
+            shift 2
+            ;;
+        --variants)
+            VARIANTS=${2:?"--variants requires a value"}
+            shift 2
+            ;;
+        --seed)
+            SEED=${2:?"--seed requires a value"}
+            shift 2
+            ;;
+        --top-k)
+            TOP_K=${2:?"--top-k requires a value"}
+            shift 2
+            ;;
+        --kv-sharing-fast-prefill)
+            KV_SHARING_FAST_PREFILL=1
+            shift
+            ;;
+        --enforce-eager)
+            ENFORCE_EAGER=1
+            shift
+            ;;
+        --compiled)
+            ENFORCE_EAGER=0
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [[ -z "${MODEL}" || -z "${NATIVE_CHECKPOINT}" ]]; then
+    echo "Both --model and --native-checkpoint are required." >&2
+    usage >&2
+    exit 2
+fi
+
+if [[ "${PROMPT_SUITE}" != "mixed5" && "${PROMPT_SUITE}" != "mixed16" && "${PROMPT_SUITE}" != "default" ]]; then
+    echo "--prompt-suite must be 'mixed5', 'mixed16', or 'default'." >&2
+    exit 2
+fi
+if ((BATCH_SIZE < 1)); then
+    echo "--batch-size must be positive." >&2
+    exit 2
+fi
+
+case "${ATTENTION_VERSION,,}" in
+    2|fa2)
+        ATTENTION_VERSION=2
+        ATTENTION_TAG=fa2
+        NATIVE_ATTENTION_ARGS=(
+            --native-local-attention
+            --native-require-transformer-engine
+        )
+        ;;
+    4|fa4)
+        ATTENTION_VERSION=4
+        ATTENTION_TAG=fa4
+        NATIVE_ATTENTION_ARGS=(
+            --native-local-attention
+            --native-require-transformer-engine
+            --native-use-cute
+            --native-no-kv-cache
+        )
+        ;;
+    *)
+        echo "--attention-version must be 2, 4, fa2, or fa4." >&2
+        exit 2
+        ;;
+esac
+
+VLLM_ATTENTION_ARGS=(
+    --attention-backend FLASH_ATTN
+    --flash-attn-version "${ATTENTION_VERSION}"
+    --force-fa-num-splits-one
+)
+NATIVE_ATTENTION_ARGS+=(--force-fa-num-splits-one)
+
+RUN_BF16=0
+RUN_FP8=0
+case "${VARIANTS}" in
+    bf16)
+        RUN_BF16=1
+        ;;
+    fp8|fp8_per_block|mxfp8)
+        RUN_FP8=1
+        ;;
+    bf16,fp8|fp8,bf16|bf16,fp8_per_block|fp8_per_block,bf16|\
+    bf16,mxfp8|mxfp8,bf16|both)
+        RUN_BF16=1
+        RUN_FP8=1
+        ;;
+    *)
+        echo "--variants must be bf16, fp8, bf16,fp8, or both." >&2
+        exit 2
+        ;;
+esac
+
+if [[ -z "${COMPARE_PYTHON_BIN}" ]]; then
+    COMPARE_PYTHON_BIN=${VLLM_PYTHON_BIN}
+fi
+
+for PYTHON_ROLE in NATIVE VLLM COMPARE; do
+    PYTHON_VARIABLE="${PYTHON_ROLE}_PYTHON_BIN"
+    PYTHON_VALUE=${!PYTHON_VARIABLE}
+    if [[ ! -x "${PYTHON_VALUE}" ]]; then
+        echo "${PYTHON_ROLE,,} Python is not executable: ${PYTHON_VALUE}" >&2
+        exit 2
+    fi
+done
+if ! "${NATIVE_PYTHON_BIN}" -c '
+import deep_gemm
+for name in (
+    "fp8_fp4_gemm_nt",
+    "m_grouped_fp8_fp4_gemm_nt_contiguous",
+    "m_grouped_bf16_gemm_nt_contiguous",
+):
+    getattr(deep_gemm, name)
+' >/dev/null 2>&1; then
+    echo "Native alignment requires the pinned external DeepGEMM package in ${NATIVE_PYTHON_BIN}." >&2
+    exit 2
+fi
+if ! "${NATIVE_PYTHON_BIN}" -c '
+from transformer_engine.pytorch.permutation import (
+    moe_permute_and_pad_with_probs,
+    moe_sort_chunks_by_index,
+    moe_sort_chunks_by_index_with_probs,
+    moe_unpermute,
+)
+' >/dev/null 2>&1; then
+    echo "Native alignment requires NVIDIA TransformerEngine MoE APIs in ${NATIVE_PYTHON_BIN}." >&2
+    exit 2
+fi
+if [[ "${ATTENTION_VERSION}" == 2 ]] && ! "${NATIVE_PYTHON_BIN}" -c '
+from flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
+' >/dev/null 2>&1; then
+    echo "Native FA2 requires flash-attn in ${NATIVE_PYTHON_BIN}." >&2
+    exit 2
+fi
+if [[ "${ATTENTION_VERSION}" == 4 ]] && ! "${NATIVE_PYTHON_BIN}" -c '
+import runpy
+namespace = runpy.run_path("'"${PROBE}"'")
+namespace["_import_fa4_varlen_func"]()
+' >/dev/null 2>&1; then
+    echo "Native FA4 requires flash-attn-4 in ${NATIVE_PYTHON_BIN}." >&2
+    exit 2
+fi
+if [[ ! -f "${PROBE}" ]]; then
+    echo "Probe script not found: ${PROBE}" >&2
+    exit 2
+fi
+
+mkdir -p "${OUTPUT_DIR}"
+OUTPUT_DIR=$(cd -- "${OUTPUT_DIR}" && pwd)
+
+NATIVE_OUT="${OUTPUT_DIR}/native_bf16_${ATTENTION_TAG}.pt"
+NATIVE_MXFP8_OUT="${OUTPUT_DIR}/native_mxfp8_${ATTENTION_TAG}.pt"
+BF16_OUT="${OUTPUT_DIR}/vllm_bf16_${ATTENTION_TAG}.pt"
+FP8_OUT="${OUTPUT_DIR}/vllm_fp8_per_block_${ATTENTION_TAG}.pt"
+BF16_COMPARE_OUT="${OUTPUT_DIR}/native_bf16_${ATTENTION_TAG}_vs_vllm.json"
+FP8_COMPARE_OUT="${OUTPUT_DIR}/native_mxfp8_${ATTENTION_TAG}_vs_vllm_fp8_per_block.json"
+
+run() {
+    printf '\n+'
+    printf ' %q' "$@"
+    printf '\n'
+    "$@"
+}
+
+PROMPT_ARGS=(
+    --prompt-suite "${PROMPT_SUITE}"
+    --prompt-index "${PROMPT_INDEX}"
+    --batch-size "${BATCH_SIZE}"
+)
+if [[ -n "${PROMPT_LIMIT}" ]]; then
+    PROMPT_ARGS+=(--prompt-limit "${PROMPT_LIMIT}")
+fi
+
+VLLM_EXTRA_ARGS=()
+VLLM_EXTRA_ARGS+=("${VLLM_ATTENTION_ARGS[@]}")
+if ((ENFORCE_EAGER)); then
+    VLLM_EXTRA_ARGS+=(--enforce-eager)
+fi
+if ((KV_SHARING_FAST_PREFILL)); then
+    VLLM_EXTRA_ARGS+=(--kv-sharing-fast-prefill)
+fi
+if [[ -n "${MOE_BACKEND}" ]]; then
+    VLLM_EXTRA_ARGS+=(--moe-backend "${MOE_BACKEND}")
+fi
+
+cd "${REPO_ROOT}"
+export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+
+echo "Writing YOCO ${ATTENTION_TAG} alignment artifacts to ${OUTPUT_DIR}"
+echo "Native Python: ${NATIVE_PYTHON_BIN}"
+echo "vLLM Python: ${VLLM_PYTHON_BIN}"
+echo "Comparison Python: ${COMPARE_PYTHON_BIN}"
+
+GENERATED_FILES=()
+
+if ((RUN_BF16)); then
+    run "${NATIVE_PYTHON_BIN}" -m torch.distributed.run \
+        --standalone \
+        --nproc-per-node 1 \
+        "${PROBE}" native \
+        --model "${MODEL}" \
+        --native-checkpoint "${NATIVE_CHECKPOINT}" \
+        --llm-train-dir "${LLM_TRAIN_DIR}" \
+        --native-dtype bfloat16 \
+        --native-quant-mode bfloat16 \
+        --out "${NATIVE_OUT}" \
+        --max-model-len "${MAX_MODEL_LEN}" \
+        --seed "${SEED}" \
+        "${NATIVE_ATTENTION_ARGS[@]}" \
+        "${PROMPT_ARGS[@]}"
+    GENERATED_FILES+=("${NATIVE_OUT}")
+fi
+
+if ((RUN_FP8)); then
+    run "${NATIVE_PYTHON_BIN}" -m torch.distributed.run \
+        --standalone \
+        --nproc-per-node 1 \
+        "${PROBE}" native \
+        --model "${MODEL}" \
+        --native-checkpoint "${NATIVE_CHECKPOINT}" \
+        --llm-train-dir "${LLM_TRAIN_DIR}" \
+        --native-dtype bfloat16 \
+        --native-quant-mode mxfp8 \
+        --native-quant-block-size 128 \
+        --native-use-torch-fp8-quant \
+        --out "${NATIVE_MXFP8_OUT}" \
+        --max-model-len "${MAX_MODEL_LEN}" \
+        --seed "${SEED}" \
+        "${NATIVE_ATTENTION_ARGS[@]}" \
+        "${PROMPT_ARGS[@]}"
+    GENERATED_FILES+=("${NATIVE_MXFP8_OUT}")
+fi
+
+VLLM_COMMON_ARGS=(
+    "${PROBE}" vllm
+    --model "${MODEL}"
+    --dtype bfloat16
+    --tensor-parallel-size "${TENSOR_PARALLEL_SIZE}"
+    --max-num-seqs "${BATCH_SIZE}"
+    --gpu-memory-utilization "${GPU_MEMORY_UTILIZATION}"
+    --max-model-len "${MAX_MODEL_LEN}"
+    --max-logprobs -1
+    --seed "${SEED}"
+    --no-v1-multiprocessing
+    --no-enable-prefix-caching
+    --log-iteration-details
+    "${PROMPT_ARGS[@]}"
+    "${VLLM_EXTRA_ARGS[@]}"
+)
+
+if ((RUN_BF16)); then
+    run "${VLLM_PYTHON_BIN}" "${VLLM_COMMON_ARGS[@]}" --out "${BF16_OUT}"
+    run "${COMPARE_PYTHON_BIN}" "${PROBE}" compare \
+        --reference "${NATIVE_OUT}" \
+        --candidate "${BF16_OUT}" \
+        --out-json "${BF16_COMPARE_OUT}" \
+        --model "${MODEL}" \
+        --top-k "${TOP_K}"
+    GENERATED_FILES+=("${BF16_OUT}" "${BF16_COMPARE_OUT}")
+fi
+
+if ((RUN_FP8)); then
+    run "${VLLM_PYTHON_BIN}" "${VLLM_COMMON_ARGS[@]}" \
+        --quantization fp8_per_block \
+        --out "${FP8_OUT}"
+    run "${COMPARE_PYTHON_BIN}" "${PROBE}" compare \
+        --reference "${NATIVE_MXFP8_OUT}" \
+        --candidate "${FP8_OUT}" \
+        --out-json "${FP8_COMPARE_OUT}" \
+        --model "${MODEL}" \
+        --top-k "${TOP_K}"
+    GENERATED_FILES+=("${FP8_OUT}" "${FP8_COMPARE_OUT}")
+fi
+
+echo
+echo "Alignment run complete:"
+printf '  %s\n' "${GENERATED_FILES[@]}"

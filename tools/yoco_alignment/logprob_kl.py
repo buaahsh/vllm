@@ -153,6 +153,15 @@ def parse_args() -> argparse.Namespace:
             "--trace-out",
             help="Optional output path for layer-by-layer hidden-state traces.",
         )
+        if name != "hf":
+            sub.add_argument(
+                "--force-fa-num-splits-one",
+                action="store_true",
+                help=(
+                    "Force one FlashAttention split. Native FA2 varlen prefill "
+                    "has no split API and already uses its non-split path."
+                ),
+            )
 
         if name == "native":
             sub.add_argument("--native-checkpoint", required=True)
@@ -165,6 +174,22 @@ def parse_args() -> argparse.Namespace:
             sub.add_argument("--native-quant-mode", choices=("bfloat16", "mxfp8"))
             sub.add_argument("--native-quant-block-size", type=int)
             sub.add_argument("--native-use-cute", action="store_true")
+            sub.add_argument(
+                "--native-local-attention",
+                action="store_true",
+                help=(
+                    "Bypass NNScaler ring wrappers and execute FA2/FA4 "
+                    "directly. This requires WORLD_SIZE=1."
+                ),
+            )
+            sub.add_argument(
+                "--native-require-transformer-engine",
+                action="store_true",
+                help=(
+                    "Require llm-train to use TransformerEngine's padded MoE "
+                    "permutation instead of the compatibility implementation."
+                ),
+            )
             sub.add_argument("--native-no-kv-cache", action="store_true")
             sub.add_argument("--native-prefill-chunk-size", type=int)
             sub.add_argument(
@@ -199,7 +224,9 @@ def parse_args() -> argparse.Namespace:
                 default="auto",
             )
             sub.add_argument("--tensor-parallel-size", type=int, default=1)
+            sub.add_argument("--data-parallel-size", type=int, default=1)
             sub.add_argument("--enable-expert-parallel", action="store_true")
+            sub.add_argument("--distributed-executor-backend")
             sub.add_argument("--gpu-memory-utilization", type=float, default=0.9)
             sub.add_argument("--max-num-seqs", type=int)
             sub.add_argument("--max-num-batched-tokens", type=int)
@@ -210,6 +237,29 @@ def parse_args() -> argparse.Namespace:
             )
             sub.add_argument("--kv-sharing-fast-prefill", action="store_true")
             sub.add_argument("--enforce-eager", action="store_true")
+            sub.add_argument(
+                "--v1-multiprocessing",
+                action=argparse.BooleanOptionalAction,
+                default=False,
+                help=(
+                    "Run the EngineCore in a child process. Disabled by default "
+                    "so all requests are queued before scheduling."
+                ),
+            )
+            sub.add_argument(
+                "--log-iteration-details",
+                action="store_true",
+                help="Log actual context/generation request counts per forward.",
+            )
+            sub.add_argument(
+                "--enable-prefix-caching",
+                action=argparse.BooleanOptionalAction,
+                default=False,
+                help=(
+                    "Enable prefix caching. Disabled by default so vLLM and "
+                    "Native execute the same prompt-token rows."
+                ),
+            )
             sub.add_argument("--compilation-config-json")
             sub.add_argument("--quantization", default=None)
             sub.add_argument("--quantization-config-json")
@@ -389,7 +439,7 @@ def _prompt_records(
 
 
 def _top_payload(logprobs: torch.Tensor, k: int = 20) -> dict[str, torch.Tensor]:
-    top = torch.topk(logprobs, k=k)
+    top = torch.topk(logprobs, k=min(k, logprobs.numel()))
     return {"top_ids": top.indices.cpu(), "top_logprobs": top.values.cpu()}
 
 
@@ -401,6 +451,17 @@ def _result_payload(
     logprobs: torch.Tensor,
     chosen_token_id: int | None = None,
 ) -> dict[str, Any]:
+    if not torch.isfinite(logprobs).all():
+        finite = int(torch.isfinite(logprobs).sum())
+        raise RuntimeError(
+            f"Non-finite logprobs for {record['name']}: "
+            f"{finite}/{logprobs.numel()} finite"
+        )
+    if logprobs.numel() > 1 and torch.all(logprobs == logprobs[0]):
+        raise RuntimeError(
+            f"Collapsed uniform logprobs for {record['name']}: "
+            f"all {logprobs.numel()} values are {float(logprobs[0])}"
+        )
     payload: dict[str, Any] = {
         "backend": backend,
         "model": model_dir,
@@ -439,6 +500,429 @@ def _record_batches(
     return [batch for batch in batches if batch]
 
 
+def _import_fa4_varlen_func():
+    """Load FA4 when its ``flash_attn.cute`` namespace is separately installed."""
+    import importlib.metadata as metadata
+
+    import flash_attn
+
+    try:
+        distribution = metadata.distribution("flash-attn-4")
+    except metadata.PackageNotFoundError as exc:
+        raise RuntimeError("Native FA4 requires the flash-attn-4 package") from exc
+
+    for relative_path in distribution.files or ():
+        if str(relative_path).endswith("flash_attn/cute/__init__.py"):
+            package_path = str(distribution.locate_file(relative_path).parents[1])
+            if package_path not in flash_attn.__path__:
+                flash_attn.__path__.append(package_path)
+            break
+
+    try:
+        from flash_attn.cute import flash_attn_varlen_func
+    except ImportError as exc:
+        raise RuntimeError(
+            "flash-attn-4 is installed but flash_attn.cute is unavailable"
+        ) from exc
+    return flash_attn_varlen_func
+
+
+def _install_native_inference_compat(
+    *,
+    local_attention: bool = False,
+    force_fa_num_splits_one: bool = False,
+) -> None:
+    """Provide inference-only fallbacks for optional llm-train dependencies.
+
+    The native alignment probe is intentionally single-GPU and prefill-only.
+    NNScaler is only needed by this path for import-time operator registration
+    and distributed ring/EP helpers. On one GPU, execute the selected attention
+    kernel directly instead of entering ring collectives. If upstream
+    ``flash_attn`` is absent, adapt vLLM's bundled varlen prefill kernel to its
+    argument order.
+    """
+    import importlib.util
+    import types
+
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+
+    if local_attention and world_size != 1:
+        raise RuntimeError("--native-local-attention requires WORLD_SIZE=1")
+
+    def identity_single_gpu(value, **kwargs):
+        return value
+
+    def unsupported_distributed_op(*args, **kwargs):
+        raise RuntimeError(
+            "The nnscaler-free native probe reached a distributed "
+            "NNScaler operation; use --native-local-attention with "
+            "WORLD_SIZE=1 or install NNScaler"
+        )
+
+    def flash_attn_cute_varlen_func(*args, **kwargs):
+        flash_attn_varlen_func = _import_fa4_varlen_func()
+        return flash_attn_varlen_func(*args, **kwargs)
+
+    def make_single_gpu_attention_wrapper(cute_module):
+        def wrapper(
+            q,
+            k,
+            v,
+            cu_seqlens_q,
+            cu_seqlens_k,
+            process_group=None,
+            **kwargs,
+        ):
+            keyword_process_group = kwargs.pop("process_group", None)
+            if process_group is not None or keyword_process_group is not None:
+                unsupported_distributed_op()
+
+            kwargs.pop("enable_ring", None)
+            use_cute = kwargs.pop("use_cute", False)
+            return_lse = kwargs.pop("return_lse", False)
+            max_seqlen_q = kwargs.pop("max_seqlen_q", None)
+            max_seqlen_k = kwargs.pop("max_seqlen_k", None)
+            if max_seqlen_q is None:
+                max_seqlen_q = int(
+                    (cu_seqlens_q[1:] - cu_seqlens_q[:-1]).max().item()
+                )
+            if max_seqlen_k is None:
+                max_seqlen_k = int(
+                    (cu_seqlens_k[1:] - cu_seqlens_k[:-1]).max().item()
+                )
+
+            if use_cute:
+                if force_fa_num_splits_one:
+                    kwargs["num_splits"] = 1
+                return cute_module.flash_attn_cute_varlen_func(
+                    q,
+                    k,
+                    v,
+                    cu_seqlens_q=cu_seqlens_q,
+                    cu_seqlens_k=cu_seqlens_k,
+                    max_seqlen_q=max_seqlen_q,
+                    max_seqlen_k=max_seqlen_k,
+                    return_lse=return_lse,
+                    **kwargs,
+                )
+
+            from flash_attn import flash_attn_varlen_func
+
+            return flash_attn_varlen_func(
+                q,
+                k,
+                v,
+                cu_seqlens_q,
+                cu_seqlens_k,
+                max_seqlen_q,
+                max_seqlen_k,
+                return_attn_probs=return_lse,
+                **kwargs,
+            )
+
+        return wrapper
+
+    if importlib.util.find_spec("nnscaler") is None:
+        if world_size != 1:
+            raise RuntimeError(
+                "Native inference without nnscaler only supports WORLD_SIZE=1"
+            )
+
+        def register_op(*args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        class DimopSplit:
+            D = staticmethod(lambda dim: ("D", dim))
+            R = staticmethod(lambda: ("R",))
+            V = staticmethod(lambda: ("V",))
+
+        class TransformRule:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class IRDimops:
+            pass
+
+        class DeviceGroup:
+            def get_group(self, process_group):
+                unsupported_distributed_op()
+
+        module_names = (
+            "nnscaler",
+            "nnscaler.customized_ops",
+            "nnscaler.customized_ops.ring_attention",
+            "nnscaler.customized_ops.ring_attention.sliding_window_attn",
+            "nnscaler.customized_ops.ring_attention.ring_attn_varlen",
+            "nnscaler.customized_ops.ring_attention.zigzag_allgather_attn_varlen",
+            "nnscaler.runtime",
+            "nnscaler.runtime.device",
+            "nnscaler.graph",
+            "nnscaler.graph.function",
+            "nnscaler.graph.function.dimops",
+        )
+        modules = {name: types.ModuleType(name) for name in module_names}
+        modules["nnscaler"].register_op = register_op
+
+        ring_attention = modules["nnscaler.customized_ops.ring_attention"]
+        sliding_window_attention = modules[
+            "nnscaler.customized_ops.ring_attention.sliding_window_attn"
+        ]
+        ring_varlen_attention = modules[
+            "nnscaler.customized_ops.ring_attention.ring_attn_varlen"
+        ]
+        zigzag_attention = modules[
+            "nnscaler.customized_ops.ring_attention.zigzag_allgather_attn_varlen"
+        ]
+        for attention_module in (
+            sliding_window_attention,
+            ring_varlen_attention,
+            zigzag_attention,
+        ):
+            attention_module.flash_attn_cute_varlen_func = (
+                flash_attn_cute_varlen_func
+            )
+
+        ring_attention.wrap_maybe_shuffle = identity_single_gpu
+        ring_attention.wrap_maybe_unshuffle = identity_single_gpu
+        if local_attention:
+            ring_attention.wrap_ring_attn_varlen_func = (
+                make_single_gpu_attention_wrapper(ring_varlen_attention)
+            )
+            ring_attention.wrap_sliding_window_attn_func = (
+                make_single_gpu_attention_wrapper(sliding_window_attention)
+            )
+            ring_attention.wrap_zigzag_allgather_attn_varlen_func = (
+                make_single_gpu_attention_wrapper(zigzag_attention)
+            )
+        else:
+            ring_attention.wrap_ring_attn_varlen_func = unsupported_distributed_op
+            ring_attention.wrap_sliding_window_attn_func = unsupported_distributed_op
+            ring_attention.wrap_zigzag_allgather_attn_varlen_func = (
+                unsupported_distributed_op
+            )
+
+        modules["nnscaler.runtime.device"].DeviceGroup = DeviceGroup
+        dimops = modules["nnscaler.graph.function.dimops"]
+        dimops.DimopSplit = DimopSplit
+        dimops.TransformRule = TransformRule
+        dimops.IRDimops = IRDimops
+        sys.modules.update(modules)
+        print(
+            "[native-kl] nnscaler not installed; using single-GPU "
+            f"{'direct-attention' if local_attention else 'inference'} "
+            "compatibility shim",
+            flush=True,
+        )
+    elif local_attention:
+        import importlib
+
+        ring_attention = importlib.import_module(
+            "nnscaler.customized_ops.ring_attention"
+        )
+        sliding_window_attention = importlib.import_module(
+            "nnscaler.customized_ops.ring_attention.sliding_window_attn"
+        )
+        ring_varlen_attention = importlib.import_module(
+            "nnscaler.customized_ops.ring_attention.ring_attn_varlen"
+        )
+        zigzag_attention = importlib.import_module(
+            "nnscaler.customized_ops.ring_attention.zigzag_allgather_attn_varlen"
+        )
+        ring_attention.wrap_maybe_shuffle = identity_single_gpu
+        ring_attention.wrap_maybe_unshuffle = identity_single_gpu
+        ring_attention.wrap_ring_attn_varlen_func = (
+            make_single_gpu_attention_wrapper(ring_varlen_attention)
+        )
+        ring_attention.wrap_sliding_window_attn_func = (
+            make_single_gpu_attention_wrapper(sliding_window_attention)
+        )
+        ring_attention.wrap_zigzag_allgather_attn_varlen_func = (
+            make_single_gpu_attention_wrapper(zigzag_attention)
+        )
+        print(
+            "[native-kl] bypassing NNScaler ring attention with local kernels",
+            flush=True,
+        )
+
+    if importlib.util.find_spec("flash_attn") is None:
+        from vllm.vllm_flash_attn import (
+            flash_attn_varlen_func as vllm_flash_attn_varlen_func,
+        )
+
+        def flash_attn_varlen_func(
+            q,
+            k,
+            v,
+            cu_seqlens_q,
+            cu_seqlens_k,
+            max_seqlen_q,
+            max_seqlen_k,
+            *args,
+            **kwargs,
+        ):
+            return vllm_flash_attn_varlen_func(
+                q,
+                k,
+                v,
+                max_seqlen_q,
+                cu_seqlens_q,
+                max_seqlen_k,
+                cu_seqlens_k,
+                *args,
+                **kwargs,
+            )
+
+        def flash_attn_with_kvcache(*args, **kwargs):
+            raise RuntimeError(
+                "The native compatibility path supports prefill only; "
+                "install flash-attn for incremental decoding"
+            )
+
+        flash_attn = types.ModuleType("flash_attn")
+        flash_attn.flash_attn_varlen_func = flash_attn_varlen_func
+        flash_attn.flash_attn_with_kvcache = flash_attn_with_kvcache
+        sys.modules["flash_attn"] = flash_attn
+        print(
+            "[native-kl] flash-attn not installed; using vLLM's bundled "
+            "varlen prefill kernel",
+            flush=True,
+        )
+
+
+def _install_native_moe_padding_compat() -> bool:
+    """Pad eager single-rank MoE rows when TransformerEngine is unavailable."""
+    import arch.all2all_moe as native_all2all_moe
+    import arch.moe_utils_v2 as native_moe_utils
+
+    if native_moe_utils.HAVE_TE:
+        print(
+            "[native-kl] using TransformerEngine padded MoE permutation",
+            flush=True,
+        )
+        return True
+
+    alignment = 128
+    original_permute = native_moe_utils.permute
+
+    def padded_permute(
+        tokens,
+        routing_map,
+        probs,
+        tokens_per_expert=None,
+    ):
+        if tokens_per_expert is None:
+            return original_permute(
+                tokens,
+                routing_map,
+                probs,
+                tokens_per_expert=tokens_per_expert,
+            )
+
+        tokens_per_expert = tokens_per_expert.to(
+            device=tokens.device,
+            dtype=torch.long,
+        )
+        target_tokens_per_expert = (
+            (tokens_per_expert + alignment - 1) // alignment * alignment
+        )
+        total_padded_tokens = int(target_tokens_per_expert.sum().item())
+        padded_tokens = tokens.new_zeros((total_padded_tokens, tokens.shape[-1]))
+        padded_probs = probs.new_zeros((total_padded_tokens,))
+        top_k = int(routing_map.sum(dim=1).max().item())
+        row_map = torch.full(
+            (tokens.shape[0], top_k),
+            -1,
+            device=tokens.device,
+            dtype=torch.long,
+        )
+        token_slots = torch.zeros(
+            tokens.shape[0],
+            device=tokens.device,
+            dtype=torch.long,
+        )
+
+        target_offset = 0
+        for expert_index, (token_count, target_count) in enumerate(
+            zip(tokens_per_expert.tolist(), target_tokens_per_expert.tolist())
+        ):
+            if token_count:
+                token_indices = torch.nonzero(
+                    routing_map[:, expert_index],
+                    as_tuple=False,
+                ).flatten()
+                if token_indices.numel() != token_count:
+                    raise RuntimeError(
+                        "MoE routing count mismatch for expert "
+                        f"{expert_index}: expected {token_count}, got "
+                        f"{token_indices.numel()}"
+                    )
+                end = target_offset + token_count
+                padded_tokens[target_offset:end] = tokens.index_select(
+                    0, token_indices
+                )
+                padded_probs[target_offset:end] = probs[
+                    token_indices, expert_index
+                ]
+                slots = token_slots.index_select(0, token_indices)
+                row_map[token_indices, slots] = torch.arange(
+                    target_offset,
+                    end,
+                    device=tokens.device,
+                )
+                token_slots[token_indices] += 1
+            target_offset += target_count
+
+        pad_offsets = torch.cumsum(
+            target_tokens_per_expert - tokens_per_expert,
+            dim=0,
+        )
+        pad_offsets = torch.cat(
+            [pad_offsets.new_zeros(1), pad_offsets[:-1]],
+        )
+        return (
+            padded_tokens,
+            padded_probs,
+            row_map,
+            pad_offsets,
+            target_tokens_per_expert,
+        )
+
+    def padded_unpermute(
+        permuted_tokens,
+        row_map,
+        restore_shape,
+        probs=None,
+        routing_map=None,
+        pad_offsets=None,
+    ):
+        del routing_map, pad_offsets
+        valid_rows = row_map >= 0
+        safe_rows = row_map.clamp_min(0)
+        token_rows = permuted_tokens.index_select(0, safe_rows.flatten()).view(
+            row_map.shape[0],
+            row_map.shape[1],
+            permuted_tokens.shape[-1],
+        )
+        token_rows = token_rows.masked_fill(~valid_rows.unsqueeze(-1), 0)
+        if probs is not None:
+            token_rows = token_rows * probs.unsqueeze(-1)
+        return token_rows.sum(dim=1).view(restore_shape)
+
+    native_moe_utils.permute = padded_permute
+    native_moe_utils.unpermute = padded_unpermute
+    native_all2all_moe.permute = padded_permute
+    native_all2all_moe.unpermute = padded_unpermute
+    print(
+        "[native-kl] TransformerEngine unavailable; using deterministic "
+        "128-row MoE padding compatibility path",
+        flush=True,
+    )
+    return False
+
+
 @torch.no_grad()
 def run_native(args: argparse.Namespace) -> None:
     import importlib
@@ -448,7 +932,32 @@ def run_native(args: argparse.Namespace) -> None:
 
     llm_dir = Path(args.llm_train_dir).resolve() / "llm"
     sys.path.insert(0, str(llm_dir))
+    _install_native_inference_compat(
+        local_attention=args.native_local_attention,
+        force_fa_num_splits_one=args.force_fa_num_splits_one,
+    )
     from arch.model import Model, ModelArgs, create_kv_cache
+
+    using_transformer_engine = _install_native_moe_padding_compat()
+    if args.native_require_transformer_engine and not using_transformer_engine:
+        raise RuntimeError(
+            "--native-require-transformer-engine was set, but llm-train "
+            "could not import TransformerEngine's MoE permutation APIs"
+        )
+
+    checkpoint_dir = Path(args.native_checkpoint)
+    metadata_path = checkpoint_dir / "metadata.json"
+    state_path = checkpoint_dir / "model_state_rank_0.pth"
+    for path, description in (
+        (metadata_path, "metadata"),
+        (state_path, "rank-0 model state"),
+    ):
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"Native checkpoint {description} not found: {path}. "
+                "Use --native-checkpoint with an accessible merged "
+                "llm-train checkpoint."
+            )
 
     if args.native_prefill_chunk_size is not None:
         import arch.attention as native_attention
@@ -481,6 +990,7 @@ def run_native(args: argparse.Namespace) -> None:
         import kernel.quant as quant
 
         linear.per_token_cast_to_fp8 = quant._per_token_cast_to_fp8_torch
+        linear.per_block_cast_to_fp8 = quant._per_block_cast_to_fp8_torch
         moe_ffn.per_token_cast_to_fp8 = quant._per_token_cast_to_fp8_torch
         print("[native-kl] using torch FP8 activation quantization", flush=True)
 
@@ -492,7 +1002,6 @@ def run_native(args: argparse.Namespace) -> None:
     device = torch.device("cuda")
     torch.manual_seed(args.seed)
 
-    metadata_path = Path(args.native_checkpoint) / "metadata.json"
     with metadata_path.open(encoding="utf-8") as reader:
         metadata = json.load(reader)
     modelargs = ModelArgs()
@@ -517,7 +1026,7 @@ def run_native(args: argparse.Namespace) -> None:
     model.eval()
 
     state = torch.load(
-        Path(args.native_checkpoint) / "model_state_rank_0.pth",
+        state_path,
         map_location=_device_mapping(-1),
         mmap=True,
     )
@@ -676,6 +1185,9 @@ def run_native(args: argparse.Namespace) -> None:
                 ]
             )
         trace_handles.append(model.norm.register_forward_hook(trace_hook("norm")))
+        trace_handles.append(
+            model.output.register_forward_hook(trace_hook("lm_head"))
+        )
 
         import arch.attention as native_attention
         import arch.moe as native_moe
@@ -688,7 +1200,7 @@ def run_native(args: argparse.Namespace) -> None:
         original_cached_attention = native_attention.flash_attn_with_kvcache
         original_varlen_attention = native_attention.flash_attn_varlen_func
         original_routed_moe = native_moe.nnscaler_all2all_moe_gmm
-        original_te_unpermute = native_moe_utils.moe_unpermute
+        original_te_unpermute = native_moe_utils.unpermute
         original_fused_silu = native_moe_ffn.fused_silu
         original_per_block_cast_to_fp8 = native_moe_ffn.per_block_cast_to_fp8
 
@@ -793,7 +1305,7 @@ def run_native(args: argparse.Namespace) -> None:
         native_attention.flash_attn_varlen_func = traced_varlen_attention
         native_moe.topk_routing = traced_topk_routing
         native_moe.nnscaler_all2all_moe_gmm = traced_routed_moe
-        native_moe_utils.moe_unpermute = traced_te_unpermute
+        native_moe_utils.unpermute = traced_te_unpermute
         native_moe_ffn.fused_silu = traced_fused_silu
         native_moe_ffn.per_block_cast_to_fp8 = traced_per_block_cast_to_fp8
         native_moe_patches.extend(
@@ -820,7 +1332,7 @@ def run_native(args: argparse.Namespace) -> None:
                 ),
                 (native_moe, "topk_routing", original_topk_routing),
                 (native_moe, "nnscaler_all2all_moe_gmm", original_routed_moe),
-                (native_moe_utils, "moe_unpermute", original_te_unpermute),
+                (native_moe_utils, "unpermute", original_te_unpermute),
                 (native_moe_ffn, "fused_silu", original_fused_silu),
                 (
                     native_moe_ffn,
@@ -856,7 +1368,10 @@ def run_native(args: argparse.Namespace) -> None:
         args.prompt_limit,
     )
     results = []
-    for batch in _record_batches(records, args.batch_size, args.first_batch_size):
+    model_forwards = []
+    for logical_batch_index, batch in enumerate(
+        _record_batches(records, args.batch_size, args.first_batch_size)
+    ):
         token_lists = [record["prompt_token_ids"] for record in batch]
         for record, token_ids in zip(batch, token_lists):
             if max(token_ids) >= model.args.vocab_size:
@@ -924,6 +1439,17 @@ def run_native(args: argparse.Namespace) -> None:
                     context["cache_seqlens"] = torch.tensor(
                         [chunk_end], device=device, dtype=torch.int32
                     )
+                model_forwards.append(
+                    {
+                        "logical_batch_index": logical_batch_index,
+                        "phase": "chunked_prefill",
+                        "num_requests": 1,
+                        "num_tokens": chunk_len,
+                        "prompt_names": [record["name"]],
+                        "chunk_start": chunk_start,
+                        "chunk_end": chunk_end,
+                    }
+                )
                 hidden, _, _ = model(
                     chunk_tokens,
                     context=context,
@@ -1012,9 +1538,20 @@ def run_native(args: argparse.Namespace) -> None:
                 f"{args.native_forward_repeats}"
             )
         repeated_logprobs = []
-        for _ in range(args.native_forward_repeats):
+        for repeat_index in range(args.native_forward_repeats):
             if "layer_index" in context:
                 context["layer_index"] = 0
+            model_forwards.append(
+                {
+                    "logical_batch_index": logical_batch_index,
+                    "phase": "prefill",
+                    "repeat_index": repeat_index,
+                    "num_requests": len(batch),
+                    "num_tokens": len(prefill_tokens),
+                    "prompt_names": [record["name"] for record in batch],
+                    "sequence_lengths": [len(token_ids) for token_ids in token_lists],
+                }
+            )
             hidden, _, _ = model(prefill_tokens, context=context, last_hidden_only=True)
             last_hidden = hidden[cu_seqlens[1:].long() - 1]
             repeated_logprobs.append(
@@ -1052,8 +1589,18 @@ def run_native(args: argparse.Namespace) -> None:
         {
             "backend": "native",
             "model": args.model,
+            "native_checkpoint": args.native_checkpoint,
+            "attention_version": 4 if args.native_use_cute else 2,
+            "local_attention": args.native_local_attention,
+            "kv_cache_enabled": not args.native_no_kv_cache,
+            "quant_mode": args.native_quant_mode,
+            "quant_block_size": args.native_quant_block_size,
+            "torch_fp8_quant_fallback": args.native_use_torch_fp8_quant,
+            "transformer_engine_enabled": using_transformer_engine,
+            "force_fa_num_splits_one": args.force_fa_num_splits_one,
             "batch_size": args.batch_size,
             "first_batch_size": args.first_batch_size,
+            "model_forwards": model_forwards,
             "results": results,
         },
     )
@@ -1193,7 +1740,12 @@ def _patch_local_vllm_metadata() -> None:
     metadata.version = version
 
 
+def _configure_vllm_alignment_env(*, enabled: bool = False) -> None:
+    os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "1" if enabled else "0"
+
+
 def run_vllm(args: argparse.Namespace) -> None:
+    _configure_vllm_alignment_env(enabled=args.v1_multiprocessing)
     _disable_transformers_torchvision()
     _patch_local_vllm_metadata()
     from vllm import LLM, SamplingParams
@@ -1212,17 +1764,25 @@ def run_vllm(args: argparse.Namespace) -> None:
         "trust_remote_code": True,
         "dtype": args.dtype,
         "tensor_parallel_size": args.tensor_parallel_size,
+        "data_parallel_size": args.data_parallel_size,
         "max_model_len": args.max_model_len,
         "max_num_batched_tokens": (args.max_num_batched_tokens or args.max_model_len),
         "gpu_memory_utilization": args.gpu_memory_utilization,
         "seed": args.seed,
         "max_logprobs": args.max_logprobs,
         "enforce_eager": args.enforce_eager,
+        "enable_prefix_caching": args.enable_prefix_caching,
     }
+    if args.log_iteration_details:
+        llm_kwargs["enable_logging_iteration_details"] = True
     if args.max_num_seqs is not None:
         llm_kwargs["max_num_seqs"] = args.max_num_seqs
     if args.enable_expert_parallel:
         llm_kwargs["enable_expert_parallel"] = True
+    if args.distributed_executor_backend:
+        llm_kwargs["distributed_executor_backend"] = (
+            args.distributed_executor_backend
+        )
     if args.enable_chunked_prefill is not None:
         llm_kwargs["enable_chunked_prefill"] = args.enable_chunked_prefill
     if args.kv_sharing_fast_prefill:
@@ -1239,12 +1799,18 @@ def run_vllm(args: argparse.Namespace) -> None:
         quantization_config["ignore"] = args.quantization_ignore
     if quantization_config is not None:
         llm_kwargs["quantization_config"] = quantization_config
-    if args.attention_backend or args.flash_attn_version is not None:
+    if (
+        args.attention_backend
+        or args.flash_attn_version is not None
+        or args.force_fa_num_splits_one
+    ):
         attention_config = {}
         if args.attention_backend:
             attention_config["backend"] = args.attention_backend
         if args.flash_attn_version is not None:
             attention_config["flash_attn_version"] = args.flash_attn_version
+        if args.force_fa_num_splits_one:
+            attention_config["flash_attn_force_num_splits_one"] = True
         llm_kwargs["attention_config"] = attention_config
     if args.moe_backend:
         llm_kwargs["moe_backend"] = args.moe_backend
@@ -1256,6 +1822,8 @@ def run_vllm(args: argparse.Namespace) -> None:
         temperature=0.0, max_tokens=1, logprobs=args.max_logprobs, seed=args.seed
     )
     vocab_size = int(llm.llm_engine.model_config.get_vocab_size())
+    parallel_config = llm.llm_engine.vllm_config.parallel_config
+    dp_rank = int(parallel_config.data_parallel_rank or 0)
     results = []
     for batch in _record_batches(records, args.batch_size, args.first_batch_size):
         outputs = llm.generate(
@@ -1287,23 +1855,32 @@ def run_vllm(args: argparse.Namespace) -> None:
             )
             results.append(payload)
             top1 = int(payload["top_ids"][0])
-            print(
-                f"[vllm-kl] {record['name']}: top1={top1} "
-                f"{tokenizer.decode([top1], skip_special_tokens=False)!r} "
-                f"{float(payload['top_logprobs'][0]):.6f}",
-                flush=True,
-            )
-    _save(
-        args.out,
-        {
-            "backend": "vllm",
-            "model": args.model,
-            "batch_size": args.batch_size,
-            "first_batch_size": args.first_batch_size,
-            "results": results,
-        },
-    )
-    print(f"[vllm-kl] saved {args.out}", flush=True)
+            if dp_rank == 0:
+                print(
+                    f"[vllm-kl] {record['name']}: top1={top1} "
+                    f"{tokenizer.decode([top1], skip_special_tokens=False)!r} "
+                    f"{float(payload['top_logprobs'][0]):.6f}",
+                    flush=True,
+                )
+    if dp_rank == 0:
+        _save(
+            args.out,
+            {
+                "backend": "vllm",
+                "model": args.model,
+                "batch_size": args.batch_size,
+                "first_batch_size": args.first_batch_size,
+                "data_parallel_size": args.data_parallel_size,
+                "expert_parallel_enabled": args.enable_expert_parallel,
+                "quantization": args.quantization,
+                "force_fa_num_splits_one": args.force_fa_num_splits_one,
+                "v1_multiprocessing_enabled": args.v1_multiprocessing,
+                "iteration_details_logged": args.log_iteration_details,
+                "prefix_caching_enabled": args.enable_prefix_caching,
+                "results": results,
+            },
+        )
+        print(f"[vllm-kl] saved {args.out}", flush=True)
 
 
 def _top_rows(

@@ -31,6 +31,10 @@ class AttentionConfig:
     flash_attn_max_num_splits_for_cuda_graph: int = 32
     """Flash Attention max number splits for cuda graph decode."""
 
+    flash_attn_force_num_splits_one: bool = False
+    """Force FlashAttention to use one split in eager and graphed execution.
+    This is narrower than VLLM_BATCH_INVARIANT and does not alter other kernels."""
+
     tq_max_kv_splits_for_cuda_graph: int = 32
     """TurboQuant max NUM_KV_SPLITS for cuda graph decode.
     Fixes the split count so grid dimensions are constant across captures,

@@ -74,29 +74,31 @@ class YOCOForCausalLMConfig(VerifyAndUpdateConfig):
                 "Larger request batches will use eager fallback."
             )
 
+        from vllm.config.compilation import CUDAGraphMode
         from vllm.v1.attention.backends.registry import AttentionBackendEnum
 
         attention_config = vllm_config.attention_config
         backend = attention_config.backend
-        fa_version = attention_config.flash_attn_version
-        if fa_version is None:
-            from vllm.platforms import current_platform
+        if cudagraph_mode != CUDAGraphMode.FULL_DECODE_ONLY:
+            fa_version = attention_config.flash_attn_version
+            if fa_version is None:
+                from vllm.platforms import current_platform
 
-            capability = current_platform.get_device_capability()
-            if capability is not None and capability.major == 10:
-                fa_version = 4
+                capability = current_platform.get_device_capability()
+                if capability is not None and capability.major == 10:
+                    fa_version = 4
 
-        if fa_version == 4 and backend in (
-            None,
-            AttentionBackendEnum.FLASH_ATTN,
-        ):
-            attention_config.backend = AttentionBackendEnum.TRITON_ATTN
-            backend = AttentionBackendEnum.TRITON_ATTN
-            logger.warning(
-                "YOCO FlashAttention 4 produces incorrect multi-token decode "
-                "results with full CUDA graphs. Forcing TRITON_ATTN. Use eager "
-                "execution to run YOCO with FlashAttention 4."
-            )
+            if fa_version == 4 and backend in (
+                None,
+                AttentionBackendEnum.FLASH_ATTN,
+            ):
+                attention_config.backend = AttentionBackendEnum.TRITON_ATTN
+                backend = AttentionBackendEnum.TRITON_ATTN
+                logger.warning(
+                    "YOCO FlashAttention 4 prefill is unsafe inside full CUDA "
+                    "graphs. Forcing TRITON_ATTN. Use FULL_DECODE_ONLY to run "
+                    "eager FA4 prefill with Triton single-token graph decode."
+                )
 
         if (
             backend == AttentionBackendEnum.TRITON_ATTN

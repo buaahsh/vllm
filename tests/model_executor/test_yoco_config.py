@@ -41,8 +41,20 @@ def test_yoco_fa4_full_cudagraph_forces_triton() -> None:
     assert not vllm_config.compilation_config.fast_moe_cold_start
 
 
-def test_yoco_fa4_full_decode_only_forces_triton() -> None:
+def test_yoco_fa4_full_decode_only_keeps_flash_attention() -> None:
     vllm_config = _make_vllm_config(cudagraph_mode=CUDAGraphMode.FULL_DECODE_ONLY)
+
+    YOCOForCausalLMConfig.verify_and_update_config(vllm_config)
+
+    assert vllm_config.attention_config.backend is None
+    assert vllm_config.cache_config.kv_sharing_fast_prefill
+
+
+def test_yoco_explicit_triton_disables_kv_sharing() -> None:
+    vllm_config = _make_vllm_config(
+        cudagraph_mode=CUDAGraphMode.FULL,
+        backend=AttentionBackendEnum.TRITON_ATTN,
+    )
 
     YOCOForCausalLMConfig.verify_and_update_config(vllm_config)
 
