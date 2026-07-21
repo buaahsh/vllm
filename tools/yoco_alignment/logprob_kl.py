@@ -479,6 +479,33 @@ def _payload_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return payload.get("results", [payload])
 
 
+def _comparison_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "backend",
+        "model",
+        "native_checkpoint",
+        "attention_backend",
+        "attention_version",
+        "local_attention",
+        "kv_cache_enabled",
+        "quant_mode",
+        "quant_block_size",
+        "quantization",
+        "moe_backend",
+        "torch_fp8_quant_fallback",
+        "transformer_engine_enabled",
+        "force_fa_num_splits_one",
+        "batch_size",
+        "first_batch_size",
+        "data_parallel_size",
+        "expert_parallel_enabled",
+        "v1_multiprocessing_enabled",
+        "prefix_caching_enabled",
+        "compilation_config",
+    )
+    return {key: payload[key] for key in keys if key in payload}
+
+
 def _record_batches(
     records: list[dict[str, Any]],
     batch_size: int,
@@ -1873,6 +1900,14 @@ def run_vllm(args: argparse.Namespace) -> None:
                 "data_parallel_size": args.data_parallel_size,
                 "expert_parallel_enabled": args.enable_expert_parallel,
                 "quantization": args.quantization,
+                "moe_backend": args.moe_backend,
+                "attention_backend": args.attention_backend,
+                "attention_version": args.flash_attn_version,
+                "compilation_config": (
+                    json.loads(args.compilation_config_json)
+                    if args.compilation_config_json
+                    else None
+                ),
                 "force_fa_num_splits_one": args.force_fa_num_splits_one,
                 "v1_multiprocessing_enabled": args.v1_multiprocessing,
                 "iteration_details_logged": args.log_iteration_details,
@@ -1995,7 +2030,12 @@ def compare(args: argparse.Namespace) -> None:
         for metric in metric_names
     }
     aggregate["num_prompts"] = len(prompt_summaries)
-    result = {"aggregate": aggregate, "prompts": prompt_summaries}
+    result = {
+        "reference_config": _comparison_metadata(reference_payload),
+        "candidate_config": _comparison_metadata(candidate_payload),
+        "aggregate": aggregate,
+        "prompts": prompt_summaries,
+    }
 
     out_path = Path(args.out_json)
     out_path.parent.mkdir(parents=True, exist_ok=True)

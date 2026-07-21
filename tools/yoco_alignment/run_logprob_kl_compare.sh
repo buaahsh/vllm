@@ -27,6 +27,7 @@ Options:
     --compare-python PATH        Comparison Python (default: vLLM Python).
     --python PATH                Use one Python for all stages (compatibility alias).
     --attention-version VERSION  2, 4, fa2, or fa4 (default: 2).
+    --compilation-config-json J  vLLM compilation config (default: FULL_DECODE_ONLY).
     --prompt-suite NAME          mixed5, mixed16, or default (default: mixed5).
   --prompt-index N             Select one prompt when supported (default: 0).
   --prompt-limit N             Limit the number of prompts.
@@ -34,7 +35,9 @@ Options:
   --max-model-len N            Maximum model length (default: 8192).
   --tensor-parallel-size N     vLLM tensor parallel size (default: 1).
   --gpu-memory-utilization F   vLLM GPU memory utilization (default: 0.9).
-    --moe-backend NAME           vLLM MoE backend (default: triton).
+    --bf16-moe-backend NAME      BF16 vLLM MoE backend (default: triton).
+    --fp8-moe-backend NAME       FP8 vLLM MoE backend (default: deep_gemm).
+    --moe-backend NAME           Set both backends to NAME (compatibility alias).
     --variants LIST              Variants: bf16, fp8, or bf16,fp8
                                                              (default: bf16,fp8).
   --seed N                     Random seed (default: 0).
@@ -42,6 +45,7 @@ Options:
   --kv-sharing-fast-prefill    Enable fast prefill in both vLLM runs.
     --enforce-eager              Use eager execution instead of the vLLM default.
     --compiled                   Use the default non-eager path (compatibility alias).
+    --dry-run                    Print commands without executing them.
   -h, --help                   Show this help.
 
 Outputs (subject to --variants):
@@ -55,8 +59,10 @@ Outputs (subject to --variants):
 Native execution is single-rank and bypasses NNScaler ring attention.
 When TransformerEngine is unavailable, the probe pads MoE rows to DeepGEMM's
 128-row alignment and unpermutes them deterministically.
-The vLLM runner follows its default non-eager execution path.
-Use --enforce-eager for a separate eager-mode validation.
+The vLLM runner uses FULL_DECODE_ONLY by default: prefill is eager and
+single-token decode is graph captured. FA4 runs require the vendored CuTe
+interface to import successfully. Use --enforce-eager for a separate fully
+eager validation.
 EOF
 }
 
@@ -68,6 +74,7 @@ NATIVE_PYTHON_BIN=${NATIVE_PYTHON_BIN:-"${REPO_ROOT}/../../.venv-yoco-native/bin
 VLLM_PYTHON_BIN=${VLLM_PYTHON_BIN:-"${REPO_ROOT}/../../.venv-yoco-mxfp8/bin/python"}
 COMPARE_PYTHON_BIN=${COMPARE_PYTHON_BIN:-}
 ATTENTION_VERSION=2
+COMPILATION_CONFIG_JSON='{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
 PROMPT_SUITE="mixed5"
 PROMPT_INDEX=0
 PROMPT_LIMIT=""
@@ -75,12 +82,14 @@ BATCH_SIZE=1
 MAX_MODEL_LEN=8192
 TENSOR_PARALLEL_SIZE=1
 GPU_MEMORY_UTILIZATION=0.9
-MOE_BACKEND="triton"
+BF16_MOE_BACKEND="triton"
+FP8_MOE_BACKEND="deep_gemm"
 VARIANTS="bf16,fp8"
 SEED=0
 TOP_K=20
 KV_SHARING_FAST_PREFILL=0
 ENFORCE_EAGER=0
+DRY_RUN=0
 
 while (($#)); do
     case "$1" in
@@ -122,6 +131,10 @@ while (($#)); do
             ATTENTION_VERSION=${2:?"--attention-version requires a value"}
             shift 2
             ;;
+        --compilation-config-json)
+            COMPILATION_CONFIG_JSON=${2:?"--compilation-config-json requires a value"}
+            shift 2
+            ;;
         --prompt-suite)
             PROMPT_SUITE=${2:?"--prompt-suite requires a value"}
             shift 2
@@ -151,7 +164,16 @@ while (($#)); do
             shift 2
             ;;
         --moe-backend)
-            MOE_BACKEND=${2:?"--moe-backend requires a value"}
+            BF16_MOE_BACKEND=${2:?"--moe-backend requires a value"}
+            FP8_MOE_BACKEND=${BF16_MOE_BACKEND}
+            shift 2
+            ;;
+        --bf16-moe-backend)
+            BF16_MOE_BACKEND=${2:?"--bf16-moe-backend requires a value"}
+            shift 2
+            ;;
+        --fp8-moe-backend)
+            FP8_MOE_BACKEND=${2:?"--fp8-moe-backend requires a value"}
             shift 2
             ;;
         --variants)
@@ -176,6 +198,10 @@ while (($#)); do
             ;;
         --compiled)
             ENFORCE_EAGER=0
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=1
             shift
             ;;
         -h|--help)
@@ -306,6 +332,17 @@ namespace["_import_fa4_varlen_func"]()
     echo "Native FA4 requires flash-attn-4 in ${NATIVE_PYTHON_BIN}." >&2
     exit 2
 fi
+if [[ "${ATTENTION_VERSION}" == 4 ]] && ! PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}" \
+    "${VLLM_PYTHON_BIN}" -c '
+from vllm.vllm_flash_attn.cute.interface import _flash_attn_fwd
+from vllm.vllm_flash_attn.flash_attn_interface import is_fa_version_supported
+assert callable(_flash_attn_fwd)
+assert is_fa_version_supported(4)
+' >/dev/null 2>&1; then
+    echo "vLLM vendored FA4 is unavailable in ${VLLM_PYTHON_BIN}." >&2
+    echo "Install requirements/cuda.txt (CUTLASS DSL 4.4.2 for this checkout)." >&2
+    exit 2
+fi
 if [[ ! -f "${PROBE}" ]]; then
     echo "Probe script not found: ${PROBE}" >&2
     exit 2
@@ -325,6 +362,9 @@ run() {
     printf '\n+'
     printf ' %q' "$@"
     printf '\n'
+    if ((DRY_RUN)); then
+        return
+    fi
     "$@"
 }
 
@@ -344,9 +384,6 @@ if ((ENFORCE_EAGER)); then
 fi
 if ((KV_SHARING_FAST_PREFILL)); then
     VLLM_EXTRA_ARGS+=(--kv-sharing-fast-prefill)
-fi
-if [[ -n "${MOE_BACKEND}" ]]; then
-    VLLM_EXTRA_ARGS+=(--moe-backend "${MOE_BACKEND}")
 fi
 
 cd "${REPO_ROOT}"
@@ -410,12 +447,15 @@ VLLM_COMMON_ARGS=(
     --no-v1-multiprocessing
     --no-enable-prefix-caching
     --log-iteration-details
+    --compilation-config-json "${COMPILATION_CONFIG_JSON}"
     "${PROMPT_ARGS[@]}"
     "${VLLM_EXTRA_ARGS[@]}"
 )
 
 if ((RUN_BF16)); then
-    run "${VLLM_PYTHON_BIN}" "${VLLM_COMMON_ARGS[@]}" --out "${BF16_OUT}"
+    run "${VLLM_PYTHON_BIN}" "${VLLM_COMMON_ARGS[@]}" \
+        --moe-backend "${BF16_MOE_BACKEND}" \
+        --out "${BF16_OUT}"
     run "${COMPARE_PYTHON_BIN}" "${PROBE}" compare \
         --reference "${NATIVE_OUT}" \
         --candidate "${BF16_OUT}" \
@@ -427,6 +467,7 @@ fi
 
 if ((RUN_FP8)); then
     run "${VLLM_PYTHON_BIN}" "${VLLM_COMMON_ARGS[@]}" \
+        --moe-backend "${FP8_MOE_BACKEND}" \
         --quantization fp8_per_block \
         --out "${FP8_OUT}"
     run "${COMPARE_PYTHON_BIN}" "${PROBE}" compare \

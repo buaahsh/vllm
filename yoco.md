@@ -67,8 +67,8 @@ KL 只有在 vLLM 和 llm-train Native 使用相同计算条件时才有意义�
 当前正式生产配置的 prefill 继续使用 FA2。CUDA Graph 单 token decode 在
 FlashAttention backend 内切换到 Triton 2D paged attention，避免 graph replay
 的 KV metadata 错误。`FULL_DECODE_ONLY + flash_attn_version=4` 现在保留 eager
-FA4 prefill，并同样只把 single-token graph decode 切到 Triton；该组合仍需重跑
-完整验收矩阵。
+FA4 prefill，并同样只把 single-token graph decode 切到 Triton。matched prefill
+matrix 已完成；FA4 decode matrix 仍待验收。
 
 下表是修改前 V1 multiprocessing 和 `1 + 15` reference shape 的历史 baseline，
 不能直接作为新 single-batch/one-split 配置的验收结果：
@@ -101,8 +101,9 @@ tokens，也得到连续、可读的输出。
   按 `4096 + remainder` 分块时为 `0.0647879`。因此可以开启
   `--enable-chunked-prefill`，但不能把真正发生切分的长 prompt 标记为已对齐。
 - BF16 batch 1：mean KL `0.00550893`，不是 exact zero。
-- FA4：`FULL` graph prefill 仍不安全；`FULL_DECODE_ONLY` 的 eager FA4 prefill
-  + Triton graph decode 尚待完整验收。
+- FA4 MXFP8 prefill：`FULL_DECODE_ONLY`、batch 16、`num_splits=1` 的 aggregate
+  mean Native→vLLM KL 为 `0.0160540`，未达到 `<0.01`；FA4 BF16 同配置为
+  `0.00357287`，通过。FA4 decode matrix 尚待验收。
 
 ### Batch invariance
 
@@ -146,11 +147,12 @@ request/prompt-token 总数交叉验证；传入新的 Native artifact 时，还
 ## TODO 与当前对齐程度
 
 - [ ] **FA4 matched matrix**
-  - 当前状态：未验收。`FULL` graph prefill 仍强制回退到 TRITON_ATTN；
-  `FULL_DECODE_ONLY` 保留 eager FA4 prefill，并把 single-token graph decode
-  路由到 Triton。
-  - 下一步：确保 vLLM 和 llm-train 同时使用 FA4 和 `num_splits=1`，分别比较
-  eager prefill 与 decode；不能用 Native FA4 对比 vLLM FA2。
+  - 当前状态：prefill 已验收。BF16 通过（mean KL `0.00357287`），MXFP8
+    未通过（`0.0160540`）。`FULL` graph prefill 仍强制回退到 TRITON_ATTN；
+    `FULL_DECODE_ONLY` 保留 eager FA4 prefill，并把 single-token graph decode
+    路由到 Triton。
+  - 下一步：定位 FA4 MXFP8 在 `medium_english`/`long_zh` 上的偏差，并运行
+    matched FA4 decode matrix；不能用 Native FA4 对比 vLLM FA2。
 - [ ] **Batch invariance**
   - 当前状态：旧 `1 + 15` baseline 已达到 aggregate 验收线，但新的
   single-batch/one-split matrix 尚未重跑。
@@ -190,6 +192,12 @@ request/prompt-token 总数交叉验证；传入新的 Native artifact 时，还
 forward：两个 FA4 实现都只在 non-causal、non-local、non-varlen forward 中选择
 2CTA，而 YOCO 使用 causal varlen/paged attention，因此不把这两个环境变量作为
 对齐条件。
+
+vLLM 使用自身 `vllm.vllm_flash_attn.cute` vendored FA4，不安装外部
+`flash-attn-4`。当前 precompiled editable wheel 的 vendored source 依赖 CUTLASS
+DSL `4.4.2` API（包括 `cute.core.ThrMma`/`make_fragment`），因此
+`requirements/cuda.txt` 固定 `nvidia-cutlass-dsl[cu13]==4.4.2`。使用不匹配的
+CUTLASS DSL `4.6.0` 会在首次 FA4 forward import 时失败。
 
 ## 实现要点
 
@@ -318,6 +326,152 @@ docker run --rm \
 ```
 
 ## 完整词表 KL 验证
+
+### FA4 matched prefill matrix
+
+2026-07-21 使用 `mixed16`、单个 `16 requests / 582 tokens` forward、V1
+in-process、prefix cache 关闭和 `num_splits=1`，比较 Native FA4 与 vLLM vendored
+FA4。vLLM 使用 `FULL_DECODE_ONLY`：prefill eager 执行 FA4，只有后续 single-token
+decode 才会切换到 Triton attention。本实验只测 next-token prefill，不执行 decode。
+
+matched pairing：
+
+| matrix | Native reference | vLLM candidate |
+| --- | --- | --- |
+| BF16 FA4 | `quant_mode=bfloat16`、`use_cute=True`（FA4）、no KV cache | BF16、`FLASH_ATTN`、`flash_attn_version=4`、Triton BF16 MoE |
+| MXFP8 FA4 | `quant_mode=mxfp8`、block `128`、torch activation quant、`use_cute=True`（FA4）、no KV cache | `quantization=fp8_per_block`、block `128`、`FLASH_ATTN`、`flash_attn_version=4`、DeepGEMM MoE |
+
+两组都使用 `--force-fa-num-splits-one`。因此 MXFP8 结果确实是 **Native MXFP8
+FA4 对 vLLM FP8-per-block FA4**，没有与 BF16 或 FA2 reference 混比。
+
+一次运行两个 precision：
+
+```bash
+CUDA_VISIBLE_DEVICES=4 tools/yoco_alignment/run_logprob_kl_compare.sh \
+  --model /data/yanqi/model_ckpt/0000-6000-hf \
+  --native-checkpoint /data/yanqi/model_ckpt/0000-6000-merged \
+  --output-dir ../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode \
+  --attention-version 4 \
+  --prompt-suite mixed16 \
+  --batch-size 16 \
+  --variants bf16,fp8 \
+  --bf16-moe-backend triton \
+  --fp8-moe-backend deep_gemm
+```
+
+也可以分别复现，避免任一 cell 失败后阻塞另一个：
+
+```bash
+# Native BF16 FA4 vs vLLM BF16 FA4
+CUDA_VISIBLE_DEVICES=4 tools/yoco_alignment/run_logprob_kl_compare.sh \
+  --model /data/yanqi/model_ckpt/0000-6000-hf \
+  --native-checkpoint /data/yanqi/model_ckpt/0000-6000-merged \
+  --output-dir ../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode \
+  --attention-version 4 \
+  --prompt-suite mixed16 \
+  --batch-size 16 \
+  --variants bf16 \
+  --moe-backend triton
+
+# Native MXFP8 FA4 vs vLLM FP8-per-block FA4
+CUDA_VISIBLE_DEVICES=4 tools/yoco_alignment/run_logprob_kl_compare.sh \
+  --model /data/yanqi/model_ckpt/0000-6000-hf \
+  --native-checkpoint /data/yanqi/model_ckpt/0000-6000-merged \
+  --output-dir ../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode \
+  --attention-version 4 \
+  --prompt-suite mixed16 \
+  --batch-size 16 \
+  --variants fp8 \
+  --moe-backend deep_gemm
+```
+
+runner 默认附加：
+
+```text
+Native: --native-use-cute --native-no-kv-cache --force-fa-num-splits-one
+vLLM:   --attention-backend FLASH_ATTN --flash-attn-version 4
+        --force-fa-num-splits-one --no-v1-multiprocessing
+        --no-enable-prefix-caching
+        --compilation-config-json
+        {"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}
+```
+
+| precision | Native→vLLM mean KL | vLLM→Native mean KL | mean JS | result |
+| --- | ---: | ---: | ---: | --- |
+| BF16 | `0.00357287` | `0.00348577` | `0.000880863` | pass |
+| MXFP8 / FP8-per-block | `0.0160540` | `0.0156212` | `0.00393370` | fail |
+
+unique prompt Native→vLLM KL：
+
+| prompt | BF16 | MXFP8 |
+| --- | ---: | ---: |
+| `short_hello` | `0.000338769` | `0.00210331` |
+| `short_fact` | `0.00388675` | `0.00608224` |
+| `medium_english` | `0.00467639` | `0.0246546` |
+| `short_zh` | `0.00526079` | `0.0143746` |
+| `long_zh` | `0.00477970` | `0.0377058` |
+
+MXFP8 的主要偏差来自中长 prompt，而不是所有 prompt 同等恶化。结果文件：
+
+- [BF16 comparison](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode/native_bf16_fa4_vs_vllm.json)、
+  [Native BF16 FA4](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode/native_bf16_fa4.pt)、
+  [vLLM BF16 FA4](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode/vllm_bf16_fa4.pt)；
+- [MXFP8 comparison](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)、
+  [Native MXFP8 FA4](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode/native_mxfp8_fa4.pt)、
+  [vLLM FP8-per-block FA4](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode/vllm_fp8_per_block_fa4.pt)。
+
+首次尝试未显式传 compilation config，vLLM 默认进入 `FULL_AND_PIECEWISE`，在
+YOCO BF16 MoE 的 `torch.get_float32_matmul_precision()` 处触发 Dynamo graph
+break。runner 现默认传 `FULL_DECODE_ONLY`。另一次环境中 CUTLASS DSL `4.6.0`
+与 wheel vendored FA4 source 不匹配；恢复官方 vendored path 和 4.4.2 后通过。
+
+#### MXFP8 quantization parity 与 FA2 control
+
+Native/vLLM 使用相同的逻辑 MXFP8 recipe：
+
+| item | Native | vLLM |
+| --- | --- | --- |
+| weight group | `128 x 128` | `128 x 128` |
+| activation group | per-token `1 x 128` | per-token `1 x 128` |
+| payload | `float8_e4m3fn` | `float8_e4m3fn` |
+| raw scale | `max(abs(x), 1e-4) / 448` | `max(abs(x), 1e-4) / 448` |
+| scale rounding | ceil to UE8M0 power of two | ceil to UE8M0 power of two |
+| logical scale dtype | FP32 | FP32 |
+| DeepGEMM transport | FP32 power-of-two scales | 4 UE8M0 scale bytes packed into `int32` |
+
+在相同 BF16 tensors 上直接比较 quantizer：activation shape `(257, 3072)`、weight
+shape `(1280, 3072)`。Native torch reference 与 vLLM 分别得到：
+
+- activation FP8 payload bitwise equal；
+- weight FP8 payload bitwise equal；
+- activation/weight FP32 UE8M0 scales exact equal，max scale diff `0`；
+- vLLM packed activation path 的 FP8 payload 也与 Native bitwise equal。
+
+因此 block size、activation chunk size、FP8 payload、scale rounding 和 logical
+scale precision 没有发现 mismatch；vLLM 的 packed `int32` 只是 DeepGEMM scale
+transport layout，不改变 quantized values。
+
+为隔离 attention version，另跑相同 `mixed16`、batch 16、single forward、V1
+in-process、prefix cache off、`num_splits=1` 和完全相同 MXFP8 recipe 的 FA2
+control：
+
+| attention | Native→vLLM mean KL | mean JS |
+| --- | ---: | ---: |
+| FA2 | `0.00840170` | `0.00211184` |
+| FA4 | `0.0160540` | `0.00393370` |
+
+[FA2 control report](../logs/yoco_alignment_results/fa2_prefill_mixed16_split1_inproc_fulldecode_mxfp8/native_mxfp8_fa2_vs_vllm_fp8_per_block.json)
+使用与 FA4 完全相同的 quant/backend/batch controls。按 engine 内部比较 attention
+version 的最终分布：Native FA2→FA4 mean KL 为 `0.00741357`，vLLM FA2→FA4 为
+`0.0129372`。这说明 FA4 数值变化在 vLLM 一侧更大。
+
+最后，对 mixed16 sequence geometry 的同一组 BF16 Q/K/V 分别运行 Native 外部
+FA4 `4.0.0b22` 与 vLLM vendored FA4（两者 `num_splits=1`）：local/global causal
+attention 均为 max abs diff `0.00390625`、mean abs diff `2.087e-6`、relative L2
+`1.154e-4`。该差异很小，但会进入后续 MXFP8 activation quantization，并在 YOCO
+universal-loop/MoE 层中反复传播；这是当前最可能的 FA4 MXFP8 额外 drift 来源。
+尚不能仅凭最终 logits 断言全部差异来自 attention，下一步应保存首个 divergence
+layer 的 pre/post-attention hidden states 和 quantized activation payload。
 
 ### FA2 可复现实验脚本
 
