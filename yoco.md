@@ -469,9 +469,82 @@ version 的最终分布：Native FA2→FA4 mean KL 为 `0.00741357`，vLLM FA2�
 FA4 `4.0.0b22` 与 vLLM vendored FA4（两者 `num_splits=1`）：local/global causal
 attention 均为 max abs diff `0.00390625`、mean abs diff `2.087e-6`、relative L2
 `1.154e-4`。该差异很小，但会进入后续 MXFP8 activation quantization，并在 YOCO
-universal-loop/MoE 层中反复传播；这是当前最可能的 FA4 MXFP8 额外 drift 来源。
-尚不能仅凭最终 logits 断言全部差异来自 attention，下一步应保存首个 divergence
-layer 的 pre/post-attention hidden states 和 quantized activation payload。
+universal-loop/MoE 层中反复传播，因此曾是 FA4 MXFP8 额外 drift 的候选来源。下述
+common-source A/B 已证明消除该差异不足以改善最终 MXFP8 alignment；下一步应保存
+首个 divergence layer 的 pre/post-attention hidden states、quantized activation
+payload/scale 和 MoE routing IDs。
+
+Upstream FlashAttention commit
+`2409214a03797b168f648ea30df1adbc09ce658a` 修复的是 **FA4 attention 输入本身为
+FP8 E4M3FN** 时的 probability saturation：把 E4M3 `max_offset` 从 `8` 降到 `4`。
+当前 YOCO MXFP8 matrix 并不走该分支：Native MXFP8 projection 的 DeepGEMM output
+显式为 BF16，vLLM `Fp8PerBlock` DeepGEMM kernel 也只支持 BF16 output；两侧传给
+FA4 的 Q/K/V 和 `auto` KV cache 都是 BF16。当前旧代码因此在两侧都走
+`q_dtype.width == 16`，`max_offset=0`；应用该 commit 后仍为 `0`。
+
+所以该 upstream fix **不太可能解释本次 FA4 MXFP8 drift**，也不建议直接在当前
+Native/vLLM acceptance environments 上覆盖安装 latest FA4：这会同时改变 FA4
+revision、CUTLASS DSL 和 wrapper ABI，却不会触发被修复的 FP8-QKV branch。若未来
+启用 FP8 attention input/KV cache，应在隔离 venv/container 中做 A/B；对当前实验
+更干净的检查是只 backport 该 commit 到两侧 source，预期 BF16-QKV kernel/output
+不变，并继续做 layer-level hidden/quantized-payload trace。
+
+#### Native/vLLM common-source FA4 A/B
+
+为只改变 Native FA4 source/runtime 而保留 NVIDIA Torch、TransformerEngine 和
+DeepGEMM，新增隔离 overlay。Native 使用与 vLLM 完全相同的 vendored CuTe source，
+并 pin vLLM 当前 runtime：CUTLASS DSL `4.4.2`、TVM FFI `0.1.9`、Quack `0.4.1`。
+source tree SHA-256 为
+`e2950f886bcca655de770c2a86d0d5b2fc3c4c5e1f8cda268755fd03f9858b5a`。
+
+```bash
+tools/yoco_alignment/setup_native_vllm_fa4_overlay.sh
+
+CUDA_VISIBLE_DEVICES=0 \
+tools/yoco_alignment/run_logprob_kl_compare.sh \
+  --model /data/yanqi/model_ckpt/0000-6000-hf \
+  --native-checkpoint /data/yanqi/model_ckpt/0000-6000-merged \
+  --attention-version 4 \
+  --native-fa4-source vllm-vendored \
+  --prompt-suite mixed16 \
+  --batch-size 16 \
+  --variants bf16,fp8 \
+  --output-dir ../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_common_fa4
+```
+
+先用相同、可精确表示的 BF16 Q/K/V 分别在 Native NVIDIA Torch 和 vLLM Torch 下
+JIT/运行该 vendored source；FA4 output 和 LSE 均 bitwise exact（max abs/relative
+L2 均为 `0`）。[common-source kernel report](../logs/yoco_alignment_results/common_fa4_aligned_20260721/compare.json)
+同时证明不同 Torch build 本身没有改变该 case 的生成 kernel 结果。
+
+完整模型结果：
+
+| Native FA4 | BF16 Native→vLLM KL | MXFP8 Native→vLLM KL |
+| --- | ---: | ---: |
+| external `4.0.0b22` | `0.00357287` | `0.0160540` |
+| vLLM vendored common source | `0.00341708` | `0.0187185` |
+
+common source 令 BF16 KL 小幅下降 `4.36%`，但 MXFP8 KL 反而上升 `16.60%`。
+vLLM old/new BF16、MXFP8 artifacts 各自 bitwise exact；只切换 Native FA4 时，最终
+distribution KL 分别为 BF16 `0.00232863`、MXFP8 `0.00510318`。Native common-FA4
+MXFP8 同进程 repeat max logprob diff 为 `0`，独立进程完整输出也 exact，排除
+run-to-run nondeterminism。
+
+变化具有明确 geometry 选择性：token 长度 `3/6/8` 的 prompts 完全不变；长度
+`66/110` 才变化。MXFP8 `medium_english` KL 从 `0.0246546` 降到 `0.0179766`，但
+`long_zh` 从 `0.0377058` 升到 `0.0585941`。这是 packed-GQA staged/tiled FA4 path
+产生的小扰动被后续离散 MXFP8 quantization/MoE routing 放大的表现，而不是统一方向
+的 FA4 bias。
+
+结论：**FA4 revision mismatch 是真实 perturbation，但不是 MXFP8 较大 drift 的
+root cause，也不是 alignment fix**。保持 common-source 工具用于控制变量；下一步
+优先定位首个 UE8M0 scale exponent、E4M3 payload 或 top-8 expert IDs 分叉的 layer。
+结果文件：
+
+- [common-source BF16 report](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_common_fa4/native_bf16_fa4_vs_vllm.json)；
+- [common-source MXFP8 report](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_common_fa4/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)；
+- [Native installed-vs-vendored MXFP8](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_common_fa4/native_installed_vs_vendored_mxfp8.json)；
+- [vLLM MXFP8 repeat control](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_common_fa4/vllm_repeat_mxfp8.json)。
 
 ### FA2 可复现实验脚本
 

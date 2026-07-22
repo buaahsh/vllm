@@ -23,6 +23,8 @@ Options:
     --output-dir PATH            Output directory (default: ../logs/yoco_alignment_results).
     --llm-train-dir PATH         llm-train checkout (default: /data/yanqi/yanqi/yoco_mxfp8/llm-train).
     --native-python PATH         Native Python (default: .venv-yoco-native).
+    --native-fa4-source NAME     installed or vllm-vendored (default: installed).
+    --native-fa4-overlay PATH    Isolated dependency overlay directory.
     --vllm-python PATH           vLLM Python (default: .venv-yoco-mxfp8).
     --compare-python PATH        Comparison Python (default: vLLM Python).
     --python PATH                Use one Python for all stages (compatibility alias).
@@ -71,6 +73,8 @@ NATIVE_CHECKPOINT=""
 OUTPUT_DIR="${REPO_ROOT}/../logs/yoco_alignment_results"
 LLM_TRAIN_DIR="/data/yanqi/yanqi/yoco_mxfp8/llm-train"
 NATIVE_PYTHON_BIN=${NATIVE_PYTHON_BIN:-"${REPO_ROOT}/../../.venv-yoco-native/bin/python"}
+NATIVE_FA4_SOURCE="installed"
+NATIVE_FA4_OVERLAY=${NATIVE_VLLM_FA4_OVERLAY:-"${REPO_ROOT}/../.native-vllm-fa4-overlay"}
 VLLM_PYTHON_BIN=${VLLM_PYTHON_BIN:-"${REPO_ROOT}/../../.venv-yoco-mxfp8/bin/python"}
 COMPARE_PYTHON_BIN=${COMPARE_PYTHON_BIN:-}
 ATTENTION_VERSION=2
@@ -111,6 +115,14 @@ while (($#)); do
             ;;
         --native-python)
             NATIVE_PYTHON_BIN=${2:?"--native-python requires a value"}
+            shift 2
+            ;;
+        --native-fa4-source)
+            NATIVE_FA4_SOURCE=${2:?"--native-fa4-source requires a value"}
+            shift 2
+            ;;
+        --native-fa4-overlay)
+            NATIVE_FA4_OVERLAY=${2:?"--native-fa4-overlay requires a value"}
             shift 2
             ;;
         --vllm-python)
@@ -230,6 +242,10 @@ if ((BATCH_SIZE < 1)); then
     echo "--batch-size must be positive." >&2
     exit 2
 fi
+if [[ "${NATIVE_FA4_SOURCE}" != "installed" && "${NATIVE_FA4_SOURCE}" != "vllm-vendored" ]]; then
+    echo "--native-fa4-source must be 'installed' or 'vllm-vendored'." >&2
+    exit 2
+fi
 
 case "${ATTENTION_VERSION,,}" in
     2|fa2)
@@ -248,6 +264,7 @@ case "${ATTENTION_VERSION,,}" in
             --native-require-transformer-engine
             --native-use-cute
             --native-no-kv-cache
+            --native-fa4-source "${NATIVE_FA4_SOURCE}"
         )
         ;;
     *)
@@ -255,6 +272,23 @@ case "${ATTENTION_VERSION,,}" in
         exit 2
         ;;
 esac
+
+NATIVE_ENV=(env)
+if [[ "${NATIVE_FA4_SOURCE}" == "vllm-vendored" ]]; then
+    if [[ "${ATTENTION_VERSION}" != 4 ]]; then
+        echo "--native-fa4-source vllm-vendored requires --attention-version 4." >&2
+        exit 2
+    fi
+    NATIVE_FA4_SITE_PACKAGES="${NATIVE_FA4_OVERLAY}/site-packages"
+    if [[ ! -d "${NATIVE_FA4_SITE_PACKAGES}" ]]; then
+        echo "Native FA4 overlay not found: ${NATIVE_FA4_SITE_PACKAGES}" >&2
+        echo "Run tools/yoco_alignment/setup_native_vllm_fa4_overlay.sh first." >&2
+        exit 2
+    fi
+    NATIVE_ENV+=(
+        "PYTHONPATH=${NATIVE_FA4_SITE_PACKAGES}:${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+    )
+fi
 
 VLLM_ATTENTION_ARGS=(
     --attention-backend FLASH_ATTN
@@ -295,7 +329,7 @@ for PYTHON_ROLE in NATIVE VLLM COMPARE; do
         exit 2
     fi
 done
-if ! "${NATIVE_PYTHON_BIN}" -c '
+if ! "${NATIVE_ENV[@]}" "${NATIVE_PYTHON_BIN}" -c '
 import deep_gemm
 for name in (
     "fp8_fp4_gemm_nt",
@@ -307,7 +341,7 @@ for name in (
     echo "Native alignment requires the pinned external DeepGEMM package in ${NATIVE_PYTHON_BIN}." >&2
     exit 2
 fi
-if ! "${NATIVE_PYTHON_BIN}" -c '
+if ! "${NATIVE_ENV[@]}" "${NATIVE_PYTHON_BIN}" -c '
 from transformer_engine.pytorch.permutation import (
     moe_permute_and_pad_with_probs,
     moe_sort_chunks_by_index,
@@ -318,18 +352,18 @@ from transformer_engine.pytorch.permutation import (
     echo "Native alignment requires NVIDIA TransformerEngine MoE APIs in ${NATIVE_PYTHON_BIN}." >&2
     exit 2
 fi
-if [[ "${ATTENTION_VERSION}" == 2 ]] && ! "${NATIVE_PYTHON_BIN}" -c '
+if [[ "${ATTENTION_VERSION}" == 2 ]] && ! "${NATIVE_ENV[@]}" "${NATIVE_PYTHON_BIN}" -c '
 from flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
 ' >/dev/null 2>&1; then
     echo "Native FA2 requires flash-attn in ${NATIVE_PYTHON_BIN}." >&2
     exit 2
 fi
-if [[ "${ATTENTION_VERSION}" == 4 ]] && ! "${NATIVE_PYTHON_BIN}" -c '
+if [[ "${ATTENTION_VERSION}" == 4 ]] && ! "${NATIVE_ENV[@]}" "${NATIVE_PYTHON_BIN}" -c '
 import runpy
 namespace = runpy.run_path("'"${PROBE}"'")
-namespace["_import_fa4_varlen_func"]()
+namespace["_import_fa4_varlen_func"]("'"${NATIVE_FA4_SOURCE}"'")
 ' >/dev/null 2>&1; then
-    echo "Native FA4 requires flash-attn-4 in ${NATIVE_PYTHON_BIN}." >&2
+    echo "Native FA4 source '${NATIVE_FA4_SOURCE}' failed its import preflight." >&2
     exit 2
 fi
 if [[ "${ATTENTION_VERSION}" == 4 ]] && ! PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}" \
@@ -391,13 +425,17 @@ export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
 echo "Writing YOCO ${ATTENTION_TAG} alignment artifacts to ${OUTPUT_DIR}"
 echo "Native Python: ${NATIVE_PYTHON_BIN}"
+echo "Native FA4 source: ${NATIVE_FA4_SOURCE}"
+if [[ "${NATIVE_FA4_SOURCE}" == "vllm-vendored" ]]; then
+    echo "Native FA4 overlay: ${NATIVE_FA4_OVERLAY}"
+fi
 echo "vLLM Python: ${VLLM_PYTHON_BIN}"
 echo "Comparison Python: ${COMPARE_PYTHON_BIN}"
 
 GENERATED_FILES=()
 
 if ((RUN_BF16)); then
-    run "${NATIVE_PYTHON_BIN}" -m torch.distributed.run \
+    run "${NATIVE_ENV[@]}" "${NATIVE_PYTHON_BIN}" -m torch.distributed.run \
         --standalone \
         --nproc-per-node 1 \
         "${PROBE}" native \
@@ -415,7 +453,7 @@ if ((RUN_BF16)); then
 fi
 
 if ((RUN_FP8)); then
-    run "${NATIVE_PYTHON_BIN}" -m torch.distributed.run \
+    run "${NATIVE_ENV[@]}" "${NATIVE_PYTHON_BIN}" -m torch.distributed.run \
         --standalone \
         --nproc-per-node 1 \
         "${PROBE}" native \

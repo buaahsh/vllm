@@ -175,6 +175,15 @@ def parse_args() -> argparse.Namespace:
             sub.add_argument("--native-quant-block-size", type=int)
             sub.add_argument("--native-use-cute", action="store_true")
             sub.add_argument(
+                "--native-fa4-source",
+                choices=("installed", "vllm-vendored"),
+                default="installed",
+                help=(
+                    "FA4 implementation used by Native. The vllm-vendored "
+                    "choice requires the matching CUTLASS/TVM/Quack overlay."
+                ),
+            )
+            sub.add_argument(
                 "--native-local-attention",
                 action="store_true",
                 help=(
@@ -486,6 +495,9 @@ def _comparison_metadata(payload: dict[str, Any]) -> dict[str, Any]:
         "native_checkpoint",
         "attention_backend",
         "attention_version",
+        "native_fa4_source",
+        "native_fa4_runtime",
+        "vllm_fa4_runtime",
         "local_attention",
         "kv_cache_enabled",
         "quant_mode",
@@ -527,8 +539,106 @@ def _record_batches(
     return [batch for batch in batches if batch]
 
 
-def _import_fa4_varlen_func():
-    """Load FA4 when its ``flash_attn.cute`` namespace is separately installed."""
+_NATIVE_FA4_FUNCTIONS: dict[str, Any] = {}
+_NATIVE_FA4_RUNTIME: dict[str, Any] = {}
+
+
+def _import_fa4_varlen_func(source: str = "installed"):
+    """Load either installed FA4 or this checkout's exact vendored FA4 source."""
+    cached = _NATIVE_FA4_FUNCTIONS.get(source)
+    if cached is not None:
+        return cached
+
+    if source == "vllm-vendored":
+        import hashlib
+        import importlib
+        import types
+
+        import cutlass
+        import tvm_ffi
+
+        expected_versions = {
+            "nvidia-cutlass-dsl": "4.4.2",
+            "apache-tvm-ffi": "0.1.9",
+            "quack-kernels": "0.4.1",
+        }
+        runtime_versions = {
+            "nvidia-cutlass-dsl": cutlass.__version__,
+            "apache-tvm-ffi": tvm_ffi.__version__,
+        }
+
+        import importlib.metadata as metadata
+
+        runtime_versions["quack-kernels"] = metadata.version("quack-kernels")
+        mismatches = {
+            name: (expected_versions[name], runtime_versions[name])
+            for name in expected_versions
+            if runtime_versions[name] != expected_versions[name]
+        }
+        if mismatches:
+            details = ", ".join(
+                f"{name}: expected {expected}, found {actual}"
+                for name, (expected, actual) in mismatches.items()
+            )
+            raise RuntimeError(
+                "vLLM vendored FA4 runtime mismatch; activate the Native "
+                f"FA4 overlay ({details})"
+            )
+
+        repo_root = Path(__file__).resolve().parents[2]
+        vllm_package = repo_root / "vllm"
+        vendored_package = vllm_package / "vllm_flash_attn"
+        interface_path = vendored_package / "cute" / "interface.py"
+        if not interface_path.is_file():
+            raise RuntimeError(f"vLLM vendored FA4 source not found: {interface_path}")
+
+        for module_name, package_path in (
+            ("vllm", vllm_package),
+            ("vllm.vllm_flash_attn", vendored_package),
+        ):
+            module = sys.modules.get(module_name)
+            if module is None:
+                module = types.ModuleType(module_name)
+                module.__package__ = module_name
+                module.__path__ = [str(package_path)]
+                sys.modules[module_name] = module
+            elif str(package_path) not in getattr(module, "__path__", ()):
+                raise RuntimeError(
+                    f"Cannot load vendored FA4 because {module_name} is already "
+                    "imported from another location"
+                )
+
+        interface = importlib.import_module(
+            "vllm.vllm_flash_attn.cute.interface"
+        )
+        source_root = vendored_package / "cute"
+        source_hasher = hashlib.sha256()
+        for source_path in sorted(source_root.rglob("*.py")):
+            relative_path = source_path.relative_to(source_root).as_posix()
+            source_hasher.update(relative_path.encode("utf-8"))
+            source_hasher.update(b"\0")
+            source_hasher.update(source_path.read_bytes())
+
+        flash_attn_varlen_func = interface.flash_attn_varlen_func
+        _NATIVE_FA4_FUNCTIONS[source] = flash_attn_varlen_func
+        _NATIVE_FA4_RUNTIME.update(
+            {
+                "source": source,
+                "source_root": str(source_root),
+                "source_sha256": source_hasher.hexdigest(),
+                "runtime_versions": runtime_versions,
+            }
+        )
+        print(
+            "[native-kl] loaded vLLM vendored FA4 "
+            f"sha256={source_hasher.hexdigest()}",
+            flush=True,
+        )
+        return flash_attn_varlen_func
+
+    if source != "installed":
+        raise ValueError(f"Unsupported Native FA4 source: {source}")
+
     import importlib.metadata as metadata
 
     import flash_attn
@@ -551,6 +661,15 @@ def _import_fa4_varlen_func():
         raise RuntimeError(
             "flash-attn-4 is installed but flash_attn.cute is unavailable"
         ) from exc
+    _NATIVE_FA4_FUNCTIONS[source] = flash_attn_varlen_func
+    _NATIVE_FA4_RUNTIME.update(
+        {
+            "source": source,
+            "distribution": distribution.metadata["Name"],
+            "distribution_version": distribution.version,
+            "source_file": sys.modules[flash_attn_varlen_func.__module__].__file__,
+        }
+    )
     return flash_attn_varlen_func
 
 
@@ -558,6 +677,7 @@ def _install_native_inference_compat(
     *,
     local_attention: bool = False,
     force_fa_num_splits_one: bool = False,
+    native_fa4_source: str = "installed",
 ) -> None:
     """Provide inference-only fallbacks for optional llm-train dependencies.
 
@@ -587,7 +707,7 @@ def _install_native_inference_compat(
         )
 
     def flash_attn_cute_varlen_func(*args, **kwargs):
-        flash_attn_varlen_func = _import_fa4_varlen_func()
+        flash_attn_varlen_func = _import_fa4_varlen_func(native_fa4_source)
         return flash_attn_varlen_func(*args, **kwargs)
 
     def make_single_gpu_attention_wrapper(cute_module):
@@ -962,6 +1082,7 @@ def run_native(args: argparse.Namespace) -> None:
     _install_native_inference_compat(
         local_attention=args.native_local_attention,
         force_fa_num_splits_one=args.force_fa_num_splits_one,
+        native_fa4_source=args.native_fa4_source,
     )
     from arch.model import Model, ModelArgs, create_kv_cache
 
@@ -1618,6 +1739,8 @@ def run_native(args: argparse.Namespace) -> None:
             "model": args.model,
             "native_checkpoint": args.native_checkpoint,
             "attention_version": 4 if args.native_use_cute else 2,
+            "native_fa4_source": args.native_fa4_source,
+            "native_fa4_runtime": dict(_NATIVE_FA4_RUNTIME),
             "local_attention": args.native_local_attention,
             "kv_cache_enabled": not args.native_no_kv_cache,
             "quant_mode": args.native_quant_mode,
@@ -1890,6 +2013,10 @@ def run_vllm(args: argparse.Namespace) -> None:
                     flush=True,
                 )
     if dp_rank == 0:
+        vllm_fa4_runtime: dict[str, Any] = {}
+        if args.flash_attn_version == 4:
+            _import_fa4_varlen_func("vllm-vendored")
+            vllm_fa4_runtime = dict(_NATIVE_FA4_RUNTIME)
         _save(
             args.out,
             {
@@ -1903,6 +2030,7 @@ def run_vllm(args: argparse.Namespace) -> None:
                 "moe_backend": args.moe_backend,
                 "attention_backend": args.attention_backend,
                 "attention_version": args.flash_attn_version,
+                "vllm_fa4_runtime": vllm_fa4_runtime,
                 "compilation_config": (
                     json.loads(args.compilation_config_json)
                     if args.compilation_config_json
