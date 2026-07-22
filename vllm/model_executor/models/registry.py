@@ -570,6 +570,7 @@ _MULTIMODAL_MODELS = {
     "UltravoxModel": ("ultravox", "UltravoxModel"),
     "VoxtralForConditionalGeneration": ("voxtral", "VoxtralForConditionalGeneration"),
     "VoxtralRealtimeGeneration": ("voxtral_realtime", "VoxtralRealtimeGeneration"),
+    "YOCOVLForConditionalGeneration": ("yoco_vl", "YOCOVLForConditionalGeneration"),
     # [Encoder-decoder]
     "CohereAsrForConditionalGeneration": (
         "cohere_asr",

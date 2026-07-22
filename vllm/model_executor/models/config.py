@@ -109,6 +109,10 @@ class YOCOForCausalLMConfig(VerifyAndUpdateConfig):
             )
 
 
+class YOCOVLForConditionalGenerationConfig(YOCOForCausalLMConfig):
+    pass
+
+
 class Gemma3TextModelConfig(VerifyAndUpdateConfig):
     @staticmethod
     def verify_and_update_model_config(model_config: "ModelConfig") -> None:
@@ -754,4 +758,5 @@ MODELS_CONFIG_MAP: dict[str, type[VerifyAndUpdateConfig]] = {
     "VoyageQwen3BidirectionalEmbedModel": VoyageQwen3BidirectionalEmbedModelConfig,
     "XLMRobertaModel": JinaRobertaModelConfig,
     "YOCOForCausalLM": YOCOForCausalLMConfig,
+    "YOCOVLForConditionalGeneration": YOCOVLForConditionalGenerationConfig,
 }
