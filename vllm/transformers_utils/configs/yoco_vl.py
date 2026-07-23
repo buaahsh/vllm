@@ -19,6 +19,7 @@ class YOCOVLConfig(PretrainedConfig):
         image_end_token_id: int = 154831,
         image_placeholder_token_id: int = 0,
         image_placeholder: str = "<image>",
+        video_placeholder: str = "<video>",
         vision_max_image_tokens: int = 4096,
         vision_align_mode: str = "resize",
         vision_patch_limit_on_one_side: int = 512,
@@ -43,6 +44,7 @@ class YOCOVLConfig(PretrainedConfig):
         self.image_end_token_id = image_end_token_id
         self.image_placeholder_token_id = image_placeholder_token_id
         self.image_placeholder = image_placeholder
+        self.video_placeholder = video_placeholder
         self.vision_max_image_tokens = vision_max_image_tokens
         self.vision_align_mode = vision_align_mode
         self.vision_patch_limit_on_one_side = vision_patch_limit_on_one_side

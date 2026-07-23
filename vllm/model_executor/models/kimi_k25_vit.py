@@ -170,9 +170,11 @@ class Learnable2DInterpPosEmbDivided_fixed(nn.Module):
             if t == 1:
                 pos_emb_3d = pos_emb_2d
             else:
-                pos_emb_3d = (
-                    pos_emb_2d.unsqueeze(0).repeat(t, 1, 1) + self.time_weight[0:t]
+                time_weight = self.time_weight[:t].to(
+                    device=pos_emb_2d.device,
+                    dtype=pos_emb_2d.dtype,
                 )
+                pos_emb_3d = pos_emb_2d.unsqueeze(0).repeat(t, 1, 1) + time_weight
 
             pos_embs.append(pos_emb_3d.reshape(-1, pos_emb_3d.shape[-1]))
 

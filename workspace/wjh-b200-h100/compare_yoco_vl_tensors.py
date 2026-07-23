@@ -29,7 +29,9 @@ from transformers import AutoTokenizer
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LLM_TRAIN_LLM_ROOT = Path("/home/v-jiahaowang/workspace/llm-train/llm")
+LLM_TRAIN_LLM_ROOT = Path(
+    os.environ.get("LLM_TRAIN_LLM_ROOT", "/root/workspace/llm-train/llm")
+)
 DEFAULT_NATIVE_CHECKPOINT = Path("/data/wjh/updates_3000")
 DEFAULT_VLLM_MODEL = Path("/data/wjh/updates_3000-hf-vl")
 DEFAULT_TOKENIZER = Path("/mnt/msranlp/yutao/hf_cache/agens_vl_tokenizer_0622")
@@ -604,7 +606,7 @@ def _collect_vllm_model_tensors(
     input_ids_cpu: torch.Tensor,
     image_mask_cpu: torch.Tensor,
     pixel_values_cpu: torch.Tensor,
-    image_grid_hws_cpu: torch.Tensor,
+    image_grid_thws_cpu: torch.Tensor,
 ) -> dict[str, torch.Tensor]:
     from vllm.model_executor.models.yoco_vl import YOCOVLImagePixelInputs
 
@@ -612,33 +614,40 @@ def _collect_vllm_model_tensors(
     input_ids = input_ids_cpu.to(device=device)
     image_mask = image_mask_cpu.to(device=device)
     pixel_values = pixel_values_cpu.to(device=device)
-    image_grid_hws = image_grid_hws_cpu.to(device=device)
+    image_grid_thws = image_grid_thws_cpu.to(device=device)
 
     with torch.inference_mode():
         image_input = YOCOVLImagePixelInputs(
             type="pixel_values",
             pixel_values=pixel_values,
-            image_grid_hws=image_grid_hws,
+            image_grid_thws=image_grid_thws,
         )
         target_dtype = model.vision_tower.patch_embed.proj.weight.dtype
         vision_pixel_values = pixel_values.to(dtype=target_dtype)
         vision_patch_embed = model.vision_tower.patch_embed(
             vision_pixel_values,
-            image_grid_hws,
+            image_grid_thws,
         )
         vision_encoder = model.vision_tower.encoder(
             vision_patch_embed,
-            image_grid_hws,
+            image_grid_thws,
         )
         vllm_lengths = torch.cat(
             (
-                torch.zeros(1, device=image_grid_hws.device, dtype=image_grid_hws.dtype),
-                (image_grid_hws[:, 0] * image_grid_hws[:, 1]).to(image_grid_hws.device),
+                torch.zeros(
+                    1,
+                    device=image_grid_thws.device,
+                    dtype=image_grid_thws.dtype,
+                ),
+                image_grid_thws[:, 0]
+                * image_grid_thws[:, 1]
+                * image_grid_thws[:, 2],
             )
         )
         vllm_cu_seqlens = vllm_lengths.cumsum(dim=0, dtype=torch.int32)
-        vllm_rope = model.vision_tower.encoder.rope_2d.get_freqs_cis_by_seqlens(
-            grid_hws=image_grid_hws,
+        vllm_rope = model.vision_tower.encoder.rope_2d.get_freqs_cis(
+            grid_thws=image_grid_thws,
+            device=vision_patch_embed.device,
         )
         vllm_block0 = model.vision_tower.encoder.blocks[0]
         vllm_block0_norm0 = vllm_block0.norm0(vision_patch_embed)
@@ -843,7 +852,7 @@ def _collect_vllm_tensors(
     ref_image_mask: torch.Tensor,
     max_model_len: int,
     vllm_pixel_values: torch.Tensor,
-    vllm_image_grid_hws: torch.Tensor,
+    vllm_image_grid_thws: torch.Tensor,
     seed: int,
     gpu_memory_utilization: float,
     flash_attn_version: int | None,
@@ -880,7 +889,7 @@ def _collect_vllm_tensors(
             input_ids_cpu=ref_input_ids,
             image_mask_cpu=ref_image_mask,
             pixel_values_cpu=vllm_pixel_values,
-            image_grid_hws_cpu=vllm_image_grid_hws,
+            image_grid_thws_cpu=vllm_image_grid_thws,
         )
         tensors = llm.apply_model(fn)[0]
         llm.apply_model(
@@ -1160,7 +1169,9 @@ def main() -> int:
         image = image_reader.convert("RGB")
     vllm_patches, vllm_grid_hw, vllm_num_tokens = _process_image(image, hf_config)
     vllm_pixel_values = torch.from_numpy(vllm_patches).contiguous()
-    vllm_image_grid_hws = torch.from_numpy(vllm_grid_hw).reshape(1, 2).contiguous()
+    vllm_image_grid_thws = torch.from_numpy(
+        np.concatenate(([1], vllm_grid_hw))
+    ).reshape(1, 3).contiguous()
 
     tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_path), trust_remote_code=True)
     vllm_prompt = _render_prompt(tokenizer, args.prompt, args.system_prompt, False)
@@ -1169,8 +1180,8 @@ def main() -> int:
         "rendered_prompt_equal": reference["rendered_prompt"] == vllm_prompt,
         "input_ids_exact": True,
         "image_mask_exact": True,
-        "grid_hw_exact": reference["grid_thw"][0, 1:].tolist()
-        == vllm_image_grid_hws[0].tolist(),
+        "grid_thw_exact": reference["grid_thw"][0].tolist()
+        == vllm_image_grid_thws[0].tolist(),
         "num_image_tokens_equal": reference["num_image_tokens"] == vllm_num_tokens,
     }
 
@@ -1196,7 +1207,7 @@ def main() -> int:
         ref_image_mask=reference["image_mask"],
         max_model_len=max_model_len,
         vllm_pixel_values=vllm_pixel_values,
-        vllm_image_grid_hws=vllm_image_grid_hws,
+        vllm_image_grid_thws=vllm_image_grid_thws,
         seed=args.seed,
         gpu_memory_utilization=args.gpu_memory_utilization,
         flash_attn_version=args.vllm_flash_attn_version,

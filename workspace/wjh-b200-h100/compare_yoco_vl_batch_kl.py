@@ -17,7 +17,6 @@ import shutil
 import sys
 import warnings
 from functools import partial
-from itertools import permutations
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +26,9 @@ from PIL import Image
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LLM_TRAIN_LLM_ROOT = Path("/home/v-jiahaowang/workspace/llm-train/llm")
+LLM_TRAIN_LLM_ROOT = Path(
+    os.environ.get("LLM_TRAIN_LLM_ROOT", "/root/workspace/llm-train/llm")
+)
 DEFAULT_CHECKPOINT_DIR = Path("/data/wjh/updates_3000")
 DEFAULT_VLLM_MODEL = Path("/data/wjh/updates_3000-hf-vl")
 DEFAULT_TOKENIZER = Path("/mnt/msranlp/yutao/hf_cache/agens_vl_tokenizer_0622")
@@ -49,6 +50,11 @@ def _add_paths() -> None:
     for path in paths:
         if path not in sys.path:
             sys.path.insert(0, path)
+    system_dist_packages = "/usr/local/lib/python3.12/dist-packages"
+    if system_dist_packages not in sys.path and Path(system_dist_packages).is_dir():
+        # The container image provides the native flash-attn build here. Append
+        # it after the venv so the venv's PyTorch and vLLM remain authoritative.
+        sys.path.append(system_dist_packages)
     pythonpath = [
         entry for entry in os.environ.get("PYTHONPATH", "").split(":") if entry
     ]
@@ -316,28 +322,85 @@ def _pairwise_distribution_divergence(
         ) + 0.5 * torch.sum(cand_p * (cand_logp - midpoint_logp), dim=-1)
         prob_l1[ref_idx] = (cand_p - ref_p[ref_idx]).abs().sum(dim=-1)
 
+    def minimum_cost_assignment(cost: torch.Tensor) -> list[int]:
+        """Return the minimum-cost one-to-one row/column assignment in O(n^3)."""
+        matrix = cost.detach().float().cpu().numpy()
+        rows, columns = matrix.shape
+        if rows != columns:
+            raise ValueError(
+                "Pairwise assignment requires a square cost matrix; "
+                f"got {matrix.shape}"
+            )
+        if not np.isfinite(matrix).all():
+            raise ValueError("Pairwise assignment cost matrix contains NaN or inf")
+
+        # Hungarian algorithm using 1-based indexing for the matching arrays.
+        # ``p[column]`` is the row currently matched to that column.
+        u = np.zeros(rows + 1, dtype=np.float64)
+        v = np.zeros(columns + 1, dtype=np.float64)
+        p = np.zeros(columns + 1, dtype=np.int64)
+        way = np.zeros(columns + 1, dtype=np.int64)
+        for row in range(1, rows + 1):
+            p[0] = row
+            column0 = 0
+            min_value = np.full(columns + 1, np.inf, dtype=np.float64)
+            used = np.zeros(columns + 1, dtype=np.bool_)
+            while True:
+                used[column0] = True
+                row0 = int(p[column0])
+                delta = np.inf
+                column1 = 0
+                for column in range(1, columns + 1):
+                    if used[column]:
+                        continue
+                    current = matrix[row0 - 1, column - 1] - u[row0] - v[column]
+                    if current < min_value[column]:
+                        min_value[column] = current
+                        way[column] = column0
+                    if min_value[column] < delta:
+                        delta = min_value[column]
+                        column1 = column
+                for column in range(columns + 1):
+                    if used[column]:
+                        u[p[column]] += delta
+                        v[column] -= delta
+                    else:
+                        min_value[column] -= delta
+                column0 = column1
+                if p[column0] == 0:
+                    break
+            while True:
+                column1 = int(way[column0])
+                p[column0] = p[column1]
+                column0 = column1
+                if column0 == 0:
+                    break
+
+        assignment = [-1] * rows
+        for column in range(1, columns + 1):
+            if p[column] != 0:
+                assignment[int(p[column]) - 1] = column - 1
+        if any(column < 0 for column in assignment):
+            raise RuntimeError(f"Hungarian assignment is incomplete: {assignment}")
+        return assignment
+
     rows = ref.shape[0]
-    best_by_kl: dict[str, Any] | None = None
-    best_by_js: dict[str, Any] | None = None
-    for perm in permutations(range(rows)):
-        perm_tensor = torch.tensor(perm, device=ref.device, dtype=torch.long)
+
+    def assignment_entry(assignment: list[int]) -> dict[str, Any]:
+        perm_tensor = torch.tensor(assignment, device=ref.device, dtype=torch.long)
         row_indices = torch.arange(rows, device=ref.device)
         kl_values = kl_ref_to_cand[row_indices, perm_tensor]
         js_values = js[row_indices, perm_tensor]
-        kl_mean = float(kl_values.mean().item())
-        js_mean = float(js_values.mean().item())
-        kl_entry = {
-            "candidate_row_for_reference_row": [int(x) for x in perm],
+        return {
+            "candidate_row_for_reference_row": [int(x) for x in assignment],
             "kl_ref_to_candidate": [float(x) for x in kl_values.tolist()],
-            "kl_ref_to_candidate_mean": kl_mean,
+            "kl_ref_to_candidate_mean": float(kl_values.mean().item()),
             "js": [float(x) for x in js_values.tolist()],
-            "js_mean": js_mean,
+            "js_mean": float(js_values.mean().item()),
         }
-        js_entry = dict(kl_entry)
-        if best_by_kl is None or kl_mean < best_by_kl["kl_ref_to_candidate_mean"]:
-            best_by_kl = kl_entry
-        if best_by_js is None or js_mean < best_by_js["js_mean"]:
-            best_by_js = js_entry
+
+    best_by_kl = assignment_entry(minimum_cost_assignment(kl_ref_to_cand))
+    best_by_js = assignment_entry(minimum_cost_assignment(js))
 
     return {
         "kl_ref_to_candidate": kl_ref_to_cand.cpu().tolist(),
@@ -422,6 +485,13 @@ def _get_vllm_batch_logits_capture(model: torch.nn.Module) -> dict[str, Any]:
     }
 
 
+def _get_vllm_projector_dtypes(model: torch.nn.Module) -> list[str]:
+    projector = getattr(model, "vision_projector", None)
+    if projector is None:
+        raise RuntimeError("vLLM model has no vision_projector")
+    return sorted({str(parameter.dtype) for parameter in projector.parameters()})
+
+
 @torch.inference_mode()
 def _run_vllm_capture(
     *,
@@ -433,14 +503,22 @@ def _run_vllm_capture(
     max_model_len: int,
     max_num_batched_tokens: int,
     max_num_seqs: int,
+    enable_chunked_prefill: bool,
     seed: int,
     gpu_memory_utilization: float,
     flash_attn_version: int | None,
+    quantization: str | None,
 ) -> dict[str, Any]:
     from vllm import LLM, SamplingParams
 
     llm = None
     try:
+        if quantization == "mxfp8":
+            moe_backend = "auto"
+        elif quantization == "fp8_per_block":
+            moe_backend = "deep_gemm"
+        else:
+            moe_backend = "triton"
         llm_kwargs = {
             "model": str(model_path),
             "tokenizer": str(tokenizer_path),
@@ -452,10 +530,10 @@ def _run_vllm_capture(
             "max_num_seqs": max_num_seqs,
             "max_num_batched_tokens": max_num_batched_tokens,
             "gpu_memory_utilization": gpu_memory_utilization,
-            "quantization": None,
-            "moe_backend": "triton",
+            "quantization": quantization,
+            "moe_backend": moe_backend,
             "enforce_eager": True,
-            "enable_chunked_prefill": False,
+            "enable_chunked_prefill": enable_chunked_prefill,
             "enable_prefix_caching": False,
             "limit_mm_per_prompt": {"image": 1},
         }
@@ -486,8 +564,11 @@ def _run_vllm_capture(
         )
         outputs = llm.generate(requests, sampling, use_tqdm=False)
         capture = llm.apply_model(_get_vllm_batch_logits_capture)[0]
+        projector_dtypes = llm.apply_model(_get_vllm_projector_dtypes)[0]
         return {
             **capture,
+            "vllm_projector_parameter_dtypes": projector_dtypes,
+            "vllm_moe_backend": moe_backend,
             "generated_ids": [list(output.outputs[0].token_ids) for output in outputs],
             "generated_text": [output.outputs[0].text for output in outputs],
         }
@@ -514,6 +595,20 @@ def parse_args() -> argparse.Namespace:
         help="Defaults to the batch size; set to 1 to force serial vLLM scheduling.",
     )
     parser.add_argument(
+        "--vllm_max_num_batched_tokens",
+        type=int,
+        default=0,
+        help=(
+            "Defaults to the full batch token count. Set a smaller value together "
+            "with --enable_chunked_prefill to avoid pathological oversized kernels."
+        ),
+    )
+    parser.add_argument(
+        "--enable_chunked_prefill",
+        action="store_true",
+        help="Allow vLLM to split a logical request batch into bounded prefill chunks.",
+    )
+    parser.add_argument(
         "--reference_prompt_variant",
         choices=("with_bos", "no_bos"),
         default="no_bos",
@@ -521,6 +616,29 @@ def parse_args() -> argparse.Namespace:
             "Use no_bos by default because vLLM receives rendered string prompts "
             "and does not include llm-train's explicit leading <sop> token."
         ),
+    )
+    parser.add_argument(
+        "--reference_quant_mode",
+        choices=("bfloat16", "mxfp8"),
+        default="bfloat16",
+    )
+    parser.add_argument(
+        "--vllm_quantization",
+        choices=("none", "mxfp8", "fp8_per_block"),
+        default="none",
+    )
+    parser.add_argument(
+        "--reference_llm_flash_attn_version",
+        type=int,
+        choices=(2, 4),
+        default=2,
+    )
+    parser.add_argument(
+        "--reference_vision_flash_attn_version",
+        type=int,
+        choices=(2, 4),
+        default=None,
+        help="Defaults to the checkpoint's saved use_cute setting.",
     )
     parser.add_argument(
         "--vllm_flash_attn_version",
@@ -581,10 +699,17 @@ def main() -> int:
     )
 
     metadata = load_metadata(checkpoint_dir)
-    model_args = model_args_from_metadata(metadata, "bfloat16")
+    model_args = model_args_from_metadata(metadata, args.reference_quant_mode)
+    model_args.use_cute = args.reference_llm_flash_attn_version == 4
+    if args.reference_vision_flash_attn_version is None:
+        reference_vision_fa_version = (
+            4 if metadata["modelargs"].get("use_cute", False) else 2
+        )
+    else:
+        reference_vision_fa_version = args.reference_vision_flash_attn_version
     vision_attn_implementation = (
         "flash_attention_cute"
-        if metadata["modelargs"].get("use_cute", False)
+        if reference_vision_fa_version == 4
         else "flash_attention_2"
     )
     tokenizer = Tokenizer(str(tokenizer_path))
@@ -593,7 +718,9 @@ def main() -> int:
         model_args,
         device,
         checkpoint_load_mode="auto",
-        checkpoint_cache_dir="auto",
+    )
+    reference_projector_parameter_dtypes = sorted(
+        {str(parameter.dtype) for parameter in projector.parameters()}
     )
     vision_tower = load_vision_tower(
         model_args.vision_encoder_path,
@@ -654,10 +781,16 @@ def main() -> int:
 
     max_prompt_tokens = max(int(ids.numel()) for ids in reference_prompt_ids)
     max_model_len = max_prompt_tokens + args.max_new_tokens
-    max_num_batched_tokens = (
+    full_batch_tokens = (
         sum(int(ids.numel()) for ids in reference_prompt_ids)
         + len(samples) * args.max_new_tokens
     )
+    max_num_batched_tokens = args.vllm_max_num_batched_tokens or full_batch_tokens
+    if max_num_batched_tokens < max_model_len:
+        raise ValueError(
+            "--vllm_max_num_batched_tokens must be at least max_model_len "
+            f"({max_model_len}); got {max_num_batched_tokens}"
+        )
     max_num_seqs = args.vllm_max_num_seqs or len(samples)
     vllm_result = _run_vllm_capture(
         model_path=vllm_model,
@@ -668,9 +801,13 @@ def main() -> int:
         max_model_len=max_model_len,
         max_num_batched_tokens=max_num_batched_tokens,
         max_num_seqs=max_num_seqs,
+        enable_chunked_prefill=args.enable_chunked_prefill,
         seed=args.seed,
         gpu_memory_utilization=args.gpu_memory_utilization,
         flash_attn_version=args.vllm_flash_attn_version,
+        quantization=(
+            None if args.vllm_quantization == "none" else args.vllm_quantization
+        ),
     )
 
     result = {
@@ -694,12 +831,29 @@ def main() -> int:
             "image_tokens": [int(sample.image_tokens) for sample in samples],
             "max_model_len": max_model_len,
             "max_num_batched_tokens": max_num_batched_tokens,
+            "full_batch_tokens": full_batch_tokens,
             "vllm_max_num_seqs": max_num_seqs,
+            "vllm_enable_chunked_prefill": args.enable_chunked_prefill,
             "reference_quant_mode": model_args.quant_mode,
+            "reference_llm_attn": (
+                "flash_attention_cute"
+                if args.reference_llm_flash_attn_version == 4
+                else "flash_attention_2"
+            ),
             "reference_vision_attn": vision_attn_implementation,
             "vllm_dtype": "bfloat16",
-            "vllm_quantization": None,
-            "vllm_moe_backend": "triton",
+            "reference_projector_parameter_dtypes": (
+                reference_projector_parameter_dtypes
+            ),
+            "vllm_projector_parameter_dtypes": vllm_result[
+                "vllm_projector_parameter_dtypes"
+            ],
+            "vllm_quantization": (
+                None
+                if args.vllm_quantization == "none"
+                else args.vllm_quantization
+            ),
+            "vllm_moe_backend": vllm_result["vllm_moe_backend"],
             "vllm_enable_prefix_caching": False,
             "vllm_flash_attn_version": args.vllm_flash_attn_version,
             "vision_seconds": vision_seconds,

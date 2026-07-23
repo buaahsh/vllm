@@ -754,7 +754,12 @@ class YOCOSelfAttention(nn.Module):
                     num_kv_heads=self.num_kv_heads,
                     cache_config=cache_config,
                     quant_config=quant_config,
-                    per_layer_sliding_window=self.sliding_window,
+                    # llm-train passes ``(yoco_window_size, 0)`` directly to
+                    # FlashAttention, so 512 means 512 preceding tokens plus
+                    # the current token. vLLM's scalar convention counts the
+                    # current token and converts W to ``(W - 1, 0)``. Add one
+                    # here so the backend receives the same ``(512, 0)``.
+                    per_layer_sliding_window=self.sliding_window + 1,
                     attn_type=AttentionType.DECODER,
                     prefix=f"{unique_prefix}.attn",
                 )
