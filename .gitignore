@@ -198,6 +198,10 @@ cython_debug/
 # Codex
 .codex/
 
+# Local experiment workspace, except the latest YOCO-VL result report
+/workspace/*
+!/workspace/yoco_vl_batch16_latest_bf16_fp8.md
+
 # Cursor
 .cursor/
 
