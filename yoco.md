@@ -3,8 +3,8 @@
 本文记录 YOCO-30B-A3B 在 B200 上与
 `/workspace/shaohanh/llm-train` 对齐后的实现、验证结果和推荐运行方式。
 生产基线代码分支为 `shaohanh/yoco-0716`，基线容器镜像为
-`buaahsh/pytorch:26.02-b200-vllm-0716`。通过 trainer KL 和持续 rollout
-性能验收的 mixed-graph overlay 镜像为：
+`buaahsh/pytorch:26.02-b200-vllm-0716`。当前面向 agentic rollout 的
+mixed-graph overlay 镜像为：
 
 ```text
 cdx123/rlbridge:b200-nnscaler-vllm-mixedgraph-0722
@@ -50,26 +50,55 @@ KL 只有在 vLLM 和 llm-train Native 使用相同计算条件时才有意义�
 
 ## 当前结论
 
-### 推荐生产配置
+### 推荐生产配置（Agentic rollout）
 
-以下配置不使用 eager，并同时满足 MXFP8 batch prefill 和稳定 decoding：
+Agentic workload 会在工具调用、环境交互和下一轮对话后反复加入新 prompt。
+当前统一使用 `FULL_AND_PIECEWISE`：纯 decode batch 走 FULL CUDA Graph，
+纯 prefill 和 mixed prefill-decode batch 走 PIECEWISE CUDA Graph。
 
-- `--max-num-seqs 16`
-- `--attention-config '{"backend":"FLASH_ATTN","flash_attn_version":2}'`
-- `--quantization fp8_per_block`
-- `--moe-backend deep_gemm`
-- compilation config:
+- `--max-num-seqs 64`，与单个 engine 的请求并发上限一致；
+- 为保证最大并发下的单 token decode 不回退 eager，
+  `cudagraph_capture_sizes` 的最大值应不小于 `--max-num-seqs`；当前均为 64；
+- `--attention-config '{"backend":"FLASH_ATTN","flash_attn_version":2}'`；
+- `--quantization fp8_per_block`；
+- `--moe-backend deep_gemm`；
+- compilation config：
 
 ```json
 {
-  "mode": 0,
-  "cudagraph_mode": "FULL_DECODE_ONLY",
-  "cudagraph_capture_sizes": [1, 2, 4, 8, 16]
+  "mode": 3,
+  "backend": "eager",
+  "custom_ops": ["all"],
+  "cudagraph_mode": "FULL_AND_PIECEWISE",
+  "cudagraph_capture_sizes": [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64]
 }
 ```
 
-prefill 继续使用 FA2。CUDA Graph 单 token decode 在 FA2 backend 内切换到
-Triton 2D paged attention，避免 FA2 graph replay 的 KV metadata 错误。
+这里的 `backend=eager` 关闭 AOT/Inductor 对普通算子的重写，但不会关闭 CUDA
+Graph：启动日志应同时出现 `mixed prefill-decode, PIECEWISE: 11/11` 和
+`decode, FULL: 11/11`。FA2 的 uniform single-token decode 使用 FULL graph；
+FA2 不支持的动态 mixed attention 留在 PIECEWISE graph 边界外执行。
+
+该配置主要面向多轮 agent、长 prompt 分块和持续请求补位。单轮 ChatBot 的
+prompt 很短、response 很长，大部分 wall time 是 pure decode；热态实测 mixed
+配置可能比 `FULL_DECODE_ONLY + graph64` 慢约几个百分点。
+
+`FULL_DECODE_ONLY` 仍保留为单轮长 decode 的性能回滚配置，但不再是 agentic
+默认。回滚时也必须把 capture sizes 覆盖到 64，避免 batch 17--64 回退 eager。
+
+### Mixed-graph 验证边界
+
+- 已确认每个 engine 捕获 11 个 PIECEWISE graph 和 11 个 FULL graph；实测
+  PIECEWISE capture 约 14 秒，FULL capture 约 2 秒，各 engine 并行启动。
+- 16-request 短突发中 mixed 配置约慢 2%；单轮 ChatBot 热态约有几个百分点
+  波动或回归，首个冷 step 还会受运行期 Triton JIT 影响。
+- 512-token offline trainer replay 中，decode-only 为 `0.00855131`，mixed 为
+  `0.00330244`；该结果可复现，但样本太小，不能代表完整训练分布。
+- 真实 model-v0 ChatBot step（约 1,300 万 tokens）中，decode-only 为
+  `0.006027`，mixed 为 `0.006142`。当前没有证据表明 mixed 会降低线上 KL。
+
+以下数值矩阵是 `0716` decode-only 基线的历史完整词表验收结果，用于保留
+数值对齐证据；它不是当前 agentic mixed 配置的性能声明。
 
 | 验证矩阵 | Native -> vLLM mean KL | 结论 |
 | --- | ---: | --- |
@@ -132,7 +161,7 @@ scheduler 一致的 `1 + 15` forward shape。
 
 ### CUDA Graph 状态
 
-已验收配置：
+历史数值对齐基线：
 
 ```json
 {
@@ -141,6 +170,26 @@ scheduler 一致的 `1 + 15` forward shape。
   "cudagraph_capture_sizes": [1, 2, 4, 8, 16]
 }
 ```
+
+当前 agentic 运行配置：
+
+```json
+{
+  "mode": 3,
+  "backend": "eager",
+  "custom_ops": ["all"],
+  "cudagraph_mode": "FULL_AND_PIECEWISE",
+  "cudagraph_capture_sizes": [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64]
+}
+```
+
+运行时路由如下：
+
+| Scheduler batch | CUDA Graph 路径 |
+| --- | --- |
+| uniform single-token decode | FULL |
+| pure prefill | PIECEWISE |
+| mixed prefill-decode | PIECEWISE |
 
 已确认不安全的组合：
 
@@ -198,31 +247,46 @@ CUDA_VISIBLE_DEVICES=5 .venv/bin/python convert_to_hf.py \
 
 ## 推荐生产启动命令
 
-### 直接运行当前仓库
+### Agentic mixed graph（默认）
 
 ```bash
+MODEL=/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu
+
 vllm serve \
-  /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
+  "$MODEL" \
   --host 0.0.0.0 \
   --port 8001 \
   --served-model-name yoco \
   --trust-remote-code \
   --tensor-parallel-size 1 \
-  --max-model-len 8192 \
-  --max-num-batched-tokens 8192 \
-  --max-num-seqs 16 \
-  --gpu-memory-utilization 0.90 \
+  --max-model-len 65536 \
+  --max-num-seqs 64 \
+  --gpu-memory-utilization 0.85 \
   --quantization fp8_per_block \
   --moe-backend deep_gemm \
   --reasoning-parser agens \
   --enable-auto-tool-choice \
   --tool-call-parser agens \
   --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":2}' \
-  --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
+  --compilation-config \
+    '{"mode":3,"backend":"eager","custom_ops":["all"],"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64]}'
 ```
 
-BF16 使用相同 graph/attention 配置，但去掉 `--quantization`，并改为
-`--moe-backend triton`。
+单个 engine 的请求并发上限不应超过 `--max-num-seqs`，最大 capture size 应
+不小于 `--max-num-seqs`；当前三者均为 64。BF16 使用相同 graph/attention
+配置，但去掉 `--quantization`，并改为 `--moe-backend triton`。
+
+### 单轮长 decode 回滚配置
+
+当 workload 已确认几乎没有新 prefill 插入时，可回滚为：
+
+```json
+{
+  "mode": 0,
+  "cudagraph_mode": "FULL_DECODE_ONLY",
+  "cudagraph_capture_sizes": [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64]
+}
+```
 
 ### Agens reasoning 与 tool parser
 
@@ -252,17 +316,16 @@ docker run --rm \
   --ulimit stack=67108864 \
   -p 8001:8001 \
   -v /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu:/model:ro \
-  buaahsh/pytorch:26.02-b200-vllm-0716 \
+  cdx123/rlbridge:b200-nnscaler-vllm-mixedgraph-0722 \
   vllm serve /model \
     --host 0.0.0.0 \
     --port 8001 \
     --served-model-name yoco \
     --trust-remote-code \
     --tensor-parallel-size 1 \
-    --max-model-len 8192 \
-    --max-num-batched-tokens 8192 \
-    --max-num-seqs 16 \
-    --gpu-memory-utilization 0.90 \
+    --max-model-len 65536 \
+    --max-num-seqs 64 \
+    --gpu-memory-utilization 0.85 \
     --quantization fp8_per_block \
     --moe-backend deep_gemm \
     --reasoning-parser agens \
@@ -271,10 +334,13 @@ docker run --rm \
     --attention-config \
       '{"backend":"FLASH_ATTN","flash_attn_version":2}' \
     --compilation-config \
-      '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
+      '{"mode":3,"backend":"eager","custom_ops":["all"],"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64]}'
 ```
 
 ## 完整词表 KL 验证
+
+本节命令用于复现历史 `0716` decode-only batch-16 数值矩阵，不是当前 agentic
+生产启动配置。生产运行应使用上文的 mixed graph64 命令。
 
 Native MXFP8 必须使用 torch activation quant fallback；训练侧 Triton
 activation quant kernel 在短 prompt 上可能触发 illegal memory。batch 16
