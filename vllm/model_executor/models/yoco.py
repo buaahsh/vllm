@@ -296,6 +296,36 @@ def _yoco_rms_norm_fake(
     return torch.empty_like(x, dtype=torch.bfloat16)
 
 
+def _yoco_router_linear_tf32_cuda(
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+    normalize_weight: bool,
+) -> torch.Tensor:
+    previous_allow_tf32 = torch.backends.cuda.matmul.allow_tf32
+    previous_matmul_precision = torch.get_float32_matmul_precision()
+    previous_cuda_precision = torch.backends.cuda.matmul.fp32_precision
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.set_float32_matmul_precision("high")
+    torch.backends.cuda.matmul.fp32_precision = "tf32"
+    try:
+        if normalize_weight:
+            weight = weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
+        return F.linear(hidden_states, weight)
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = previous_allow_tf32
+        torch.set_float32_matmul_precision(previous_matmul_precision)
+        torch.backends.cuda.matmul.fp32_precision = previous_cuda_precision
+
+
+def _yoco_router_linear_tf32_fake(
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+    normalize_weight: bool,
+) -> torch.Tensor:
+    del normalize_weight
+    return hidden_states.new_empty((*hidden_states.shape[:-1], weight.shape[0]))
+
+
 if HAS_TRITON and current_platform.is_cuda():
     direct_register_custom_op(
         op_name="yoco_rms_clip",
@@ -306,6 +336,11 @@ if HAS_TRITON and current_platform.is_cuda():
         op_name="yoco_rms_norm",
         op_func=_yoco_rms_norm_cuda,
         fake_impl=_yoco_rms_norm_fake,
+    )
+    direct_register_custom_op(
+        op_name="yoco_router_linear_tf32",
+        op_func=_yoco_router_linear_tf32_cuda,
+        fake_impl=_yoco_router_linear_tf32_fake,
     )
 
 
@@ -1091,23 +1126,19 @@ class YOCOMoE(nn.Module):
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        previous_allow_tf32 = torch.backends.cuda.matmul.allow_tf32
-        previous_matmul_precision = torch.get_float32_matmul_precision()
-        previous_cuda_precision = torch.backends.cuda.matmul.fp32_precision
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.set_float32_matmul_precision("high")
-        torch.backends.cuda.matmul.fp32_precision = "tf32"
-        try:
+        if hidden_states.is_cuda and current_platform.is_cuda():
+            router_logits = torch.ops.vllm.yoco_router_linear_tf32(
+                hidden_states.float(),
+                self.gate.weight,
+                not self.router_weights_normalized,
+            )
+        else:
             if self.router_weights_normalized:
                 router_logits = F.linear(hidden_states.float(), self.gate.weight)
             else:
                 router_logits = _yoco_normalized_router_linear(
                     hidden_states.float(), self.gate.weight
                 )
-        finally:
-            torch.backends.cuda.matmul.allow_tf32 = previous_allow_tf32
-            torch.set_float32_matmul_precision(previous_matmul_precision)
-            torch.backends.cuda.matmul.fp32_precision = previous_cuda_precision
         routed_out = self.experts(
             hidden_states=hidden_states, router_logits=router_logits
         )
@@ -1582,6 +1613,8 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
             prefix=maybe_prefix(prefix, "model"),
         )
 
+        self._rope_cache_initialized = False
+
         self.vocab_size = _cfg_int(config, "vocab_size")
         hidden_size = _cfg_int(config, "hidden_size", "d_model")
         self.fast_prefill_enabled = vllm_config.cache_config.kv_sharing_fast_prefill
@@ -1618,6 +1651,12 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        if not self._rope_cache_initialized:
+            for module in self.model.modules():
+                if isinstance(module, YOCORotaryEmbedding):
+                    module._get_cos_sin_cache(positions.device)
+            self._rope_cache_initialized = True
+
         if not self.fast_prefill_enabled:
             return self.model(
                 input_ids=input_ids,

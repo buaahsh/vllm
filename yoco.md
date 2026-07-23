@@ -2,8 +2,17 @@
 
 本文记录 YOCO-30B-A3B 在 B200 上与
 `/workspace/shaohanh/llm-train` 对齐后的实现、验证结果和推荐运行方式。
-对应代码分支为 `shaohanh/yoco-0716`，容器镜像为
-`buaahsh/pytorch:26.02-b200-vllm-0716`。
+生产基线代码分支为 `shaohanh/yoco-0716`，基线容器镜像为
+`buaahsh/pytorch:26.02-b200-vllm-0716`。通过 trainer KL 和持续 rollout
+性能验收的 mixed-graph overlay 镜像为：
+
+```text
+cdx123/rlbridge:b200-nnscaler-vllm-mixedgraph-0722
+```
+
+该镜像仅在 `0716` 上覆盖
+`vllm/model_executor/models/yoco.py`，源文件 SHA256 为
+`dea50e32a429ab8a24b3a2f9277fa689ca8bcfc44e14156990a978b7d723a7d3`。
 
 ## 已验证模型
 
@@ -349,6 +358,21 @@ docker build \
 
 该 Dockerfile 保留 `donglixp/pytorch:26.02-b200` 中的 Python、PyTorch 和
 CUDA 环境，只在固定的 vLLM 基线提交上覆盖本次需要的 Python runtime 文件。
+
+### Mixed-graph 薄 overlay
+
+mixed-graph 改动只有 YOCO Python 源码，不需要重编 CUDA/C++。使用固定的
+`0716` digest 构建薄 overlay：
+
+```bash
+docker buildx build --push \
+  -f docker/Dockerfile.b200-mixedgraph \
+  -t cdx123/rlbridge:b200-nnscaler-vllm-mixedgraph-0722 \
+  .
+```
+
+发布后的 manifest 保留基线全部 109 层，只新增一个 21,217-byte layer。不要
+覆盖 `0716` tag；它是 mode 0 / FULL_DECODE_ONLY 的回滚基线。
 
 ### 快速迭代
 

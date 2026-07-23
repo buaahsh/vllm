@@ -1,0 +1,15 @@
+# syntax=docker/dockerfile:1.7
+
+# Build example:
+#   docker buildx build --push \
+#     -f docker/Dockerfile.b200-mixedgraph \
+#     -t cdx123/rlbridge:b200-nnscaler-vllm-mixedgraph-0722 .
+
+FROM buaahsh/pytorch:26.02-b200-vllm-0716@sha256:5f42f3456baf6a734a389d5b08cac3f9b8105c1c5331d4842ac2d3ab06d3c056
+
+LABEL org.opencontainers.image.description="Validated Agens 30B YOCO mixed prefill-decode graph overlay" \
+      ai.vllm.yoco.source-sha256="dea50e32a429ab8a24b3a2f9277fa689ca8bcfc44e14156990a978b7d723a7d3" \
+      ai.vllm.yoco.base-revision="d4eb9942f9dc81c773d82b737b27dffda40cd56d"
+
+COPY --link --chmod=0644 vllm/model_executor/models/yoco.py \
+    /workspace/vllm/vllm/model_executor/models/yoco.py
