@@ -937,6 +937,84 @@ per-prompt Native→vLLM KL：
 [batch-1 all-MXFP8](../logs/yoco_alignment_results/image_fa4_4.0.0b13/bsz1_tile_n128/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)、
 [batch-1 QKV-BF16](../logs/yoco_alignment_results/image_fa4_4.0.0b13/bsz1_tile_n128/native_mxfp8_qkv_bf16_fa4_vs_vllm_fp8_per_block_qkv_bf16.json)。
 
+##### latest PyPI FA4 b23 batch-1 all-MXFP8
+
+为检验较新的 FA4 是否恢复 historical FA2 batch-1 exact zero，另建隔离 overlay，
+同时将 Native 和 vLLM 切到 2026-07-24 PyPI 最新 prerelease
+`flash-attn-4==4.0.0b23`。这里使用 b23 声明并可共同解析的依赖组合，而不是把每个
+package 独立升级到最新版本：
+
+| package | pinned version |
+| --- | --- |
+| `flash-attn-4` | `4.0.0b23` |
+| `nvidia-cutlass-dsl` and CUDA 13 libs | `4.6.0.dev0` |
+| `apache-tvm-ffi` | `0.1.12` |
+| `quack-kernels` | `0.5.3` |
+
+独立最新的 CUTLASS DSL `4.6.1` 与 Quack `0.6.1` 不属于 b23 的共同兼容组合。
+overlay 用 `--no-deps` 安装上述 kernel runtime，保留 Native NVIDIA Torch
+`2.11.0a0+eb65b36914.nv26.02` 和 vLLM Torch `2.11.0+cu130` 不变。其 FA4 Python
+source SHA-256 为
+`6a9688934b3b70bcfc471661506acf46b22145aa4ca757a17b3a99fbfbee6ac8`；manifest
+同时验证 package versions 及 CUTLASS/TVM FFI module 均来自该 overlay。
+
+在 full model 前，先用相同 deterministic BF16 Q/K/V 和 varlen geometry 分别在两
+Torch environments 运行 common FA4 kernel。output 与 LSE 均通过 strict
+`torch.equal`：
+
+| common b23 kernel tensor | exact | max abs | mean abs | relative L2 |
+| --- | --- | ---: | ---: | ---: |
+| output | yes | `0` | `0` | `0` |
+| LSE | yes | `0` | `0` | `0` |
+
+full-model arm 继续使用 `mixed5`，每个 prompt 分别执行一个 one-request forward；
+vLLM iteration log 确认五次 context forward 分别是 `1` request 和
+`3/6/66/8/110` tokens。其余条件与 b13 batch-1 all-MXFP8 对照一致：default exp2、
+explicit `tile_mn=(128,128)`、`num_splits=1`、prefix cache off、V1 in-process、
+Native MXFP8、vLLM `fp8_per_block` + DeepGEMM。b23 private FA4 的四返回值仅通过
+adapter 收缩为 vLLM 所需的 `(out, lse)`，不修改 kernel 数值。
+
+| batch-1 common FA4 stack | Native->vLLM KL | vLLM->Native KL | mean JS | exact prompts |
+| --- | ---: | ---: | ---: | ---: |
+| exact-image b13 | `0.00828524` | - | `0.00207670` | `0/5` |
+| latest PyPI b23 | `0.00721046` | `0.00740192` | `0.00181689` | `0/5` |
+
+b23 将 Native->vLLM mean KL 降低 `12.97%`，但完整 vocabulary logprob tensor 仍然
+没有任何 prompt bitwise identical：
+
+| prompt | Native->vLLM KL | exact | max abs logprob diff | mean abs logprob diff |
+| --- | ---: | --- | ---: | ---: |
+| `short_hello` | `0.00170887` | no | `0.440781` | `0.0725505` |
+| `short_fact` | `0.000776463` | no | `0.518112` | `0.133087` |
+| `medium_english` | `0.00289617` | no | `0.689833` | `0.117473` |
+| `short_zh` | `0.0102440` | no | `0.683306` | `0.111220` |
+| `long_zh` | `0.0204269` | no | `1.17019` | `0.188799` |
+
+对 b13/b23 artifacts 作 engine 内比较时，`short_hello`、`short_fact`、`short_zh`
+在 Native 和 vLLM 两侧都 bitwise unchanged。revision 只移动本 suite 的
+`medium_english` 与 `long_zh`；对应 cross-engine KL 分别从
+`0.00566024 -> 0.00289617` 和 `0.0230367 -> 0.0204269`。因此 b23 对较长 shape 有
+正向改进，但 **common FA4 kernel exact 并不足以使 all-MXFP8 full model exact**；
+剩余差异来自 attention 之外或被后续 MXFP8/MoE path 放大的 engine-level 数值路径。
+historical FA2 MXFP8 batch-1 exact zero 仍未恢复。
+
+复现命令：
+
+```bash
+tools/yoco_alignment/setup_latest_fa4_overlay.sh
+
+tools/yoco_alignment/run_latest_fa4_bsz1_mxfp8.sh \
+  --model /data/yanqi/model_ckpt/0000-6000-hf \
+  --native-checkpoint /data/yanqi/model_ckpt/0000-6000-merged \
+  --native-gpu 2 \
+  --vllm-gpu 3
+```
+
+结果：
+[kernel exactness](../logs/yoco_alignment_results/latest_fa4_4.0.0b23/kernel_exact/comparison.json)、
+[full comparison](../logs/yoco_alignment_results/latest_fa4_4.0.0b23/bsz1_mxfp8/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)、
+[per-prompt exactness](../logs/yoco_alignment_results/latest_fa4_4.0.0b23/bsz1_mxfp8/exactness.json)。
+
 ### FA2 可复现实验脚本
 
 `run_logprob_kl_prefill_ablation_fa2.sh` 固化 BF16/MXFP8 的四个 prefill arm：

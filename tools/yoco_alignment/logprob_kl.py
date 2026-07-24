@@ -610,21 +610,42 @@ def _fa4_source_runtime(source_root: str, profile: str) -> dict[str, Any]:
     if not interface_path.is_file() or not forward_path.is_file():
         raise RuntimeError(f"Invalid FA4 source profile: {cute_root}")
 
-    expected_versions = {
-        "flash-attn-4": "4.0.0b13",
-        "nvidia-cutlass-dsl": "4.5.1",
-        "apache-tvm-ffi": "0.1.11",
-        "quack-kernels": "0.4.1",
-    }
     runtime_versions = {
         "flash-attn-4": metadata.version("flash-attn-4"),
         "nvidia-cutlass-dsl": cutlass.__version__,
         "apache-tvm-ffi": tvm_ffi.__version__,
         "quack-kernels": metadata.version("quack-kernels"),
     }
+    known_runtimes = {
+        "4.0.0b13": {
+            "source": "donglixp/pytorch:26.02-b200",
+            "versions": {
+                "flash-attn-4": "4.0.0b13",
+                "nvidia-cutlass-dsl": "4.5.1",
+                "apache-tvm-ffi": "0.1.11",
+                "quack-kernels": "0.4.1",
+            },
+        },
+        "4.0.0b23": {
+            "source": "PyPI flash-attn-4==4.0.0b23",
+            "versions": {
+                "flash-attn-4": "4.0.0b23",
+                "nvidia-cutlass-dsl": "4.6.0.dev0",
+                "apache-tvm-ffi": "0.1.12",
+                "quack-kernels": "0.5.3",
+            },
+        },
+    }
+    runtime_spec = known_runtimes.get(runtime_versions["flash-attn-4"])
+    if runtime_spec is None:
+        raise RuntimeError(
+            "Unsupported external FA4 runtime: "
+            f"{runtime_versions['flash-attn-4']}"
+        )
+    expected_versions = runtime_spec["versions"]
     if runtime_versions != expected_versions:
         raise RuntimeError(
-            "Image-derived FA4 runtime mismatch: "
+            "External FA4 runtime mismatch: "
             f"expected {expected_versions}, found {runtime_versions}"
         )
 
@@ -668,7 +689,7 @@ def _fa4_source_runtime(source_root: str, profile: str) -> dict[str, Any]:
         )
 
     return {
-        "source": "donglixp/pytorch:26.02-b200",
+        "source": runtime_spec["source"],
         "profile": profile,
         "source_root": str(cute_root),
         "source_sha256": source_hasher.hexdigest(),
