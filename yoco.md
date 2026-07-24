@@ -68,7 +68,9 @@ KL 只有在 vLLM 和 llm-train Native 使用相同计算条件时才有意义�
 FlashAttention backend 内切换到 Triton 2D paged attention，避免 graph replay
 的 KV metadata 错误。`FULL_DECODE_ONLY + flash_attn_version=4` 现在保留 eager
 FA4 prefill，并同样只把 single-token graph decode 切到 Triton。matched prefill
-matrix 已完成；FA4 decode matrix 仍待验收。
+matrix 已完成；exact-image b13 的 BF16 与 MXFP8 + QKV-BF16 `mixed16`
+decode16/128 matrix 也已通过。FA2 仍是生产默认，因为 FA4 selective-precision
+profile 尚缺 end-to-end throughput、task quality 和真实长上下文验收。
 
 下表是修改前 V1 multiprocessing 和 `1 + 15` reference shape 的历史 baseline，
 不能直接作为新 single-batch/one-split 配置的验收结果：
@@ -101,9 +103,11 @@ tokens，也得到连续、可读的输出。
   按 `4096 + remainder` 分块时为 `0.0647879`。因此可以开启
   `--enable-chunked-prefill`，但不能把真正发生切分的长 prompt 标记为已对齐。
 - BF16 batch 1：mean KL `0.00550893`，不是 exact zero。
-- FA4 MXFP8 prefill：`FULL_DECODE_ONLY`、batch 16、`num_splits=1` 的 aggregate
-  mean Native→vLLM KL 为 `0.0160540`，未达到 `<0.01`；FA4 BF16 同配置为
-  `0.00357287`，通过。FA4 decode matrix 尚待验收。
+- FA4 all-MXFP8 prefill：原 acceptance stacks 的 aggregate mean Native→vLLM
+  KL 为 `0.0160540`，exact-image b13 为 `0.0187185`，均未达到 `<0.01`。
+  exact-image b13 的 QKV-BF16 policy 将 prefill 降至 `0.00565650`，其
+  decode16/128 matrix 已通过；不能用 selective-precision 结果宣称 all-MXFP8
+  已通过。
 
 ### Batch invariance
 
@@ -126,8 +130,7 @@ tokens：
 两个 arm 的 16 个完整词表输出逐元素一致，双向 KL、JS、max/mean logprob diff
 全部为 `0`。这证明旧 `1 + 15` 是 EngineCore process boundary 下请求边到达边调度
 造成的，而关闭 V1 multiprocessing 后，16 个已提交请求进入同一个实际 prefill
-forward。该实验只证明 scheduler shape；30B YOCO 的新 one-split/single-batch KL
-仍需在 GPU 空闲后重跑。
+forward。该实验只证明 scheduler shape。
 
 原始证据保存在 `../logs/yoco_alignment_results/v1_batch_shape_ab_20260721/`：
 
@@ -146,13 +149,13 @@ request/prompt-token 总数交叉验证；传入新的 Native artifact 时，还
 
 ## TODO 与当前对齐程度
 
-- [ ] **FA4 matched matrix**
-  - 当前状态：prefill 已验收。BF16 通过（mean KL `0.00357287`），MXFP8
-    未通过（`0.0160540`）。`FULL` graph prefill 仍强制回退到 TRITON_ATTN；
-    `FULL_DECODE_ONLY` 保留 eager FA4 prefill，并把 single-token graph decode
-    路由到 Triton。
-  - 下一步：定位 FA4 MXFP8 在 `medium_english`/`long_zh` 上的偏差，并运行
-    matched FA4 decode matrix；不能用 Native FA4 对比 vLLM FA2。
+- [x] **FA4 recommended matched matrix**
+  - 当前状态：exact-image b13 BF16 和 MXFP8 + QKV-BF16 的 prefill、decode16
+    smoke、decode128 acceptance 均通过。`FULL_DECODE_ONLY` 保留 eager FA4
+    prefill，并把 single-token graph decode 路由到 Triton。all-MXFP8 prefill
+    仍未通过，不属于已验收 recommendation。
+  - 下一步：补 QKV-BF16 end-to-end throughput/task-quality，定位长 prefill 的
+    首个 scale/payload/route 分叉，并继续真实 chunked-prefill 验收。
 - [ ] **Batch invariance**
   - 当前状态：旧 `1 + 15` baseline 已达到 aggregate 验收线，但新的
   single-batch/one-split matrix 尚未重跑。
@@ -327,6 +330,50 @@ docker run --rm \
 
 ## 完整词表 KL 验证
 
+### 推荐配置统一复现
+
+`run_recommended_configs.sh` 将当前推荐的 FA2/FA4 prefill alignment profiles
+统一映射到 `run_logprob_kl_compare.sh`，避免分别手工拼接 precision、attention、
+FA4 overlay 和 tuning 参数。默认运行：
+
+- `fa2-bf16`：FA2 BF16 + Triton MoE；
+- `fa2-mxfp8`：生产推荐 FA2 MXFP8 + DeepGEMM MoE；
+- `fa4-bf16`：exact-image b13 FA4 BF16；
+- `fa4-mxfp8-qkv-bf16`：exact-image b13、default exp2、explicit
+  `tile_mn=(128,128)`、auto q-stage、attention QKV BF16，其余 MXFP8。
+
+四个 profiles 分配到四张 GPU 并行运行：
+
+```bash
+tools/yoco_alignment/run_recommended_configs.sh \
+  --model /data/yanqi/model_ckpt/0000-6000-hf \
+  --native-checkpoint /data/yanqi/model_ckpt/0000-6000-merged \
+  --gpus 0,1,2,3
+```
+
+只复现两个 MXFP8 recommendations：
+
+```bash
+tools/yoco_alignment/run_recommended_configs.sh \
+  --model /data/yanqi/model_ckpt/0000-6000-hf \
+  --native-checkpoint /data/yanqi/model_ckpt/0000-6000-merged \
+  --profiles fa2-mxfp8,fa4-mxfp8-qkv-bf16 \
+  --gpus 0,1
+```
+
+profiles 按顺序 round-robin 分配给 `--gpus`；同一 GPU 上的 profiles 串行，不同
+GPU workers 并行，因此 `--gpus 0` 可安全地串行执行完整矩阵。若 exact b13 overlay
+尚不存在，追加 `--setup-fa4`；已有但不完整的目录不会被自动删除。`--profiles all`
+额外运行已知不通过的 `fa4-mxfp8` control。
+
+默认输出为 `../logs/yoco_alignment_results/recommended_configs/<profile>/`，每个
+profile 写独立 artifacts 和 `run.log`。全部完成后生成 `summary.json`，列出 observed
+KL、本文 recorded KL 和 delta；四个 recommendations 必须通过默认 `<0.01`，control
+只报告、不参与 gate。`--dry-run` 会完成 dependency/profile preflight 并打印所有
+child commands，不加载模型。该脚本复现的是 matched next-token prefill matrix；
+FA2 decode 使用 `run_logprob_kl_decode_fa2.sh`，recommended FA4 decode 使用
+`run_recommended_decode_fa4.sh`；chunked-prefill 仍单独验收。
+
 ### FA4 matched prefill matrix
 
 2026-07-21 使用 `mixed16`、单个 `16 requests / 582 tokens` forward、V1
@@ -496,20 +543,23 @@ DeepGEMM，新增隔离 overlay。Native 使用与 vLLM 完全相同的 vendored
 并 pin vLLM 当前 runtime：CUTLASS DSL `4.4.2`、TVM FFI `0.1.9`、Quack `0.4.1`。
 source tree SHA-256 为
 `e2950f886bcca655de770c2a86d0d5b2fc3c4c5e1f8cda268755fd03f9858b5a`。
+该 overlay 仅保留为历史 kernel/source control；canonical matrix runner 不再暴露
+overlay options，并始终使用 Native external FA4 与 vLLM vendored FA4，避免把
+CUTLASS/TVM/Quack override 带入常规 acceptance environment。
 
 ```bash
 tools/yoco_alignment/setup_native_vllm_fa4_overlay.sh
 
 CUDA_VISIBLE_DEVICES=0 \
-tools/yoco_alignment/run_logprob_kl_compare.sh \
-  --model /data/yanqi/model_ckpt/0000-6000-hf \
-  --native-checkpoint /data/yanqi/model_ckpt/0000-6000-merged \
-  --attention-version 4 \
-  --native-fa4-source vllm-vendored \
-  --prompt-suite mixed16 \
-  --batch-size 16 \
-  --variants bf16,fp8 \
-  --output-dir ../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_common_fa4
+PYTHONPATH=../.native-vllm-fa4-overlay/site-packages:$PWD \
+../../.venv-yoco-native/bin/python \
+  tools/yoco_alignment/verify_common_fa4.py run \
+  --out ../logs/yoco_alignment_results/common_fa4_aligned_20260721/native_overlay.pt
+
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=$PWD \
+../../.venv-yoco-mxfp8/bin/python \
+  tools/yoco_alignment/verify_common_fa4.py run \
+  --out ../logs/yoco_alignment_results/common_fa4_aligned_20260721/vllm.pt
 ```
 
 先用相同、可精确表示的 BF16 Q/K/V 分别在 Native NVIDIA Torch 和 vLLM Torch 下
@@ -545,6 +595,347 @@ root cause，也不是 alignment fix**。保持 common-source 工具用于控制
 - [common-source MXFP8 report](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_common_fa4/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)；
 - [Native installed-vs-vendored MXFP8](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_common_fa4/native_installed_vs_vendored_mxfp8.json)；
 - [vLLM MXFP8 repeat control](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_common_fa4/vllm_repeat_mxfp8.json)。
+
+#### Attention QKV BF16 selective-precision A/B
+
+`--keep-attention-qkv-bf16` 只作用于 FP8 arm，并保持所有 attention input
+projections 为 BF16：self layers 的 Q/K/V、cross layers 的 Q，以及 model-level
+shared K/V。`o_proj`、FFN、shared/routed MoE 仍走 MXFP8。Native 将 42 个逻辑
+projection module 切到 BF16；vLLM 通过 online quantization ignore patterns 将 fused
+`qkv_proj` 整体保留 BF16。
+
+vLLM 的 `QKVParallelLinear` 对 Q/K/V 使用单一 fused quant method，且 quantization
+framework 明确禁止 fused shards 使用不同 precision。因此 matched Q/K-only ablation
+需要拆开 vLLM projection 或新增 mixed-shard kernel；当前更干净、可维护的第一步是
+整个 fused QKV BF16。Native 虽有独立 Q/K/V modules，也同步保留三者 BF16。
+
+```bash
+CUDA_VISIBLE_DEVICES=0 \
+tools/yoco_alignment/run_logprob_kl_compare.sh \
+  --model /data/yanqi/model_ckpt/0000-6000-hf \
+  --native-checkpoint /data/yanqi/model_ckpt/0000-6000-merged \
+  --attention-version 4 \
+  --prompt-suite mixed16 \
+  --batch-size 16 \
+  --variants fp8 \
+  --keep-attention-qkv-bf16 \
+  --output-dir ../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_qkv_bf16_installed
+```
+
+两侧均使用原 acceptance installations：Native external FA4 `4.0.0b22`，vLLM
+vendored FA4；其余 batch/process/cache/split/quant recipe controls 与 baseline 相同。
+
+| FA4 MXFP8 policy | Native→vLLM KL | mean JS | mean abs logprob diff |
+| --- | ---: | ---: | ---: |
+| all projections MXFP8 | `0.0160540` | `0.00393370` | `0.257960` |
+| attention QKV BF16 | `0.00947813` | `0.00235316` | `0.111654` |
+
+QKV BF16 将 mean KL 降低 `40.96%`，首次使 FA4 MXFP8 aggregate 低于 `0.01`；16/16
+prompts 均改善。unique prompts：
+
+| prompt | all MXFP8 | QKV BF16 |
+| --- | ---: | ---: |
+| `short_hello` | `0.00210331` | `0.00128999` |
+| `short_fact` | `0.00608224` | `0.000555366` |
+| `medium_english` | `0.0246546` | `0.00345763` |
+| `short_zh` | `0.0143746` | `0.0138509` |
+| `long_zh` | `0.0377058` | `0.0309661` |
+
+相对各 engine 自身 BF16 reference，效果并不对称：Native 的 BF16→MXFP8 KL 从
+all-MXFP8 `0.00876520` 变为 QKV-BF16 `0.0103209`，而 vLLM 从 `0.0159846` 明显降至
+`0.00693412`。因此该实验主要证明 **vLLM QKV quantization 是 cross-engine drift 的
+重要非对称来源**，不能解释为 selective BF16 对每个 engine 的最终 logits 都单调
+更接近 BF16。
+
+FA2 control 进一步区分了 general QKV effect 与 FA4 interaction：
+
+| attention | all MXFP8 KL | QKV BF16 KL |
+| --- | ---: | ---: |
+| FA2 | `0.00840170` | `0.00931939` |
+| FA4 | `0.0160540` | `0.00947813` |
+
+QKV BF16 令 FA2 KL 小幅上升 `10.92%`，却令 FA4 下降 `40.96%`；切换后 FA2/FA4
+只差 `0.000159`。因此它消除的主要是 **FA4 × quantized-QKV interaction**，而不是
+普遍降低所有 attention backend 的误差。这也解释了为什么 all-MXFP8 下 FA4 比 FA2
+严重，而 QKV BF16 后两者基本收敛到同一 residual floor。
+
+`long_zh` 仍明显超阈值，说明还有其他来源。下一步优先在 `long_zh` trace 中定位
+首个 UE8M0 scale/E4M3 payload 或 MoE top-8 route 分叉。该 policy 在 TP1 约保留
+`600.8M` weights 为 BF16，相对 FP8 payload 增加约 `0.56 GiB`；是否作为 production
+default 还需补吞吐/延迟与 task-quality benchmark。结果文件：
+
+- [QKV BF16 comparison](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_qkv_bf16_installed/native_mxfp8_qkv_bf16_fa4_vs_vllm_fp8_per_block_qkv_bf16.json)；
+- [Native QKV BF16 artifact](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_qkv_bf16_installed/native_mxfp8_qkv_bf16_fa4.pt)；
+- [vLLM QKV BF16 artifact](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_qkv_bf16_installed/vllm_fp8_per_block_qkv_bf16_fa4.pt)；
+- [Native own-BF16 control](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_qkv_bf16_installed/native_bf16_vs_mxfp8_qkv_bf16.json)；
+- [vLLM own-BF16 control](../logs/yoco_alignment_results/fa4_prefill_mixed16_split1_inproc_fulldecode_qkv_bf16_installed/vllm_bf16_vs_fp8_qkv_bf16.json)；
+- [FA2 QKV BF16 control](../logs/yoco_alignment_results/fa2_prefill_mixed16_split1_inproc_fulldecode_qkv_bf16_installed/native_mxfp8_qkv_bf16_fa2_vs_vllm_fp8_per_block_qkv_bf16.json)。
+
+#### `donglixp/pytorch:26.02-b200` exact FA4 与 exp2 A/B
+
+Docker Hub manifest
+`sha256:cdbdc71b773142a98a303d488816d2faf6b9d85d179a4639b92263fca6da4769`
+的 package layer 显示，该 image 实际 bake 的不是当前 PyPI beta，
+而是以下完整 stack：
+
+| package | image version |
+| --- | --- |
+| `flash-attn-4` | `4.0.0b13` |
+| `nvidia-cutlass-dsl` | `4.5.1` |
+| `apache-tvm-ffi` | `0.1.11` |
+| `quack-kernels` | `0.4.1` |
+
+迄今 `mixed16` FA4 prefill 实验汇总如下。`original unaligned` 表示 Native external
+FA4 `4.0.0b22` 与 vLLM vendored snapshot 各自使用原 runtime；`common b22` 是曾经
+误作 image target 的当前 PyPI b22 control，并非 Docker image；最后四行为本节的
+exact-image b13 结果。
+
+| FA4 source/runtime relation | exp2 policy | precision policy | Native→vLLM KL | mean JS |
+| --- | --- | --- | ---: | ---: |
+| original unaligned | default | BF16 | `0.00357287` | `0.000880863` |
+| original unaligned | default | all MXFP8 | `0.0160540` | `0.00393370` |
+| original unaligned | default | MXFP8 + QKV BF16 | `0.00947813` | `0.00235316` |
+| Native b22 vs vLLM vendored | no-exp2 | all MXFP8 | `0.0187185` | `0.00459417` |
+| common vLLM vendored snapshot | snapshot default | BF16 | `0.00341708` | `0.000843901` |
+| common vLLM vendored snapshot | snapshot default | all MXFP8 | `0.0187185` | `0.00459417` |
+| common external b22 (not image) | default | BF16 | `0.00565088` | `0.00143434` |
+| common external b22 (not image) | default | all MXFP8 | `0.0111063` | `0.00271762` |
+| common external b22 (not image) | default | MXFP8 + QKV BF16 | `0.00662123` | `0.00165084` |
+| common external b22 (not image) | no-exp2 | all MXFP8 | `0.0187185` | `0.00459417` |
+| exact image b13 | default | BF16 | `0.00341708` | `0.000843901` |
+| exact image b13 | default | all MXFP8 | `0.0187185` | `0.00459417` |
+| exact image b13 | default | MXFP8 + QKV BF16 | `0.00565650` | `0.00139278` |
+| exact image b13 | no-exp2 | all MXFP8 | `0.0187185` | `0.00459417` |
+
+Docker-image alignment 前的 explicit no-exp2 reference 使用 Native b22 no-exp2
+artifact 与原 vLLM vendored artifact 重新比较；candidate 与原 baseline vLLM output
+bitwise equal。其 KL `0.0187185` 比 original unaligned default `0.0160540` 高
+`16.60%`，因此在旧 unaligned stacks 上也没有改善。另一个非-image control 是
+common external b22：关闭 exp2 后 KL 从 `0.0111063` 上升到 `0.0187185`
+（`+68.54%`）。[explicit unaligned no-exp2 report](../logs/yoco_alignment_results/image_fa4_4.0.0b22/unaligned_no_ex2/native_b22_no_ex2_vs_vllm_vendored.json)
+
+从 image layer 直接抽取的 `flash_attn/cute/*.py` 与隔离 overlay 的 source tree
+SHA-256 均为
+`edbe1f46fcd2ac531be02900ef6caf7269e449279a0dd23509f8cb47420cf369`。两侧通过
+同一 source/runtime profile 运行；vLLM 只增加 private API `(out,lse,p,row_max)`
+到 `(out,lse)` 的返回值 adapter，不修改 kernel 参数或实现。
+
+```bash
+tools/yoco_alignment/setup_image_fa4_profiles.sh
+
+CUDA_VISIBLE_DEVICES=0 \
+tools/yoco_alignment/run_image_fa4_matrix.sh \
+  --model /data/yanqi/model_ckpt/0000-6000-hf \
+  --native-checkpoint /data/yanqi/model_ckpt/0000-6000-merged
+```
+
+`mixed16`、batch 16、in-process V1、prefix cache off、`num_splits=1` 的结果：
+
+| exact-image FA4 arm | Native→vLLM KL | mean JS | mean abs logprob diff |
+| --- | ---: | ---: | ---: |
+| BF16 | `0.00341708` | `0.000843901` | `0.111748` |
+| all MXFP8 | `0.0187185` | `0.00459417` | `0.198440` |
+| MXFP8 + QKV BF16 | `0.00565650` | `0.00139278` | `0.104463` |
+| all MXFP8 + no-exp2 | `0.0187185` | `0.00459417` | `0.198440` |
+
+QKV BF16 在 exact-image stack 下将 all-MXFP8 KL 降低 `69.78%`，仍是最有效的
+selective-precision control。相比原 acceptance installations，exact-image BF16
+略改善，all-MXFP8 反而恶化，而 QKV-BF16 明显改善；FA4 revision 影响仍然
+依赖 precision/path，不能用单一方向概括。
+
+no-exp2 profile 只在 b13 source 的 tuning 完成后加入请求的：
+
+```python
+self.enable_ex2_emu = False
+self.ex2_emu_freq = 0
+```
+
+其 source SHA-256 为
+`18f2bf4ffe0c4c6122fefe55d31e7ab9433aded50383d1532a0d2e6e9253709b`；除
+`flash_fwd_sm100.py` 这两行 override 外，文件集合及内容均与 image profile 相同。
+
+`mixed16` 的 token lengths 只有 `3/6/8/66/110`，均不超过 FA4 `n_block_size=128`。
+b13 在 `mask_fn is not None` 时本来就给 `apply_exp2_convert` 传
+`ex2_emu_freq=0`；这些 sequence 的唯一 KV block 都是 masked edge block。因此
+default/no-exp2 在 `mixed16` 下 Native 和 vLLM artifacts 各自 bitwise exact，
+该 A/B 对短 suite 是结构性 no-op。
+
+为实际触发 unmasked interior blocks，另用 `chunk4k` 的 4,682-token repetitive
+prompt 做 stress test：
+
+| 4.7k prefill arm | Native→vLLM KL | mean JS | top-20 overlap |
+| --- | ---: | ---: | ---: |
+| BF16 | `0.0232922` | `0.00586551` | `18/20` |
+| all MXFP8 default | `0.395051` | `0.0971621` | `15/20` |
+| all MXFP8 no-exp2 | `0.291749` | `0.0669735` | `19/20` |
+
+这些大 KL 是真实 finite/normalized next-token distributions，不是 tokenization、
+NaN 或 scheduler token-count 错误：两侧输入 token IDs exact equal，Native 为一个
+`1 request / 4682 tokens` forward，vLLM iteration 也为 `1 / 4682`；三组结果 top-1
+均为 token `13919`（`" Harry"`）。但它们**不能与 mixed16 的 `~1e-2` 直接比较**：
+prompt 长度和数值累积相差约两个数量级，且 BF16 floor 自身已升到 `0.0233`。
+
+更重要的是，相对各 engine 自身 BF16 reference：
+
+| 4.7k MXFP8 profile | Native KL vs own BF16 | vLLM KL vs own BF16 |
+| --- | ---: | ---: |
+| default | `0.0281959` | `0.326553` |
+| no-exp2 | `0.211784` | `0.390367` |
+
+所以 no-exp2 虽将 cross-engine KL 降低 `26.15%`，却使两侧都更远离各自 BF16；
+mean abs Native-vLLM logprob diff 也从 `0.55056` 升到 `1.00608`。这不是 accuracy 或
+quality improvement，只是两个已显著移动的分布偶然更接近，不建议据此关闭 exp2
+emulation。
+
+8-token greedy rollout/replay sanity 显示两 profile 都生成完全相同且连贯的：
+
+```text
+ Harry Potter and the Philosopher's Stone
+```
+
+token IDs 均为 `[13919, 29218, 323, 279, 7155, 45090, 594, 14292]`；保存完整
+distribution 的 positions `1/2/4/8` 上 Native 与 vLLM argmax 都等于生成 token。
+large discrepancy 集中在 response position 1（长 prefill boundary），进入真实
+KV-cached decode 后 alignment 很紧：
+
+| profile | pos 1 KL | pos 2 KL | pos 4 KL | pos 8 KL | decode-only selected-token mean abs diff |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| default | `0.297213` | `0.000472728` | `0.0000709748` | `0.000245207` | `0.00122492` |
+| no-exp2 | `0.0294102` | `0.000338844` | `0.000124105` | `0.000108733` | `0.00107547` |
+
+因此两 engine 仍能产生有意义且一致的短 continuation；问题是 4.7k all-MXFP8
+prefill distribution calibration/accumulation，而不是 decode path 崩坏。当前结论是：
+保留 default exp2 tuning；对长 prompt 优先 trace 首个 MXFP8 scale/payload/MoE route
+分叉，并扩充多种真实长上下文，而不是从单个重复 prompt 的 cross-engine KL 选择
+exp2 policy。结果文件：
+
+- [exact-image BF16](../logs/yoco_alignment_results/image_fa4_4.0.0b13/default/native_bf16_fa4_vs_vllm.json)；
+- [exact-image all-MXFP8](../logs/yoco_alignment_results/image_fa4_4.0.0b13/default/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)；
+- [exact-image QKV-BF16](../logs/yoco_alignment_results/image_fa4_4.0.0b13/qkv_bf16/native_mxfp8_qkv_bf16_fa4_vs_vllm_fp8_per_block_qkv_bf16.json)；
+- [mixed16 no-exp2](../logs/yoco_alignment_results/image_fa4_4.0.0b13/no_ex2/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)；
+- [chunk4k BF16](../logs/yoco_alignment_results/image_fa4_4.0.0b13/chunk4k_bf16/native_bf16_fa4_vs_vllm.json)；
+- [chunk4k default MXFP8](../logs/yoco_alignment_results/image_fa4_4.0.0b13/chunk4k_default/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)；
+- [chunk4k no-exp2](../logs/yoco_alignment_results/image_fa4_4.0.0b13/chunk4k_no_ex2/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)；
+- [default decode8](../logs/yoco_alignment_results/image_fa4_4.0.0b13/decode8_default/compare.json)；
+- [no-exp2 decode8](../logs/yoco_alignment_results/image_fa4_4.0.0b13/decode8_no_ex2/compare.json)。
+
+##### 其他 FA4 knobs
+
+在 exact-image b13、default exp2、all-MXFP8、`mixed16` 上继续测试两个对 YOCO
+causal varlen path 实际生效的 knob。`FA_DISABLE_2CTA` 和 `FA_CLC` 未列为实验 arm：
+2CTA 要求 non-causal、non-local、non-varlen；CLC 也在 varlen 下关闭，因此对当前
+YOCO prefill 是结构性 no-op。
+
+| FA4 config | Native→vLLM KL | mean JS | mean abs logprob diff | vs all-MXFP8 default |
+| --- | ---: | ---: | ---: | ---: |
+| default | `0.0187185` | `0.00459417` | `0.198440` | baseline |
+| explicit `tile_mn=(128,128)` | `0.0187185` | `0.00459417` | `0.198440` | bitwise equal to default |
+| `pack_gqa=False` | `0.0187185` | `0.00459417` | `0.198440` | exact no-op |
+| `tile_mn=(128,64)` | `0.0151919` | `0.00374743` | `0.183869` | `-18.84%` KL |
+| QKV BF16 | `0.00565650` | `0.00139278` | `0.104463` | `-69.78%` KL |
+| QKV BF16 + explicit `tile_mn=(128,128)` | `0.00565650` | `0.00139278` | `0.104463` | bitwise equal to QKV-BF16 default |
+| QKV BF16 + `tile_mn=(128,64)` | `0.00784983` | `0.00196721` | `0.111309` | `-58.06%` KL |
+
+`pack_gqa=False` 在 Native/vLLM 两侧均明确记录为 override，但完整 logits artifacts
+各自与 default bitwise exact，因此无需继续。`tile_n=64` 对 66/110-token prompts
+生效：`medium_english` KL `0.0179766 -> 0.0131874`，`long_zh`
+`0.0585941 -> 0.0445749`；短 prompts 不变。它是有效的 secondary knob，但相对各
+engine default 会同时移动 Native（KL `0.0031690`）和 vLLM（`0.00561434`），且
+相对 own-BF16 的 KL 仍为 Native `0.00971392`、vLLM `0.0152713`。
+
+`tile_n=64` 与 QKV-BF16 不正向叠加：组合 KL `0.00784983` 比 QKV-BF16 alone
+`0.00565650` 高 `38.78%`。其中 `medium_english` 略改善，但 `long_zh` 从
+`0.00915731` 恶化到 `0.0223107`。因此当前优先级为：
+
+1. 保持 default exp2；
+2. 若允许 selective precision，优先 QKV BF16；
+3. `tile_n=64` 只作为 all-MXFP8 secondary control，不与 QKV-BF16 默认组合。
+
+结果文件：
+
+- [pack-GQA off](../logs/yoco_alignment_results/image_fa4_4.0.0b13/pack_gqa_off/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)；
+- [tile n64](../logs/yoco_alignment_results/image_fa4_4.0.0b13/tile_n64/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)；
+- [tile n64 + QKV BF16](../logs/yoco_alignment_results/image_fa4_4.0.0b13/tile_n64_qkv_bf16/native_mxfp8_qkv_bf16_fa4_vs_vllm_fp8_per_block_qkv_bf16.json)。
+
+`q_stage` 不是 tile shape 本身，而是每个 CTA 同时 pipeline 的 Q tiles 数。b13 在
+SM100 上使用：
+
+```python
+seqlen_q_packgqa = max_seqlen_q * qhead_per_kvhead
+q_stage = 2 if seqlen_q_packgqa > tile_m else 1
+```
+
+该 YOCO checkpoint 的 differential attention 为 64 Q heads、8 KV heads，故
+`qhead_per_kvhead=8`。固定 `tile_m=128` 后 threshold 是
+`max_seqlen_q > 16`。`mixed16` 的 batch max 为 110，因此当前所有 layer/call 已
+de-facto 使用 `q_stage=2`；单独运行长度 `3/6/8` 的 prompt 才会选择 stage 1。
+
+explicit `tile_mn=(128,128)` 已固定 tile M/N 并与 implicit default bitwise equal，
+但它没有固定 `q_stage`。现已用 exact-image b13 的 forced-stage source profiles 完成
+stage 1/2 A/B。`mixed16` 的 BF16、all-MXFP8、MXFP8 + QKV-BF16 三种 policy 在
+Native 和 vLLM 两侧均满足：
+
+- forced stage 1 vs forced stage 2：mean KL、max/mean absolute logprob diff 全为 `0`；
+- auto vs forced stage 2：三种 policy 的 artifact 均 bitwise equal；
+- batch-1 auto vs forced stage 1：已比较的 BF16 与 all-MXFP8 artifact 均 bitwise
+  equal；直接 stage 1 vs stage 2 比较也未发现数值差异。
+
+因此 q-stage switch 在当前 workload 上数值中性。更重要的是，用相同 short prompt
+分别 standalone 和置于 `mixed16` 中比较时，强制 stage 1 与强制 stage 2 的
+batch-composition diff 都仍为 nonzero；六个 precision/stage 组合均如此。也就是说，
+固定 q-stage **不能**恢复 strict batch invariance，q-stage 不是已观察到 batch
+dependence 的根因。完整汇总见
+[batch_invariance.json](../logs/yoco_alignment_results/image_fa4_4.0.0b13/qstage_comparisons/batch_invariance.json)。
+
+初步 kernel-only latency microbenchmark（B200，explicit `128x128`，warmup 后 CUDA
+event 计时；单次结果，不等同于 end-to-end throughput）：
+
+| geometry | attention | stage 1 (ms) | stage 2 (ms) | stage 2 vs 1 |
+| --- | --- | ---: | ---: | ---: |
+| mixed16-like, 582 tokens | local `(512,0)` | `0.058249` | `0.057381` | `-1.49%` |
+| mixed16-like, 582 tokens | global | `0.056955` | `0.056435` | `-0.91%` |
+| standalone, 3 tokens | local `(512,0)` | `0.056222` | `0.057356` | `+2.02%` |
+| standalone, 3 tokens | global | `0.055345` | `0.066656` | `+20.44%` |
+
+最终建议：继续显式 pin `tile_mn=(128,128)`，但保留 b13 的 `q_stage=auto`。
+auto 在 mixed batch 选择略快的 stage 2，在 tiny prompt 避免 stage 2 的额外开销；
+固定任一 stage 都没有数值或 batch-invariance 收益。只有当实验要求 kernel control
+flow 也完全不随 shape 改变时才应 pin q-stage，并应把潜在吞吐回退作为代价记录。
+
+##### `yoco-0716` batch-1 starting-point 复测
+
+历史 `shaohanh/yoco-0716` 的 “batch 1” 是 `mixed5` 五个 prompts 分别以一个
+one-request forward 执行后聚合，并非只测一个 prompt。历史结果使用 FA2：MXFP8
+KL `0`，BF16 KL `0.00550893`。用当前推荐 FA4 条件复测：exact-image b13、default
+exp2、explicit `tile_mn=(128,128)`、`num_splits=1`、prefix cache off、V1
+in-process、batch size 1：
+
+| batch-1 precision policy | Native→vLLM KL | mean JS | exact-zero prompts |
+| --- | ---: | ---: | ---: |
+| BF16 | `0.00396589` | `0.000995932` | `0/5` |
+| all MXFP8 | `0.00828524` | `0.00207670` | `0/5` |
+| MXFP8 + QKV BF16 | `0.00874279` | `0.00216718` | `0/5` |
+
+所以 current FA4 可通过 batch-1 `<0.01`，但未达到 historical FA2 MXFP8 exact
+zero。BF16 比历史 `0.00550893` 改善约 `28.0%`；QKV-BF16 在 batch 1 略差于
+all-MXFP8，这与 batch-16 中的大幅改善再次说明 selective-precision effect 依赖
+batch/sequence geometry。
+
+per-prompt Native→vLLM KL：
+
+| prompt | BF16 | all MXFP8 | QKV BF16 |
+| --- | ---: | ---: | ---: |
+| `short_hello` | `0.000383975` | `0.00170887` | `0.00221632` |
+| `short_fact` | `0.00128207` | `0.000776463` | `0.00278359` |
+| `medium_english` | `0.00283869` | `0.00566024` | `0.00391972` |
+| `short_zh` | `0.00892018` | `0.0102440` | `0.0159414` |
+| `long_zh` | `0.00640453` | `0.0230367` | `0.0188529` |
+
+该结果作为 q-stage A/B 的起点：standalone short prompts 根据长度使用 stage 1，
+66/110-token prompts 使用 stage 2；mixed16 batch 则统一 auto-select stage 2。
+[batch-1 BF16](../logs/yoco_alignment_results/image_fa4_4.0.0b13/bsz1_tile_n128/native_bf16_fa4_vs_vllm.json)、
+[batch-1 all-MXFP8](../logs/yoco_alignment_results/image_fa4_4.0.0b13/bsz1_tile_n128/native_mxfp8_fa4_vs_vllm_fp8_per_block.json)、
+[batch-1 QKV-BF16](../logs/yoco_alignment_results/image_fa4_4.0.0b13/bsz1_tile_n128/native_mxfp8_qkv_bf16_fa4_vs_vllm_fp8_per_block_qkv_bf16.json)。
 
 ### FA2 可复现实验脚本
 
@@ -624,6 +1015,88 @@ CUDA_VISIBLE_DEVICES=5 .venv/bin/python \
 ```
 
 ### Decode path 与 teacher-forced prefill 对齐
+
+#### 128-token exact-image b13 FA4 recommended matrix
+
+2026-07-24 已完成 BF16 与 MXFP8 + QKV-BF16 两个 profiles。共同条件为
+exact-image FA4 `4.0.0b13`、CUTLASS DSL `4.5.1`、TVM FFI `0.1.11`、Quack
+`0.4.1`、default exp2、explicit `tile_mn=(128,128)`、auto q-stage、
+`mixed16` batch 16、V1 in-process、prefix cache off、`num_splits=1` 和
+`FULL_DECODE_ONLY`。position 1 使用 eager FA4 prefill；position 2 以后是 graph
+captured Triton KV-cache decode。Native 使用 exact b13 FA4 做一个 packed、no-cache
+teacher-forced replay；BF16 为 `16 sequences / 2240 tokens`，QKV-BF16 为
+`16 / 2105`。
+
+```bash
+tools/yoco_alignment/run_recommended_decode_fa4.sh \
+  --model /data/yanqi/model_ckpt/0000-6000-hf \
+  --native-checkpoint /data/yanqi/model_ckpt/0000-6000-merged \
+  --gpus 0,1 \
+  --lengths 16,128
+```
+
+launcher 将 BF16 和 MXFP8 + QKV-BF16 分配到不同 GPU 并行执行；同一 profile
+内部按 length 串行完成 vLLM rollout、Native replay 和 compare。16-token smoke
+的 row-weighted true-decode KL 分别为 `0.00163256`、`0.00460465`；最差 aggregate
+checkpoint 分别为 `0.00231970`、`0.00702355`，均通过 `<0.01`。
+
+128-token acceptance 总结。`true-decode weighted` 按 position 2 以后的实际
+full-vocab rows 加权，不包含 position 1：
+
+| metric | BF16 | MXFP8 + QKV BF16 |
+| --- | ---: | ---: |
+| position 1 prefill KL | `0.00386452` | `0.00613731` |
+| true-decode sparse rows | `140` | `131` |
+| true-decode weighted Native→vLLM KL | `0.00102458` | `0.00244198` |
+| true-decode weighted mean JS | `0.000253163` | `0.000602323` |
+| all sparse positions Native→vLLM KL | `0.00131586` | `0.00284419` |
+| selected-token positions | `1642` | `1507` |
+| selected mean / p95 abs diff | `0.015888 / 0.073336` | `0.033587 / 0.126427` |
+| selected p99 / max abs diff | `0.120836 / 0.216878` | `0.212744 / 0.401032` |
+
+完整词表按 response position 聚合：
+
+| position | path | BF16 active / KL / JS | MXFP8 + QKV BF16 active / KL / JS |
+| ---: | --- | ---: | ---: |
+| 1 | prefill | `16 / 0.003865 / 0.000954` | `16 / 0.006137 / 0.001506` |
+| 2 | decode | `13 / 0.002531 / 0.000616` | `13 / 0.003725 / 0.000918` |
+| 4 | decode | `13 / 0.000550 / 0.000138` | `13 / 0.004783 / 0.001183` |
+| 8 | decode | `13 / 0.001157 / 0.000289` | `13 / 0.003279 / 0.000812` |
+| 16 | decode | `13 / 0.000344 / 0.000086` | `13 / 0.002214 / 0.000546` |
+| 32 | decode | `13 / 0.000309 / 0.000077` | `13 / 0.003628 / 0.000867` |
+| 48 | decode | `13 / 0.000180 / 0.000045` | `13 / 0.002320 / 0.000588` |
+| 64 | decode | `13 / 0.001171 / 0.000292` | `13 / 0.004174 / 0.001034` |
+| 80 | decode | `13 / 0.002655 / 0.000655` | `13 / 0.000227 / 0.000056` |
+| 96 | decode | `13 / 0.001103 / 0.000271` | `13 / 0.000116 / 0.000029` |
+| 112 | decode | `13 / 0.000142 / 0.000035` | `7 / 0.000124 / 0.000028` |
+| 128 | decode | `10 / 0.001160 / 0.000288` | `7 / 0.000138 / 0.000038` |
+
+所有 aggregate true-decode checkpoints 均小于 `0.01`，且没有随 length 单调累积。
+逐 prompt 仍有 tail：BF16 最大 prompt/checkpoint KL 是 `short_zh_2` position 2
+的 `0.00862323`；QKV-BF16 最大值是同 prompt position 4 的 `0.0155409`，虽然
+该 position 的 13-request aggregate 仅 `0.00478343`。selected-token worst case：
+
+- BF16：`short_fact_2` position 116，token `279`（` the`），
+  `vLLM - Native = -0.216878`；
+- MXFP8 + QKV BF16：`short_zh_2` position 7，token `98448`（`三`），
+  `vLLM - Native = -0.401032`。
+
+response coverage：BF16 min/mean/median/max 为 `1/103.625/128/128`，`10/16`
+达到 128；QKV-BF16 为 `1/95.1875/104/128`，`7/16` 达到 128。两侧 rollout
+均连续可读，没有重复首 token、乱码或单 token collapse；不同 precision 产生不同
+trajectory 属正常现象，Native 分别 replay 各自 exact token IDs。
+
+与 FA2 128-token matrix 按同一定义对照：FA4 BF16 的 weighted decode KL、selected
+mean/p95/max 分别改善 `36.56%`、`23.96%`、`13.69%`、`38.16%`。QKV-BF16
+FA4 相对 FA2 all-MXFP8 的 weighted KL 改善 `10.46%`，但 selected mean/p95
+恶化 `67.74%`/`39.11%`，max 基本持平（`+0.38%`）。后者不是纯 attention-version
+A/B，因为 precision policy 和 rollout trajectory 均不同；结论是 distributional
+decode alignment 通过，但 FP8 selected-token tail 仍需保留为风险项。
+
+结果：BF16 [decode128 comparison](../logs/yoco_alignment_results/fa4_decode_recommended_b13/fa4-bf16/decode128/compare.json)、
+QKV-BF16 [decode128 comparison](../logs/yoco_alignment_results/fa4_decode_recommended_b13/fa4-mxfp8-qkv-bf16/decode128/compare.json)、
+BF16 [decode16 smoke](../logs/yoco_alignment_results/fa4_decode_recommended_b13/fa4-bf16/decode16/compare.json)、
+QKV-BF16 [decode16 smoke](../logs/yoco_alignment_results/fa4_decode_recommended_b13/fa4-mxfp8-qkv-bf16/decode16/compare.json)。
 
 `run_logprob_kl_decode_fa2.sh` 固化 `mixed16`、batch 16、FA2、
 `FULL_DECODE_ONLY`、V1 in-process、prefix cache 关闭和 `num_splits=1`。先运行
@@ -892,6 +1365,9 @@ docker buildx build \
 ```text
 convert_to_hf.py
 tools/yoco_alignment/logprob_kl.py
+tools/yoco_alignment/logprob_kl_decode.py
+tools/yoco_alignment/run_recommended_configs.sh
+tools/yoco_alignment/run_recommended_decode_fa4.sh
 vllm/model_executor/models/yoco.py
 vllm/model_executor/models/config.py
 vllm/model_executor/layers/fused_moe/deep_gemm_utils.py

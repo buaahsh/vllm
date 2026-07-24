@@ -22,6 +22,12 @@ def parse_args() -> argparse.Namespace:
     run_parser = subparsers.add_parser("run", help="Run the vendored FA4 kernel")
     run_parser.add_argument("--out", required=True)
     run_parser.add_argument("--device", default="cuda:0")
+    run_parser.add_argument("--fa4-source-root")
+    run_parser.add_argument(
+        "--fa4-profile",
+        choices=("default", "no-ex2", "q-stage1", "q-stage2"),
+        default="default",
+    )
 
     compare_parser = subparsers.add_parser("compare", help="Compare two runs")
     compare_parser.add_argument("--reference", required=True)
@@ -42,7 +48,12 @@ def deterministic_tensor(
     return (values.to(torch.float32) / 128.0).to(torch.bfloat16).reshape(shape).to(device)
 
 
-def run_kernel(out_path: str, device_name: str) -> None:
+def run_kernel(
+    out_path: str,
+    device_name: str,
+    fa4_source_root: str | None,
+    fa4_profile: str,
+) -> None:
     device = torch.device(device_name)
     torch.cuda.set_device(device)
     sequence_lengths = (17, 129)
@@ -73,7 +84,11 @@ def run_kernel(out_path: str, device_name: str) -> None:
         [0, sequence_lengths[0], total_tokens], dtype=torch.int32, device=device
     )
 
-    flash_attn_varlen_func = _import_fa4_varlen_func("vllm-vendored")
+    flash_attn_varlen_func = _import_fa4_varlen_func(
+        "vllm-vendored" if fa4_source_root is None else "installed",
+        source_root=fa4_source_root,
+        profile=fa4_profile,
+    )
     output, lse = flash_attn_varlen_func(
         q,
         k,
@@ -156,7 +171,12 @@ def compare_runs(
 def main() -> None:
     args = parse_args()
     if args.command == "run":
-        run_kernel(args.out, args.device)
+        run_kernel(
+            args.out,
+            args.device,
+            args.fa4_source_root,
+            args.fa4_profile,
+        )
     else:
         compare_runs(
             args.reference,

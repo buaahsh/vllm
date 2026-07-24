@@ -162,6 +162,33 @@ def parse_args() -> argparse.Namespace:
                     "has no split API and already uses its non-split path."
                 ),
             )
+            sub.add_argument(
+                "--keep-attention-qkv-bf16",
+                action="store_true",
+                help=(
+                    "Keep every projection feeding attention in BF16 while "
+                    "leaving output, FFN, and MoE projections quantized."
+                ),
+            )
+            sub.add_argument("--fa4-source-root", help=argparse.SUPPRESS)
+            sub.add_argument(
+                "--fa4-profile",
+                choices=("default", "no-ex2", "q-stage1", "q-stage2"),
+                default="default",
+                help=argparse.SUPPRESS,
+            )
+            sub.add_argument(
+                "--fa4-pack-gqa",
+                choices=("auto", "on", "off"),
+                default="auto",
+                help=argparse.SUPPRESS,
+            )
+            sub.add_argument(
+                "--fa4-tile-mn",
+                choices=("default", "128x64", "128x128"),
+                default="default",
+                help=argparse.SUPPRESS,
+            )
 
         if name == "native":
             sub.add_argument("--native-checkpoint", required=True)
@@ -178,10 +205,7 @@ def parse_args() -> argparse.Namespace:
                 "--native-fa4-source",
                 choices=("installed", "vllm-vendored"),
                 default="installed",
-                help=(
-                    "FA4 implementation used by Native. The vllm-vendored "
-                    "choice requires the matching CUTLASS/TVM/Quack overlay."
-                ),
+                help=argparse.SUPPRESS,
             )
             sub.add_argument(
                 "--native-local-attention",
@@ -507,6 +531,9 @@ def _comparison_metadata(payload: dict[str, Any]) -> dict[str, Any]:
         "torch_fp8_quant_fallback",
         "transformer_engine_enabled",
         "force_fa_num_splits_one",
+        "keep_attention_qkv_bf16",
+        "attention_qkv_bf16_modules",
+        "quantization_ignore",
         "batch_size",
         "first_batch_size",
         "data_parallel_size",
@@ -542,12 +569,226 @@ def _record_batches(
 _NATIVE_FA4_FUNCTIONS: dict[str, Any] = {}
 _NATIVE_FA4_RUNTIME: dict[str, Any] = {}
 
+ATTENTION_QKV_BF16_IGNORE = (
+    r"re:^model\.layers\.[0-9]+\.self_attn\.(q|k|v)_proj$",
+    r"re:^model\.yoco_(k|v)_proj$",
+)
 
-def _import_fa4_varlen_func(source: str = "installed"):
+
+def _keep_native_attention_qkv_bf16(model: torch.nn.Module) -> list[str]:
+    modules: list[str] = []
+    for layer_index, layer in enumerate(model.layers):
+        attention = layer.self_attn
+        for projection_name in ("q_proj", "k_proj", "v_proj"):
+            projection = getattr(attention, projection_name, None)
+            if projection is None:
+                continue
+            projection.quant_mode = "bfloat16"
+            modules.append(f"layers.{layer_index}.self_attn.{projection_name}")
+    for projection_name in ("k_proj", "v_proj"):
+        projection = getattr(model, projection_name, None)
+        if projection is None:
+            continue
+        projection.quant_mode = "bfloat16"
+        modules.append(projection_name)
+    if not modules:
+        raise RuntimeError("No Native attention QKV projections were found")
+    return modules
+
+
+def _fa4_source_runtime(source_root: str, profile: str) -> dict[str, Any]:
+    import hashlib
+    import importlib.metadata as metadata
+
+    import cutlass
+    import tvm_ffi
+
+    root = Path(source_root).resolve()
+    cute_root = root / "flash_attn" / "cute"
+    interface_path = cute_root / "interface.py"
+    forward_path = cute_root / "flash_fwd_sm100.py"
+    if not interface_path.is_file() or not forward_path.is_file():
+        raise RuntimeError(f"Invalid FA4 source profile: {cute_root}")
+
+    expected_versions = {
+        "flash-attn-4": "4.0.0b13",
+        "nvidia-cutlass-dsl": "4.5.1",
+        "apache-tvm-ffi": "0.1.11",
+        "quack-kernels": "0.4.1",
+    }
+    runtime_versions = {
+        "flash-attn-4": metadata.version("flash-attn-4"),
+        "nvidia-cutlass-dsl": cutlass.__version__,
+        "apache-tvm-ffi": tvm_ffi.__version__,
+        "quack-kernels": metadata.version("quack-kernels"),
+    }
+    if runtime_versions != expected_versions:
+        raise RuntimeError(
+            "Image-derived FA4 runtime mismatch: "
+            f"expected {expected_versions}, found {runtime_versions}"
+        )
+
+    source_hasher = hashlib.sha256()
+    for source_path in sorted(cute_root.rglob("*.py")):
+        relative_path = source_path.relative_to(cute_root).as_posix()
+        source_hasher.update(relative_path.encode("utf-8"))
+        source_hasher.update(b"\0")
+        source_hasher.update(source_path.read_bytes())
+
+    forward_text = forward_path.read_text(encoding="utf-8")
+    interface_text = interface_path.read_text(encoding="utf-8")
+    override = "self.enable_ex2_emu = False\n        self.ex2_emu_freq = 0"
+    exp2_emu_disabled = override in forward_text
+    if exp2_emu_disabled != (profile == "no-ex2"):
+        raise RuntimeError(
+            f"FA4 profile {profile!r} does not match source override state "
+            f"exp2_emu_disabled={exp2_emu_disabled}"
+        )
+
+    q_stage_override = None
+    for stage in (1, 2):
+        snippet = (
+            "    if arch // 10 == 10:\n"
+            f"        q_stage = {stage}\n"
+            "    else:\n"
+            "        q_stage = 1\n"
+        )
+        if snippet in interface_text:
+            q_stage_override = stage
+    expected_q_stage = {
+        "default": None,
+        "no-ex2": None,
+        "q-stage1": 1,
+        "q-stage2": 2,
+    }[profile]
+    if q_stage_override != expected_q_stage:
+        raise RuntimeError(
+            f"FA4 profile {profile!r} does not match q_stage override "
+            f"state {q_stage_override!r}"
+        )
+
+    return {
+        "source": "donglixp/pytorch:26.02-b200",
+        "profile": profile,
+        "source_root": str(cute_root),
+        "source_sha256": source_hasher.hexdigest(),
+        "runtime_versions": runtime_versions,
+        "cutlass_module": cutlass.__file__,
+        "tvm_ffi_module": tvm_ffi.__file__,
+        "exp2_emu_disabled": exp2_emu_disabled,
+        "q_stage_override": q_stage_override,
+    }
+
+
+def _import_external_fa4_interface(source_root: str, profile: str):
+    import importlib
+
+    root = Path(source_root).resolve()
+    package_path = root / "flash_attn"
+    if not (package_path / "cute" / "interface.py").is_file():
+        raise RuntimeError(f"FA4 source package not found: {package_path}")
+
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    try:
+        import flash_attn
+    except ImportError:
+        flash_attn = None
+    if flash_attn is not None and hasattr(flash_attn, "__path__"):
+        package_path_text = str(package_path)
+        if package_path_text not in flash_attn.__path__:
+            flash_attn.__path__.insert(0, package_path_text)
+
+    existing = sys.modules.get("flash_attn.cute.interface")
+    if existing is not None:
+        existing_path = Path(existing.__file__).resolve()
+        if not existing_path.is_relative_to(package_path):
+            raise RuntimeError(
+                "flash_attn.cute.interface was imported before the requested "
+                f"FA4 source profile: {existing_path}"
+            )
+        interface = existing
+    else:
+        interface = importlib.import_module("flash_attn.cute.interface")
+
+    runtime = _fa4_source_runtime(str(root), profile)
+    return interface, runtime
+
+
+def _install_external_fa4_tuning(
+    interface: Any,
+    *,
+    pack_gqa: str = "auto",
+    tile_mn: str = "default",
+) -> dict[str, Any]:
+    pack_gqa_override = {"auto": None, "on": True, "off": False}[pack_gqa]
+    tile_mn_override = {
+        "default": None,
+        "128x64": (128, 64),
+        "128x128": (128, 128),
+    }[tile_mn]
+    overrides = {
+        key: value
+        for key, value in (
+            ("pack_gqa", pack_gqa_override),
+            ("tile_mn", tile_mn_override),
+        )
+        if value is not None
+    }
+    if not overrides:
+        return {}
+
+    current = interface._flash_attn_fwd
+    if hasattr(current, "__yoco_fa4_tuning_overrides__"):
+        if current.__yoco_fa4_tuning_overrides__ != overrides:
+            raise RuntimeError(
+                "External FA4 tuning was already installed with different "
+                f"overrides: {current.__yoco_fa4_tuning_overrides__}"
+            )
+        return overrides
+
+    def tuned_flash_attn_fwd(*args, **kwargs):
+        kwargs.update(overrides)
+        return current(*args, **kwargs)
+
+    tuned_flash_attn_fwd.compile_cache = current.compile_cache
+    tuned_flash_attn_fwd.__yoco_fa4_tuning_overrides__ = overrides
+    interface._flash_attn_fwd = tuned_flash_attn_fwd
+    return overrides
+
+
+def _import_fa4_varlen_func(
+    source: str = "installed",
+    *,
+    source_root: str | None = None,
+    profile: str = "default",
+    pack_gqa: str = "auto",
+    tile_mn: str = "default",
+):
     """Load either installed FA4 or this checkout's exact vendored FA4 source."""
-    cached = _NATIVE_FA4_FUNCTIONS.get(source)
+    cache_key = f"{source}:{source_root or ''}:{profile}:{pack_gqa}:{tile_mn}"
+    cached = _NATIVE_FA4_FUNCTIONS.get(cache_key)
     if cached is not None:
         return cached
+
+    if source_root is not None:
+        interface, runtime = _import_external_fa4_interface(source_root, profile)
+        tuning_overrides = _install_external_fa4_tuning(
+            interface,
+            pack_gqa=pack_gqa,
+            tile_mn=tile_mn,
+        )
+        flash_attn_varlen_func = interface.flash_attn_varlen_func
+        _NATIVE_FA4_FUNCTIONS[cache_key] = flash_attn_varlen_func
+        _NATIVE_FA4_RUNTIME.update(
+            {**runtime, "tuning_overrides": tuning_overrides}
+        )
+        print(
+            "[native-kl] loaded image-derived FA4 "
+            f"profile={profile} sha256={runtime['source_sha256']}",
+            flush=True,
+        )
+        return flash_attn_varlen_func
 
     if source == "vllm-vendored":
         import hashlib
@@ -620,7 +861,7 @@ def _import_fa4_varlen_func(source: str = "installed"):
             source_hasher.update(source_path.read_bytes())
 
         flash_attn_varlen_func = interface.flash_attn_varlen_func
-        _NATIVE_FA4_FUNCTIONS[source] = flash_attn_varlen_func
+        _NATIVE_FA4_FUNCTIONS[cache_key] = flash_attn_varlen_func
         _NATIVE_FA4_RUNTIME.update(
             {
                 "source": source,
@@ -661,7 +902,7 @@ def _import_fa4_varlen_func(source: str = "installed"):
         raise RuntimeError(
             "flash-attn-4 is installed but flash_attn.cute is unavailable"
         ) from exc
-    _NATIVE_FA4_FUNCTIONS[source] = flash_attn_varlen_func
+    _NATIVE_FA4_FUNCTIONS[cache_key] = flash_attn_varlen_func
     _NATIVE_FA4_RUNTIME.update(
         {
             "source": source,
@@ -678,6 +919,10 @@ def _install_native_inference_compat(
     local_attention: bool = False,
     force_fa_num_splits_one: bool = False,
     native_fa4_source: str = "installed",
+    fa4_source_root: str | None = None,
+    fa4_profile: str = "default",
+    fa4_pack_gqa: str = "auto",
+    fa4_tile_mn: str = "default",
 ) -> None:
     """Provide inference-only fallbacks for optional llm-train dependencies.
 
@@ -707,7 +952,13 @@ def _install_native_inference_compat(
         )
 
     def flash_attn_cute_varlen_func(*args, **kwargs):
-        flash_attn_varlen_func = _import_fa4_varlen_func(native_fa4_source)
+        flash_attn_varlen_func = _import_fa4_varlen_func(
+            native_fa4_source,
+            source_root=fa4_source_root,
+            profile=fa4_profile,
+            pack_gqa=fa4_pack_gqa,
+            tile_mn=fa4_tile_mn,
+        )
         return flash_attn_varlen_func(*args, **kwargs)
 
     def make_single_gpu_attention_wrapper(cute_module):
@@ -1083,6 +1334,10 @@ def run_native(args: argparse.Namespace) -> None:
         local_attention=args.native_local_attention,
         force_fa_num_splits_one=args.force_fa_num_splits_one,
         native_fa4_source=args.native_fa4_source,
+        fa4_source_root=args.fa4_source_root,
+        fa4_profile=args.fa4_profile,
+        fa4_pack_gqa=args.fa4_pack_gqa,
+        fa4_tile_mn=args.fa4_tile_mn,
     )
     from arch.model import Model, ModelArgs, create_kv_cache
 
@@ -1172,6 +1427,19 @@ def run_native(args: argparse.Namespace) -> None:
     torch.set_default_device(default_device)
     torch.set_default_dtype(default_dtype)
     model.eval()
+
+    attention_qkv_bf16_modules: list[str] = []
+    if args.keep_attention_qkv_bf16:
+        if args.native_quant_mode != "mxfp8":
+            raise ValueError(
+                "--keep-attention-qkv-bf16 requires --native-quant-mode mxfp8"
+            )
+        attention_qkv_bf16_modules = _keep_native_attention_qkv_bf16(model)
+        print(
+            "[native-kl] keeping attention QKV projections BF16: "
+            f"{len(attention_qkv_bf16_modules)} logical projections",
+            flush=True,
+        )
 
     state = torch.load(
         state_path,
@@ -1748,6 +2016,8 @@ def run_native(args: argparse.Namespace) -> None:
             "torch_fp8_quant_fallback": args.native_use_torch_fp8_quant,
             "transformer_engine_enabled": using_transformer_engine,
             "force_fa_num_splits_one": args.force_fa_num_splits_one,
+            "keep_attention_qkv_bf16": args.keep_attention_qkv_bf16,
+            "attention_qkv_bf16_modules": attention_qkv_bf16_modules,
             "batch_size": args.batch_size,
             "first_batch_size": args.first_batch_size,
             "model_forwards": model_forwards,
@@ -1894,10 +2164,70 @@ def _configure_vllm_alignment_env(*, enabled: bool = False) -> None:
     os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "1" if enabled else "0"
 
 
+def _install_vllm_external_fa4(
+    source_root: str,
+    profile: str,
+    *,
+    pack_gqa: str = "auto",
+    tile_mn: str = "default",
+) -> dict[str, Any]:
+    import types
+
+    interface, runtime = _import_external_fa4_interface(source_root, profile)
+    tuning_overrides = _install_external_fa4_tuning(
+        interface,
+        pack_gqa=pack_gqa,
+        tile_mn=tile_mn,
+    )
+    adapter_name = "vllm.vllm_flash_attn.cute.interface"
+    package_name = "vllm.vllm_flash_attn.cute"
+
+    adapter = types.ModuleType(adapter_name)
+    adapter.__file__ = interface.__file__
+
+    def _flash_attn_fwd(*args, **kwargs):
+        result = interface._flash_attn_fwd(*args, **kwargs)
+        if not isinstance(result, tuple) or len(result) not in (2, 4):
+            raise RuntimeError(
+                "Unexpected external FA4 private return shape: "
+                f"{type(result).__name__}, len={getattr(result, '__len__', lambda: '?')()}"
+            )
+        return result[0], result[1]
+
+    adapter._flash_attn_fwd = _flash_attn_fwd
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(Path(source_root).resolve() / "flash_attn" / "cute")]
+    package.interface = adapter
+    sys.modules[package_name] = package
+    sys.modules[adapter_name] = adapter
+
+    runtime = {
+        **runtime,
+        "tuning_overrides": tuning_overrides,
+        "vllm_private_return_adapter": "4-to-2",
+    }
+    print(
+        "[vllm-kl] installed external FA4 adapter "
+        f"profile={profile} sha256={runtime['source_sha256']}",
+        flush=True,
+    )
+    return runtime
+
+
 def run_vllm(args: argparse.Namespace) -> None:
     _configure_vllm_alignment_env(enabled=args.v1_multiprocessing)
     _disable_transformers_torchvision()
     _patch_local_vllm_metadata()
+    external_fa4_runtime: dict[str, Any] = {}
+    if args.fa4_source_root:
+        if args.flash_attn_version != 4:
+            raise ValueError("--fa4-source-root requires --flash-attn-version 4")
+        external_fa4_runtime = _install_vllm_external_fa4(
+            args.fa4_source_root,
+            args.fa4_profile,
+            pack_gqa=args.fa4_pack_gqa,
+            tile_mn=args.fa4_tile_mn,
+        )
     from vllm import LLM, SamplingParams
 
     tokenizer, records = _prompt_records(
@@ -1909,6 +2239,15 @@ def run_vllm(args: argparse.Namespace) -> None:
     )
     if args.trace_out:
         raise ValueError("--trace-out is only supported by the Native backend")
+    if args.keep_attention_qkv_bf16:
+        if args.quantization not in ("fp8_per_block", "mxfp8"):
+            raise ValueError(
+                "--keep-attention-qkv-bf16 requires online fp8_per_block or "
+                "mxfp8 quantization"
+            )
+        for pattern in ATTENTION_QKV_BF16_IGNORE:
+            if pattern not in args.quantization_ignore:
+                args.quantization_ignore.append(pattern)
     llm_kwargs: dict[str, Any] = {
         "model": args.model,
         "trust_remote_code": True,
@@ -2013,8 +2352,8 @@ def run_vllm(args: argparse.Namespace) -> None:
                     flush=True,
                 )
     if dp_rank == 0:
-        vllm_fa4_runtime: dict[str, Any] = {}
-        if args.flash_attn_version == 4:
+        vllm_fa4_runtime = external_fa4_runtime
+        if args.flash_attn_version == 4 and not vllm_fa4_runtime:
             _import_fa4_varlen_func("vllm-vendored")
             vllm_fa4_runtime = dict(_NATIVE_FA4_RUNTIME)
         _save(
@@ -2037,6 +2376,8 @@ def run_vllm(args: argparse.Namespace) -> None:
                     else None
                 ),
                 "force_fa_num_splits_one": args.force_fa_num_splits_one,
+                "keep_attention_qkv_bf16": args.keep_attention_qkv_bf16,
+                "quantization_ignore": args.quantization_ignore,
                 "v1_multiprocessing_enabled": args.v1_multiprocessing,
                 "iteration_details_logged": args.log_iteration_details,
                 "prefix_caching_enabled": args.enable_prefix_caching,

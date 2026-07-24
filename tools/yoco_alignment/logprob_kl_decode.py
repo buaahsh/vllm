@@ -88,7 +88,27 @@ def _add_vllm_engine_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--attention-backend")
     parser.add_argument("--flash-attn-version", type=int)
     parser.add_argument("--force-fa-num-splits-one", action="store_true")
+    parser.add_argument("--keep-attention-qkv-bf16", action="store_true")
     parser.add_argument("--moe-backend")
+    parser.add_argument("--fa4-source-root", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--fa4-profile",
+        choices=("default", "no-ex2", "q-stage1", "q-stage2"),
+        default="default",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--fa4-pack-gqa",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--fa4-tile-mn",
+        choices=("default", "128x64", "128x128"),
+        default="default",
+        help=argparse.SUPPRESS,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -181,6 +201,26 @@ def parse_args() -> argparse.Namespace:
     )
     native_parser.add_argument("--native-no-kv-cache", action="store_true")
     native_parser.add_argument("--force-fa-num-splits-one", action="store_true")
+    native_parser.add_argument("--keep-attention-qkv-bf16", action="store_true")
+    native_parser.add_argument("--fa4-source-root", help=argparse.SUPPRESS)
+    native_parser.add_argument(
+        "--fa4-profile",
+        choices=("default", "no-ex2", "q-stage1", "q-stage2"),
+        default="default",
+        help=argparse.SUPPRESS,
+    )
+    native_parser.add_argument(
+        "--fa4-pack-gqa",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help=argparse.SUPPRESS,
+    )
+    native_parser.add_argument(
+        "--fa4-tile-mn",
+        choices=("default", "128x64", "128x128"),
+        default="default",
+        help=argparse.SUPPRESS,
+    )
     native_parser.add_argument(
         "--native-use-torch-fp8-quant", action="store_true"
     )
@@ -416,6 +456,25 @@ def run_vllm(args: argparse.Namespace) -> None:
     prefill_probe._configure_vllm_alignment_env()
     prefill_probe._disable_transformers_torchvision()
     prefill_probe._patch_local_vllm_metadata()
+    if args.keep_attention_qkv_bf16:
+        if args.quantization not in ("fp8_per_block", "mxfp8"):
+            raise ValueError(
+                "--keep-attention-qkv-bf16 requires online fp8_per_block or "
+                "mxfp8 quantization"
+            )
+        for pattern in prefill_probe.ATTENTION_QKV_BF16_IGNORE:
+            if pattern not in args.quantization_ignore:
+                args.quantization_ignore.append(pattern)
+    fa4_runtime: dict[str, Any] = {}
+    if args.fa4_source_root:
+        if args.flash_attn_version != 4:
+            raise ValueError("--fa4-source-root requires --flash-attn-version 4")
+        fa4_runtime = prefill_probe._install_vllm_external_fa4(
+            args.fa4_source_root,
+            args.fa4_profile,
+            pack_gqa=args.fa4_pack_gqa,
+            tile_mn=args.fa4_tile_mn,
+        )
     from vllm import LLM, SamplingParams
 
     tokenizer, records = prefill_probe._prompt_records(
@@ -652,7 +711,12 @@ def run_vllm(args: argparse.Namespace) -> None:
         "stage": "rollout",
         "backend": "vllm",
         "model": args.model,
-        "engine_config": engine_config,
+        "engine_config": {
+            **engine_config,
+            "fa4_runtime": fa4_runtime,
+            "keep_attention_qkv_bf16": args.keep_attention_qkv_bf16,
+            "quantization_ignore": list(args.quantization_ignore),
+        },
         "sampling_config": sampling_config,
         "prompt_config": {
             "prompt_suite": args.prompt_suite,
@@ -731,7 +795,7 @@ def _results_by_submission_batch(
 def _load_native_model(
     args: argparse.Namespace,
     seed: int,
-) -> tuple[Any, Any, torch.device, Any, bool]:
+) -> tuple[Any, Any, torch.device, Any, bool, list[str]]:
     import torch.distributed as dist
     from torch.distributed.device_mesh import init_device_mesh
 
@@ -741,6 +805,10 @@ def _load_native_model(
     prefill_probe._install_native_inference_compat(
         local_attention=args.native_local_attention,
         force_fa_num_splits_one=args.force_fa_num_splits_one,
+        fa4_source_root=args.fa4_source_root,
+        fa4_profile=args.fa4_profile,
+        fa4_pack_gqa=args.fa4_pack_gqa,
+        fa4_tile_mn=args.fa4_tile_mn,
     )
     from arch.model import Model, ModelArgs, create_kv_cache
 
@@ -812,6 +880,21 @@ def _load_native_model(
     torch.set_default_dtype(default_dtype)
     model.eval()
 
+    attention_qkv_bf16_modules: list[str] = []
+    if args.keep_attention_qkv_bf16:
+        if args.native_quant_mode != "mxfp8":
+            raise ValueError(
+                "--keep-attention-qkv-bf16 requires --native-quant-mode mxfp8"
+            )
+        attention_qkv_bf16_modules = (
+            prefill_probe._keep_native_attention_qkv_bf16(model)
+        )
+        print(
+            "[native-decode-kl] keeping attention QKV projections BF16: "
+            f"{len(attention_qkv_bf16_modules)} logical projections",
+            flush=True,
+        )
+
     state = torch.load(
         state_path,
         map_location=prefill_probe._device_mapping(-1),
@@ -827,7 +910,14 @@ def _load_native_model(
         f"kv_cache={not args.native_no_kv_cache}",
         flush=True,
     )
-    return model, create_kv_cache, device, dist, using_transformer_engine
+    return (
+        model,
+        create_kv_cache,
+        device,
+        dist,
+        using_transformer_engine,
+        attention_qkv_bf16_modules,
+    )
 
 
 def _native_result_shell(source: dict[str, Any]) -> dict[str, Any]:
@@ -1060,9 +1150,14 @@ def run_native(args: argparse.Namespace) -> None:
         ),
         default=20,
     )
-    model, create_kv_cache, device, dist, using_transformer_engine = (
-        _load_native_model(args, seed)
-    )
+    (
+        model,
+        create_kv_cache,
+        device,
+        dist,
+        using_transformer_engine,
+        attention_qkv_bf16_modules,
+    ) = _load_native_model(args, seed)
     results = []
     replay_batches = []
     try:
@@ -1114,6 +1209,9 @@ def run_native(args: argparse.Namespace) -> None:
                 "torch_fp8_quant_fallback": args.native_use_torch_fp8_quant,
                 "transformer_engine_enabled": using_transformer_engine,
                 "force_fa_num_splits_one": args.force_fa_num_splits_one,
+                "keep_attention_qkv_bf16": args.keep_attention_qkv_bf16,
+                "attention_qkv_bf16_modules": attention_qkv_bf16_modules,
+                "fa4_runtime": dict(prefill_probe._NATIVE_FA4_RUNTIME),
                 "max_model_len": max_model_len,
                 "seed": seed,
                 "execution": "packed teacher-forced prefill",
