@@ -86,6 +86,7 @@ def convert_state_dict(
     state_dict: dict[str, torch.Tensor],
     verbose: bool = False,
     router_normalization: str = "cuda",
+    legacy_diff_v3: bool = False,
 ) -> dict[str, torch.Tensor]:
     """Rename training keys to HF keys and reshape per-head projections."""
     new_state: dict[str, torch.Tensor] = {}
@@ -103,6 +104,7 @@ def convert_state_dict(
         "output.weight": "lm_head.weight",
         "norm.weight": "model.norm.weight",
         "yoco_norm.weight": "model.yoco_norm.weight",
+        "k_norm.weight": "model.yoco_k_norm.weight",
         "k_proj.weight": "model.k_proj.weight",
         "v_proj.weight": "model.v_proj.weight",
     }
@@ -128,12 +130,20 @@ def convert_state_dict(
             # Per-head 3D projections that need flattening
             if sub in ("q_proj.weight", "k_proj.weight", "v_proj.weight"):
                 add(f"{prefix}.self_attn.{sub}", _flatten_proj(value), key)
-            elif sub in (
-                "o_proj.weight",
-                "lambda_proj.weight",
-                "q_norm.weight",
-                "k_norm.weight",
-            ):
+            elif sub == "lambda_proj.weight":
+                if legacy_diff_v3:
+                    if value.shape[0] % 2:
+                        raise ValueError(
+                            f"Legacy diff_both_lamb weight {key} has odd "
+                            f"output size {value.shape[0]}"
+                        )
+                    heads = value.shape[0] // 2
+                    value = value.reshape(2, heads, *value.shape[1:])
+                    value = value.transpose(0, 1).reshape(-1, *value.shape[2:])
+                add(f"{prefix}.self_attn.lambda_proj.weight", value, key)
+            elif sub == "gate_proj.weight":
+                add(f"{prefix}.self_attn.lambda_proj.weight", value, key)
+            elif sub in ("o_proj.weight", "q_norm.weight", "k_norm.weight"):
                 add(f"{prefix}.self_attn.{sub}", value, key)
             else:
                 # gate_proj.weight (when gated_attention=True), etc.
@@ -153,6 +163,15 @@ def convert_state_dict(
                 if router_normalization == "cuda":
                     gate = _normalize_router_weight_for_export(gate)
                 add(f"{prefix}.mlp.gate.weight", gate, key)
+                continue
+
+            if sub in (
+                "fc1_latent_proj.weight",
+                "fc2_latent_proj.weight",
+                "fc1_latent_norm.weight",
+                "fc2_latent_norm.weight",
+            ):
+                add(f"{prefix}.mlp.{sub}", value, key)
                 continue
 
             # MoE experts (3D tensors flattened on dim 0 for vLLM FusedMoE)
@@ -304,6 +323,19 @@ def create_hf_config(
     )
     max_seq_len = max(MIN_MODEL_MAX_LENGTH, ma["max_seq_len"])
 
+    legacy_diff_v3 = bool(
+        ma.get("diff_attention")
+        and ma.get("diff_both_lamb")
+        and not (ma.get("diff_v2") or ma.get("diff_v3"))
+    )
+    diff_v3 = bool(ma.get("diff_v3") or legacy_diff_v3)
+    diff_v2 = bool(
+        ma.get(
+            "diff_v2",
+            ma.get("diff_attention", False) and not legacy_diff_v3,
+        )
+    )
+
     config = {
         "architectures": ["YOCOForCausalLM"],
         "model_type": "yoco",
@@ -325,11 +357,17 @@ def create_hf_config(
         "rope_theta": ma["rope_theta"],
         "qk_norm": False if qk_rms_clip else ma.get("qk_norm", False),
         "qk_rms_clip": qk_rms_clip,
+        # Older YOCO-v2 checkpoints omitted this field and used weight-free
+        # Q/K clipping. YOCO-v3 checkpoints record the affine setting.
+        "qk_rms_gamma": ma.get("qk_rms_gamma", False),
         "qk_rms_limit": ma.get("qk_rms_limit", 3.0),
         "attention_bias": ma.get("attention_bias", False),
         "weight_tying": ma.get("weight_tying", False),
-        "gated_attention": ma.get("gated_attention", False),
-        "diff_attention": ma.get("diff_attention", False),
+        "headwise_glu": ma.get("headwise_glu", False),
+        "diff_v2": diff_v2,
+        "diff_v3": diff_v3,
+        # Preserve the legacy flag for older consumers.
+        "diff_attention": diff_v2,
         # YOCO
         "yoco_cross_layers": ma.get("yoco_cross_layers", 0),
         "yoco_window_size": ma.get("yoco_window_size", 512),
@@ -339,6 +377,8 @@ def create_hf_config(
         "moe_expert_num": ma.get("moe_expert_num", 0),
         "moe_top_k": ma.get("moe_top_k", 0),
         "moe_ffn_dim": ma.get("moe_ffn_dim", 0),
+        "moe_latent_dim": ma.get("moe_latent_dim", 0),
+        "moe_latent_norm": ma.get("moe_latent_norm", False),
         "d_shared_expert": ma.get("d_shared_expert", 0),
         "dense_layers": ma.get("dense_layers", 0),
         "swiglu_limit": ma.get("swiglu_limit", 10.0),
@@ -541,7 +581,8 @@ def convert_checkpoint(
     print(
         f"   d_model={ma['d_model']}  n_layers={ma['n_layers']}  "
         f"head={ma['head']}  kv_head={ma['kv_head']}  "
-        f"moe={ma.get('moe')}  diff_attn={ma.get('diff_attention')}  "
+        f"moe={ma.get('moe')}  diff_v2={ma.get('diff_v2')}  "
+        f"diff_v3={ma.get('diff_v3')}  latent={ma.get('moe_latent_dim')}  "
         f"yoco_cross_layers={ma.get('yoco_cross_layers')}  "
         f"universal_loop={ma.get('universal_loop')}  updates={metadata.get('updates')}"
     )
@@ -570,6 +611,11 @@ def convert_checkpoint(
         state_dict,
         verbose=verbose,
         router_normalization=router_normalization,
+        legacy_diff_v3=bool(
+            ma.get("diff_attention")
+            and ma.get("diff_both_lamb")
+            and not (ma.get("diff_v2") or ma.get("diff_v3"))
+        ),
     )
     print(f"   Produced {len(new_state)} parameters")
 

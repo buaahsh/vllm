@@ -23,6 +23,12 @@ RUN git init /workspace/vllm \
 
 WORKDIR /workspace/vllm
 
+# Match the FlashAttention 4 and CuTeDSL versions already installed in the
+# NVIDIA 26.02 image before building vLLM's vendored FA4 package.
+COPY cmake/external_projects/vllm_flash_attn.cmake \
+    /workspace/vllm/cmake/external_projects/vllm_flash_attn.cmake
+COPY requirements/cuda.txt /workspace/vllm/requirements/cuda.txt
+
 # Strip torch/torchvision/torchaudio requirements so the NVIDIA image torch is
 # preserved. This is the required first step before pip install.
 RUN python use_existing_torch.py
@@ -115,4 +121,6 @@ COPY vllm/tool_parsers/agens_tool_parser.py \
     /workspace/vllm/vllm/tool_parsers/agens_tool_parser.py
 COPY tools/yoco_alignment/logprob_kl.py \
     /workspace/vllm/tools/yoco_alignment/logprob_kl.py
+COPY tools/yoco_alignment/rl_rollout.py \
+    /workspace/vllm/tools/yoco_alignment/rl_rollout.py
 COPY yoco.md /workspace/vllm/yoco.md

@@ -856,15 +856,19 @@ def is_torch_equal(target: str) -> bool:
 
 HAS_OPAQUE_TYPE = is_torch_equal_or_newer("2.11.0.dev")
 
+if HAS_OPAQUE_TYPE:
+    try:
+        from torch._opaque_base import OpaqueBase
+    except ModuleNotFoundError:
+        HAS_OPAQUE_TYPE = False
+        OpaqueBase = object  # type: ignore[misc, assignment]
+else:
+    OpaqueBase = object  # type: ignore[misc, assignment]
+
 # Allow toggling LayerName usage via environment variable.
 # Defaults to True on torch >= 2.11, False otherwise.
 # Set VLLM_USE_LAYERNAME=0 to disable even on torch >= 2.11.
 _USE_LAYERNAME = HAS_OPAQUE_TYPE and envs.VLLM_USE_LAYERNAME
-
-if HAS_OPAQUE_TYPE:
-    from torch._opaque_base import OpaqueBase
-else:
-    OpaqueBase = object  # type: ignore[misc, assignment]
 
 
 class LayerName(OpaqueBase):  # type: ignore[misc]

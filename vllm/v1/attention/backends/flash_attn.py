@@ -698,6 +698,10 @@ class FlashAttentionImpl(AttentionImpl):
             model_type == "yoco"
             and cudagraph_mode is not None
             and cudagraph_mode.has_full_cudagraphs()
+            and self.vllm_flash_attn_version != 4
+        )
+        self.force_single_split = (
+            model_type == "yoco" and self.vllm_flash_attn_version == 4
         )
         dcp_a2a = (
             vllm_config is not None
@@ -811,6 +815,7 @@ class FlashAttentionImpl(AttentionImpl):
             max_seqlen_k = attn_metadata.max_seq_len
             block_table = attn_metadata.block_table
             scheduler_metadata = attn_metadata.scheduler_metadata
+            num_splits = 1 if self.force_single_split else attn_metadata.max_num_splits
 
             descale_shape = (cu_seqlens_q.shape[0] - 1, self.num_kv_heads)
 
@@ -913,7 +918,7 @@ class FlashAttentionImpl(AttentionImpl):
                         window_size=sliding_window_size,
                         softcap=self.logits_soft_cap,
                         fa_version=self.vllm_flash_attn_version,
-                        num_splits=attn_metadata.max_num_splits,
+                        num_splits=num_splits,
                         s_aux=self.sinks,
                     )
                     return output
@@ -937,7 +942,7 @@ class FlashAttentionImpl(AttentionImpl):
                     q_descale=q_descale,
                     k_descale=k_descale,
                     v_descale=v_descale,
-                    num_splits=attn_metadata.max_num_splits,
+                    num_splits=num_splits,
                     s_aux=self.sinks,
                 )
                 return output
@@ -960,7 +965,9 @@ class FlashAttentionImpl(AttentionImpl):
             logits_soft_cap=self.logits_soft_cap,
             block_table=attn_metadata.block_table,
             common_prefix_len=attn_metadata.common_prefix_len,
-            max_num_splits=attn_metadata.max_num_splits,
+            max_num_splits=(
+                1 if self.force_single_split else attn_metadata.max_num_splits
+            ),
             fa_version=self.vllm_flash_attn_version,
             prefix_scheduler_metadata=attn_metadata.prefix_scheduler_metadata,
             suffix_scheduler_metadata=attn_metadata.scheduler_metadata,
@@ -1026,6 +1033,7 @@ class FlashAttentionImpl(AttentionImpl):
         cu_seqlens_q = attn_metadata.query_start_loc
         max_seqlen_q = attn_metadata.max_query_len
         block_table = attn_metadata.block_table
+        num_splits = 1 if self.force_single_split else attn_metadata.max_num_splits
 
         query = query.contiguous()
         query_across_dcp = get_dcp_group().all_gather(query, dim=1)
@@ -1060,7 +1068,7 @@ class FlashAttentionImpl(AttentionImpl):
             q_descale=q_descale,
             k_descale=k_descale,
             v_descale=v_descale,
-            num_splits=attn_metadata.max_num_splits,
+            num_splits=num_splits,
         )
         # FA returns LSE in shape [ H, B ] but DCP combine wants [ B, H ]
         context_attn_out_cor, context_lse_cor = self.dcp_combine(
@@ -1093,7 +1101,7 @@ class FlashAttentionImpl(AttentionImpl):
             q_descale=q_descale,
             k_descale=k_descale,
             v_descale=v_descale,
-            num_splits=attn_metadata.max_num_splits,
+            num_splits=num_splits,
         )
         assert context_attn_out_cor.shape == query_attn_out.shape
         assert context_lse_cor.shape == query_lse.shape

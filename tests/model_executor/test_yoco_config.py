@@ -30,27 +30,27 @@ def _make_vllm_config(
     )
 
 
-def test_yoco_fa4_full_cudagraph_forces_triton() -> None:
+def test_yoco_fa4_full_cudagraph_keeps_flash_attention() -> None:
     vllm_config = _make_vllm_config(cudagraph_mode=CUDAGraphMode.FULL)
 
     YOCOForCausalLMConfig.verify_and_update_config(vllm_config)
 
-    assert vllm_config.attention_config.backend == AttentionBackendEnum.TRITON_ATTN
-    assert vllm_config.compilation_config.cudagraph_capture_sizes == [1, 2, 4]
-    assert not vllm_config.cache_config.kv_sharing_fast_prefill
+    assert vllm_config.attention_config.backend is None
+    assert vllm_config.compilation_config.cudagraph_capture_sizes is None
+    assert vllm_config.cache_config.kv_sharing_fast_prefill
     assert not vllm_config.compilation_config.fast_moe_cold_start
 
 
-def test_yoco_fa4_full_decode_only_forces_triton() -> None:
+def test_yoco_fa4_full_decode_only_keeps_flash_attention() -> None:
     vllm_config = _make_vllm_config(cudagraph_mode=CUDAGraphMode.FULL_DECODE_ONLY)
 
     YOCOForCausalLMConfig.verify_and_update_config(vllm_config)
 
-    assert vllm_config.attention_config.backend == AttentionBackendEnum.TRITON_ATTN
-    assert not vllm_config.cache_config.kv_sharing_fast_prefill
+    assert vllm_config.attention_config.backend is None
+    assert vllm_config.cache_config.kv_sharing_fast_prefill
 
 
-def test_yoco_auto_fa4_full_cudagraph_forces_triton(monkeypatch) -> None:
+def test_yoco_auto_fa4_full_cudagraph_keeps_flash_attention(monkeypatch) -> None:
     vllm_config = _make_vllm_config(
         cudagraph_mode=CUDAGraphMode.FULL,
         flash_attn_version=None,
@@ -62,8 +62,9 @@ def test_yoco_auto_fa4_full_cudagraph_forces_triton(monkeypatch) -> None:
 
     YOCOForCausalLMConfig.verify_and_update_config(vllm_config)
 
-    assert vllm_config.attention_config.backend == AttentionBackendEnum.TRITON_ATTN
-    assert not vllm_config.cache_config.kv_sharing_fast_prefill
+    assert vllm_config.attention_config.backend is None
+    assert vllm_config.compilation_config.cudagraph_capture_sizes is None
+    assert vllm_config.cache_config.kv_sharing_fast_prefill
 
 
 def test_yoco_fa4_eager_keeps_flash_attention() -> None:
@@ -96,6 +97,19 @@ def test_yoco_fa3_full_cudagraph_keeps_flash_attention() -> None:
 
     assert vllm_config.attention_config.backend is None
     assert vllm_config.cache_config.kv_sharing_fast_prefill
+
+
+def test_yoco_triton_full_cudagraph_disables_kv_sharing() -> None:
+    vllm_config = _make_vllm_config(
+        cudagraph_mode=CUDAGraphMode.FULL,
+        backend=AttentionBackendEnum.TRITON_ATTN,
+    )
+
+    YOCOForCausalLMConfig.verify_and_update_config(vllm_config)
+
+    assert vllm_config.attention_config.backend == AttentionBackendEnum.TRITON_ATTN
+    assert vllm_config.compilation_config.cudagraph_capture_sizes == [1, 2, 4]
+    assert not vllm_config.cache_config.kv_sharing_fast_prefill
 
 
 def test_yoco_preserves_explicit_cudagraph_capture_sizes() -> None:
