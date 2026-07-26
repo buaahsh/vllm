@@ -34,8 +34,9 @@ v3 HF checkpoint 包含 14 个 safetensor shard、357 个推理权重；转换�
 
 ## 对齐原则
 
-KL 只有在 vLLM 和 llm-train Native 使用相同计算条件时才有意义。每次对齐前
-必须先固定并记录以下因素：
+低层 kernel matched 对齐要求 vLLM 和 llm-train Native 使用相同计算条件；
+RL backend A/B 则固定精度、采样和 sampled token sequence，只改变明确记录的
+vLLM backend。每次实验前必须先固定并记录以下因素：
 
 1. **精度模式一致**：MXFP8 对齐要求两侧都使用 MXFP8；BF16 对齐要求两侧
    都使用 BF16，不能用 MXFP8 vLLM 对比 BF16 Native。
@@ -43,15 +44,18 @@ KL 只有在 vLLM 和 llm-train Native 使用相同计算条件时才有意义�
    `quant_mode=mxfp8`、`quant_block_size=128`；vLLM 使用
    `--quantization fp8_per_block`。Native 的 torch activation quant fallback
    只是替换不稳定的 Triton 实现，不改变 MXFP8 数值格式。
-3. **Attention 一致**：FA2 只能和 FA2 reference 比较；FA4 只能和 FA4
-   reference 比较。当前 FA4 正式矩阵固定为 `4.0.0b13`
+3. **区分 matched kernel 对齐和 RL backend A/B**：低层 attention kernel
+   对齐要求两侧一致，FA2 只能和 FA2 reference 比较，FA4 只能和 FA4
+   reference 比较。RL rollout backend A/B 则固定 llm-train 使用 FA4，
+   有意改变 vLLM attention/MoE backend，比较真实 sampled-token logprob。
+   当前 Native FA4 固定为 `4.0.0b13`
    (`9bad4bec7326ad28edb5516b8878fd283f8991c0`) 和 CuTeDSL `4.5.1`。
 4. **执行形状一致**：batch size、scheduler forward shape、prompt 顺序、
    chunk 切分位置和 KV-cache 语义必须一致。batch 16 当前使用与 vLLM
    scheduler 一致的 `1 + 15` Native forward shape。
-5. **并行和功能开关一致**：TP、EP、KV-sharing fast prefill、chunked
-   prefill、CUDA Graph 范围都必须逐项匹配，不能把不同配置的结果混在同一
-   个 KL 结论中。
+5. **并行和功能开关可追踪**：matched 对齐时 TP、EP、KV-sharing fast
+   prefill、chunked prefill、CUDA Graph 范围必须一致；backend A/B 中改变的
+   项必须单独列出，不能把不同配置混成同一个 KL 结论。
 
 ## 当前结论
 
@@ -126,9 +130,95 @@ Triton MoE 的两 TP2 replica 和四 TP1 replica 静态吞吐分别为 `2908.54`
 3. MXFP8 匹配 llm-train backend：四个 TP1 + DeepGEMM MoE，sampled KL
    低于 `1e-2`，但 k3 仍略高于阈值。
 
-### 推荐生产配置
+### vLLM backend A/B：llm-train 固定 FA4
 
-以下配置不使用 eager，并让 prefill 和 CUDA Graph decode 都使用 FA4：
+下面所有结果都固定 llm-train teacher-forcing baseline 使用 FA4，vLLM 侧
+有意改变 attention 或 MoE backend。单 B200、非 eager
+`FULL_DECODE_ONLY`、64 prompts、Native scoring batch 16，并开启 chunked
+prefill 和 KV-sharing fast prefill。
+
+BF16 attention sweep 固定 vLLM Triton MoE，`max_tokens=128`：
+
+| vLLM attention | 64-query wall | output tok/s | 对 BF16+FA4 k3 KL |
+| --- | ---: | ---: | ---: |
+| FA4 | `12.809s` | `633.95` | **`0.00297739`** |
+| FA2 | `12.983s` | `618.48` | `0.00304211` |
+| FlashInfer | **`12.568s`** | **`642.66`** | `0.00316659` |
+
+三种 BF16 attention 都通过 `<5e-3`。FlashInfer attention 最快，FA4 的 KL
+最低，但两者差异很小。Triton attention 在非 eager CUDA Graph capture 中
+触发 illegal memory，不能作为生产候选。
+
+MXFP8 attention sweep 固定 vLLM Triton MoE，`max_tokens=128`：
+
+| vLLM attention | 64-query wall | output tok/s | 对 MXFP8+FA4 k3 KL |
+| --- | ---: | ---: | ---: |
+| FA4 | **`10.570s`** | **`766.22`** | **`0.01112026`** |
+| FA2 | `10.907s` | `736.83` | `0.01264444` |
+| FlashInfer | `10.757s` | `751.31` | `0.01245236` |
+
+MXFP8 MoE sweep 固定 vLLM FA4 attention：
+
+| vLLM MoE | 64-query wall | output tok/s | 对 MXFP8+FA4 k3 KL |
+| --- | ---: | ---: | ---: |
+| Triton | **`10.570s`** | **`766.22`** | **`0.01112026`** |
+| DeepGEMM | `13.658s` | `592.02` | `0.01119467` |
+
+因此单卡 MXFP8 当前应使用 **FA4 attention + Triton MoE**：它同时是最快
+attention 组合和最快 MoE backend，并且 KL 也是本次 MXFP8 backend sweep
+中最低。更长的 warm `max_tokens=256` 正式结果为：
+
+| vLLM 配置 | 64-query wall | output tok/s | matched FA4 k3 KL |
+| --- | ---: | ---: | ---: |
+| BF16 FlashInfer attention + Triton MoE | `24.903s` | `620.44` | **`0.00294958`** |
+| MXFP8 FA4 attention + Triton MoE | **`20.733s`** | **`765.56`** | `0.01024826` |
+
+BF16 明确通过 `<5e-3`。MXFP8 比 max128 更接近阈值，但仍高于 `<1e-2`
+约 `2.5e-4`。第一次 MXFP8 max256 请求因 CuTe/FA4 shape JIT 只有
+`224.01 tok/s`；同一 server warm repeat 恢复为 `765.56 tok/s`，所以正式
+吞吐不包含该一次性编译时间。
+
+MoE backend 兼容性：
+
+- BF16 FlashInfer TRTLLM 不支持 YOCO custom routing method 101；
+- BF16 FlashInfer CUTLASS 在加载权重后不再推进；
+- MXFP8 vLLM CUTLASS 对当前配置被 oracle 禁用；
+- MXFP8 FlashInfer CUTLASS 不支持 128x128 weight block 和 1x128 dynamic
+  activation quant；
+- MXFP8 FlashInfer TRTLLM 在转换到约 31.27 GiB 后不再推进；
+- `--moe-backend auto` 不是安全回退：BF16 自动选择 FlashInfer CUTLASS，
+  MXFP8 自动选择 FlashInfer TRTLLM，二者等待 3 分钟均未 ready。
+
+生产启动必须显式传 `--moe-backend triton`，不要依赖 `auto`。
+
+固定每请求 256 tokens 的单卡持续到达结果如下。所有组合均为 64/64 成功、
+0 请求错误：
+
+| 配置 | rate | 64-query wall | output tok/s | p50 / p95 | queue max |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| BF16 FlashInfer + Triton | 2 qps | `36.204s` | `452.55` | `8.660 / 11.173s` | 12 |
+| BF16 FlashInfer + Triton | 4 qps | `30.987s` | `528.74` | `11.664 / 17.292s` | 28 |
+| BF16 FlashInfer + Triton | 8 qps | `28.580s` | `573.27` | `14.209 / 21.856s` | 45 |
+| BF16 FlashInfer + Triton | 16 qps | `27.246s` | `601.34` | `15.375 / 23.996s` | 48 |
+| BF16 FlashInfer + Triton | 32 qps | `26.086s` | `628.08` | `15.638 / 24.556s` | 48 |
+| BF16 FlashInfer + Triton | infinite | **`24.201s`** | **`677.00`** | `15.161 / 24.188s` | 48 |
+| MXFP8 FA4 + Triton | 2 qps | `33.635s` | `487.11` | `6.962 / 9.185s` | 9 |
+| MXFP8 FA4 + Triton | 4 qps | `28.348s` | `577.96` | `10.141 / 14.675s` | 26 |
+| MXFP8 FA4 + Triton | 8 qps | `25.465s` | `643.38` | `12.393 / 18.783s` | 40 |
+| MXFP8 FA4 + Triton | 16 qps | `25.549s` | `641.29` | `14.500 / 22.429s` | 48 |
+| MXFP8 FA4 + Triton | 32 qps | `23.753s` | `689.77` | `14.245 / 22.315s` | 48 |
+| MXFP8 FA4 + Triton | infinite | **`20.256s`** | **`808.83`** | `12.712 / 20.244s` | 48 |
+
+单卡 fixed256 的可持续完成率约为 BF16 `2.6 req/s`、MXFP8 `3.2 req/s`；
+因此从 4–8 qps 开始持续积压是容量限制，不是请求失败。MXFP8 在 2 qps
+保持 queue max 9；更高到达率应增加独立 replica，而不是继续提高单卡
+`max_num_seqs`。
+
+### FA4 matched reference 配置
+
+以下配置用于两侧 attention/MoE 尽量 matched 的 reference 实验，不是上述
+单卡 backend sweep 的速度最优配置。它不使用 eager，并让 prefill 和 CUDA
+Graph decode 都使用 FA4：
 
 - `--max-num-seqs 16`
 - `--attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}'`
@@ -280,6 +370,12 @@ scheduler 一致的 `1 + 15` forward shape。
     - 四卡推荐 BF16 TP4+EP4：`4014 tok/s`、k3 KL=`0.00418782`。
       四卡 MXFP8 最接近结果为 4 个 TP1 replica：`3655 tok/s`、
       k3 KL=`0.01010610`，尚未稳定通过 `<1e-2`。
+- [x] **vLLM backend sweep**
+    - 当前状态：llm-train 固定 FA4，已完成 vLLM FA4/FA2/FlashInfer
+      attention、Triton/DeepGEMM/FlashInfer/CUTLASS/auto MoE probe、max256
+      KL 和 2/4/8/16/32/infinite qps sweep。
+    - 单卡推荐 BF16 FlashInfer attention + Triton MoE；MXFP8 使用 FA4
+      attention + Triton MoE，但 MXFP8 k3 KL=`0.01024826` 仍略高于阈值。
 - [ ] **Batch invariance**
     - 当前状态：batch 16 已通过。MXFP8 mean KL 为 `0.0000724250`，BF16 为
       `0.00283000`；MXFP8 batch 1 mixed5 仍为 `0.0182856`。
