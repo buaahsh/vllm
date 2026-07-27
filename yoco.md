@@ -214,6 +214,251 @@ MoE backend 兼容性：
 保持 queue max 9；更高到达率应增加独立 replica，而不是继续提高单卡
 `max_num_seqs`。
 
+### Docker 镜像、KL 定义和单节点启动命令
+
+发布镜像：
+
+```text
+buaahsh/pytorch:26.02-b200-vllm-0725
+```
+
+以下实测均使用 YOCO-v3/L3 28k：
+
+```text
+/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf
+```
+
+#### llm-train baseline 和 KL
+
+checkpoint 的 `metadata.json` 记录的训练设置为：
+
+- `quant_mode=mxfp8`、`quant_block_size=128`；
+- `use_cute=true`，即 llm-train attention 使用 FA4；
+- `max_seq_len=8192`、training dataloader `batch_size=2`；
+- diff-v3、`universal_loop=3`、latent MoE dim `1024`；
+- 128 routed experts、top-k 8、shared expert dim `1280`；
+- Q/K weighted RMSClip limit `3.0`、SwiGLU limit `10.0`。
+
+RL 对齐固定两套 llm-train teacher-forcing baseline：
+
+1. **BF16+FA4**：加载同一个 28k checkpoint，只将
+   `modelargs.quant_mode` 覆盖为 `bfloat16`；
+2. **MXFP8+FA4**：保持训练时的 `mxfp8` 和 128-element quant block。
+
+两套 baseline 都使用 FA4 beta13、CuTeDSL 4.5.1、Native batch size 16。
+对多个 vLLM replica，Native scorer 保留每个 server 收到的 round-robin
+request group，不能重新混排 batch。
+
+vLLM 使用 `temperature=1`、`top_p=1`、`top_k=0`、`min_tokens=0` 采样，
+保存每个 sampled token 的 raw pre-sampling logprob。llm-train 对完全相同的
+prompt 和 completion 做 full causal teacher forcing。对 action
+`a ~ p_vllm(.|s)`：
+
+```text
+sampled KL = mean(log p_vllm(a|s) - log p_train(a|s))
+k3 KL      = mean(exp(log p_train(a|s) - log p_vllm(a|s))
+                  - 1
+                  - (log p_train(a|s) - log p_vllm(a|s)))
+```
+
+文档以非负、低方差的 mean k3 KL 判断 `<1e-2` / `<5e-3`。host 速度是
+64 个 query、最多 256 output tokens 的 aggregate output tok/s，包含 HTTP
+和 logprob 返回成本，不包含 server 启动及首次 CuTe/Triton JIT。
+
+#### 已实测最佳结果
+
+| GPU | vLLM precision/backend | 64-query wall | output tok/s | matched llm-train k3 KL |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | BF16, FlashInfer attention, Triton MoE | `24.903s` | `620.44` | **`0.00294958`** |
+| 1 | MXFP8, FA4 attention, Triton MoE | **`20.733s`** | **`765.56`** | `0.01024826` |
+| 4 | BF16 TP4+EP4, FA4 attention, Triton MoE | `5.964s` | **`2625.99`** | **`0.00294112`** |
+| 4 | MXFP8 4xTP1, FA4 attention, DeepGEMM MoE | `6.463s` | `2390.39` | **`0.01054670`** |
+| 4 | MXFP8 4xTP1, FA4 attention, Triton MoE, fixed256 load | **`5.118s`** | **`3201.43`** | 不适用 |
+| 8 | BF16 2xTP4+EP4 | 未实测 | 未实测 | 未实测 |
+| 8 | MXFP8 8xTP1 | 未实测 | 未实测 | 未实测 |
+
+BF16 单卡和四卡都通过 `<5e-3`。MXFP8 目前没有稳定通过 `<1e-2`：
+DeepGEMM 是四卡严格 KL 最低配置；Triton 的 `3201.43 tok/s` 来自强制
+256-token load test，只能用于吞吐，不能用 raw logprob 计算严格 KL。8 卡
+没有填入外推值：本轮构建时 GPU 2–5 被其他 workload 持续占用，无法获得
+可信的单节点 8 卡 KL 和速度。
+
+所有命令先设置：
+
+```bash
+IMAGE=buaahsh/pytorch:26.02-b200-vllm-0725
+MODEL=/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf
+COMMON_DOCKER_ARGS=(
+  --rm
+  --ipc=host
+  --network=host
+  --ulimit memlock=-1
+  --ulimit stack=67108864
+  -v /mnt/pvc/lidong1:/mnt/pvc/lidong1:ro
+  -e VLLM_ENABLE_V1_MULTIPROCESSING=0
+)
+```
+
+**单卡 BF16，当前严格 KL 最优且速度略优于 FA4：**
+
+```bash
+docker run "${COMMON_DOCKER_ARGS[@]}" \
+  --name yoco-bf16-1gpu \
+  --gpus '"device=0"' \
+  "$IMAGE" vllm serve "$MODEL" \
+  --host 0.0.0.0 --port 8000 \
+  --served-model-name yoco-v3 \
+  --trust-remote-code \
+  --max-model-len 1024 \
+  --max-num-batched-tokens 4096 \
+  --max-num-seqs 16 \
+  --gpu-memory-utilization 0.90 \
+  --moe-backend triton \
+  --enable-chunked-prefill \
+  --kv-sharing-fast-prefill \
+  --no-async-scheduling \
+  --attention-backend FLASHINFER \
+  --compilation-config \
+    '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
+```
+
+**单卡 MXFP8，当前速度和 KL 都优于其他已测 MXFP8 attention/MoE 组合：**
+
+```bash
+docker run "${COMMON_DOCKER_ARGS[@]}" \
+  --name yoco-mxfp8-1gpu \
+  --gpus '"device=0"' \
+  "$IMAGE" vllm serve "$MODEL" \
+  --host 0.0.0.0 --port 8000 \
+  --served-model-name yoco-v3 \
+  --trust-remote-code \
+  --max-model-len 1024 \
+  --max-num-batched-tokens 4096 \
+  --max-num-seqs 16 \
+  --gpu-memory-utilization 0.90 \
+  --quantization fp8_per_block \
+  --moe-backend triton \
+  --enable-chunked-prefill \
+  --kv-sharing-fast-prefill \
+  --no-async-scheduling \
+  --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
+  --compilation-config \
+    '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
+```
+
+**四卡 BF16，单个 TP4+EP4 endpoint：**
+
+```bash
+docker run "${COMMON_DOCKER_ARGS[@]}" \
+  --name yoco-bf16-4gpu \
+  --gpus '"device=0,1,2,3"' \
+  "$IMAGE" vllm serve "$MODEL" \
+  --host 0.0.0.0 --port 8000 \
+  --served-model-name yoco-v3 \
+  --trust-remote-code \
+  --tensor-parallel-size 4 \
+  --enable-expert-parallel \
+  --max-model-len 1024 \
+  --max-num-batched-tokens 8192 \
+  --max-num-seqs 64 \
+  --gpu-memory-utilization 0.90 \
+  --moe-backend triton \
+  --enable-chunked-prefill \
+  --kv-sharing-fast-prefill \
+  --no-async-scheduling \
+  --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
+  --compilation-config \
+    '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16,32,64]}'
+```
+
+**四卡 MXFP8，四个 TP1 replica；DeepGEMM 为 KL 最低，纯速度可改
+`MOE_BACKEND=triton`：**
+
+```bash
+MOE_BACKEND=deep_gemm
+for gpu in 0 1 2 3; do
+  port=$((8100 + gpu))
+  docker run -d "${COMMON_DOCKER_ARGS[@]}" \
+    --name "yoco-mxfp8-gpu${gpu}" \
+    --gpus "device=${gpu}" \
+    "$IMAGE" vllm serve "$MODEL" \
+    --host 0.0.0.0 --port "$port" \
+    --served-model-name yoco-v3 \
+    --trust-remote-code \
+    --max-model-len 1024 \
+    --max-num-batched-tokens 4096 \
+    --max-num-seqs 16 \
+    --gpu-memory-utilization 0.90 \
+    --quantization fp8_per_block \
+    --moe-backend "$MOE_BACKEND" \
+    --enable-chunked-prefill \
+    --kv-sharing-fast-prefill \
+    --no-async-scheduling \
+    --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
+    --compilation-config \
+      '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
+done
+```
+
+**八卡 BF16 推荐拓扑，两个 TP4+EP4 replica：**
+
+```bash
+for spec in "0,1,2,3:8200:0" "4,5,6,7:8201:1"; do
+  IFS=: read -r gpus port replica <<<"$spec"
+  docker run -d "${COMMON_DOCKER_ARGS[@]}" \
+    --name "yoco-bf16-tp4-${replica}" \
+    --gpus "\"device=${gpus}\"" \
+    "$IMAGE" vllm serve "$MODEL" \
+    --host 0.0.0.0 --port "$port" \
+    --served-model-name yoco-v3 \
+    --trust-remote-code \
+    --tensor-parallel-size 4 \
+    --enable-expert-parallel \
+    --max-model-len 1024 \
+    --max-num-batched-tokens 8192 \
+    --max-num-seqs 32 \
+    --gpu-memory-utilization 0.90 \
+    --moe-backend triton \
+    --enable-chunked-prefill \
+    --kv-sharing-fast-prefill \
+    --no-async-scheduling \
+    --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
+    --compilation-config \
+      '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16,32]}'
+done
+```
+
+**八卡 MXFP8 推荐拓扑，八个 TP1 replica：**
+
+```bash
+MOE_BACKEND=deep_gemm
+for gpu in 0 1 2 3 4 5 6 7; do
+  port=$((8300 + gpu))
+  docker run -d "${COMMON_DOCKER_ARGS[@]}" \
+    --name "yoco-mxfp8-gpu${gpu}" \
+    --gpus "device=${gpu}" \
+    "$IMAGE" vllm serve "$MODEL" \
+    --host 0.0.0.0 --port "$port" \
+    --served-model-name yoco-v3 \
+    --trust-remote-code \
+    --max-model-len 1024 \
+    --max-num-batched-tokens 4096 \
+    --max-num-seqs 16 \
+    --gpu-memory-utilization 0.90 \
+    --quantization fp8_per_block \
+    --moe-backend "$MOE_BACKEND" \
+    --enable-chunked-prefill \
+    --kv-sharing-fast-prefill \
+    --no-async-scheduling \
+    --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
+    --compilation-config \
+      '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
+done
+```
+
+多 replica 配置需要由调用端 round-robin 到全部端口；严格 KL scoring 也必须
+保留相同 server grouping。不要使用 `--moe-backend auto`。
+
 ### FA4 matched reference 配置
 
 以下配置用于两侧 attention/MoE 尽量 matched 的 reference 实验，不是上述
@@ -390,10 +635,11 @@ scheduler 一致的 `1 + 15` forward shape。
 - [ ] **BF16 batch 1 exact**
     - 当前状态：mean KL 为 `0.00392071`，满足 `< 0.01`，但未达到 exact zero。
     - 下一步：实现与 Native grouped DeepGEMM BF16 routed MoE 等价的路径。
-- [ ] **Docker build/run**
-    - Dockerfile 已在构建 vLLM 前应用 FA4 beta13、CuTeDSL 4.5.1 和 QuACK
-      0.4.1 pins；当前节点没有 Docker/Podman/containerd runtime，最终 image
-      build 和 `docker run` 仍需在有容器 runtime 的 B200 宿主机执行。
+- [x] **Docker build/run**
+    - 已构建 `buaahsh/pytorch:26.02-b200-vllm-0725`，镜像约 30.96 GB。
+    - 容器内确认 vLLM `0.1.dev1+gf4964c907.d20260726`、FA4 `4.0.0b13`、
+      CuTeDSL `4.5.1` 和 B200 CUDA 可用；FA4 non-eager vLLM server 成功
+      ready，并通过 OpenAI chat completion 生成连贯中文输出。
 
 ### CUDA Graph 状态
 
@@ -415,8 +661,11 @@ fallback 会把 YOCO FA4 强制切到 Triton；Triton 在 batch 16 graph capture
 
 ### FlashAttention 4
 
-- vLLM vendored FA4 固定到 PT 26.02 使用的 beta13 commit
-  `9bad4bec7326ad28edb5516b8878fd283f8991c0`；
+- FA2/FA3 native extensions 使用提供 CMake targets 的 vLLM FlashAttention
+  commit `bce29425653ec0fbc579d329883030e832d15ada` 构建；
+- PT 26.02 预装的 FA4 `4.0.0b13`
+  (`9bad4bec7326ad28edb5516b8878fd283f8991c0`) 是 Python/CuTeDSL-only
+  package，native build 后复制到 `vllm.vllm_flash_attn.cute` namespace；
 - CuTeDSL 固定为 `4.5.1`，QuACK 固定为 `0.4.1`；
 - YOCO FA4 full graph 不再在 model config 或 attention backend 内切换到
   Triton；
@@ -514,7 +763,7 @@ function name 和 arguments。
 这些 parser 只处理服务层输出，不参与模型 forward、KV cache、sampling 或
 logits 计算，因此不会改变本文件记录的 prefill KL 和 decoding 数值对齐结果。
 
-### 运行发布镜像
+### YOCO-v2 legacy 0716 镜像
 
 ```bash
 docker run --rm \
@@ -619,19 +868,22 @@ KV-sharing fast prefill 验证追加：
 
 ## 构建 B200 image
 
-`docker/Dockerfile.b200` clone 固定 commit，在 native build 前应用 FA4
-beta13、CuTeDSL 4.5.1 和 QuACK 0.4.1 pins，并 overlay 当前 YOCO Python
-实现和对齐工具：
+`docker/Dockerfile.b200` clone 固定 vLLM commit，使用 CMake-compatible
+FlashAttention revision 构建 FA2/FA3 native extensions，再从 PT 26.02
+overlay FA4 beta13，并固定 CuTeDSL 4.5.1、QuACK 0.4.1 和当前 YOCO Python
+实现：
 
 ```bash
 docker build \
   -f docker/Dockerfile.b200 \
-  -t buaahsh/pytorch:26.02-b200-vllm-0716 \
+  -t buaahsh/pytorch:26.02-b200-vllm-0725 \
   .
 ```
 
 该 Dockerfile 保留 `donglixp/pytorch:26.02-b200` 中的 Python、PyTorch 和
 CUDA 环境，只在固定的 vLLM 基线提交上覆盖本次需要的 Python runtime 文件。
+本轮实际构建镜像约 30.96 GB；容器内已确认 B200、FA4 beta13、CuTeDSL
+4.5.1、CUDA Graph 和标准 `vllm serve` 可用。
 
 ### 快速迭代
 
@@ -662,7 +914,7 @@ docker buildx build \
   --progress=plain \
   --push \
   -f docker/Dockerfile.b200 \
-  -t buaahsh/pytorch:26.02-b200-vllm-0716 \
+  -t buaahsh/pytorch:26.02-b200-vllm-0725 \
   .
 ```
 
@@ -679,11 +931,11 @@ docker buildx inspect --bootstrap
 
 docker buildx build \
   --progress=plain \
-  --cache-from type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0716-buildcache \
-  --cache-to type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0716-buildcache,mode=max \
+  --cache-from type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0725-buildcache \
+  --cache-to type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0725-buildcache,mode=max \
   --push \
   -f docker/Dockerfile.b200 \
-  -t buaahsh/pytorch:26.02-b200-vllm-0716 \
+  -t buaahsh/pytorch:26.02-b200-vllm-0725 \
   .
 ```
 
