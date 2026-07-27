@@ -1,7 +1,7 @@
 # Builds the validated YOCO runtime on top of the NVIDIA B200 environment.
 # Build example:
 #   docker build -f docker/Dockerfile.b200 \
-#     -t buaahsh/pytorch:26.02-b200-vllm-0725 .
+#     -t buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph .
 
 FROM donglixp/pytorch:26.02-b200@sha256:cdbdc71b773142a98a303d488816d2faf6b9d85d179a4639b92263fca6da4769
 

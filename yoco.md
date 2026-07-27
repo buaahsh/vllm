@@ -216,10 +216,16 @@ MoE backend 兼容性：
 
 ### Docker 镜像、KL 定义和单节点启动命令
 
-发布镜像：
+基础对齐镜像：
 
 ```text
 buaahsh/pytorch:26.02-b200-vllm-0725
+```
+
+包含 YOCO-v3 mixed-graph 修复的 RL/agent 镜像：
+
+```text
+buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph
 ```
 
 以下实测均使用 YOCO-v3/L3 28k：
@@ -283,10 +289,88 @@ DeepGEMM 是四卡严格 KL 最低配置；Triton 的 `3201.43 tok/s` 来自强�
 没有填入外推值：本轮构建时 GPU 2–5 被其他 workload 持续占用，无法获得
 可信的单节点 8 卡 KL 和速度。
 
+#### RL/agent 持续并发 mixed graph
+
+YOCO-v3 的 mixed graph 需要补回旧 mixed-graph overlay 中的 TF32 router
+custom op，使 TorchDynamo 不追踪 `torch.get_float32_matmul_precision()` 等
+非 Tensor 全局状态。YOCO-v3 还需要在 weight load 结束后预生成并共享 RoPE
+cache；否则首次 piecewise compile 会因为 forward 修改 module buffer 而失败。
+
+以下测试使用单张 B200、MXFP8、FA4、Triton MoE、32 个最大并发 sequence：
+
+- 96 个独立 agent conversation，每个 conversation 连续生成 3 轮；
+- 每轮固定 128 output tokens，轮间插入平均 0.5 秒后返回的 synthetic tool
+  observation；
+- 新 conversation 按 Poisson 到达，后续轮次会把完整历史重新 prefill；
+- 每个配置都完成 288/288 请求，无请求失败。
+
+| 新 conversation/s | graph mode | output tok/s | p95 latency | p95 TTFT | queue max |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 1.0 | `FULL_DECODE_ONLY` | `371.73` | `10.300s` | `0.265s` | `0` |
+| 1.0 | mixed + fast prefill | **`387.70`** | **`4.499s`** | **`0.211s`** | `0` |
+| 1.5 | `FULL_DECODE_ONLY` | `505.08` | `7.000s` | `0.292s` | `2` |
+| 1.5 | mixed + fast prefill | **`541.57`** | **`6.741s`** | **`0.281s`** | `0` |
+| 2.0 | `FULL_DECODE_ONLY` | `629.13` | `8.072s` | `1.636s` | `10` |
+| 2.0 | mixed + fast prefill | **`664.42`** | **`5.520s`** | **`0.604s`** | **`5`** |
+| 2.5 | `FULL_DECODE_ONLY` | `669.22` | `9.877s` | `5.074s` | `36` |
+| 2.5 | mixed + fast prefill | **`693.59`** | **`8.930s`** | **`3.745s`** | `26` |
+
+该 workload 的单卡健康上界约为 2 个新 conversation/s：mixed graph 在 queue
+低于 10 时比 decode-only 快 `5.6%`，p95 latency 降低 `31.6%`，p95 TTFT
+降低 `63.1%`。2.5/s 时两者 queue 都超过 10，不能作为稳定生产点。
+
+相同 1.5 conversation/s、96x3-turn agent workload 下的 precision 选择：
+
+| precision | output tok/s | p95 latency | p95 TTFT | queue max | matched llm-train k3 KL |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| BF16 mixed + fast prefill | `535.84` | **`4.393s`** | **`0.159s`** | `0` | **`0.00399465`** |
+| MXFP8 mixed + fast prefill | **`541.57`** | `6.741s` | `0.281s` | `0` | `0.01162790` |
+
+BF16 只比 MXFP8 慢 `1.1%`，但通过 `<5e-3`；MXFP8 没有通过 `<1e-2`。
+因此 RL/agent 默认使用 **BF16 mixed + fast prefill**。MXFP8 只作为允许
+`~0.0116` k3 KL 时的吞吐实验配置。
+
+BF16 生产入口速率 sweep：
+
+| 新 conversation/s | output tok/s | p95 latency | p95 TTFT | queue max |
+| ---: | ---: | ---: | ---: | ---: |
+| 1.5 | `535.84` | `4.393s` | `0.159s` | `0` |
+| 1.75 | **`600.06`** | **`5.177s`** | **`0.261s`** | **`4`** |
+| 2.0 | `641.86` | `6.346s` | `1.356s` | `10` |
+
+单卡生产建议入口速率为 **1.75 个新 conversation/s**；2.0/s 虽然没有超过
+queue 10，但已没有安全余量。
+
+2 conversation/s 下的 GPU telemetry：
+
+| graph mode | SM util mean/p95 | memory BW util mean/p95 | power mean/p95 | GPU memory |
+| --- | ---: | ---: | ---: | ---: |
+| `FULL_DECODE_ONLY` | `65.1% / 97.0%` | `30.8% / 65.0%` | `495W / 589W` | `166190 MiB` |
+| mixed + fast prefill | `60.4% / 86.5%` | `21.8% / 36.0%` | `457W / 517W` | `164620 MiB` |
+
+BF16 mixed 在推荐 1.75 conversation/s 下：SM util mean/p95
+`68.9% / 89.0%`，memory bandwidth util `40.8% / 58.0%`，power
+`565W / 639W`，GPU memory `163992 MiB`。
+
+纯 32-request、固定 128-token burst 中，fast-prefill mixed graph 只有
+`503.66 tok/s`，低于 decode-only 的 `1354.71 tok/s`；但 agent workload
+会持续插入新 prefill，mixed graph 的 TTFT 和持续吞吐更优。不开
+`--kv-sharing-fast-prefill` 的 standard mixed burst 可达 `1274.87 tok/s`，
+但在 1 conversation/s 下 p95 latency 为 `8.859s`，仍明显差于 fast-prefill
+mixed 的 `4.499s`。因此 RL/agent 默认使用 BF16 mixed + fast prefill，单轮纯 decode 才使用
+`FULL_DECODE_ONLY`。
+
+本轮 BF16 strict KL 覆盖的多轮 prompt 最长约 1K tokens，并在
+`max-num-batched-tokens=8192` 的持续 mixed scheduler 下通过。单个约 4.7K
+tokens prompt 的真实多 chunk Native 对齐仍未通过，不能把这个结论外推到任意
+长 prompt。所以下面的 alignment-safe 默认 endpoint 设置
+`--max-model-len 1024`，超过该长度的请求必须拒绝；需要 8K context 时应另开
+throughput-only endpoint，并明确不承诺 `<1e-2` KL。
+
 所有命令先设置：
 
 ```bash
-IMAGE=buaahsh/pytorch:26.02-b200-vllm-0725
+IMAGE=buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph
 MODEL=/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf
 COMMON_DOCKER_ARGS=(
   --rm
@@ -297,6 +381,32 @@ COMMON_DOCKER_ARGS=(
   -v /mnt/pvc/lidong1:/mnt/pvc/lidong1:ro
   -e VLLM_ENABLE_V1_MULTIPROCESSING=0
 )
+```
+
+**单卡 BF16，RL/agent 持续并发默认：**
+
+```bash
+docker run "${COMMON_DOCKER_ARGS[@]}" \
+  --name yoco-agent-bf16-1gpu \
+  --gpus '"device=0"' \
+  "$IMAGE" vllm serve "$MODEL" \
+  --host 0.0.0.0 --port 8000 \
+  --served-model-name yoco-v3 \
+  --trust-remote-code \
+  --max-model-len 1024 \
+  --max-num-batched-tokens 8192 \
+  --max-num-seqs 32 \
+  --gpu-memory-utilization 0.90 \
+  --moe-backend triton \
+  --enable-chunked-prefill \
+  --kv-sharing-fast-prefill \
+  --no-async-scheduling \
+  --reasoning-parser agens \
+  --enable-auto-tool-choice \
+  --tool-call-parser agens \
+  --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
+  --compilation-config \
+    '{"mode":3,"backend":"eager","custom_ops":["all"],"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,32]}'
 ```
 
 **单卡 BF16，当前严格 KL 最优且速度略优于 FA4：**
@@ -637,9 +747,12 @@ scheduler 一致的 `1 + 15` forward shape。
     - 下一步：实现与 Native grouped DeepGEMM BF16 routed MoE 等价的路径。
 - [x] **Docker build/run**
     - 已构建 `buaahsh/pytorch:26.02-b200-vllm-0725`，镜像约 30.96 GB。
+    - RL/agent mixed-graph 修复发布为
+      `buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph`。
     - 容器内确认 vLLM `0.1.dev1+gf4964c907.d20260726`、FA4 `4.0.0b13`、
       CuTeDSL `4.5.1` 和 B200 CUDA 可用；FA4 non-eager vLLM server 成功
-      ready，并通过 OpenAI chat completion 生成连贯中文输出。
+      ready，`FULL_AND_PIECEWISE` 同时捕获 FULL/PIECEWISE graphs，并通过
+      OpenAI chat completion 生成连贯中文输出。
 
 ### CUDA Graph 状态
 
@@ -650,6 +763,18 @@ scheduler 一致的 `1 + 15` forward shape。
   "mode": 0,
   "cudagraph_mode": "FULL_DECODE_ONLY",
   "cudagraph_capture_sizes": [1, 2, 4, 8, 16]
+}
+```
+
+RL/agent 持续并发配置：
+
+```json
+{
+  "mode": 3,
+  "backend": "eager",
+  "custom_ops": ["all"],
+  "cudagraph_mode": "FULL_AND_PIECEWISE",
+  "cudagraph_capture_sizes": [1, 2, 4, 8, 16, 32]
 }
 ```
 
@@ -674,9 +799,18 @@ fallback 会把 YOCO FA4 强制切到 Triton；Triton 在 batch 16 graph capture
 ### Router
 
 - Router gate 使用 FP32 TF32 GEMM，与 llm-train 一致；
+- TF32 precision 状态切换封装为 `yoco_router_linear_tf32` custom op，避免
+  piecewise TorchDynamo 追踪返回字符串的全局 precision API；
 - routing 使用固定 geometry 的 Native 等价 Triton dense graph：
   `softmax -> topk -> renorm -> scatter`，不依赖 Inductor autotune cache；
 - routing probabilities 在 W2 activation quantization 前应用。
+
+### RoPE cache
+
+- weight load 后在目标 CUDA device 上预生成 RoPE FP32 cache；
+- 相同 head size、最大长度和 base 的 attention layer 共享同一 cache；
+- 顶层未编译 forward 保留兜底初始化，覆盖 dummy/sharded 等不调用模型
+  `load_weights()` 的 loader，避免 piecewise compile 中修改 module buffer。
 
 ### RMSNorm
 
@@ -876,7 +1010,7 @@ overlay FA4 beta13，并固定 CuTeDSL 4.5.1、QuACK 0.4.1 和当前 YOCO Python
 ```bash
 docker build \
   -f docker/Dockerfile.b200 \
-  -t buaahsh/pytorch:26.02-b200-vllm-0725 \
+  -t buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph \
   .
 ```
 
@@ -914,7 +1048,7 @@ docker buildx build \
   --progress=plain \
   --push \
   -f docker/Dockerfile.b200 \
-  -t buaahsh/pytorch:26.02-b200-vllm-0725 \
+  -t buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph \
   .
 ```
 
@@ -931,11 +1065,11 @@ docker buildx inspect --bootstrap
 
 docker buildx build \
   --progress=plain \
-  --cache-from type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0725-buildcache \
-  --cache-to type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0725-buildcache,mode=max \
+  --cache-from type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph-buildcache \
+  --cache-to type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph-buildcache,mode=max \
   --push \
   -f docker/Dockerfile.b200 \
-  -t buaahsh/pytorch:26.02-b200-vllm-0725 \
+  -t buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph \
   .
 ```
 

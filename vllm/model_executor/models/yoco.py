@@ -296,6 +296,43 @@ def _yoco_rms_norm_fake(
     return torch.empty_like(x, dtype=torch.bfloat16)
 
 
+def _yoco_router_linear_tf32_cuda(
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+    normalize_weight: bool,
+) -> torch.Tensor:
+    previous_allow_tf32 = torch.backends.cuda.matmul.allow_tf32
+    previous_matmul_precision = torch.get_float32_matmul_precision()
+    previous_cuda_precision = torch.backends.cuda.matmul.fp32_precision
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.set_float32_matmul_precision("high")
+    torch.backends.cuda.matmul.fp32_precision = "tf32"
+    try:
+        if normalize_weight:
+            weight = weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
+        return F.linear(hidden_states, weight)
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = previous_allow_tf32
+        torch.set_float32_matmul_precision(previous_matmul_precision)
+        torch.backends.cuda.matmul.fp32_precision = previous_cuda_precision
+
+
+def _yoco_router_linear_tf32_fake(
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+    normalize_weight: bool,
+) -> torch.Tensor:
+    del normalize_weight
+    return hidden_states.new_empty((*hidden_states.shape[:-1], weight.shape[0]))
+
+
+if current_platform.is_cuda():
+    direct_register_custom_op(
+        op_name="yoco_router_linear_tf32",
+        op_func=_yoco_router_linear_tf32_cuda,
+        fake_impl=_yoco_router_linear_tf32_fake,
+    )
+
 if HAS_TRITON and current_platform.is_cuda():
     direct_register_custom_op(
         op_name="yoco_rms_clip",
@@ -1170,23 +1207,19 @@ class YOCOMoE(nn.Module):
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        previous_allow_tf32 = torch.backends.cuda.matmul.allow_tf32
-        previous_matmul_precision = torch.get_float32_matmul_precision()
-        previous_cuda_precision = torch.backends.cuda.matmul.fp32_precision
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.set_float32_matmul_precision("high")
-        torch.backends.cuda.matmul.fp32_precision = "tf32"
-        try:
+        if hidden_states.is_cuda and current_platform.is_cuda():
+            router_logits = torch.ops.vllm.yoco_router_linear_tf32(
+                hidden_states.float(),
+                self.gate.weight,
+                not self.router_weights_normalized,
+            )
+        else:
             if self.router_weights_normalized:
                 router_logits = F.linear(hidden_states.float(), self.gate.weight)
             else:
                 router_logits = _yoco_normalized_router_linear(
                     hidden_states.float(), self.gate.weight
                 )
-        finally:
-            torch.backends.cuda.matmul.allow_tf32 = previous_allow_tf32
-            torch.set_float32_matmul_precision(previous_matmul_precision)
-            torch.backends.cuda.matmul.fp32_precision = previous_cuda_precision
         if self.fc1_latent_proj is not None:
             assert self.fc1_latent_norm is not None
             expert_input = self.fc1_latent_norm(self.fc1_latent_proj(hidden_states))
@@ -1688,6 +1721,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         self.make_empty_intermediate_tensors = (
             self.model.make_empty_intermediate_tensors
         )
+        self._rotary_caches_initialized = False
 
     # ------------------------------------------------------------------ #
     # standard forward / compute_logits API                              #
@@ -1698,6 +1732,30 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
 
+    def _initialize_rotary_caches(self) -> None:
+        if self._rotary_caches_initialized:
+            return
+        device = self.model.embed_tokens.weight.device
+        if device.type != "cuda":
+            return
+
+        rotary_caches: dict[tuple[int, int, float], torch.Tensor] = {}
+        for module in self.modules():
+            if not isinstance(module, YOCORotaryEmbedding):
+                continue
+            cache_key = (
+                module.head_size,
+                module.max_position_embeddings,
+                module.base,
+            )
+            cache = rotary_caches.get(cache_key)
+            if cache is None:
+                cache = module._get_cos_sin_cache(device)
+                rotary_caches[cache_key] = cache
+            else:
+                module.cos_sin_cache = cache
+        self._rotary_caches_initialized = True
+
     def forward(
         self,
         input_ids: torch.Tensor | None,
@@ -1705,6 +1763,9 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        # Default loading initializes this eagerly. This fallback covers
+        # loaders that assign tensors without calling this model's load_weights.
+        self._initialize_rotary_caches()
         if not self.fast_prefill_enabled:
             return self.model(
                 input_ids=input_ids,
@@ -1989,5 +2050,9 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
                 # back to the default one.
                 default_weight_loader(param, loaded_weight)
             loaded_names.add(name)
+
+        # Piecewise compilation cannot trace a forward that mutates module
+        # buffers, so initialize caches before profile/warmup forwards begin.
+        self._initialize_rotary_caches()
 
         return loaded_names
