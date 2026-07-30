@@ -1,226 +1,315 @@
-# YOCO vLLM B200 对齐与运行说明
+# YOCO B200 最终验收报告
 
-本文记录 YOCO-30B-A3B 在 B200 上与
-`/workspace/shaohanh/llm-train` 对齐后的实现、验证结果和推荐运行方式。
-YOCO-v2 对应已发布代码分支为 `shaohanh/yoco-0716`，容器镜像为
-`buaahsh/pytorch:26.02-b200-vllm-0716`。YOCO-v3/L3 开发与验证分支为
-`shaohanh/yoco-0725`。
+本文只记录本次 YOCO-v2/v3 在 B200 上的最终配置、验收方法和结果，不包含
+旧镜像、旧分支或中间调试过程。
 
-## 已验证模型
+## 最终产物
 
-- Native checkpoint:
-  `/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000`
-- nnScaler merged checkpoint:
-  `/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-merged`
-- GPU 转换后的 HF checkpoint:
-  `/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu`
+Git 分支：
 
-HF checkpoint 共 21 个文件，大小为 `64,477,415,770` bytes；从本地转换目录
-复制到上述路径后，所有文件均通过 SHA256 校验。
+```text
+shaohanh/yoco-serving-final-20260730
+```
 
-旧的 `0000-6000-hf/config.json` 在文件末尾缺少 `}`，不要直接用于验收。
-
-YOCO-v3/L3 28k checkpoint：
-
-- Native checkpoint:
-  `/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000`
-- nnScaler merged checkpoint:
-  `/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-merged`
-- 转换后的 HF checkpoint:
-  `/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf`
-
-v3 HF checkpoint 包含 14 个 safetensor shard、357 个推理权重；转换只跳过
-33 个 MTP 专用权重。
-
-## 对齐原则
-
-低层 kernel matched 对齐要求 vLLM 和 llm-train Native 使用相同计算条件；
-RL backend A/B 则固定精度、采样和 sampled token sequence，只改变明确记录的
-vLLM backend。每次实验前必须先固定并记录以下因素：
-
-1. **精度模式一致**：MXFP8 对齐要求两侧都使用 MXFP8；BF16 对齐要求两侧
-   都使用 BF16，不能用 MXFP8 vLLM 对比 BF16 Native。
-2. **量化配置一致**：MXFP8 两侧都使用 128-element block。Native 使用
-   `quant_mode=mxfp8`、`quant_block_size=128`；vLLM 使用
-   `--quantization fp8_per_block`。Native 的 torch activation quant fallback
-   只是替换不稳定的 Triton 实现，不改变 MXFP8 数值格式。
-3. **区分 matched kernel 对齐和 RL backend A/B**：低层 attention kernel
-   对齐要求两侧一致，FA2 只能和 FA2 reference 比较，FA4 只能和 FA4
-   reference 比较。RL rollout backend A/B 则固定 llm-train 使用 FA4，
-   有意改变 vLLM attention/MoE backend，比较真实 sampled-token logprob。
-   当前 Native FA4 固定为 `4.0.0b13`
-   (`9bad4bec7326ad28edb5516b8878fd283f8991c0`) 和 CuTeDSL `4.5.1`。
-4. **执行形状一致**：batch size、scheduler forward shape、prompt 顺序、
-   chunk 切分位置和 KV-cache 语义必须一致。batch 16 当前使用与 vLLM
-   scheduler 一致的 `1 + 15` Native forward shape。
-5. **并行和功能开关可追踪**：matched 对齐时 TP、EP、KV-sharing fast
-   prefill、chunked prefill、CUDA Graph 范围必须一致；backend A/B 中改变的
-   项必须单独列出，不能把不同配置混成同一个 KL 结论。
-
-## 当前结论
-
-### 最终 clean serving 闭环
-
-最终自包含镜像：
+Docker Hub 镜像：
 
 ```text
 buaahsh/pytorch:26.02-b200-vllm-yoco-v2-v3-0729-final
-sha256:bff890479962a9267862f3903113239f48ac9de982d184239de0a41d17f1b0e6
-37,667,878,332 bytes
+registry digest: sha256:08a08f36ab8c6c80ee1c7f09b9e5f8b6ce0b91cc684455982b2e5e286c736f2b
+local image id: sha256:bff890479962a9267862f3903113239f48ac9de982d184239de0a41d17f1b0e6
+size: 37,667,878,332 bytes
 ```
 
-该镜像基于一次性完整 Python package overlay，不需要任何 vLLM 源码 bind
-mount；只挂载只读模型目录。镜像同时包含：
+镜像是自包含 runtime，不需要挂载 vLLM 源码。镜像内包含：
 
 - YOCO-v2 DP4 compile key `1a1773b3c5`；
 - YOCO-v3 DP4 compile key `b9be5626e8`；
 - YOCO-v2 DP8+EP compile key `be47add45b`；
 - 对应的 Torch AOT/Inductor 和首请求 Triton JIT cache。
 
-宿主入口统一使用 `/workspace/shaohanh/vllm_serve_clean.sh`。脚本会识别
-`YOCOForCausalLM`，自动启用 FlashInfer attention、Triton MoE、prefix
-cache、chunked prefill、KV-sharing fast prefill、8192 batched tokens、
-32 sequences 和非 eager `FULL_AND_PIECEWISE` CUDA Graph。YOCO-v3 默认
-设置 `enable_thinking=false`，避免短 generation budget 被长 reasoning
-耗尽；需要 thinking 时可显式覆盖 `DEFAULT_CHAT_TEMPLATE_KWARGS`。
+## 验证模型
 
-YOCO-v2 DP4：
+YOCO-v2 agentic serving：
 
-```bash
-GPU_IDS=0,1,6,7 PORT=8001 MAX_MODEL_LEN=81920 \
-  /workspace/shaohanh/vllm_serve_clean.sh \
-  /mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf \
-  4
+```text
+/mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf
 ```
 
-YOCO-v3 DP4：
+YOCO-v3/L3：
+
+```text
+/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf
+```
+
+FA4 Native/vLLM matched alignment：
+
+```text
+HF:
+/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu
+
+Native merged:
+/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-merged
+```
+
+Qwen 对照：
+
+```text
+/mnt/pvc/lidong1/hf_cache/Qwen3.5-35B-A3B
+```
+
+## 完整启动命令
+
+### YOCO-v2 DP4
 
 ```bash
-GPU_IDS=0,1,6,7 PORT=8001 MAX_MODEL_LEN=81920 \
-  /workspace/shaohanh/vllm_serve_clean.sh \
+docker run --rm \
+  --name yoco-v2-dp4 \
+  --network host \
+  --ipc host \
+  --gpus '"device=0,1,6,7"' \
+  -v /mnt/msranlphot:/mnt/msranlphot:ro \
+  buaahsh/pytorch:26.02-b200-vllm-yoco-v2-v3-0729-final \
+  vllm serve \
+  /mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf \
+  --served-model-name yoco-v2 \
+  --host 0.0.0.0 \
+  --port 8001 \
+  --trust-remote-code \
+  --attention-backend FLASHINFER \
+  --moe-backend triton \
+  --tensor-parallel-size 1 \
+  --data-parallel-size 4 \
+  --gpu-memory-utilization 0.85 \
+  --max-model-len 81920 \
+  --max-num-batched-tokens 8192 \
+  --max-num-seqs 32 \
+  --enable-prefix-caching \
+  --enable-chunked-prefill \
+  --kv-sharing-fast-prefill \
+  --enable-auto-tool-choice \
+  --tool-call-parser agens \
+  --reasoning-parser agens \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+```
+
+该命令没有 `--enforce-eager`。普通 decode 使用 FULL CUDA Graph；
+prefill/decode 混合 step 使用 PIECEWISE graph。
+
+### Qwen3.5-35B-A3B DP4 对照
+
+```bash
+docker run --rm \
+  --name qwen35-dp4 \
+  --network host \
+  --ipc host \
+  --gpus '"device=0,1,6,7"' \
+  -v /mnt/pvc:/mnt/pvc:ro \
+  buaahsh/pytorch:26.02-b200-vllm-yoco-v2-v3-0729-final \
+  vllm serve \
+  /mnt/pvc/lidong1/hf_cache/Qwen3.5-35B-A3B \
+  --served-model-name qwen35 \
+  --host 0.0.0.0 \
+  --port 8001 \
+  --trust-remote-code \
+  --attention-backend FLASHINFER \
+  --moe-backend triton \
+  --tensor-parallel-size 1 \
+  --data-parallel-size 4 \
+  --gpu-memory-utilization 0.85 \
+  --max-model-len 81920 \
+  --max-num-batched-tokens 8192 \
+  --max-num-seqs 32 \
+  --enable-prefix-caching \
+  --enable-chunked-prefill \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+```
+
+Qwen 与 YOCO 的速度对照使用同一个镜像、同一 vLLM commit、BF16、
+FlashInfer attention、Triton MoE、DP4、相同 GPU 和相同请求序列。
+
+### YOCO-v3 DP4
+
+```bash
+docker run --rm \
+  --name yoco-v3-dp4 \
+  --network host \
+  --ipc host \
+  --gpus '"device=0,1,6,7"' \
+  -v /mnt/pvc:/mnt/pvc:ro \
+  buaahsh/pytorch:26.02-b200-vllm-yoco-v2-v3-0729-final \
+  vllm serve \
   /mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf \
-  4
+  --served-model-name yoco-v3 \
+  --host 0.0.0.0 \
+  --port 8001 \
+  --trust-remote-code \
+  --attention-backend FLASHINFER \
+  --moe-backend triton \
+  --tensor-parallel-size 1 \
+  --data-parallel-size 4 \
+  --gpu-memory-utilization 0.85 \
+  --max-model-len 81920 \
+  --max-num-batched-tokens 8192 \
+  --max-num-seqs 32 \
+  --enable-prefix-caching \
+  --enable-chunked-prefill \
+  --kv-sharing-fast-prefill \
+  --enable-auto-tool-choice \
+  --tool-call-parser agens \
+  --reasoning-parser agens \
+  --default-chat-template-kwargs '{"enable_thinking":false}' \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
 ```
 
-DP8+EP 在健康的 NVIDIA container runtime 上使用：
+### FA4 BF16 验收服务
+
+下面的命令直接从最终镜像启动 FA4 beta13、非 eager CUDA Graph 服务：
 
 ```bash
-GPU_IDS=0,1,2,3,4,5,6,7 PORT=8001 MAX_MODEL_LEN=81920 \
-GPU_MEMORY_UTILIZATION=0.68 \
-  /workspace/shaohanh/vllm_serve_clean.sh \
-  /mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf \
-  8 --enable-expert-parallel
+docker run --rm \
+  --name yoco-fa4-bf16 \
+  --network host \
+  --ipc host \
+  --gpus '"device=0"' \
+  -v /mnt/msranlphot:/mnt/msranlphot:ro \
+  buaahsh/pytorch:26.02-b200-vllm-yoco-v2-v3-0729-final \
+  vllm serve \
+  /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
+  --served-model-name yoco-fa4-bf16 \
+  --host 0.0.0.0 \
+  --port 8001 \
+  --trust-remote-code \
+  --attention-config.backend FLASH_ATTN \
+  --attention-config.flash_attn_version 4 \
+  --moe-backend triton \
+  --tensor-parallel-size 1 \
+  --data-parallel-size 1 \
+  --gpu-memory-utilization 0.85 \
+  --max-model-len 8192 \
+  --max-num-batched-tokens 8192 \
+  --max-num-seqs 16 \
+  --enable-prefix-caching \
+  --enable-chunked-prefill \
+  --kv-sharing-fast-prefill \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
 ```
 
-当前节点的 NVIDIA container hook 只暴露了 GPU 0、1、6、7 的
-`/proc/driver/nvidia/gpus` 条目，直接请求八卡会在容器创建阶段报缺少
-GPU2 PCI 路径；但八个 `/dev/nvidia*`、CUDA 和 NVML 都正常。使用等价的
-`runc` device/driver-library 映射后，DP8+EP 成功启动。这是宿主 runtime
-元数据问题，不是 vLLM、模型或镜像问题。
+MXFP8 使用相同命令并增加：
 
-DP8 验收结果：
+```text
+--quantization fp8_per_block
+```
 
-- 非 eager `FULL_AND_PIECEWISE`，capture sizes `1,2,4,8,16,32`；
-- FlashInfer attention、Triton MoE、chunked prefill、fast prefill 和 EP
-  同时开启；
-- 78,001-token prompt + 16-token decode 总耗时 `3.329s`；
-- 八张 B200 峰值 SM utilization 均为 `98-99%`；
-- GPU5 包含外部约 44GB 占用时峰值 `168,889 MiB`，仍低于 183GB；
-- 日志无 eager fallback，长上下文请求后中文对话仍正常。
+### YOCO-v2 DP8 + EP
 
-compile cache 只消除源码/config hash 对应的 Torch 编译，CUDA Graph
-对象仍需每个服务进程重新 capture。最终镜像实测：
+健康的 NVIDIA container runtime 上使用：
 
-| 模型 | graph compile | graph capture | ready 时间 |
-| --- | ---: | ---: | ---: |
-| v2 DP4，无新 cache | `67.8s` | `6s` | 约 `5.3 min` |
-| v2 DP4，baked cache | `10.5s` | `6s` | 约 `4.7 min` |
-| v3 DP4，无新 cache | 约 `125s` | `5s` | 约 `249s` |
-| v3 DP4，baked cache | `14.9s` | `5s` | 约 `221s` |
+```bash
+docker run --rm \
+  --name yoco-v2-dp8-ep \
+  --network host \
+  --ipc host \
+  --gpus all \
+  -v /mnt/msranlphot:/mnt/msranlphot:ro \
+  buaahsh/pytorch:26.02-b200-vllm-yoco-v2-v3-0729-final \
+  vllm serve \
+  /mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf \
+  --served-model-name yoco-v2 \
+  --host 0.0.0.0 \
+  --port 8001 \
+  --trust-remote-code \
+  --attention-backend FLASHINFER \
+  --moe-backend triton \
+  --tensor-parallel-size 1 \
+  --data-parallel-size 8 \
+  --enable-expert-parallel \
+  --gpu-memory-utilization 0.68 \
+  --max-model-len 81920 \
+  --max-num-batched-tokens 8192 \
+  --max-num-seqs 32 \
+  --enable-prefix-caching \
+  --enable-chunked-prefill \
+  --kv-sharing-fast-prefill \
+  --enable-auto-tool-choice \
+  --tool-call-parser agens \
+  --reasoning-parser agens \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+```
 
-剩余启动时间主要来自权重读取、KV memory profile、模型 warmup 和
-FlashInfer/Triton 初始化，而不是 CUDA Graph capture。
+本机 NVIDIA container hook 缺少 GPU2-5 的 `/proc/driver/nvidia/gpus` 条目，
+因此本次 DP8 验收使用等价的 `runc` device/driver-library 映射。八个
+`/dev/nvidia*`、CUDA 和 NVML 均正常；该问题属于宿主 runtime 元数据。
 
-Agens 服务层另有两个必要修复：
+## Agentic 验证方法
 
-- tokenizer 中 `<|end|>` 不是 special token，因此 reasoning parser 声明
-  它为额外 stop string，chat serving 自动合并到请求 `stop`；
-- v3 默认关闭 thinking，但用户传入的 chat-template kwargs 保持最高优先级。
+本次性能验收代码已放入：
 
-最终 v3 中文直答以 `<|end|>` 正常停止、不返回 stop marker、无 reasoning
-泄漏；`get_weather({"city":"Seattle"})` tool call 能被正确解析。
+```text
+benchmarks/multi_turn/benchmark_agent_trace.py
+```
 
-### Qwen 速度差距与实际 FLOPs
+固定 workload：
 
-YOCO 参数更少不代表每个 token 的 active compute 更少。按 checkpoint
-tensor shape 和真实 forward 循环计数：
+- 每条 trajectory 为 40 turns；
+- 每轮平均增加 1,800 个 prefill token，并强制生成 200 token；
+- 每条 trajectory 合计 72K logical prefill + 8K generation；
+- 最终上下文为 80K token；
+- prefix 长度按 1,056 token 对齐，稳定触发 prefix cache 和 chunked prefill；
+- `min_tokens=max_tokens=200`、`ignore_eos=true`，确保两模型输出 token 数一致；
+- 使用 `X-data-parallel-rank` 将同一 trajectory 固定到相同 DP rank；
+- 每条 trajectory 使用独立 `cache_salt`；
+- 同时采集 vLLM metrics、TTFT、ITL、queue、KV cache、每卡 SM、
+  memory bandwidth utilization、显存和功耗。
 
-| 指标 | YOCO-30B-A3B | Qwen3.5-35B-A3B | YOCO / Qwen |
-| --- | ---: | ---: | ---: |
-| 总参数 | `32.2207B` | `35.9518B` | `0.896x` |
-| decode projection + MoE GEMM | `11.943 GF/token` | `4.873 GF/token` | `2.451x` |
-| 2K context core compute | `13.117 GF/token` | `5.321 GF/token` | `2.465x` |
-| 40K context core compute | `25.554 GF/token` | `11.539 GF/token` | `2.214x` |
-| 80K context core compute | `38.661 GF/token` | `18.093 GF/token` | `2.137x` |
+YOCO c8/c16/c32：
 
-主要原因不是一个单独的坏 kernel：
+```bash
+mkdir -p /tmp/agent-trace/yoco
 
-- YOCO 10 个 self layers 运行 `universal_loop=3`，再运行 10 个 cross
-  layers，总计 40 次 block execution；
-- hidden size 为 3072，Qwen 为 2048；
-- YOCO routed top-8 expert intermediate 为 1280，Qwen 为 512；
-- differential attention 将 Q heads 翻倍；
-- 10 个 cross-attention layer 的 decode work 随上下文增长。
+for concurrency in 8 16 32; do
+  python benchmarks/multi_turn/benchmark_agent_trace.py \
+    --base-url http://127.0.0.1:8001/v1 \
+    --model yoco-v2 \
+    --tokenizer \
+      /mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf \
+    --output /tmp/agent-trace/yoco/c${concurrency}.json \
+    --concurrency "${concurrency}" \
+    --trajectories "${concurrency}" \
+    --turns 40 \
+    --prefill-per-turn 1800 \
+    --output-per-turn 200 \
+    --cache-alignment 1056 \
+    --dp-size 4 \
+    --gpu-indices 0,1,6,7 \
+    --seed 20260729
+done
+```
 
-因此普通长上下文 decode 中 YOCO 实测慢约 1.5 倍是合理的：它实际执行
-约 2.1-2.5 倍核心计算，而不是因为参数量较少就应更快。fast prefill
-跳过重复 self-decoder 后，80K 理论 active compute 变为 YOCO
-`11.16 GF/token`、Qwen `11.54 GF/token`。最终同镜像、同代码、同后端
-测试中 YOCO wall time 为 Qwen 的 `1.28-1.30x`；这部分差距同时包含
-YOCO 更高的 decode active FLOPs 和 fast-prefill split path 的执行效率。
+Qwen 使用同一命令，只替换：
 
-已确认的剩余效率损失包括：
+```text
+--model qwen35
+--tokenizer /mnt/pvc/lidong1/hf_cache/Qwen3.5-35B-A3B
+--output /tmp/agent-trace/qwen/c${concurrency}.json
+```
 
-- 40 层串行 launch 和较小 GEMM 难以占满 B200；
-- lambda/shared-gate、RMSClip、RoPE、differential combine 和 FP32
-  residual 等非 GEMM kernel；
-- routed/shared expert 分开的 collective；
-- tiny-token cross-decoder MoE；
-- 当前 fast-prefill split path 的额外调度和 metadata 成本。
+输出文件：
 
-新增的 B200 Triton MoE 配置
-`E=128,N=320,device_name=NVIDIA_B200.json` 已使 decode batch 8-128 的
-MoE microbenchmark 提升约 `9-16%`。继续优化应集中在上述 fast-prefill
-执行效率，而不是假设 YOCO 与 Qwen 的 FLOPs 相同。
+- `<output>`：整场汇总；
+- `<output>.turns.jsonl`：逐 trajectory/turn 的 prompt/output token 数、
+  TTFT、ITL 和 latency；
+- `<output>.runtime.json`：逐秒 vLLM metrics 和每卡 telemetry。
 
-### DP fast-prefill 与 CUDA Graph 回归修复
+`computed_prefill_tokens_per_service_second` 使用 vLLM
+`request_prefill_time_seconds_sum` 作分母；
+`generation_tokens_per_service_second` 使用
+`request_decode_time_seconds_sum` 作分母。它们用于分开比较 prefill 和 decode，
+不能用整场 wall throughput 代替。
 
-DP fast-prefill 不能由各 rank 独立决定执行路径。任一 rank 有长 prefill
-时，所有 rank 必须统一进入 split self/cross path；否则 Naive DP+EP MoE
-collective 的 token vector 会分叉并 hang。
+## Agentic 性能结果
 
-最终 DP coordination 仍保持四行 collective，将 metadata 打包到原 flag
-row：
-
-- bit 0：ubatch；
-- bit 1：fast-prefill active；
-- bit 2 起：fast-prefill padded token count。
-
-inactive rank 在其他 rank 开启 fast prefill 时使用主 batch padded count；
-所有 rank 都是普通 decode 时返回 `None`，完全跳过 fast metadata 传播，
-继续使用普通 FULL model graph。DP4 c32 的 local batch 8 也已加入 FULL
-graph capture；原来未捕获时出现的 718s/87.9ms ITL eager fallback 已消失。
-
-最终 YOCO-v2 DP4 40-turn、80K trace：
-
-| concurrency | wall | computed prefill | generation | TTFT p50 | ITL p50 | waiting max | KV max |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 8 | `109.665s` | `5,275 tok/s` | `584 tok/s` | `323ms` | `11.73ms` | `0` | `0.57%` |
-| 16 | `123.290s` | `8,646 tok/s` | `1,038 tok/s` | `441ms` | `12.97ms` | `0` | `1.24%` |
-| 32 | `152.651s` | `14,939 tok/s` | `1,677 tok/s` | `629ms` | `15.59ms` | `5` | `2.70%` |
-
-Qwen3.5-35B-A3B 使用同一个 final image、同一 vLLM commit、BF16、
-FlashInfer attention、Triton MoE、DP4、相同 GPU 和相同 trace。分项结果：
+三档测试分别严格生成 64K、128K、256K token；Qwen 与 YOCO 的 prompt
+schedule 和 output token 数完全相同。
 
 | c | wall Q/Y | prefill service tok/s Q/Y | decode service tok/s Q/Y | TTFT p50 Q/Y | ITL p50 Q/Y | avg SM Q/Y |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -231,24 +320,144 @@ FlashInfer attention、Triton MoE、DP4、相同 GPU 和相同 trace。分项结
 其中 `Q/Y` 分别表示 Qwen/YOCO。YOCO 相对 Qwen：
 
 - wall time 慢 `28.1% / 30.4% / 27.8%`；
-- normalized prefill service throughput 为 Qwen 的
-  `74.7% / 72.7% / 51.9%`；
-- normalized decode service throughput 为 Qwen 的
-  `78.6% / 74.7% / 80.8%`。
+- prefill service throughput 为 Qwen 的 `74.7% / 72.7% / 51.9%`；
+- decode service throughput 为 Qwen 的 `78.6% / 74.7% / 80.8%`。
 
-c32 时 Qwen 平均 SM utilization 约 `87%`，YOCO 约 `83%`，同时 YOCO
-prefill service efficiency 明显下降；这是 fast-prefill split path、
-40 层串行执行和 tiny cross-decoder MoE 仍有优化空间的直接证据。decode
-差距则在三档都稳定约 `19-25%`，与 YOCO 更高 active FLOPs 一致，不是
-eager fallback。Qwen 当前还缺少 `E=256,N=128` 的 B200 Triton MoE tuned
-config，日志使用 default config；补齐后 Qwen 上限可能进一步提高。
+YOCO 运行状态：
 
-### Torch profiler：架构 FLOPs 与实现损失
+| c | waiting max | KV max | 结论 |
+| ---: | ---: | ---: | --- |
+| 8 | `0` | `0.57%` | queue/KV 健康 |
+| 16 | `0` | `1.24%` | queue/KV 健康 |
+| 32 | `5` | `2.70%` | queue/KV 健康 |
 
-最终用同一个 clean image、同一代码和同一 DP4 后端做了短 trace profiler：
-8 个 trajectories、2 turns、每轮平均 4K prefill + 200 decode，合计
-3,200 个生成 token。torch profiler 会放大绝对 wall time，因此这里只用它
-分析比例和 kernel 结构；正式吞吐仍以上面的 40-turn 数据为准。
+c32 没有 eager fallback。此前未覆盖 local batch 8 的 FULL graph 已补齐；
+最终 capture sizes 为 `1,2,4,8,16,32`。
+
+Agentic 生产性能使用 FlashInfer attention，而不是 FA4。FA4 用于下面的
+matched alignment 验收；在相同 40-turn workload 中，FA4 c32 明显慢于
+FlashInfer，因此不作为最终吞吐配置。
+
+## FA4 数值与 decode 验收
+
+matched alignment 固定：
+
+- PyTorch 26.02；
+- FlashAttention `4.0.0b13`；
+- FA4 commit `9bad4bec7326ad28edb5516b8878fd283f8991c0`；
+- CuTeDSL `4.5.1`；
+- vLLM 与 llm-train 使用相同 BF16/MXFP8、FA4 和 batch shape；
+- MXFP8 两侧均使用 128-element block；
+- batch 16 Native reference 使用与 scheduler 一致的 `1 + 15` forward shape；
+- vLLM 使用非 eager CUDA Graph。
+
+| 验证矩阵 | Native -> vLLM mean KL | 结论 |
+| --- | ---: | --- |
+| BF16，batch 1 | `0.00392071` | 通过 `<1e-2`，但不是 exact zero |
+| BF16，batch 16 | `0.00283000` | 通过 `<1e-2` |
+| MXFP8，batch 1，mixed5 | `0.0182856` | 未通过 `<1e-2` |
+| MXFP8，batch 16 | `0.0000724250` | 通过 `<1e-2` |
+| BF16，TP2+EP2，batch 16 | `0.00509094` | 通过 `<1e-2` |
+| MXFP8，TP2+EP2，batch 16 | `0.00959670` | 通过 `<1e-2` |
+
+非 eager FA4 eager/FULL/FULL_DECODE_ONLY 的 greedy decode 逐 token 一致，
+没有 CUDA Graph replay 导致的乱码、首 token 卡死或单 token collapse。
+最终 YOCO-v2/v3 serving smoke 中英文生成正常，没有异常重复。
+
+约 4.7K-token 输入按 1,024 token 分块时，打开 KV-sharing fast prefill 对
+同一个 vLLM FA4 chunked 输出的增量 KL 为：
+
+| 精度 | fast prefill off -> on KL |
+| --- | ---: |
+| BF16 | `0.000121237` |
+| MXFP8 | `0.00400451` |
+
+因此 KV-sharing fast prefill 本身没有破坏 vLLM 输出。
+
+尚未通过的 matched alignment：
+
+- 约 4.7K-token 的真实 Native -> vLLM chunked prefill：
+  BF16 `0.285164`、MXFP8 `0.0209809`；
+- MXFP8 batch 1 mixed5：`0.0182856`；
+- BF16 batch 1 满足 `<1e-2`，但不是 exact zero。
+
+不能用“服务能开启 `--enable-chunked-prefill`”代替真实 Native-to-vLLM
+chunked KL 验收。
+
+## DP fast prefill 与 CUDA Graph
+
+DP 下任一 rank 进入 fast prefill 时，所有 rank 必须统一进入 split
+self/cross path；否则 NaiveDPEP MoE collective 的 token vector 会分叉。
+
+最终实现将 fast-prefill metadata 打包进原 DP coordination flag：
+
+- bit 0：ubatch；
+- bit 1：fast-prefill active；
+- bit 2 起：fast-prefill padded token count。
+
+inactive rank 在其他 rank 开启 fast prefill 时使用主 batch padded count；
+所有 rank 都是普通 decode 时返回 `None`，不传播 fast metadata，继续使用
+普通 FULL model graph。最终 DP4 mixed prefill/decode、c32 local batch 8、
+DP8+EP 均无 collective hang 或 eager fallback。
+
+## DP8 与 YOCO-v3
+
+DP8+EP 验收：
+
+- 78,001-token prompt + 16-token decode：`3.329s`；
+- 八张 B200 峰值 SM utilization 均为 `98-99%`；
+- GPU5 包含外部约 44GB 占用时峰值显存 `168,889 MiB`；
+- FlashInfer、Triton MoE、chunked prefill、fast prefill、EP 和
+  `FULL_AND_PIECEWISE` 同时开启；
+- 请求后中文生成正常，日志无 eager fallback。
+
+YOCO-v3 验收：
+
+- `diff_v3`、weighted Q/K RMSClip、latent MoE、`universal_loop=3` 可加载；
+- 中文和英文直答正常；
+- `<|end|>` 被服务层作为 stop string，不返回给用户；
+- `get_weather({"city":"Seattle"})` tool call 可正确解析；
+- 默认 `enable_thinking=false`，用户显式 chat-template kwargs 仍可覆盖。
+
+## 启动 cache
+
+CUDA Graph 对象不能跨进程持久化；镜像只持久化 Torch
+AOT/Inductor/Triton 编译产物。最终镜像实测：
+
+| 模型 | graph compile | graph capture | ready 时间 |
+| --- | ---: | ---: | ---: |
+| v2 DP4，无新 cache | `67.8s` | `6s` | 约 `5.3 min` |
+| v2 DP4，baked cache | `10.5s` | `6s` | 约 `4.7 min` |
+| v3 DP4，无新 cache | 约 `125s` | `5s` | 约 `249s` |
+| v3 DP4，baked cache | `14.9s` | `5s` | 约 `221s` |
+
+剩余启动时间来自权重读取、KV memory profile、模型 warmup 和 backend
+初始化，不是 CUDA Graph capture。
+
+## FLOPs 与 profiler 结论
+
+| 指标 | YOCO-30B-A3B | Qwen3.5-35B-A3B | YOCO / Qwen |
+| --- | ---: | ---: | ---: |
+| 总参数 | `32.2207B` | `35.9518B` | `0.896x` |
+| decode projection + MoE GEMM | `11.943 GF/token` | `4.873 GF/token` | `2.451x` |
+| 2K context core compute | `13.117 GF/token` | `5.321 GF/token` | `2.465x` |
+| 40K context core compute | `25.554 GF/token` | `11.539 GF/token` | `2.214x` |
+| 80K context core compute | `38.661 GF/token` | `18.093 GF/token` | `2.137x` |
+
+YOCO 参数更少但 active FLOPs 更高，主要因为：
+
+- 10 个 self layers 执行 `universal_loop=3`，再执行 10 个 cross layers，
+  共 40 次 block execution；
+- hidden size 为 3,072，Qwen 为 2,048；
+- routed top-8 expert intermediate 为 1,280，Qwen 为 512；
+- differential attention 增加 Q 和 combine 工作；
+- cross-attention decode work 随上下文增长。
+
+fast prefill 跳过重复 self-decoder 后，80K 理论 active compute 为 YOCO
+`11.16 GF/token`、Qwen `11.54 GF/token`。因此 prefill 理论 FLOPs 接近，
+剩余差距主要来自 split path、rank imbalance 和小 kernel 效率。
+
+同镜像、同后端的短 torch profile：
 
 | profiled c8 | Qwen | YOCO | YOCO / Qwen |
 | --- | ---: | ---: | ---: |
@@ -256,7 +465,7 @@ config，日志使用 default config；补齐后 Qwen 上限可能进一步提�
 | prefill service throughput | `6,195 tok/s` | `5,370 tok/s` | `0.867x` |
 | decode service throughput | `96.58 tok/s` | `75.47 tok/s` | `0.781x` |
 
-代表性 DP rank 1 的 decode kernel trace：
+代表性 rank 的 decode trace：
 
 | 指标 | Qwen | YOCO | YOCO / Qwen |
 | --- | ---: | ---: | ---: |
@@ -265,1085 +474,47 @@ config，日志使用 default config；补齐后 Qwen 上限可能进一步提�
 | union GPU busy time | `3,382.8ms` | `3,872.2ms` | `1.145x` |
 | 被 overlap 隐藏的 kernel time | `410.9ms` (`10.8%`) | `48.7ms` (`1.2%`) | - |
 
-`summed kernel time` 会重复计算并发 stream；`union GPU busy time` 将重叠区间
-只计算一次。YOCO 的 kernel 总工作时间只多约 3%，但 launch 数多 20%，而
-Qwen 能把约 11% kernel time 隐藏在通信/计算 overlap 中，YOCO 基本串行，
-所以实际 GPU busy time 多约 15%。这部分是实现效率差距，不是模型 FLOPs。
+去掉 collective 和通用 elementwise 后，MoE、GEMM、router、attention 等
+主要计算热点合计为 Qwen `1,808ms`、YOCO `2,600ms`，YOCO 为 `1.44x`。
+这说明 decode 差距主要是架构 active compute，同时还叠加了：
 
-同一 rank 的 decode kernel 分类如下，时间为 raw summed CUDA time：
+- YOCO 每 step 多 `20%` kernel launches；
+- YOCO 通信/计算 overlap 明显少于 Qwen；
+- RMSNorm/RMSClip、gate、differential combine、router TopK/scatter 等
+  小 kernel；
+- DP fast-prefill rank 不均衡和 collective 等待。
 
-| kernel 类别 | Qwen | YOCO |
-| --- | ---: | ---: |
-| EP collective | `1,280.4ms` (`33.8%`) | `630.0ms` (`16.1%`) |
-| routed MoE expert GEMM | `521.0ms` (`13.7%`) | `748.4ms` (`19.1%`) |
-| dense/small GEMM | `853.5ms` (`22.5%`) | `972.9ms` (`24.8%`) |
-| router / TopK / scatter | `263.0ms` (`6.9%`) | `448.7ms` (`11.4%`) |
-| model-specific attention/mixer/norm | `170.7ms` (`4.5%`) | `430.1ms` (`11.0%`) |
-| generic elementwise/norm/copy | `680.5ms` (`17.9%`) | `690.0ms` (`17.6%`) |
-
-其中 model-specific 类别对 Qwen 统计 GDN + FMHA，对 YOCO 统计
-self/cross attention + RMSClip + gate/differential combine。去掉 collective
-和通用 elementwise 后，MoE、GEMM、router、attention 等主要计算热点合计
-为 Qwen `1,808ms`、YOCO `2,600ms`，YOCO 为 `1.44x`。这与前面的 active
-FLOPs 结论一致：YOCO 的主要 decode 差距确实来自更多有效计算，不是一个
-异常慢 kernel。
-
-prefill profile 则显示另一类问题。代表性 rank 的 raw CUDA time 中，
-collective 占 `48.3%`，MoE 占 `21.9%`；YOCO rank 0 的首个 4,224-token
-prefill range 为 `2.144s`，而其他 rank 同步处理 8,192 tokens 时约
-`0.81s`。较少 token 的 rank 反而更慢，说明它在 global fast-prefill split
-path 中等待其他 rank/collective，而不是受本 rank FLOPs 限制。这与 c32
-prefill service throughput 仅为 Qwen `51.9%` 的现象一致。
-
-因此后续优化优先级已经明确：
-
-1. 合并 RMSNorm/RMSClip、gate、differential combine、router TopK/scatter
-   等小 kernel，减少 40 层串行 launch；
-2. 让 NaiveDPEP AllGather/ReduceScatter 与 expert/shared compute overlap，
-   避免当前接近全串行的 YOCO decode；
-3. 改善 DP fast-prefill 的 chunk packing 和 rank 均衡，减少 split
-   self/cross 阶段的 collective 等待；
-4. 继续调优 tiny-token cross-decoder MoE，但不能把 top-8、N=320 和
-   self/cross attention 的架构计算误判为单纯 kernel 回归。
-
-profiler 原始结果保存在
-`/workspace/shaohanh/kernel-profiles/{qwen,yoco}/`。两边均为非 eager
-`FULL_AND_PIECEWISE`，日志没有 eager fallback。
-
-三组 workload 分别严格生成 64K、128K、256K tokens，Qwen 与 YOCO 的
-output token 数和 prompt schedule 完全相同。c32 无 graph/eager fallback，
-queue 和 KV 均健康。
-
-### YOCO-v3/L3 28k：64-query RL rollout
-
-vLLM 已同时支持旧 YOCO-v2 和新 YOCO-v3。v3 新增语义包括：
-
-- diff-v3：`attn_even * sigmoid(gate_even) -
-  attn_odd * sigmoid(gate_odd)`；
-- 带可学习 affine weight 的 Q/K RMSClip；
-- latent MoE：
-  `3072 -> 1024 -> routed experts -> 1024 -> 3072`，两侧 projection 前后
-  保持与训练一致的 RMSNorm 顺序；
-- `universal_loop=3`。
-
-旧 v2 config 没有 `qk_rms_gamma` 时默认使用 weight-free Q/K clip，不会因
-v3 支持而改变旧 checkpoint 的参数结构。
-
-正式矩阵固定：
-
-- 64 个 prompts、`temperature=1`、`top_p=1`、`min_tokens=0`、最多
-  256 output tokens；
-- 四张 B200，FA4 beta13，非 eager `FULL_DECODE_ONLY`；
-- 开启 chunked prefill、KV-sharing fast prefill；
-- `VLLM_ENABLE_V1_MULTIPROCESSING=0` 和 `--no-async-scheduling`；
-- llm-train BF16/MXFP8 baseline 均使用 FA4，teacher-forcing batch size 16。
-
-| vLLM rollout | output tok/s | 对 BF16 k3 KL | 对 MXFP8 k3 KL |
-| --- | ---: | ---: | ---: |
-| BF16 TP4 + EP4 | **`2625.99`** | **`0.00294112`** | `0.01082455` |
-| MXFP8，4 个 TP1 replica，DeepGEMM MoE | `2390.39` | `0.01137099` | **`0.01054670`** |
-
-BF16 TP4+EP4 是当前精度最优配置，匹配 BF16 baseline 的 k3 KL 明显低于
-`5e-3`。MXFP8 DeepGEMM 与 llm-train 原生 DeepGEMM quant baseline 的结果
-和 torch activation-quant reference 完全一致；其 sampled KL 为
-`0.00938869`，但更保守的非负 k3 KL 为 `0.01054670`，仍略高于严格
-`1e-2` 验收线。偏差主要集中在 completion 前 128 tokens；128–256 token
-区间 k3 KL 为 `0.00943566`。
-
-Triton MoE 的两 TP2 replica 和四 TP1 replica 静态吞吐分别为 `2908.54`
-和 `3084.53 tok/s`。这些数据来自强制最小生成长度的 throughput sweep，
-可以用于速度比较，但对应 raw logprob 不能用于 on-policy KL；正式 KL 表只
-保留上面的 `min_tokens=0` 结果。
-
-固定每请求 256 tokens 的持续到达结果：
-
-| 配置 | rate | 64-query wall | output tok/s | p50 / p95 | queue max |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| BF16 TP4 + EP4 | 8 qps | `12.183s` | `1344.79` | `7.986 / 9.524s` | 0 |
-| BF16 TP4 + EP4 | 16 qps | `8.965s` | `1827.52` | `6.834 / 7.820s` | 0 |
-| BF16 TP4 + EP4 | 32 qps | `8.238s` | `1988.89` | `7.228 / 7.801s` | 0 |
-| BF16 TP4 + EP4 | infinite | `6.033s` | `2715.95` | `6.013 / 6.025s` | 0 |
-| MXFP8 4xTP1 Triton | 8 qps | `11.578s` | `1415.13` | `5.217 / 5.531s` | 0 |
-| MXFP8 4xTP1 Triton | 16 qps | `8.293s` | `1975.72` | `5.496 / 5.977s` | 0 |
-| MXFP8 4xTP1 Triton | 32 qps | `6.661s` | `2459.79` | `5.520 / 6.052s` | 0 |
-| MXFP8 4xTP1 Triton | infinite | **`5.118s`** | **`3201.43`** | `5.034 / 5.110s` | 0 |
-
-拓扑限制：
-
-- MXFP8 TP4 不能直接使用：shared expert intermediate size 1280 在 TP4 下
-  分成 320，不能被 128-element activation quant block 整除；
-- DP4+EP4 在 synchronous V1 + fast-prefill 首批请求中触发 DP/EP
-  all-to-all token-size assertion，不作为鲁棒生产候选；
-- 两个 TP2 replica 和四个 TP1 replica 都稳定完成静态及 open-loop sweep，
-  64/64 请求成功且 queue max 为 0。
-
-因此 v3 四卡推荐：
-
-1. 精度优先：BF16 TP4+EP4；
-2. 纯吞吐优先：四个 MXFP8 TP1 + Triton MoE replica，但当前没有通过严格
-   on-policy k3 KL 验收；
-3. MXFP8 匹配 llm-train backend：四个 TP1 + DeepGEMM MoE，sampled KL
-   低于 `1e-2`，但 k3 仍略高于阈值。
-
-### vLLM backend A/B：llm-train 固定 FA4
-
-下面所有结果都固定 llm-train teacher-forcing baseline 使用 FA4，vLLM 侧
-有意改变 attention 或 MoE backend。单 B200、非 eager
-`FULL_DECODE_ONLY`、64 prompts、Native scoring batch 16，并开启 chunked
-prefill 和 KV-sharing fast prefill。
-
-BF16 attention sweep 固定 vLLM Triton MoE，`max_tokens=128`：
-
-| vLLM attention | 64-query wall | output tok/s | 对 BF16+FA4 k3 KL |
-| --- | ---: | ---: | ---: |
-| FA4 | `12.809s` | `633.95` | **`0.00297739`** |
-| FA2 | `12.983s` | `618.48` | `0.00304211` |
-| FlashInfer | **`12.568s`** | **`642.66`** | `0.00316659` |
-
-三种 BF16 attention 都通过 `<5e-3`。FlashInfer attention 最快，FA4 的 KL
-最低，但两者差异很小。Triton attention 在非 eager CUDA Graph capture 中
-触发 illegal memory，不能作为生产候选。
-
-MXFP8 attention sweep 固定 vLLM Triton MoE，`max_tokens=128`：
-
-| vLLM attention | 64-query wall | output tok/s | 对 MXFP8+FA4 k3 KL |
-| --- | ---: | ---: | ---: |
-| FA4 | **`10.570s`** | **`766.22`** | **`0.01112026`** |
-| FA2 | `10.907s` | `736.83` | `0.01264444` |
-| FlashInfer | `10.757s` | `751.31` | `0.01245236` |
-
-MXFP8 MoE sweep 固定 vLLM FA4 attention：
-
-| vLLM MoE | 64-query wall | output tok/s | 对 MXFP8+FA4 k3 KL |
-| --- | ---: | ---: | ---: |
-| Triton | **`10.570s`** | **`766.22`** | **`0.01112026`** |
-| DeepGEMM | `13.658s` | `592.02` | `0.01119467` |
-
-因此单卡 MXFP8 当前应使用 **FA4 attention + Triton MoE**：它同时是最快
-attention 组合和最快 MoE backend，并且 KL 也是本次 MXFP8 backend sweep
-中最低。更长的 warm `max_tokens=256` 正式结果为：
-
-| vLLM 配置 | 64-query wall | output tok/s | matched FA4 k3 KL |
-| --- | ---: | ---: | ---: |
-| BF16 FlashInfer attention + Triton MoE | `24.903s` | `620.44` | **`0.00294958`** |
-| MXFP8 FA4 attention + Triton MoE | **`20.733s`** | **`765.56`** | `0.01024826` |
-
-BF16 明确通过 `<5e-3`。MXFP8 比 max128 更接近阈值，但仍高于 `<1e-2`
-约 `2.5e-4`。第一次 MXFP8 max256 请求因 CuTe/FA4 shape JIT 只有
-`224.01 tok/s`；同一 server warm repeat 恢复为 `765.56 tok/s`，所以正式
-吞吐不包含该一次性编译时间。
-
-MoE backend 兼容性：
-
-- BF16 FlashInfer TRTLLM 不支持 YOCO custom routing method 101；
-- BF16 FlashInfer CUTLASS 在加载权重后不再推进；
-- MXFP8 vLLM CUTLASS 对当前配置被 oracle 禁用；
-- MXFP8 FlashInfer CUTLASS 不支持 128x128 weight block 和 1x128 dynamic
-  activation quant；
-- MXFP8 FlashInfer TRTLLM 在转换到约 31.27 GiB 后不再推进；
-- `--moe-backend auto` 不是安全回退：BF16 自动选择 FlashInfer CUTLASS，
-  MXFP8 自动选择 FlashInfer TRTLLM，二者等待 3 分钟均未 ready。
-
-生产启动必须显式传 `--moe-backend triton`，不要依赖 `auto`。
-
-固定每请求 256 tokens 的单卡持续到达结果如下。所有组合均为 64/64 成功、
-0 请求错误：
-
-| 配置 | rate | 64-query wall | output tok/s | p50 / p95 | queue max |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| BF16 FlashInfer + Triton | 2 qps | `36.204s` | `452.55` | `8.660 / 11.173s` | 12 |
-| BF16 FlashInfer + Triton | 4 qps | `30.987s` | `528.74` | `11.664 / 17.292s` | 28 |
-| BF16 FlashInfer + Triton | 8 qps | `28.580s` | `573.27` | `14.209 / 21.856s` | 45 |
-| BF16 FlashInfer + Triton | 16 qps | `27.246s` | `601.34` | `15.375 / 23.996s` | 48 |
-| BF16 FlashInfer + Triton | 32 qps | `26.086s` | `628.08` | `15.638 / 24.556s` | 48 |
-| BF16 FlashInfer + Triton | infinite | **`24.201s`** | **`677.00`** | `15.161 / 24.188s` | 48 |
-| MXFP8 FA4 + Triton | 2 qps | `33.635s` | `487.11` | `6.962 / 9.185s` | 9 |
-| MXFP8 FA4 + Triton | 4 qps | `28.348s` | `577.96` | `10.141 / 14.675s` | 26 |
-| MXFP8 FA4 + Triton | 8 qps | `25.465s` | `643.38` | `12.393 / 18.783s` | 40 |
-| MXFP8 FA4 + Triton | 16 qps | `25.549s` | `641.29` | `14.500 / 22.429s` | 48 |
-| MXFP8 FA4 + Triton | 32 qps | `23.753s` | `689.77` | `14.245 / 22.315s` | 48 |
-| MXFP8 FA4 + Triton | infinite | **`20.256s`** | **`808.83`** | `12.712 / 20.244s` | 48 |
-
-单卡 fixed256 的可持续完成率约为 BF16 `2.6 req/s`、MXFP8 `3.2 req/s`；
-因此从 4–8 qps 开始持续积压是容量限制，不是请求失败。MXFP8 在 2 qps
-保持 queue max 9；更高到达率应增加独立 replica，而不是继续提高单卡
-`max_num_seqs`。
-
-### Docker 镜像、KL 定义和单节点启动命令
-
-基础对齐镜像：
+新增的 B200 Triton MoE 配置：
 
 ```text
-buaahsh/pytorch:26.02-b200-vllm-0725
+vllm/model_executor/layers/fused_moe/configs/E=128,N=320,device_name=NVIDIA_B200.json
 ```
 
-包含 YOCO-v3 mixed-graph 修复的 RL/agent 镜像：
+使 decode batch 8-128 的 MoE microbenchmark 提升约 `9-16%`。
+
+后续优化优先级：
+
+1. 合并 YOCO norm/gate/differential/router 小 kernel；
+2. overlap NaiveDPEP AllGather/ReduceScatter 与 expert/shared compute；
+3. 改善 DP fast-prefill chunk packing 和 rank 均衡；
+4. 继续调优 tiny-token cross-decoder MoE。
+
+## 本次相关代码
 
 ```text
-buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph
-```
-
-以下实测均使用 YOCO-v3/L3 28k：
-
-```text
-/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf
-```
-
-#### llm-train baseline 和 KL
-
-checkpoint 的 `metadata.json` 记录的训练设置为：
-
-- `quant_mode=mxfp8`、`quant_block_size=128`；
-- `use_cute=true`，即 llm-train attention 使用 FA4；
-- `max_seq_len=8192`、training dataloader `batch_size=2`；
-- diff-v3、`universal_loop=3`、latent MoE dim `1024`；
-- 128 routed experts、top-k 8、shared expert dim `1280`；
-- Q/K weighted RMSClip limit `3.0`、SwiGLU limit `10.0`。
-
-RL 对齐固定两套 llm-train teacher-forcing baseline：
-
-1. **BF16+FA4**：加载同一个 28k checkpoint，只将
-   `modelargs.quant_mode` 覆盖为 `bfloat16`；
-2. **MXFP8+FA4**：保持训练时的 `mxfp8` 和 128-element quant block。
-
-两套 baseline 都使用 FA4 beta13、CuTeDSL 4.5.1、Native batch size 16。
-对多个 vLLM replica，Native scorer 保留每个 server 收到的 round-robin
-request group，不能重新混排 batch。
-
-vLLM 使用 `temperature=1`、`top_p=1`、`top_k=0`、`min_tokens=0` 采样，
-保存每个 sampled token 的 raw pre-sampling logprob。llm-train 对完全相同的
-prompt 和 completion 做 full causal teacher forcing。对 action
-`a ~ p_vllm(.|s)`：
-
-```text
-sampled KL = mean(log p_vllm(a|s) - log p_train(a|s))
-k3 KL      = mean(exp(log p_train(a|s) - log p_vllm(a|s))
-                  - 1
-                  - (log p_train(a|s) - log p_vllm(a|s)))
-```
-
-文档以非负、低方差的 mean k3 KL 判断 `<1e-2` / `<5e-3`。host 速度是
-64 个 query、最多 256 output tokens 的 aggregate output tok/s，包含 HTTP
-和 logprob 返回成本，不包含 server 启动及首次 CuTe/Triton JIT。
-
-#### 已实测最佳结果
-
-| GPU | vLLM precision/backend | 64-query wall | output tok/s | matched llm-train k3 KL |
-| ---: | --- | ---: | ---: | ---: |
-| 1 | BF16, FlashInfer attention, Triton MoE | `24.903s` | `620.44` | **`0.00294958`** |
-| 1 | MXFP8, FA4 attention, Triton MoE | **`20.733s`** | **`765.56`** | `0.01024826` |
-| 4 | BF16 TP4+EP4, FA4 attention, Triton MoE | `5.964s` | **`2625.99`** | **`0.00294112`** |
-| 4 | MXFP8 4xTP1, FA4 attention, DeepGEMM MoE | `6.463s` | `2390.39` | **`0.01054670`** |
-| 4 | MXFP8 4xTP1, FA4 attention, Triton MoE, fixed256 load | **`5.118s`** | **`3201.43`** | 不适用 |
-| 8 | BF16 2xTP4+EP4 | 未实测 | 未实测 | 未实测 |
-| 8 | MXFP8 8xTP1 | 未实测 | 未实测 | 未实测 |
-
-BF16 单卡和四卡都通过 `<5e-3`。MXFP8 目前没有稳定通过 `<1e-2`：
-DeepGEMM 是四卡严格 KL 最低配置；Triton 的 `3201.43 tok/s` 来自强制
-256-token load test，只能用于吞吐，不能用 raw logprob 计算严格 KL。8 卡
-没有填入外推值：本轮构建时 GPU 2–5 被其他 workload 持续占用，无法获得
-可信的单节点 8 卡 KL 和速度。
-
-#### RL/agent 持续并发 mixed graph
-
-YOCO-v3 的 mixed graph 需要补回旧 mixed-graph overlay 中的 TF32 router
-custom op，使 TorchDynamo 不追踪 `torch.get_float32_matmul_precision()` 等
-非 Tensor 全局状态。YOCO-v3 还需要在 weight load 结束后预生成并共享 RoPE
-cache；否则首次 piecewise compile 会因为 forward 修改 module buffer 而失败。
-
-以下测试使用单张 B200、MXFP8、FA4、Triton MoE、32 个最大并发 sequence：
-
-- 96 个独立 agent conversation，每个 conversation 连续生成 3 轮；
-- 每轮固定 128 output tokens，轮间插入平均 0.5 秒后返回的 synthetic tool
-  observation；
-- 新 conversation 按 Poisson 到达，后续轮次会把完整历史重新 prefill；
-- 每个配置都完成 288/288 请求，无请求失败。
-
-| 新 conversation/s | graph mode | output tok/s | p95 latency | p95 TTFT | queue max |
-| ---: | --- | ---: | ---: | ---: | ---: |
-| 1.0 | `FULL_DECODE_ONLY` | `371.73` | `10.300s` | `0.265s` | `0` |
-| 1.0 | mixed + fast prefill | **`387.70`** | **`4.499s`** | **`0.211s`** | `0` |
-| 1.5 | `FULL_DECODE_ONLY` | `505.08` | `7.000s` | `0.292s` | `2` |
-| 1.5 | mixed + fast prefill | **`541.57`** | **`6.741s`** | **`0.281s`** | `0` |
-| 2.0 | `FULL_DECODE_ONLY` | `629.13` | `8.072s` | `1.636s` | `10` |
-| 2.0 | mixed + fast prefill | **`664.42`** | **`5.520s`** | **`0.604s`** | **`5`** |
-| 2.5 | `FULL_DECODE_ONLY` | `669.22` | `9.877s` | `5.074s` | `36` |
-| 2.5 | mixed + fast prefill | **`693.59`** | **`8.930s`** | **`3.745s`** | `26` |
-
-该 workload 的单卡健康上界约为 2 个新 conversation/s：mixed graph 在 queue
-低于 10 时比 decode-only 快 `5.6%`，p95 latency 降低 `31.6%`，p95 TTFT
-降低 `63.1%`。2.5/s 时两者 queue 都超过 10，不能作为稳定生产点。
-
-相同 1.5 conversation/s、96x3-turn agent workload 下的 precision 选择：
-
-| precision | output tok/s | p95 latency | p95 TTFT | queue max | matched llm-train k3 KL |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| BF16 mixed + fast prefill | `535.84` | **`4.393s`** | **`0.159s`** | `0` | **`0.00399465`** |
-| MXFP8 mixed + fast prefill | **`541.57`** | `6.741s` | `0.281s` | `0` | `0.01162790` |
-
-BF16 只比 MXFP8 慢 `1.1%`，但通过 `<5e-3`；MXFP8 没有通过 `<1e-2`。
-因此 RL/agent 默认使用 **BF16 mixed + fast prefill**。MXFP8 只作为允许
-`~0.0116` k3 KL 时的吞吐实验配置。
-
-BF16 生产入口速率 sweep：
-
-| 新 conversation/s | output tok/s | p95 latency | p95 TTFT | queue max |
-| ---: | ---: | ---: | ---: | ---: |
-| 1.5 | `535.84` | `4.393s` | `0.159s` | `0` |
-| 1.75 | **`600.06`** | **`5.177s`** | **`0.261s`** | **`4`** |
-| 2.0 | `641.86` | `6.346s` | `1.356s` | `10` |
-
-单卡生产建议入口速率为 **1.75 个新 conversation/s**；2.0/s 虽然没有超过
-queue 10，但已没有安全余量。
-
-2 conversation/s 下的 GPU telemetry：
-
-| graph mode | SM util mean/p95 | memory BW util mean/p95 | power mean/p95 | GPU memory |
-| --- | ---: | ---: | ---: | ---: |
-| `FULL_DECODE_ONLY` | `65.1% / 97.0%` | `30.8% / 65.0%` | `495W / 589W` | `166190 MiB` |
-| mixed + fast prefill | `60.4% / 86.5%` | `21.8% / 36.0%` | `457W / 517W` | `164620 MiB` |
-
-BF16 mixed 在推荐 1.75 conversation/s 下：SM util mean/p95
-`68.9% / 89.0%`，memory bandwidth util `40.8% / 58.0%`，power
-`565W / 639W`，GPU memory `163992 MiB`。
-
-纯 32-request、固定 128-token burst 中，fast-prefill mixed graph 只有
-`503.66 tok/s`，低于 decode-only 的 `1354.71 tok/s`；但 agent workload
-会持续插入新 prefill，mixed graph 的 TTFT 和持续吞吐更优。不开
-`--kv-sharing-fast-prefill` 的 standard mixed burst 可达 `1274.87 tok/s`，
-但在 1 conversation/s 下 p95 latency 为 `8.859s`，仍明显差于 fast-prefill
-mixed 的 `4.499s`。因此 RL/agent 默认使用 BF16 mixed + fast prefill，单轮纯 decode 才使用
-`FULL_DECODE_ONLY`。
-
-本轮 BF16 strict KL 覆盖的多轮 prompt 最长约 1K tokens，并在
-`max-num-batched-tokens=8192` 的持续 mixed scheduler 下通过。单个约 4.7K
-tokens prompt 的真实多 chunk Native 对齐仍未通过，不能把这个结论外推到任意
-长 prompt。所以下面的 alignment-safe 默认 endpoint 设置
-`--max-model-len 1024`，超过该长度的请求必须拒绝；需要 8K context 时应另开
-throughput-only endpoint，并明确不承诺 `<1e-2` KL。
-
-所有命令先设置：
-
-```bash
-IMAGE=buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph
-MODEL=/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf
-COMMON_DOCKER_ARGS=(
-  --rm
-  --ipc=host
-  --network=host
-  --ulimit memlock=-1
-  --ulimit stack=67108864
-  -v /mnt/pvc/lidong1:/mnt/pvc/lidong1:ro
-  -e VLLM_ENABLE_V1_MULTIPROCESSING=0
-)
-```
-
-**单卡 BF16，RL/agent 持续并发默认：**
-
-```bash
-docker run "${COMMON_DOCKER_ARGS[@]}" \
-  --name yoco-agent-bf16-1gpu \
-  --gpus '"device=0"' \
-  "$IMAGE" vllm serve "$MODEL" \
-  --host 0.0.0.0 --port 8000 \
-  --served-model-name yoco-v3 \
-  --trust-remote-code \
-  --max-model-len 1024 \
-  --max-num-batched-tokens 8192 \
-  --max-num-seqs 32 \
-  --gpu-memory-utilization 0.90 \
-  --moe-backend triton \
-  --enable-chunked-prefill \
-  --kv-sharing-fast-prefill \
-  --no-async-scheduling \
-  --reasoning-parser agens \
-  --enable-auto-tool-choice \
-  --tool-call-parser agens \
-  --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
-  --compilation-config \
-    '{"mode":3,"backend":"eager","custom_ops":["all"],"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,32]}'
-```
-
-**单卡 BF16，当前严格 KL 最优且速度略优于 FA4：**
-
-```bash
-docker run "${COMMON_DOCKER_ARGS[@]}" \
-  --name yoco-bf16-1gpu \
-  --gpus '"device=0"' \
-  "$IMAGE" vllm serve "$MODEL" \
-  --host 0.0.0.0 --port 8000 \
-  --served-model-name yoco-v3 \
-  --trust-remote-code \
-  --max-model-len 1024 \
-  --max-num-batched-tokens 4096 \
-  --max-num-seqs 16 \
-  --gpu-memory-utilization 0.90 \
-  --moe-backend triton \
-  --enable-chunked-prefill \
-  --kv-sharing-fast-prefill \
-  --no-async-scheduling \
-  --attention-backend FLASHINFER \
-  --compilation-config \
-    '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
-```
-
-**单卡 MXFP8，当前速度和 KL 都优于其他已测 MXFP8 attention/MoE 组合：**
-
-```bash
-docker run "${COMMON_DOCKER_ARGS[@]}" \
-  --name yoco-mxfp8-1gpu \
-  --gpus '"device=0"' \
-  "$IMAGE" vllm serve "$MODEL" \
-  --host 0.0.0.0 --port 8000 \
-  --served-model-name yoco-v3 \
-  --trust-remote-code \
-  --max-model-len 1024 \
-  --max-num-batched-tokens 4096 \
-  --max-num-seqs 16 \
-  --gpu-memory-utilization 0.90 \
-  --quantization fp8_per_block \
-  --moe-backend triton \
-  --enable-chunked-prefill \
-  --kv-sharing-fast-prefill \
-  --no-async-scheduling \
-  --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
-  --compilation-config \
-    '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
-```
-
-**四卡 BF16，单个 TP4+EP4 endpoint：**
-
-```bash
-docker run "${COMMON_DOCKER_ARGS[@]}" \
-  --name yoco-bf16-4gpu \
-  --gpus '"device=0,1,2,3"' \
-  "$IMAGE" vllm serve "$MODEL" \
-  --host 0.0.0.0 --port 8000 \
-  --served-model-name yoco-v3 \
-  --trust-remote-code \
-  --tensor-parallel-size 4 \
-  --enable-expert-parallel \
-  --max-model-len 1024 \
-  --max-num-batched-tokens 8192 \
-  --max-num-seqs 64 \
-  --gpu-memory-utilization 0.90 \
-  --moe-backend triton \
-  --enable-chunked-prefill \
-  --kv-sharing-fast-prefill \
-  --no-async-scheduling \
-  --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
-  --compilation-config \
-    '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16,32,64]}'
-```
-
-**四卡 MXFP8，四个 TP1 replica；DeepGEMM 为 KL 最低，纯速度可改
-`MOE_BACKEND=triton`：**
-
-```bash
-MOE_BACKEND=deep_gemm
-for gpu in 0 1 2 3; do
-  port=$((8100 + gpu))
-  docker run -d "${COMMON_DOCKER_ARGS[@]}" \
-    --name "yoco-mxfp8-gpu${gpu}" \
-    --gpus "device=${gpu}" \
-    "$IMAGE" vllm serve "$MODEL" \
-    --host 0.0.0.0 --port "$port" \
-    --served-model-name yoco-v3 \
-    --trust-remote-code \
-    --max-model-len 1024 \
-    --max-num-batched-tokens 4096 \
-    --max-num-seqs 16 \
-    --gpu-memory-utilization 0.90 \
-    --quantization fp8_per_block \
-    --moe-backend "$MOE_BACKEND" \
-    --enable-chunked-prefill \
-    --kv-sharing-fast-prefill \
-    --no-async-scheduling \
-    --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
-    --compilation-config \
-      '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
-done
-```
-
-**八卡 BF16 推荐拓扑，两个 TP4+EP4 replica：**
-
-```bash
-for spec in "0,1,2,3:8200:0" "4,5,6,7:8201:1"; do
-  IFS=: read -r gpus port replica <<<"$spec"
-  docker run -d "${COMMON_DOCKER_ARGS[@]}" \
-    --name "yoco-bf16-tp4-${replica}" \
-    --gpus "\"device=${gpus}\"" \
-    "$IMAGE" vllm serve "$MODEL" \
-    --host 0.0.0.0 --port "$port" \
-    --served-model-name yoco-v3 \
-    --trust-remote-code \
-    --tensor-parallel-size 4 \
-    --enable-expert-parallel \
-    --max-model-len 1024 \
-    --max-num-batched-tokens 8192 \
-    --max-num-seqs 32 \
-    --gpu-memory-utilization 0.90 \
-    --moe-backend triton \
-    --enable-chunked-prefill \
-    --kv-sharing-fast-prefill \
-    --no-async-scheduling \
-    --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
-    --compilation-config \
-      '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16,32]}'
-done
-```
-
-**八卡 MXFP8 推荐拓扑，八个 TP1 replica：**
-
-```bash
-MOE_BACKEND=deep_gemm
-for gpu in 0 1 2 3 4 5 6 7; do
-  port=$((8300 + gpu))
-  docker run -d "${COMMON_DOCKER_ARGS[@]}" \
-    --name "yoco-mxfp8-gpu${gpu}" \
-    --gpus "device=${gpu}" \
-    "$IMAGE" vllm serve "$MODEL" \
-    --host 0.0.0.0 --port "$port" \
-    --served-model-name yoco-v3 \
-    --trust-remote-code \
-    --max-model-len 1024 \
-    --max-num-batched-tokens 4096 \
-    --max-num-seqs 16 \
-    --gpu-memory-utilization 0.90 \
-    --quantization fp8_per_block \
-    --moe-backend "$MOE_BACKEND" \
-    --enable-chunked-prefill \
-    --kv-sharing-fast-prefill \
-    --no-async-scheduling \
-    --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
-    --compilation-config \
-      '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
-done
-```
-
-多 replica 配置需要由调用端 round-robin 到全部端口；严格 KL scoring 也必须
-保留相同 server grouping。不要使用 `--moe-backend auto`。
-
-### FA4 matched reference 配置
-
-以下配置用于两侧 attention/MoE 尽量 matched 的 reference 实验，不是上述
-单卡 backend sweep 的速度最优配置。它不使用 eager，并让 prefill 和 CUDA
-Graph decode 都使用 FA4：
-
-- `--max-num-seqs 16`
-- `--attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}'`
-- `--quantization fp8_per_block`
-- `--moe-backend deep_gemm`
-- compilation config:
-
-```json
-{
-  "mode": 0,
-  "cudagraph_mode": "FULL_DECODE_ONLY",
-  "cudagraph_capture_sizes": [1, 2, 4, 8, 16]
-}
-```
-
-| 验证矩阵 | Native -> vLLM mean KL | 结论 |
-| --- | ---: | --- |
-| BF16，batch 1 | `0.00392071` | 通过 `< 0.01`，但不是 exact |
-| BF16，batch 16 | `0.00283000` | 通过 `< 0.01` |
-| MXFP8，batch 1，mixed5 | `0.0182856` | 未达到 `< 0.01` |
-| MXFP8，batch 16 | `0.0000724250` | 通过 `< 0.01` |
-| BF16，TP2 + EP2，batch 16 | `0.00509094` | 通过 `< 0.01` |
-| MXFP8，TP2 + EP2，batch 16 | `0.00959670` | 通过 `< 0.01` |
-
-BF16 batch 1 当前 mean KL 为 `0.00392071`，尚未达到逐元素一致。主要差异是
-Native 使用 DeepGEMM grouped BF16 routed MoE，而 vLLM 使用 Triton BF16 MoE。
-
-MXFP8 batch 1 的五个 prompt 中，短 prompt KL 为 `0.0011588`，最长中文
-prompt 为 `0.0670810`；这部分是 DeepGEMM/activation-quant 小 batch geometry
-差异，不是 FA4 graph replay。batch 16 已接近逐元素一致。
-
-`FULL_DECODE_ONLY` 和 `FULL` 均成功 capture `[1, 2, 4, 8, 16]`。BF16 的
-四请求、32-token graph 输出与 FA4 eager 逐 token 完全相同；MXFP8 的 `FULL`
-与 `FULL_DECODE_ONLY` 也逐 token 完全相同。未出现 graph 导致的乱码、连续
-单 token collapse 或首 token 卡死。一个 BF16 中文 greedy completion 会重复
-完整 prompt，但 eager 和 graph 完全一致，因此不是 CUDA Graph corruption。
-
-约 4.7K-token 输入按 1024 tokens 分块时，打开 KV-sharing fast prefill 对
-同一 vLLM FA4 chunked 输出的增量 KL 为：BF16 `0.000121237`、MXFP8
-`0.00400451`，均小于 `1e-2`。
-
-### RL rollout：64 prompts、四卡推理
-
-`tools/yoco_alignment/rl_rollout.py` 模拟标准 RL rollout：
-
-- 64 个唯一中英文、代码、数学和系统设计 chat prompts，prompt 长度
-  `28–48` tokens，平均 `37.1`；
-- 通过标准 OpenAI completions API 一次提交并发请求；
-- `temperature=1`、`top_p=1`、`top_k=0`，保存 sampled token IDs 和 raw
-  sampled-token logprobs；
-- KL rollout 固定 `min_tokens=0`，默认 `max_tokens=512`；vLLM 返回的是
-  stop-token mask 之前的 raw logprob，因此非零 `min_tokens` 只能用于吞吐
-  load test，不能用于 sampled KL；
-- llm-train 对完全相同的 prompt + sampled completion 做 full causal
-  teacher forcing，BF16/MXFP8 两侧均使用真实 FA4；
-- 正式结果使用 Native batch 16。多个独立 vLLM server 时，Native scoring
-  保留每个 server 实际收到的 round-robin batch composition；
-- 吞吐包含 HTTP API 和 logprob 返回开销，不包含 server 启动以及第一次约
-  `48–77` 秒的 Triton/FA4 JIT warmup。
-
-这里的 KL 是 RL 实际可获得的 sampled-action estimator，不是每个位置完整词表
-的精确 KL：
-
-```text
-sampled KL = log p_vllm(a|s) - log p_train(a|s)
-k3 KL      = exp(log p_train - log p_vllm) - 1
-             - (log p_train - log p_vllm)
-```
-
-以非负、低方差的 mean k3 KL 作为 `<1e-2` / `<5e-3` 判断。下表是旧 v2
-`min_tokens=64` 的历史 sweep，因此吞吐仍有效，但 KL 列只能作为 logprob
-drift 参考，不能作为严格 on-policy KL 验收：
-
-| vLLM setting | 稳态 output tok/s | mean k3 KL | 结论 |
-| --- | ---: | ---: | --- |
-| BF16 TP1 | `2354` | `0.00391659` | 通过 `<5e-3` |
-| BF16 TP2 + EP2 | `3258` | `0.00426475` | 通过 `<5e-3` |
-| BF16 TP4 + EP4 | **`4014`** | `0.00418782` | **通过 `<5e-3`，当前最优** |
-| BF16 DP4 + EP4 | `3829` | `0.00417150` | 通过 `<5e-3` |
-| BF16 4 个独立 TP1 replica | `3453` | `0.00424997` | 通过 `<5e-3` |
-| MXFP8 TP1 | `2905` | `0.01051388` | 略高于 `<1e-2` |
-| MXFP8 TP2 + EP2 | `3574` | `0.01048570` | 略高于 `<1e-2` |
-| MXFP8 DP4 + EP4 | `3028` | `0.01057012` | 未通过；重复吞吐约 `3.0–3.8k` |
-| MXFP8 4 个独立 TP1 replica | `3655` | `0.01010610` | 非常接近，但未稳定通过 |
-
-MXFP8 TP1 限制长度时，`max_tokens=256` 为 `2847 tok/s`、
-k3 KL=`0.00990026`；`max_tokens=128` 为 `2760 tok/s`、
-k3 KL=`0.00903105`。但四卡 DP/replica 下缩短长度没有稳定降低 KL，例如
-DP4+EP4 的 max256 k3 KL=`0.01093448`。不同 setting 会 sampled 出不同内容，
-因此不能把长度 sweep 当成同一 token 集上的单调曲线。
-
-当前四卡 RL rollout 推荐 **BF16 TP4 + EP4**。它同时比所有已测四卡 MXFP8
-setting 更快且 KL 更低；在每卡只有约 16 条 active sequence 时，MXFP8 的
-activation quant、scale 处理、MoE routed-row padding 和通信开销没有被足够
-大的 GEMM 摊薄。
-
-推荐启动命令：
-
-```bash
-VLLM_ENABLE_V1_MULTIPROCESSING=0 \
-CUDA_VISIBLE_DEVICES=4,5,6,7 vllm serve \
-  /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
-  --host 127.0.0.1 \
-  --port 8107 \
-  --served-model-name yoco \
-  --trust-remote-code \
-  --tensor-parallel-size 4 \
-  --enable-expert-parallel \
-  --max-model-len 2048 \
-  --max-num-batched-tokens 8192 \
-  --max-num-seqs 64 \
-  --gpu-memory-utilization 0.90 \
-  --moe-backend triton \
-  --enable-chunked-prefill \
-  --kv-sharing-fast-prefill \
-  --no-async-scheduling \
-  --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
-  --compilation-config \
-    '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16,32,64]}'
-```
-
-`rl_rollout.py rollout` 可以重复传入 `--url`，将 prompts round-robin 分给多个
-独立 TP1 server，并按所有 server 的共同 wall time 计算 aggregate throughput。
-
-### 尚未通过的矩阵
-
-- 真实 FA4 chunked prefill：约 4.7K-token 输入按 1024 tokens 分块时，
-  Native -> vLLM mean KL 为 BF16 `0.285164`、MXFP8 `0.0209809`。因此参数可
-  正常运行，KV-sharing 也不会额外破坏结果，但长 prompt 的 matched chunked
-  reference 仍未达到 `< 0.01`。
-- MXFP8 batch 1 mixed5：mean KL `0.0182856`；长 prompt 尚未通过。
-- BF16 batch 1：mean KL `0.00392071`，不是 exact zero。
-
-### Batch invariance
-
-batch 大于 1 时不要求逐元素一致，验收标准是完整词表 aggregate mean KL
-小于 `1e-2`，同时 decoding 不重复、不乱码。Native reference 使用和 vLLM
-scheduler 一致的 `1 + 15` forward shape。
-
-## TODO 与当前对齐程度
-
-- [x] **FA4 matched matrix**
-    - 当前状态：BF16/MXFP8 batch 16、FA4 CUDA Graph decode、TP2/EP2 均通过。
-    - vLLM 和 Native 同时使用 FA4 beta13、CuTeDSL 4.5.1，并固定
-      `num_splits=1`。
-- [x] **RL rollout simulation**
-    - 当前状态：64 prompts、标准 `vllm serve`、sampled logprob、Native FA4
-      teacher forcing 和四卡 TP/DP/replica sweep 已完成。
-    - 四卡推荐 BF16 TP4+EP4：`4014 tok/s`、k3 KL=`0.00418782`。
-      四卡 MXFP8 最接近结果为 4 个 TP1 replica：`3655 tok/s`、
-      k3 KL=`0.01010610`，尚未稳定通过 `<1e-2`。
-- [x] **vLLM backend sweep**
-    - 当前状态：llm-train 固定 FA4，已完成 vLLM FA4/FA2/FlashInfer
-      attention、Triton/DeepGEMM/FlashInfer/CUTLASS/auto MoE probe、max256
-      KL 和 2/4/8/16/32/infinite qps sweep。
-    - 单卡推荐 BF16 FlashInfer attention + Triton MoE；MXFP8 使用 FA4
-      attention + Triton MoE，但 MXFP8 k3 KL=`0.01024826` 仍略高于阈值。
-- [ ] **Batch invariance**
-    - 当前状态：batch 16 已通过。MXFP8 mean KL 为 `0.0000724250`，BF16 为
-      `0.00283000`；MXFP8 batch 1 mixed5 仍为 `0.0182856`。
-    - 下一步：继续降低 scheduler shape 和 packed-row geometry 导致的差异，
-    并验证更多 batch size；所有 Native reference 必须复现 vLLM 的实际
-    forward shape。
-- [ ] **真实 chunked prefill**
-    - 当前状态：FA4 cache-backed Native reference 已确认真实调用 CuTeDSL。
-      约 4.7K-token prompt 按 1024 tokens 切分时 BF16/MXFP8 仍未通过。
-    - 下一步：定位 cache-backed prefill 中 attention 与 MoE shape drift；
-    在通过前，开启 `--enable-chunked-prefill` 不等于真实切分路径已对齐。
-- [ ] **BF16 batch 1 exact**
-    - 当前状态：mean KL 为 `0.00392071`，满足 `< 0.01`，但未达到 exact zero。
-    - 下一步：实现与 Native grouped DeepGEMM BF16 routed MoE 等价的路径。
-- [x] **Docker build/run**
-    - 已构建 `buaahsh/pytorch:26.02-b200-vllm-0725`，镜像约 30.96 GB。
-    - RL/agent mixed-graph 修复发布为
-      `buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph`。
-    - 容器内确认 vLLM `0.1.dev1+gf4964c907.d20260726`、FA4 `4.0.0b13`、
-      CuTeDSL `4.5.1` 和 B200 CUDA 可用；FA4 non-eager vLLM server 成功
-      ready，`FULL_AND_PIECEWISE` 同时捕获 FULL/PIECEWISE graphs，并通过
-      OpenAI chat completion 生成连贯中文输出。
-
-### CUDA Graph 状态
-
-已验收配置：
-
-```json
-{
-  "mode": 0,
-  "cudagraph_mode": "FULL_DECODE_ONLY",
-  "cudagraph_capture_sizes": [1, 2, 4, 8, 16]
-}
-```
-
-RL/agent 持续并发配置：
-
-```json
-{
-  "mode": 3,
-  "backend": "eager",
-  "custom_ops": ["all"],
-  "cudagraph_mode": "FULL_AND_PIECEWISE",
-  "cudagraph_capture_sizes": [1, 2, 4, 8, 16, 32]
-}
-```
-
-FA4 beta13 已确认可用于上述 full CUDA Graph 配置。旧代码中的两层安全
-fallback 会把 YOCO FA4 强制切到 Triton；Triton 在 batch 16 graph capture
-出现 illegal memory，不能用于判断 FA4 是否安全。
-
-## 实现要点
-
-### FlashAttention 4
-
-- FA2/FA3 native extensions 使用提供 CMake targets 的 vLLM FlashAttention
-  commit `bce29425653ec0fbc579d329883030e832d15ada` 构建；
-- PT 26.02 预装的 FA4 `4.0.0b13`
-  (`9bad4bec7326ad28edb5516b8878fd283f8991c0`) 是 Python/CuTeDSL-only
-  package，native build 后复制到 `vllm.vllm_flash_attn.cute` namespace；
-- CuTeDSL 固定为 `4.5.1`，QuACK 固定为 `0.4.1`；
-- YOCO FA4 full graph 不再在 model config 或 attention backend 内切换到
-  Triton；
-- YOCO FA4 固定 `num_splits=1`，与 Native beta13 默认执行形状一致。
-
-### Router
-
-- Router gate 使用 FP32 TF32 GEMM，与 llm-train 一致；
-- TF32 precision 状态切换封装为 `yoco_router_linear_tf32` custom op，避免
-  piecewise TorchDynamo 追踪返回字符串的全局 precision API；
-- routing 使用固定 geometry 的 Native 等价 Triton dense graph：
-  `softmax -> topk -> renorm -> scatter`，不依赖 Inductor autotune cache；
-- routing probabilities 在 W2 activation quantization 前应用。
-
-### RoPE cache
-
-- weight load 后在目标 CUDA device 上预生成 RoPE FP32 cache；
-- 相同 head size、最大长度和 base 的 attention layer 共享同一 cache；
-- 顶层未编译 forward 保留兜底初始化，覆盖 dummy/sharded 等不调用模型
-  `load_weights()` 的 loader，避免 piecewise compile 中修改 module buffer。
-
-### RMSNorm
-
-- residual 和 reduction 使用 FP32；
-- affine weight 按 BF16 operator boundary 读取；
-- token rows 少于 128 时使用 2048 reduction block；
-- token rows 至少 128 时使用 4096 reduction block。
-
-### DeepGEMM
-
-- YOCO 自动启用 psum layout 和 W2 前 routed-row weighting；
-- eager、非 compile 路径使用真实 active expert row count；
-- graph capture 保留静态安全上界。
-- EP 下将非本地 expert 的 inverse permutation 初始化为 `-1`，并在
-  routed-row weight scatter 时检查 row bounds；这修复了 TP2/EP2 profile 的
-  illegal memory 和错误权重写入。
-
-以下旧环境变量不再需要，最终命令不应设置它们：
-
-```text
-VLLM_DEEPGEMM_MOE_PSUM_LAYOUT
-VLLM_DEEPGEMM_MOE_FUSED_ROW_WEIGHTS
-VLLM_YOCO_COMPILED_TOPK_ROUTING
-```
-
-## GPU 转换 checkpoint
-
-从 merged checkpoint 转换：
-
-```bash
-CUDA_VISIBLE_DEVICES=5 .venv/bin/python convert_to_hf.py \
-  --input_dir /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-merged \
-  --output_dir /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
-  --quant_mode mxfp8 \
-  --quant_block_size 128
-```
-
-默认会在 CUDA 上执行 router row-wise L2 normalization，并写入
-`qk_rms_clip`、`qk_rms_limit`、`swiglu_limit` 和 quantization metadata。
-
-## 推荐生产启动命令
-
-### 直接运行当前仓库
-
-```bash
-vllm serve \
-  /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
-  --host 0.0.0.0 \
-  --port 8001 \
-  --served-model-name yoco \
-  --trust-remote-code \
-  --tensor-parallel-size 1 \
-  --max-model-len 8192 \
-  --max-num-batched-tokens 8192 \
-  --max-num-seqs 16 \
-  --gpu-memory-utilization 0.90 \
-  --quantization fp8_per_block \
-  --moe-backend deep_gemm \
-  --reasoning-parser agens \
-  --enable-auto-tool-choice \
-  --tool-call-parser agens \
-  --attention-config '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
-  --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
-```
-
-BF16 使用相同 graph/attention 配置，但去掉 `--quantization`，并改为
-`--moe-backend triton`。
-
-### Agens reasoning 与 tool parser
-
-Agens 模型需要同时启用新增的 reasoning parser 和 tool parser：
-
-```text
---reasoning-parser agens
---enable-auto-tool-choice
---tool-call-parser agens
-```
-
-`agens` reasoning parser 基于 DeepSeek V3 thinking parser，并将 streaming
-reasoning 输出到兼容 CCR 的 `reasoning_content` 字段。`agens` tool parser
-基于 GLM-4.7 parser，会合并同一个 tool-call index 在单个 delta 内拆开的
-function name 和 arguments。
-
-这些 parser 只处理服务层输出，不参与模型 forward、KV cache、sampling 或
-logits 计算，因此不会改变本文件记录的 prefill KL 和 decoding 数值对齐结果。
-
-### YOCO-v2 legacy 0716 镜像
-
-```bash
-docker run --rm \
-  --device nvidia.com/gpu=5 \
-  --ipc=host \
-  --ulimit memlock=-1 \
-  --ulimit stack=67108864 \
-  -p 8001:8001 \
-  -v /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu:/model:ro \
-  buaahsh/pytorch:26.02-b200-vllm-0716 \
-  vllm serve /model \
-    --host 0.0.0.0 \
-    --port 8001 \
-    --served-model-name yoco \
-    --trust-remote-code \
-    --tensor-parallel-size 1 \
-    --max-model-len 8192 \
-    --max-num-batched-tokens 8192 \
-    --max-num-seqs 16 \
-    --gpu-memory-utilization 0.90 \
-    --quantization fp8_per_block \
-    --moe-backend deep_gemm \
-    --reasoning-parser agens \
-    --enable-auto-tool-choice \
-    --tool-call-parser agens \
-    --attention-config \
-      '{"backend":"FLASH_ATTN","flash_attn_version":4}' \
-    --compilation-config \
-      '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}'
-```
-
-## 完整词表 KL 验证
-
-Native MXFP8 必须使用 torch activation quant fallback；训练侧 Triton
-activation quant kernel 在短 prompt 上可能触发 illegal memory。batch 16
-reference 使用 `1 + 15` forward shape：
-
-```bash
-CUDA_VISIBLE_DEVICES=5 .venv/bin/python \
-  tools/yoco_alignment/logprob_kl.py native \
-  --model /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
-  --native-checkpoint /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-merged \
-  --llm-train-dir /workspace/shaohanh/llm-train \
-  --native-quant-mode mxfp8 \
-  --native-quant-block-size 128 \
-  --native-use-torch-fp8-quant \
-  --native-use-cute \
-  --prompt-suite mixed16 \
-  --first-batch-size 1 \
-  --batch-size 15 \
-  --out /tmp/yoco-native-mxfp8-mixed16.pt
-```
-
-非 eager vLLM batch 16：
-
-```bash
-CUDA_VISIBLE_DEVICES=5 .venv/bin/python \
-  tools/yoco_alignment/logprob_kl.py vllm \
-  --model /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
-  --prompt-suite mixed16 \
-  --batch-size 16 \
-  --max-num-seqs 16 \
-  --max-model-len 8192 \
-  --max-num-batched-tokens 8192 \
-  --quantization fp8_per_block \
-  --moe-backend deep_gemm \
-  --attention-backend FLASH_ATTN \
-  --flash-attn-version 4 \
-  --compilation-config-json \
-    '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4,8,16]}' \
-  --out /tmp/yoco-vllm-mxfp8-mixed16.pt
-```
-
-比较：
-
-```bash
-.venv/bin/python tools/yoco_alignment/logprob_kl.py compare \
-  --reference /tmp/yoco-native-mxfp8-mixed16.pt \
-  --candidate /tmp/yoco-vllm-mxfp8-mixed16.pt \
-  --model /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
-  --out-json /tmp/yoco-compare-mxfp8-mixed16.json
-```
-
-`logprob_kl.py` 只检查 next-token 分布；还必须执行至少 8 tokens 的单/多请求
-greedy decoding。
-
-TP2/EP2 验证在 vLLM 命令中追加：
-
-```text
---tensor-parallel-size 2 --enable-expert-parallel
-```
-
-KV-sharing fast prefill 验证追加：
-
-```text
---kv-sharing-fast-prefill
-```
-
-该 FA4 配置的 MXFP8 batch 16 mean KL 为 `0.0000724250`，graph decode
-正常。真实 chunked prefill 尚未通过，不能仅凭
-`--enable-chunked-prefill` 启动成功判定对齐。
-
-## 构建 B200 image
-
-`docker/Dockerfile.b200` clone 固定 vLLM commit，使用 CMake-compatible
-FlashAttention revision 构建 FA2/FA3 native extensions，再从 PT 26.02
-overlay FA4 beta13，并固定 CuTeDSL 4.5.1、QuACK 0.4.1 和当前 YOCO Python
-实现：
-
-```bash
-docker build \
-  -f docker/Dockerfile.b200 \
-  -t buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph \
-  .
-```
-
-该 Dockerfile 保留 `donglixp/pytorch:26.02-b200` 中的 Python、PyTorch 和
-CUDA 环境，只在固定的 vLLM 基线提交上覆盖本次需要的 Python runtime 文件。
-本轮实际构建镜像约 30.96 GB；容器内已确认 B200、FA4 beta13、CuTeDSL
-4.5.1、CUDA Graph 和标准 `vllm serve` 可用。
-
-### 快速迭代
-
-`Dockerfile.b200` 已将耗时的 vLLM 安装放在 Python overlay 之前。同一台机器上
-只修改 overlay 清单内的 Python 文件时，直接重复执行上面的 `docker build`
-会命中 native extension 和依赖安装缓存，只重新执行末尾的 `COPY` 和镜像导出。
-2026-07-16 的 reasoning 修复重建中，所有安装层均为 `CACHED`，没有重新编译
-CUDA/C++；约 154 秒主要消耗在导出 30.9 GB 本地镜像。
-
-开发阶段可以完全跳过 build，将单个改动文件 bind mount 到已有镜像。例如在
-下文“运行发布镜像”的 `docker run` 命令中额外加入：
-
-```bash
--v "$PWD/vllm/entrypoints/openai/chat_completion/protocol.py:/workspace/vllm/vllm/entrypoints/openai/chat_completion/protocol.py:ro" \
--v "$PWD/vllm/parser/agens_parser.py:/workspace/vllm/vllm/parser/agens_parser.py:ro"
-```
-
-容器内使用 editable install，因此重新创建容器后会直接加载挂载的 Python
-文件。不要挂载整个本地 `vllm/` 到 `/workspace/vllm/vllm/`，否则会遮住镜像
-内已经编译好的 `_C*.so` 等 native extension。修改 C++、CUDA、构建依赖或
-Dockerfile 安装步骤时仍必须完整重建。
-
-发布 Python-only 改动时可以让 BuildKit 直接推送，避免先将完整镜像导出到本地
-Docker image store：
-
-```bash
-docker buildx build \
-  --progress=plain \
-  --push \
-  -f docker/Dockerfile.b200 \
-  -t buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph \
-  .
-```
-
-如果需要在不同机器或 CI 之间复用编译缓存，使用支持 registry cache 的
-`docker-container` builder。第一次仍需完整构建，之后可从 Docker Hub 恢复
-缓存：
-
-```bash
-docker buildx create \
-  --name yoco-b200-builder \
-  --driver docker-container \
-  --use
-docker buildx inspect --bootstrap
-
-docker buildx build \
-  --progress=plain \
-  --cache-from type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph-buildcache \
-  --cache-to type=registry,ref=buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph-buildcache,mode=max \
-  --push \
-  -f docker/Dockerfile.b200 \
-  -t buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph \
-  .
-```
-
-进一步降低发布延迟时，可以将固定 commit 的完整编译结果发布为不可变
-`vllm-base` tag，再用只包含 Python `COPY` 的薄 overlay image 作为最终 tag。
-这样 Python-only 发布不会再次经过 vLLM 安装阶段，也不依赖构建机的本地缓存。
-
-## 相关文件
-
-```text
-convert_to_hf.py
-tools/yoco_alignment/logprob_kl.py
-tools/yoco_alignment/rl_rollout.py
-vllm/model_executor/models/yoco.py
-vllm/model_executor/models/config.py
-vllm/model_executor/layers/fused_moe/deep_gemm_utils.py
-vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
-vllm/v1/attention/backends/flash_attn.py
-vllm/entrypoints/openai/chat_completion/protocol.py
-vllm/parser/agens_parser.py
+benchmarks/multi_turn/benchmark_agent_trace.py
 docker/Dockerfile.b200
+docker/Dockerfile.b200.runtime
+tests/model_executor/test_yoco_config.py
+tests/parser/test_agens_parser.py
+tests/v1/worker/test_dp_utils.py
+vllm/entrypoints/openai/chat_completion/serving.py
+vllm/forward_context.py
+vllm/model_executor/models/config.py
+vllm/model_executor/models/yoco.py
+vllm/reasoning/agens_reasoning_parser.py
+vllm/v1/attention/backend.py
+vllm/v1/attention/backends/utils.py
+vllm/v1/worker/dp_utils.py
+vllm/v1/worker/gpu_model_runner.py
 ```
