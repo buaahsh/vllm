@@ -27,6 +27,83 @@ size: 37,667,878,332 bytes
 - YOCO-v2 DP8+EP compile key `be47add45b`；
 - 对应的 Torch AOT/Inductor 和首请求 Triton JIT cache。
 
+## Prefill-only 后十层裁剪
+
+这是最终分支之后的 follow-up 优化，尚未写入上面的最终镜像，避免与已发布
+镜像内容混淆：
+
+```text
+baseline branch: shaohanh/yoco-serving-final-20260730
+baseline commit: c27db1e189973cea3164ba66b1d00359d4122088
+candidate branch: prefill-cut-7-31
+candidate commit: 3b088241b6ad5636ce2b0a046e8d27363108706f
+```
+
+最终分支的普通 fast prefill 已经让后十个 cross layers 中的后九层只处理
+logits token，但第一个 KV-owner cross layer 仍处理完整 prompt。本次改为由
+self block 直接把共享 K/V 写入第一个 cross layer 的 cache，再让十个 cross
+layers 都只处理 logits token。对于只负责传 KV 的 P 请求，十个 cross layers
+全部跳过；D 侧的正常 decode 路径不变。
+
+### P/D token 归属和启用条件
+
+当前约定是 **P token 必须丢弃，D 负责 first token 和之后所有用户可见
+token**：
+
+1. Gateway 向 P 发送原始 prompt，并设置 `max_tokens=1`、
+   `kv_transfer_params.do_remote_decode=true`；
+2. P 为了完成 vLLM 请求仍会产生一个 disposable sampled token，但 Gateway
+   必须丢弃 P response 的整个 `choices`，只取 `kv_transfer_params`；
+3. Gateway 将原始 prompt 和 P 返回的 KV transfer metadata 一起发送给 D；
+4. D 生成第一个以及后续全部用户可见 token。
+
+这不是可选的展示策略，而是本优化的正确性前提。如果 Gateway 拼接或返回
+P token，输出不保证正确，因为 P 的 disposable logits 没有经过 cross
+layers。
+
+裁剪只在以下条件全部满足时启用：
+
+- 模型为 YOCO，并开启 `--kv-sharing-fast-prefill`；
+- `data_parallel_size=1`；
+- 当前 active batch 中每个请求都是尚未产出 token 的 P 请求；
+- 每个请求均为 `max_tokens=1` 且
+  `kv_transfer_params.do_remote_decode=true`。
+
+DP 大于 1、P/D 混合 batch、普通请求或已经开始生成的请求都会保守回退到
+原路径。DP 模式要先补跨 rank 的 P/D role 同步，才能安全省掉后十层中的
+MoE collectives。
+
+### B200 正确性与性能
+
+测试全部在同一台 8×B200 Pod 内完成，本机未运行测试。定向单测覆盖
+`tests/model_executor/test_yoco_conversion.py` 和
+`tests/v1/worker/test_gpu_model_runner.py`，结果为：
+
+```text
+42 passed, 23 warnings in 244.55s
+```
+
+端到端 P/D 正确性覆盖 `1,356 / 12,096 / 43,704` prompt tokens。三个
+case 中，baseline P/D、candidate P/D 和单体 reference 的最终 D 输出均
+exact match。另做了三轮连续 D -> P -> D KV 回传；前一轮 D 输出进入下一轮
+prompt，三轮最终输出也都与单体 reference exact match。
+
+下面是相同 B200 节点、相同 YOCO-v3 模型和服务参数下的 warmed A/B；每个
+实例为 DP1，指标是 P 侧 prompt throughput：
+
+| prompt / concurrency | baseline tok/s | candidate tok/s | 提升 |
+| --- | ---: | ---: | ---: |
+| 1.4K / c1 | `13,558` | `14,884` | `9.8%` |
+| 12.1K / c1 | `40,958` | `43,177` | `5.4%` |
+| 43.7K / c1 | `46,531` | `49,167` | `5.7%` |
+| 12.1K / c4 | `48,601` | `51,006` | `4.9%` |
+| 12.1K / c8 | `47,835` | `50,221` | `5.0%` |
+
+长 prompt 和并发场景稳定提升约 `5%`。原因是 baseline 已经把九个 cross
+layers 压缩到 logits token，本次主要再移除第一个 KV-owner cross layer
+对完整 prompt 的计算，而不是从零裁掉完整十层计算，因此该收益量级符合
+预期。
+
 ## 验证模型
 
 YOCO-v2 agentic serving：
