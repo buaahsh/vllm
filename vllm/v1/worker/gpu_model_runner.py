@@ -1026,6 +1026,48 @@ class GPUModelRunner(
         )
         return model_kwargs
 
+    def _is_yoco_kv_only_prefill_batch(self) -> bool:
+        """Whether this DP1 batch consists only of P-side transfer requests.
+
+        NIXL marks requests sent to a prefiller with ``do_remote_decode``.
+        Their one sampled token is only a completion signal for the proxy, so
+        YOCO can stop once its shared K/V has been populated.  Mixed batches
+        retain the normal path so regular requests still receive exact logits.
+
+        DP needs an additional cross-rank role synchronization before ranks
+        may omit MoE collectives, so keep this first implementation on DP1.
+        """
+        if (
+            self.model_config.hf_config.model_type != "yoco"
+            or not self.cache_config.kv_sharing_fast_prefill
+            or self.parallel_config.data_parallel_size != 1
+        ):
+            return False
+
+        req_ids = self.input_batch.req_ids
+        if not req_ids:
+            return False
+
+        for req_id in req_ids:
+            req_state = self.requests[req_id]
+            sampling_params = req_state.sampling_params
+            if (
+                sampling_params is None
+                or sampling_params.max_tokens != 1
+                or req_state.output_token_ids
+            ):
+                return False
+            extra_args = sampling_params.extra_args
+            transfer_params = (
+                extra_args.get("kv_transfer_params") if extra_args else None
+            )
+            if not isinstance(transfer_params, dict) or not transfer_params.get(
+                "do_remote_decode"
+            ):
+                return False
+
+        return True
+
     def _may_reorder_batch(self, scheduler_output: "SchedulerOutput") -> None:
         """
         Update the order of requests in the batch based on the attention
@@ -3317,6 +3359,7 @@ class GPUModelRunner(
         scheduler_output: "SchedulerOutput",
         num_input_tokens: int,  # Padded
         intermediate_tensors: IntermediateTensors | None = None,
+        yoco_kv_only_prefill: bool = False,
     ) -> tuple[
         torch.Tensor | None,
         torch.Tensor | None,
@@ -3420,6 +3463,9 @@ class GPUModelRunner(
             # ever have a single encoder input.
             encoder_outputs = self._execute_mm_encoder(scheduler_output)
             model_kwargs.update({"encoder_outputs": encoder_outputs})
+
+        if yoco_kv_only_prefill:
+            model_kwargs["kv_only_prefill"] = True
 
         return (
             input_ids,
@@ -4014,6 +4060,7 @@ class GPUModelRunner(
                 scheduler_output,
                 num_scheduled_tokens_np,
             )
+            yoco_kv_only_prefill = self._is_yoco_kv_only_prefill_batch()
             fast_prefill_num_logits = None
             if self.cache_config.kv_sharing_fast_prefill:
                 min_query_len = (
@@ -4051,6 +4098,11 @@ class GPUModelRunner(
                 use_cascade_attn=cascade_attn_prefix_lens is not None,
                 num_encoder_reqs=len(scheduler_output.scheduled_encoder_inputs),
                 fast_prefill_num_logits=fast_prefill_num_logits,
+                # Tiny prefills would otherwise take the ordinary FULL model
+                # graph, which includes the cross layers. They are uncommon
+                # on P nodes, so run them without a graph to preserve the cut.
+                force_eager=yoco_kv_only_prefill
+                and max_num_scheduled_tokens <= 8,
             )
 
             logger.debug(
@@ -4158,7 +4210,10 @@ class GPUModelRunner(
                 model_kwargs,
                 ec_connector_output,
             ) = self._preprocess(
-                scheduler_output, num_tokens_padded, intermediate_tensors
+                scheduler_output,
+                num_tokens_padded,
+                intermediate_tensors,
+                yoco_kv_only_prefill=yoco_kv_only_prefill,
             )
 
         # Set cudagraph mode to none if calc_kv_scales is true.
@@ -7084,6 +7139,16 @@ class GPUModelRunner(
                     self.kv_sharing_fast_prefill_eligible_layers.add(layer_name)
                 else:
                     break
+
+            # YOCO writes the target layer's full shared K/V cache explicitly
+            # before entering its compact cross-decoder block.  Its cache owner
+            # can therefore use the same logits-only metadata as the following
+            # KV-sharing layers, allowing all cross layers to skip prefill-only
+            # token computation.
+            if self.model_config.hf_config.model_type == "yoco":
+                self.kv_sharing_fast_prefill_eligible_layers.update(
+                    self.shared_kv_cache_layers.values()
+                )
 
     def initialize_kv_cache(
         self,

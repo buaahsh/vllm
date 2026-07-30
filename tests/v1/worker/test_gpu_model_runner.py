@@ -302,6 +302,43 @@ def test_sample_tokens_skips_pp_group_lookup_without_async_scheduling(
     assert GPUModelRunner.sample_tokens(runner, None) is None
 
 
+def test_yoco_kv_only_prefill_batch_detection():
+    runner = GPUModelRunner.__new__(GPUModelRunner)
+    runner.model_config = SimpleNamespace(
+        hf_config=SimpleNamespace(model_type="yoco")
+    )
+    runner.cache_config = SimpleNamespace(kv_sharing_fast_prefill=True)
+    runner.parallel_config = SimpleNamespace(data_parallel_size=1)
+    runner.input_batch = SimpleNamespace(req_ids=["prefill"])
+    runner.requests = {
+        "prefill": SimpleNamespace(
+            sampling_params=SamplingParams(
+                max_tokens=1,
+                extra_args={
+                    "kv_transfer_params": {
+                        "do_remote_decode": True,
+                        "do_remote_prefill": False,
+                    }
+                },
+            ),
+            output_token_ids=[],
+        )
+    }
+
+    assert runner._is_yoco_kv_only_prefill_batch()
+
+    runner.requests["prefill"].sampling_params.extra_args[  # type: ignore[index]
+        "kv_transfer_params"
+    ]["do_remote_decode"] = False
+    assert not runner._is_yoco_kv_only_prefill_batch()
+
+    runner.requests["prefill"].sampling_params.extra_args[  # type: ignore[index]
+        "kv_transfer_params"
+    ]["do_remote_decode"] = True
+    runner.parallel_config.data_parallel_size = 2
+    assert not runner._is_yoco_kv_only_prefill_batch()
+
+
 def test_select_common_block_size_no_valid_option():
     backend_a = _make_mock_backend_for_kernel_block_size([64])
     backend_b = _make_mock_backend_for_kernel_block_size([MultipleOf(16)])
