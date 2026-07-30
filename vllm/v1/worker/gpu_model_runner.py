@@ -785,6 +785,7 @@ class GPUModelRunner(
         self.kv_sharing_fast_prefill_logits_indices = None
         self.fast_prefill_num_tokens_padded = 0
         self.fast_prefill_num_tokens_across_dp_cpu: torch.Tensor | None = None
+        self.yoco_kv_only_prefill_across_dp = False
         if self.cache_config.kv_sharing_fast_prefill:
             self.kv_sharing_fast_prefill_logits_indices = torch.zeros(
                 self.max_num_tokens, dtype=torch.int32, device=self.device
@@ -1034,13 +1035,24 @@ class GPUModelRunner(
         YOCO can stop once its shared K/V has been populated.  Mixed batches
         retain the normal path so regular requests still receive exact logits.
 
-        DP needs an additional cross-rank role synchronization before ranks
-        may omit MoE collectives, so keep this first implementation on DP1.
+        On DP>1, the standard ``kv_producer`` role proves that every rank is
+        part of a dedicated prefiller. The per-rank request checks below are
+        additionally synchronized by ``coordinate_batch_across_dp`` before
+        any rank may omit the cross-layer MoE collectives. ``kv_both`` is not
+        sufficient because it can also serve decode or ordinary requests.
         """
+        dp_size = self.parallel_config.data_parallel_size
+        kv_transfer_config = self.vllm_config.kv_transfer_config
         if (
             self.model_config.hf_config.model_type != "yoco"
             or not self.cache_config.kv_sharing_fast_prefill
-            or self.parallel_config.data_parallel_size != 1
+            or (
+                dp_size > 1
+                and (
+                    kv_transfer_config is None
+                    or kv_transfer_config.kv_role != "kv_producer"
+                )
+            )
         ):
             return False
 
@@ -3717,6 +3729,7 @@ class GPUModelRunner(
         force_has_lora: bool | None = None,
         force_num_active_loras: int | None = None,
         num_encoder_reqs: int = 0,
+        yoco_kv_only_prefill: bool = False,
     ) -> tuple[
         CUDAGraphMode,
         BatchDescriptor,
@@ -3791,6 +3804,7 @@ class GPUModelRunner(
                 num_tokens_across_dp,
                 synced_cudagraph_mode,
                 fast_prefill_num_tokens_across_dp,
+                yoco_kv_only_prefill_across_dp,
             ) = (
                 coordinate_batch_across_dp(
                     num_tokens_unpadded=num_tokens,
@@ -3801,12 +3815,16 @@ class GPUModelRunner(
                         fast_prefill_num_tokens_padded
                     ),
                     fast_prefill_active=fast_prefill_active,
+                    yoco_kv_only_prefill=yoco_kv_only_prefill,
                     uniform_decode=uniform_decode,
                     cudagraph_mode=cudagraph_mode.value,
                 )
             )
             self.fast_prefill_num_tokens_across_dp_cpu = (
                 fast_prefill_num_tokens_across_dp
+            )
+            self.yoco_kv_only_prefill_across_dp = (
+                yoco_kv_only_prefill_across_dp
             )
 
             # Extract DP-synced values
@@ -3832,6 +3850,7 @@ class GPUModelRunner(
         else:
             self.fast_prefill_num_tokens_across_dp_cpu = None
             self.fast_prefill_num_tokens_padded = fast_prefill_num_tokens_padded
+            self.yoco_kv_only_prefill_across_dp = yoco_kv_only_prefill
 
         cudagraph_stats = None
         if self.vllm_config.observability_config.cudagraph_metrics:
@@ -4103,7 +4122,9 @@ class GPUModelRunner(
                 # on P nodes, so run them without a graph to preserve the cut.
                 force_eager=yoco_kv_only_prefill
                 and max_num_scheduled_tokens <= 8,
+                yoco_kv_only_prefill=yoco_kv_only_prefill,
             )
+            yoco_kv_only_prefill = self.yoco_kv_only_prefill_across_dp
 
             logger.debug(
                 "Running batch with cudagraph_mode: %s, batch_descriptor: %s, "

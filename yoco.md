@@ -64,23 +64,31 @@ layers。
 裁剪只在以下条件全部满足时启用：
 
 - 模型为 YOCO，并开启 `--kv-sharing-fast-prefill`；
-- `data_parallel_size=1`；
+- `data_parallel_size=1`，或者 DP>1 且服务明确配置为专用 P 节点：
+  `kv_transfer_config.kv_role=kv_producer`；
 - 当前 active batch 中每个请求都是尚未产出 token 的 P 请求；
 - 每个请求均为 `max_tokens=1` 且
   `kv_transfer_params.do_remote_decode=true`。
 
-DP 大于 1、P/D 混合 batch、普通请求或已经开始生成的请求都会保守回退到
-原路径。DP 模式要先补跨 rank 的 P/D role 同步，才能安全省掉后十层中的
-MoE collectives。
+DP>1 时，本地 P-only 判定会打包进已有的 DP coordination all-reduce；只有
+所有 rank 都确认当前 batch 为 P-only，才一起跳过后十层。任一 rank 出现
+普通请求、D 请求或已经开始生成的请求，所有 rank 都保守回退到原路径，
+避免后十层 MoE collective 顺序分叉。`kv_both` 不能证明实例是专用 P 节点，
+所以 DP>1 时仍不启用；P 节点应使用：
+
+```text
+--kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_producer",...}'
+```
 
 ### B200 正确性与性能
 
 测试全部在同一台 8×B200 Pod 内完成，本机未运行测试。定向单测覆盖
-`tests/model_executor/test_yoco_conversion.py` 和
+`tests/model_executor/test_yoco_conversion.py`、
+`tests/v1/worker/test_dp_utils.py` 和
 `tests/v1/worker/test_gpu_model_runner.py`，结果为：
 
 ```text
-42 passed, 23 warnings in 244.55s
+46 passed, 23 warnings in 60.66s
 ```
 
 端到端 P/D 正确性覆盖 `1,356 / 12,096 / 43,704` prompt tokens。三个

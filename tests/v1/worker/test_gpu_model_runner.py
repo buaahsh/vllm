@@ -309,6 +309,9 @@ def test_yoco_kv_only_prefill_batch_detection():
     )
     runner.cache_config = SimpleNamespace(kv_sharing_fast_prefill=True)
     runner.parallel_config = SimpleNamespace(data_parallel_size=1)
+    runner.vllm_config = SimpleNamespace(
+        kv_transfer_config=SimpleNamespace(kv_role="kv_both")
+    )
     runner.input_batch = SimpleNamespace(req_ids=["prefill"])
     runner.requests = {
         "prefill": SimpleNamespace(
@@ -336,6 +339,12 @@ def test_yoco_kv_only_prefill_batch_detection():
         "kv_transfer_params"
     ]["do_remote_decode"] = True
     runner.parallel_config.data_parallel_size = 2
+    assert not runner._is_yoco_kv_only_prefill_batch()
+
+    runner.vllm_config.kv_transfer_config.kv_role = "kv_producer"
+    assert runner._is_yoco_kv_only_prefill_batch()
+
+    runner.vllm_config.kv_transfer_config.kv_role = "kv_consumer"
     assert not runner._is_yoco_kv_only_prefill_batch()
 
 

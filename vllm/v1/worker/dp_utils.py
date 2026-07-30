@@ -16,7 +16,8 @@ logger = init_logger(__name__)
 
 _UBATCH_FLAG = 1
 _FAST_PREFILL_ACTIVE_FLAG = 2
-_FAST_PREFILL_COUNT_SHIFT = 2
+_YOCO_KV_ONLY_PREFILL_FLAG = 4
+_FAST_PREFILL_COUNT_SHIFT = 3
 
 
 def _get_device_and_group(parallel_config: ParallelConfig):
@@ -43,6 +44,7 @@ def _run_ar(
     padded_num_tokens_per_ubatch: int,
     fast_prefill_num_tokens_padded: int,
     fast_prefill_active: bool,
+    yoco_kv_only_prefill: bool,
     cudagraph_mode: int,
     parallel_config: ParallelConfig,
 ) -> torch.Tensor:
@@ -59,6 +61,8 @@ def _run_ar(
         else 0
     ) | (
         _FAST_PREFILL_ACTIVE_FLAG if fast_prefill_active else 0
+    ) | (
+        _YOCO_KV_ONLY_PREFILL_FLAG if yoco_kv_only_prefill else 0
     ) | (
         _UBATCH_FLAG if should_ubatch else 0
     )
@@ -133,15 +137,27 @@ def _post_process_fast_prefill(
     return fast_prefill_num_tokens_across_dp
 
 
+def _post_process_yoco_kv_only_prefill(tensor: torch.Tensor) -> bool:
+    """Only skip YOCO cross layers when every DP rank agrees to do so."""
+    packed = tensor[2, :]
+    return bool(
+        torch.all(
+            (packed & _YOCO_KV_ONLY_PREFILL_FLAG)
+            == _YOCO_KV_ONLY_PREFILL_FLAG
+        ).item()
+    )
+
+
 def _synchronize_dp_ranks(
     num_tokens_unpadded: int,
     num_tokens_padded: int,
     fast_prefill_num_tokens_padded: int,
     fast_prefill_active: bool,
+    yoco_kv_only_prefill: bool,
     should_attempt_ubatching: bool,
     cudagraph_mode: int,
     parallel_config: ParallelConfig,
-) -> tuple[bool, torch.Tensor | None, int, torch.Tensor | None]:
+) -> tuple[bool, torch.Tensor | None, int, torch.Tensor | None, bool]:
     """
     1. Decides if each DP rank is going to microbatch. Either all ranks
     run with microbatching or none of them do.
@@ -171,6 +187,7 @@ def _synchronize_dp_ranks(
         padded_num_tokens_per_ubatch=num_tokens_padded,
         fast_prefill_num_tokens_padded=fast_prefill_num_tokens_padded,
         fast_prefill_active=fast_prefill_active,
+        yoco_kv_only_prefill=yoco_kv_only_prefill,
         cudagraph_mode=cudagraph_mode,
         parallel_config=parallel_config,
     )
@@ -201,12 +218,14 @@ def _synchronize_dp_ranks(
         tensor,
         num_tokens_after_padding,
     )
+    yoco_kv_only_prefill_across_dp = _post_process_yoco_kv_only_prefill(tensor)
 
     return (
         should_ubatch,
         num_tokens_after_padding,
         synced_cudagraph_mode,
         fast_prefill_num_tokens_across_dp,
+        yoco_kv_only_prefill_across_dp,
     )
 
 
@@ -217,9 +236,10 @@ def coordinate_batch_across_dp(
     num_tokens_padded: int | None = None,
     fast_prefill_num_tokens_padded: int | None = None,
     fast_prefill_active: bool = False,
+    yoco_kv_only_prefill: bool = False,
     uniform_decode: bool | None = None,
     cudagraph_mode: int = 0,
-) -> tuple[bool, torch.Tensor | None, int, torch.Tensor | None]:
+) -> tuple[bool, torch.Tensor | None, int, torch.Tensor | None, bool]:
     """
     Coordinates amongst all DP ranks to determine if and how the full batch
     should be split into microbatches.
@@ -247,7 +267,7 @@ def coordinate_batch_across_dp(
     """
     if parallel_config.data_parallel_size == 1:
         # Early exit.
-        return False, None, cudagraph_mode, None
+        return False, None, cudagraph_mode, None, yoco_kv_only_prefill
 
     # If the caller has explicitly enabled microbatching.
     should_attempt_ubatching = False
@@ -270,12 +290,14 @@ def coordinate_batch_across_dp(
         num_tokens_after_padding,
         synced_cudagraph_mode,
         fast_prefill_num_tokens_across_dp,
+        yoco_kv_only_prefill_across_dp,
     ) = (
         _synchronize_dp_ranks(
             num_tokens_unpadded,
             num_tokens_padded,
             fast_prefill_num_tokens_padded,
             fast_prefill_active,
+            yoco_kv_only_prefill,
             should_attempt_ubatching,
             cudagraph_mode,
             parallel_config,
@@ -287,4 +309,5 @@ def coordinate_batch_across_dp(
         num_tokens_after_padding,
         synced_cudagraph_mode,
         fast_prefill_num_tokens_across_dp,
+        yoco_kv_only_prefill_across_dp,
     )
