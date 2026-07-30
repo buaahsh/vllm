@@ -36,7 +36,7 @@ size: 37,667,878,332 bytes
 baseline branch: shaohanh/yoco-serving-final-20260730
 baseline commit: c27db1e189973cea3164ba66b1d00359d4122088
 candidate branch: prefill-cut-7-31
-candidate commit: 3b088241b6ad5636ce2b0a046e8d27363108706f
+candidate feature commit: e9f9fe5c3e48933b12f9eaf57f2cd290b726fabc
 ```
 
 最终分支的普通 fast prefill 已经让后十个 cross layers 中的后九层只处理
@@ -59,7 +59,10 @@ token**：
 
 这不是可选的展示策略，而是本优化的正确性前提。如果 Gateway 拼接或返回
 P token，输出不保证正确，因为 P 的 disposable logits 没有经过 cross
-layers。
+layers。端到端测试中 P 的 HTTP `choices[0].text` 实际为一个空格 token，
+验证器明确没有把它拼入结果；D 独立生成的首 token 及完整输出与 reference
+exact match。因此这里的“丢弃”是 Gateway 丢弃 P 的整个 `choices`，不是要求
+P 的原始 HTTP response 必须为空。
 
 裁剪只在以下条件全部满足时启用：
 
@@ -88,13 +91,30 @@ DP>1 时，本地 P-only 判定会打包进已有的 DP coordination all-reduce�
 `tests/v1/worker/test_gpu_model_runner.py`，结果为：
 
 ```text
-46 passed, 23 warnings in 60.66s
+46 passed, 24 warnings
 ```
 
-端到端 P/D 正确性覆盖 `1,356 / 12,096 / 43,704` prompt tokens。三个
-case 中，baseline P/D、candidate P/D 和单体 reference 的最终 D 输出均
-exact match。另做了三轮连续 D -> P -> D KV 回传；前一轮 D 输出进入下一轮
-prompt，三轮最终输出也都与单体 reference exact match。
+NIXL cross-layer KV alias 专项结果为 `4 passed, 2 skipped`，`ruff check`
+通过。YOCO 会给后十层建立指向同一块物理 cache 的 alias；当前 NIXL worker
+若直接按 alias 名查原始 `KVCacheConfig`，会报
+`KeyError: model.layers.11.self_attn.attn`。本次 baseline/candidate 都叠加了
+相同的 27 行 alias 去重修复后再做 A/B，避免测试条件不一致。该修复是当前
+NIXL 端到端部署的前置条件，不能只部署 `e9f9fe5c3` 而漏掉它。
+
+端到端 P/D 正确性覆盖 `1,356 / 12,096 / 43,704` prompt tokens。warmed
+DP4 的三个 case 中，candidate P/D 最终 D 输出均与单体 reference exact
+match；mixed P-only/普通请求 batch 的 4 个普通请求也全部 exact match，且
+DP collective 无 hang。首次冷态 P/D 请求曾返回一次空串，未计入通过结果；
+生产发布应先完成健康检查和 warm-up，再接收流量。
+
+测试 Pod 为 `bonete01/lidong1-yoco-vllm-pd-0730-master-0`，节点为
+`slc01-cl02-hgx-0448`。原始日志和 JSON 结果位于：
+
+```text
+/mnt/pvc/lidong1/vllm_pd/prefill-cut-dp-validation-20260730-0448/
+```
+
+#### DP1 既有结果
 
 下面是相同 B200 节点、相同 YOCO-v3 模型和服务参数下的 warmed A/B；每个
 实例为 DP1，指标是 P 侧 prompt throughput：
@@ -111,6 +131,47 @@ prompt，三轮最终输出也都与单体 reference exact match。
 layers 压缩到 logits token，本次主要再移除第一个 KV-owner cross layer
 对完整 prompt 的计算，而不是从零裁掉完整十层计算，因此该收益量级符合
 预期。
+
+#### 专用 P 节点 DP4
+
+下表使用 `kv_role=kv_producer`、`gpu-memory-utilization=0.85`，指标为
+warmed P 侧 prompt throughput。baseline 和 candidate 顺序运行在同一 Pod
+的 B200 上：
+
+| prompt / concurrency | baseline tok/s | candidate tok/s | 提升 |
+| --- | ---: | ---: | ---: |
+| 1.4K / c1 | `10,372` | `9,513` | `-8.3%` |
+| 12.1K / c1 | `51,630` | `52,000` | `0.7%` |
+| 43.7K / c1 | `67,019` | `70,111` | `4.6%` |
+| 12.1K / c4 | `107,174` | `112,501` | `5.0%` |
+| 12.1K / c8 | `120,017` | `121,749` | `1.4%` |
+
+短 prompt c1 没有收益；主要收益出现在长 prompt 和 c4。本优化不应宣传成
+所有 shape 都更快。
+
+#### 专用 P 节点 DP8
+
+DP8 使用全部八张 B200、`kv_role=kv_producer` 和相同的 `0.85` 显存比例。
+下表取三轮 warmed throughput 的中位数：
+
+| prompt / concurrency | baseline tok/s | candidate tok/s | 提升 |
+| --- | ---: | ---: | ---: |
+| 1.4K / c1 | `9,609` | `9,977` | `3.8%` |
+| 12.1K / c1 | `48,079` | `49,332` | `2.6%` |
+| 43.7K / c1 | `63,805` | `68,290` | `7.0%` |
+| 12.1K / c4 | `101,215` | `116,401` | `15.0%` |
+| 12.1K / c8 | `131,174` | `139,720` | `6.5%` |
+
+DP8 mixed P-only/普通请求同样为 4/4 exact 且无 hang。c4 的单轮波动很大：
+baseline 为 `34.1K--113.7K`，candidate 为 `56.5K--132.1K tok/s`，所以
+`15.0%` 只是三轮中位数，不应视为稳定 SLA；43.7K c1 和 12.1K c8 的提升
+更有代表性。
+
+另以 DP4 `kv_role=kv_both` 做了保守回退验收：mixed batch 4/4 exact、无
+collective hang；43.7K c1 为 `68,896 tok/s`，接近 baseline 的
+`67,019 tok/s`，没有误走专用 producer 才允许的 KV-only shortcut。结合
+单测对 role 判定和全 rank agreement 的覆盖，P 节点可以安全使用 DP>1，
+但必须明确配置 `kv_producer`；`kv_both` 在 DP>1 会保守回退。
 
 ## 验证模型
 
