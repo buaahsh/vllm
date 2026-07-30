@@ -14,6 +14,10 @@ from vllm.v1.worker.ubatch_utils import (
 
 logger = init_logger(__name__)
 
+_UBATCH_FLAG = 1
+_FAST_PREFILL_ACTIVE_FLAG = 2
+_FAST_PREFILL_COUNT_SHIFT = 2
+
 
 def _get_device_and_group(parallel_config: ParallelConfig):
     # Use the actual device assigned to the DP group, not just the device type
@@ -37,6 +41,8 @@ def _run_ar(
     should_ubatch: bool,
     orig_num_tokens_per_ubatch: int,
     padded_num_tokens_per_ubatch: int,
+    fast_prefill_num_tokens_padded: int,
+    fast_prefill_active: bool,
     cudagraph_mode: int,
     parallel_config: ParallelConfig,
 ) -> torch.Tensor:
@@ -47,7 +53,15 @@ def _run_ar(
     tensor_cpu = torch.zeros(4, dp_size, dtype=torch.int32)
     tensor_cpu[0][dp_rank] = orig_num_tokens_per_ubatch
     tensor_cpu[1][dp_rank] = padded_num_tokens_per_ubatch
-    tensor_cpu[2][dp_rank] = 1 if should_ubatch else 0
+    tensor_cpu[2][dp_rank] = (
+        (fast_prefill_num_tokens_padded << _FAST_PREFILL_COUNT_SHIFT)
+        if fast_prefill_active
+        else 0
+    ) | (
+        _FAST_PREFILL_ACTIVE_FLAG if fast_prefill_active else 0
+    ) | (
+        _UBATCH_FLAG if should_ubatch else 0
+    )
     tensor_cpu[3][dp_rank] = cudagraph_mode
     tensor = tensor_cpu.to(device, non_blocking=True)
     dist.all_reduce(tensor, group=group)
@@ -59,7 +73,9 @@ def _post_process_ubatch(tensor: torch.Tensor, num_ubatches: int) -> bool:
     padded_num_tokens_tensor = tensor[1, :]
 
     # First determine if we are going to be ubatching.
-    should_ubatch: bool = bool(torch.all(tensor[2] == 1).item())
+    should_ubatch: bool = bool(
+        torch.all((tensor[2] & _UBATCH_FLAG) == _UBATCH_FLAG).item()
+    )
     if not should_ubatch:
         return False
     # If the DP ranks are planning to ubatch, make sure that
@@ -98,13 +114,34 @@ def _post_process_cudagraph_mode(tensor: torch.Tensor) -> int:
     return int(tensor[3, :].min().item())
 
 
+def _post_process_fast_prefill(
+    tensor: torch.Tensor,
+    num_tokens_after_padding: torch.Tensor,
+) -> torch.Tensor | None:
+    packed = tensor[2, :].cpu()
+    fast_prefill_active_across_dp = (
+        packed & _FAST_PREFILL_ACTIVE_FLAG
+    ).bool()
+    if not fast_prefill_active_across_dp.any().item():
+        return None
+    fast_prefill_num_tokens_across_dp = (
+        packed >> _FAST_PREFILL_COUNT_SHIFT
+    )
+    fast_prefill_num_tokens_across_dp[~fast_prefill_active_across_dp] = (
+        num_tokens_after_padding[~fast_prefill_active_across_dp]
+    )
+    return fast_prefill_num_tokens_across_dp
+
+
 def _synchronize_dp_ranks(
     num_tokens_unpadded: int,
     num_tokens_padded: int,
+    fast_prefill_num_tokens_padded: int,
+    fast_prefill_active: bool,
     should_attempt_ubatching: bool,
     cudagraph_mode: int,
     parallel_config: ParallelConfig,
-) -> tuple[bool, torch.Tensor | None, int]:
+) -> tuple[bool, torch.Tensor | None, int, torch.Tensor | None]:
     """
     1. Decides if each DP rank is going to microbatch. Either all ranks
     run with microbatching or none of them do.
@@ -132,6 +169,8 @@ def _synchronize_dp_ranks(
         should_ubatch=should_attempt_ubatching,
         orig_num_tokens_per_ubatch=num_tokens_unpadded,
         padded_num_tokens_per_ubatch=num_tokens_padded,
+        fast_prefill_num_tokens_padded=fast_prefill_num_tokens_padded,
+        fast_prefill_active=fast_prefill_active,
         cudagraph_mode=cudagraph_mode,
         parallel_config=parallel_config,
     )
@@ -158,7 +197,17 @@ def _synchronize_dp_ranks(
         should_dp_pad,
     )
 
-    return should_ubatch, num_tokens_after_padding, synced_cudagraph_mode
+    fast_prefill_num_tokens_across_dp = _post_process_fast_prefill(
+        tensor,
+        num_tokens_after_padding,
+    )
+
+    return (
+        should_ubatch,
+        num_tokens_after_padding,
+        synced_cudagraph_mode,
+        fast_prefill_num_tokens_across_dp,
+    )
 
 
 def coordinate_batch_across_dp(
@@ -166,9 +215,11 @@ def coordinate_batch_across_dp(
     allow_microbatching: bool,
     parallel_config: ParallelConfig,
     num_tokens_padded: int | None = None,
+    fast_prefill_num_tokens_padded: int | None = None,
+    fast_prefill_active: bool = False,
     uniform_decode: bool | None = None,
     cudagraph_mode: int = 0,
-) -> tuple[bool, torch.Tensor | None, int]:
+) -> tuple[bool, torch.Tensor | None, int, torch.Tensor | None]:
     """
     Coordinates amongst all DP ranks to determine if and how the full batch
     should be split into microbatches.
@@ -196,7 +247,7 @@ def coordinate_batch_across_dp(
     """
     if parallel_config.data_parallel_size == 1:
         # Early exit.
-        return False, None, cudagraph_mode
+        return False, None, cudagraph_mode, None
 
     # If the caller has explicitly enabled microbatching.
     should_attempt_ubatching = False
@@ -211,15 +262,29 @@ def coordinate_batch_across_dp(
 
     if num_tokens_padded is None:
         num_tokens_padded = num_tokens_unpadded
+    if fast_prefill_num_tokens_padded is None:
+        fast_prefill_num_tokens_padded = num_tokens_padded
 
-    (should_ubatch, num_tokens_after_padding, synced_cudagraph_mode) = (
+    (
+        should_ubatch,
+        num_tokens_after_padding,
+        synced_cudagraph_mode,
+        fast_prefill_num_tokens_across_dp,
+    ) = (
         _synchronize_dp_ranks(
             num_tokens_unpadded,
             num_tokens_padded,
+            fast_prefill_num_tokens_padded,
+            fast_prefill_active,
             should_attempt_ubatching,
             cudagraph_mode,
             parallel_config,
         )
     )
 
-    return (should_ubatch, num_tokens_after_padding, synced_cudagraph_mode)
+    return (
+        should_ubatch,
+        num_tokens_after_padding,
+        synced_cudagraph_mode,
+        fast_prefill_num_tokens_across_dp,
+    )

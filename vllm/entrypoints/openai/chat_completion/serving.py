@@ -269,6 +269,21 @@ class OpenAIServingChat(OpenAIServing):
                 tokenizer,
                 chat_template_kwargs=chat_template_kwargs,  # type: ignore[call-arg]
             )
+            additional_stop_strings = getattr(
+                reasoning_parser, "additional_stop_strings", ()
+            )
+            if additional_stop_strings:
+                request_stop = request.stop
+                if request_stop is None:
+                    merged_stop_strings = []
+                elif isinstance(request_stop, str):
+                    merged_stop_strings = [request_stop]
+                else:
+                    merged_stop_strings = list(request_stop)
+                for stop_string in additional_stop_strings:
+                    if stop_string not in merged_stop_strings:
+                        merged_stop_strings.append(stop_string)
+                request.stop = merged_stop_strings
         result = await self.render_chat_request(request)
         if isinstance(result, ErrorResponse):
             return result

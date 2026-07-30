@@ -1,0 +1,23 @@
+# Fast, reproducible runtime layer over the validated B200 native build.
+# Model-specific compile caches are added after warmup with docker commit.
+FROM buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph
+
+ENV VLLM_TARGET_DEVICE=cuda \
+    VLLM_CACHE_ROOT=/root/.cache/vllm
+
+WORKDIR /workspace/vllm
+
+COPY vllm /workspace/vllm/vllm
+
+RUN python -m py_compile \
+      vllm/model_executor/models/config.py \
+      vllm/model_executor/models/yoco.py \
+      vllm/forward_context.py \
+      vllm/v1/attention/backend.py \
+      vllm/v1/attention/backends/utils.py \
+      vllm/v1/spec_decode/extract_hidden_states.py \
+      vllm/v1/spec_decode/llm_base_proposer.py \
+      vllm/v1/worker/dp_utils.py \
+      vllm/v1/worker/gpu_model_runner.py \
+      vllm/entrypoints/openai/chat_completion/serving.py \
+      vllm/reasoning/agens_reasoning_parser.py

@@ -56,12 +56,12 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from vllm.compilation.decorators import support_torch_compile
-from vllm.config import CacheConfig, VllmConfig
+from vllm.config import CUDAGraphMode, CacheConfig, VllmConfig
 from vllm.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
 )
-from vllm.forward_context import get_forward_context
+from vllm.forward_context import DPMetadata, get_forward_context
 from vllm.model_executor.layers.activation import SiluAndMul
 from vllm.model_executor.layers.attention.attention import Attention, AttentionType
 from vllm.model_executor.layers.fused_moe import FusedMoE
@@ -1472,7 +1472,6 @@ class YOCOSelfBlock(nn.Module):
         "intermediate_tensors": 0,
         "inputs_embeds": 0,
     },
-    enable_if=lambda vllm_config: not vllm_config.cache_config.kv_sharing_fast_prefill,
 )
 class YOCOModel(nn.Module):
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = "") -> None:
@@ -1592,6 +1591,7 @@ class YOCOModel(nn.Module):
                     cross_layers=kv_sharing_cross_layers,
                     first_cross_layer_idx=self.first_cross_layer_idx + 1,
                 )
+            self.full_model_warmed = False
 
             # Static input buffers for the cross block's CUDA graph.  vLLM runs
             # with cudagraph_copy_inputs=False, so cross-block inputs must have
@@ -1616,6 +1616,7 @@ class YOCOModel(nn.Module):
         else:
             self.self_block = None
             self.cross_block = None
+            self.full_model_warmed = True
 
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states"], self.hidden_size
@@ -1792,10 +1793,10 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
 
         The self portion and the cross portion run as two separately-compiled
         ``@support_torch_compile`` units (``self_block`` / ``cross_block``).
-        The cross block is *always* executed — during cudagraph warmup and
-        dummy/profile runs (when no fast-prefill metadata is available) it
-        falls back to ALL tokens — so its CUDA graph is captured during warmup
-        instead of (illegally) capturing at inference time."""
+        The first eager profile run compiles the ordinary full model before
+        CUDA graph capture, then piecewise profiling compiles both split
+        blocks. Uniform FULL decode reuses the ordinary model path; prefill
+        uses the split blocks."""
         model = self.model
 
         # No dedicated fast-prefill blocks (e.g. a single cross layer): fall
@@ -1808,6 +1809,51 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
                 inputs_embeds=inputs_embeds,
             )
 
+        # Decode-token indices. Piecewise profile/warmup runs without fast
+        # metadata fall back to all tokens so both split blocks are compiled.
+        (
+            logits_indices_padded,
+            num_logits_indices,
+            fast_prefill_num_tokens_across_dp_cpu,
+        ) = self._get_fast_prefill_indices()
+        fwd_ctx = get_forward_context()
+        global_fast_prefill = logits_indices_padded is not None
+        if (
+            not global_fast_prefill
+            and fwd_ctx.dp_metadata is not None
+            and fast_prefill_num_tokens_across_dp_cpu is not None
+        ):
+            global_fast_prefill = not torch.equal(
+                fast_prefill_num_tokens_across_dp_cpu,
+                fwd_ctx.dp_metadata.num_tokens_across_dp_cpu,
+            )
+
+        if (
+            not global_fast_prefill
+            and fwd_ctx.cudagraph_runtime_mode == CUDAGraphMode.NONE
+            and not model.full_model_warmed
+        ):
+            model(
+                input_ids=input_ids,
+                positions=positions,
+                inputs_embeds=inputs_embeds,
+            )
+            model.full_model_warmed = True
+
+        if (
+            not global_fast_prefill
+            and fwd_ctx.cudagraph_runtime_mode == CUDAGraphMode.FULL
+        ):
+            assert model.full_model_warmed, (
+                "YOCO full model must be compiled during eager profiling "
+                "before CUDA graph capture."
+            )
+            return model(
+                input_ids=input_ids,
+                positions=positions,
+                inputs_embeds=inputs_embeds,
+            )
+
         # Self portion on ALL tokens (separate piecewise CUDA graph).  Also
         # produces the shared KV (yoco_key / yoco_value) and writes layer
         # ``first_cross_layer_idx``'s shared KV cache.
@@ -1817,10 +1863,6 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
             inputs_embeds,
         )
 
-        # Decode-token indices.  When no fast-prefill metadata is available
-        # (cudagraph capture / dummy / profile runs) fall back to ALL tokens so
-        # the cross block is always invoked (and thus captured during warmup).
-        logits_indices_padded, num_logits_indices = self._get_fast_prefill_indices()
         if logits_indices_padded is None:
             logits_indices_padded = torch.arange(
                 positions.size(0),
@@ -1840,12 +1882,23 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         model.fp_yoco_key[:n].copy_(yoco_key[logits_indices_padded])
         model.fp_yoco_value[:n].copy_(yoco_value[logits_indices_padded])
 
-        decode_hidden = model.cross_block(
-            model.fp_positions[:n],
-            model.fp_hidden_states[:n],
-            model.fp_yoco_key[:n],
-            model.fp_yoco_value[:n],
-        )
+        original_dp_metadata = fwd_ctx.dp_metadata
+        if (
+            original_dp_metadata is not None
+            and fast_prefill_num_tokens_across_dp_cpu is not None
+        ):
+            fwd_ctx.dp_metadata = DPMetadata(
+                fast_prefill_num_tokens_across_dp_cpu
+            )
+        try:
+            decode_hidden = model.cross_block(
+                model.fp_positions[:n],
+                model.fp_hidden_states[:n],
+                model.fp_yoco_key[:n],
+                model.fp_yoco_value[:n],
+            )
+        finally:
+            fwd_ctx.dp_metadata = original_dp_metadata
 
         # Merge cross-decoder outputs back into the full hidden states.
         if num_logits_indices is not None:
@@ -1859,24 +1912,31 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
 
     def _get_fast_prefill_indices(
         self,
-    ) -> tuple[torch.Tensor | None, int | None]:
+    ) -> tuple[torch.Tensor | None, int | None, torch.Tensor | None]:
         """Retrieve logits_indices from forward context attention metadata."""
         fwd_ctx = get_forward_context()
         attn_metadata = fwd_ctx.attn_metadata
+        fast_prefill_num_tokens_across_dp_cpu = (
+            fwd_ctx.fast_prefill_num_tokens_across_dp_cpu
+        )
         if attn_metadata is None:
-            return None, None
+            return None, None, fast_prefill_num_tokens_across_dp_cpu
         if not isinstance(attn_metadata, dict):
-            return None, None
+            return None, None, fast_prefill_num_tokens_across_dp_cpu
         # Find a KV-sharing layer's metadata to get logits_indices.
         # Use the last layer's attention (which is a fast prefill layer).
         last_layer = self.model.layers[-1]
         layer_name = last_layer.self_attn.attn.layer_name
         layer_meta = attn_metadata.get(layer_name)
         if layer_meta is None:
-            return None, None
+            return None, None, fast_prefill_num_tokens_across_dp_cpu
         if isinstance(layer_meta, KVSharingFastPrefillMetadata):
-            return layer_meta.logits_indices_padded, layer_meta.num_logits_indices
-        return None, None
+            return (
+                layer_meta.logits_indices_padded,
+                layer_meta.num_logits_indices,
+                fast_prefill_num_tokens_across_dp_cpu,
+            )
+        return None, None, fast_prefill_num_tokens_across_dp_cpu
 
     def compute_logits(
         self,

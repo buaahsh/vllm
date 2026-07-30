@@ -33,7 +33,8 @@ COPY requirements/cuda.txt /workspace/vllm/requirements/cuda.txt
 # preserved. This is the required first step before pip install.
 RUN python use_existing_torch.py
 
-RUN python -m pip install --no-cache-dir "setuptools-scm==10.2.0" \
+RUN python -m pip install --no-cache-dir \
+        "packaging==25.0" "setuptools-scm==10.2.0" \
     && python -m pip install --no-cache-dir -e . --no-build-isolation \
     && python -m pip check \
     && python -c "import vllm.version; print(vllm.version.__version__)" \
@@ -81,12 +82,28 @@ COPY vllm/model_executor/models/deepseek_v2_utils.py \
     /workspace/vllm/vllm/model_executor/models/deepseek_v2_utils.py
 COPY vllm/model_executor/models/yoco.py \
     /workspace/vllm/vllm/model_executor/models/yoco.py
+COPY vllm/forward_context.py \
+    /workspace/vllm/vllm/forward_context.py
 COPY vllm/model_executor/layers/fused_moe/deep_gemm_utils.py \
     /workspace/vllm/vllm/model_executor/layers/fused_moe/deep_gemm_utils.py
 COPY vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py \
     /workspace/vllm/vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
+COPY vllm/model_executor/layers/fused_moe/configs/E=128,N=320,device_name=NVIDIA_B200.json \
+    /workspace/vllm/vllm/model_executor/layers/fused_moe/configs/E=128,N=320,device_name=NVIDIA_B200.json
+COPY vllm/v1/attention/backend.py \
+    /workspace/vllm/vllm/v1/attention/backend.py
+COPY vllm/v1/attention/backends/utils.py \
+    /workspace/vllm/vllm/v1/attention/backends/utils.py
 COPY vllm/v1/attention/backends/flash_attn.py \
     /workspace/vllm/vllm/v1/attention/backends/flash_attn.py
+COPY vllm/v1/spec_decode/extract_hidden_states.py \
+    /workspace/vllm/vllm/v1/spec_decode/extract_hidden_states.py
+COPY vllm/v1/spec_decode/llm_base_proposer.py \
+    /workspace/vllm/vllm/v1/spec_decode/llm_base_proposer.py
+COPY vllm/v1/worker/dp_utils.py \
+    /workspace/vllm/vllm/v1/worker/dp_utils.py
+COPY vllm/v1/worker/gpu_model_runner.py \
+    /workspace/vllm/vllm/v1/worker/gpu_model_runner.py
 COPY vllm/entrypoints/openai/chat_completion/protocol.py \
     /workspace/vllm/vllm/entrypoints/openai/chat_completion/protocol.py
 COPY vllm/entrypoints/openai/chat_completion/batch_serving.py \

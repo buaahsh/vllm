@@ -9,11 +9,17 @@ import time
 from contextlib import nullcontext
 from datetime import datetime
 from itertools import product
+from pathlib import Path
 from typing import Any, TypedDict
 
-import ray
 import torch
-from ray.experimental.tqdm_ray import tqdm
+
+try:
+    import ray
+    from ray.experimental.tqdm_ray import tqdm
+except ModuleNotFoundError:
+    ray = None
+    from tqdm import tqdm
 
 from vllm.model_executor.layers.fused_moe import fused_topk
 from vllm.model_executor.layers.fused_moe.activation import MoEActivation
@@ -408,6 +414,70 @@ def get_configs_compute_bound(use_fp16, block_quant_shape) -> list[dict[str, int
     return configs
 
 
+def get_neighbor_tuning_space(
+    num_experts: int,
+    shard_intermediate_size: int,
+    dtype_str: str | None,
+    block_quant_shape: list[int] | None,
+    *,
+    num_neighbors: int,
+) -> list[dict[str, int]]:
+    """Seed a compact tuning space from nearby checked-in GPU configs."""
+    target_n = shard_intermediate_size // 2
+    target_filename = get_config_file_name(
+        num_experts,
+        target_n,
+        dtype_str,
+        block_quant_shape,
+    )
+    target_suffix = target_filename.split(",device_name=", 1)[1]
+    config_dir = (
+        Path(__file__).resolve().parents[2]
+        / "vllm/model_executor/layers/fused_moe/configs"
+    )
+
+    neighbors: list[tuple[int, Path]] = []
+    prefix = f"E={num_experts},N="
+    for path in config_dir.iterdir():
+        name = path.name
+        if (
+            not name.startswith(prefix)
+            or ",device_name=" not in name
+            or name.split(",device_name=", 1)[1] != target_suffix
+        ):
+            continue
+        try:
+            candidate_n = int(name[len(prefix) :].split(",", 1)[0])
+        except ValueError:
+            continue
+        neighbors.append((abs(candidate_n - target_n), path))
+
+    neighbors.sort(key=lambda item: item[0])
+    selected = neighbors[:num_neighbors]
+    if not selected:
+        raise ValueError(
+            "No neighboring MoE configs found for "
+            f"{target_filename}; use exhaustive tuning instead."
+        )
+
+    unique_configs: dict[str, dict[str, int]] = {}
+    for _, path in selected:
+        with path.open() as config_file:
+            configs = json.load(config_file)
+        for batch_size, config in configs.items():
+            if batch_size == "triton_version":
+                continue
+            key = json.dumps(config, sort_keys=True)
+            unique_configs[key] = config
+
+    print(
+        "Using "
+        f"{len(unique_configs)} unique configs from neighboring files: "
+        + ", ".join(path.name for _, path in selected)
+    )
+    return list(unique_configs.values())
+
+
 def prune_rocm_search_space(
     num_tokens, shard_intermediate_size, hidden_size, search_space, is_fp16, topk
 ):
@@ -519,7 +589,6 @@ def merge_unique_dicts(list1, list2):
     return result
 
 
-@ray.remote(num_gpus=1)
 class BenchmarkWorker:
     def __init__(self, seed: int) -> None:
         torch.set_default_device("cuda")
@@ -528,7 +597,7 @@ class BenchmarkWorker:
         # Get the device ID to allocate tensors and kernels
         # on the respective GPU. This is required for Ray to work
         # correctly with multi-GPU tuning on the ROCm platform.
-        self.device_id = int(ray.get_gpu_ids()[0])
+        self.device_id = int(ray.get_gpu_ids()[0]) if ray is not None else 0
 
     def benchmark(
         self,
@@ -805,6 +874,11 @@ def get_model_params(config):
         topk = config.thinker_config.text_config.num_experts_per_tok
         intermediate_size = config.thinker_config.text_config.moe_intermediate_size
         hidden_size = config.thinker_config.text_config.hidden_size
+    elif architecture == "YOCOForCausalLM":
+        E = config.moe_expert_num
+        topk = config.moe_top_k
+        intermediate_size = config.moe_ffn_dim
+        hidden_size = config.hidden_size
     elif architecture == "PixtralForConditionalGeneration":
         # Pixtral can contain different LLM architectures,
         # recurse to get their parameters
@@ -938,20 +1012,29 @@ def main(args: argparse.Namespace):
         os.environ["ROCR_VISIBLE_DEVICES"] = val
         del os.environ["HIP_VISIBLE_DEVICES"]
 
-    ray.init()
-    num_gpus = int(ray.available_resources()["GPU"])
-    workers = [BenchmarkWorker.remote(args.seed) for _ in range(num_gpus)]
+    if ray is None:
+        worker = BenchmarkWorker(args.seed)
 
-    def _distribute(method: str, inputs: list[Any]) -> list[Any]:
-        outputs = []
-        worker_idx = 0
-        for input_args in inputs:
-            worker = workers[worker_idx]
+        def _distribute(method: str, inputs: list[Any]) -> list[Any]:
             worker_method = getattr(worker, method)
-            output = worker_method.remote(*input_args)
-            outputs.append(output)
-            worker_idx = (worker_idx + 1) % num_gpus
-        return ray.get(outputs)
+            return [worker_method(*input_args) for input_args in inputs]
+
+    else:
+        remote_worker_cls = ray.remote(num_gpus=1)(BenchmarkWorker)
+        ray.init()
+        num_gpus = int(ray.available_resources()["GPU"])
+        workers = [remote_worker_cls.remote(args.seed) for _ in range(num_gpus)]
+
+        def _distribute(method: str, inputs: list[Any]) -> list[Any]:
+            outputs = []
+            worker_idx = 0
+            for input_args in inputs:
+                worker = workers[worker_idx]
+                worker_method = getattr(worker, method)
+                output = worker_method.remote(*input_args)
+                outputs.append(output)
+                worker_idx = (worker_idx + 1) % num_gpus
+            return ray.get(outputs)
 
     if args.tune:
         # int4_w4a16 weights are uint8-packed, not fp16; treat like fp8 for
@@ -962,7 +1045,25 @@ def main(args: argparse.Namespace):
         # of group_size. Skip block_quant_shape filtering to keep the full
         # search space (e.g. BLOCK_SIZE_K=64 with group_size=128).
         tune_block_quant_shape = None if use_int4_w4a16 else block_quant_shape
-        search_space = get_configs_compute_bound(is_fp16, tune_block_quant_shape)
+        if args.tune_neighbor_configs:
+            dtype_str = _get_config_dtype_str(
+                dtype,
+                use_int8_w8a16=use_int8_w8a16,
+                use_fp8_w8a8=use_fp8_w8a8,
+                use_int4_w4a16=use_int4_w4a16,
+            )
+            search_space = get_neighbor_tuning_space(
+                E,
+                shard_intermediate_size,
+                dtype_str,
+                block_quant_shape,
+                num_neighbors=args.tune_neighbor_count,
+            )
+        else:
+            search_space = get_configs_compute_bound(
+                is_fp16,
+                tune_block_quant_shape,
+            )
         if use_int4_w4a16:
             # SPLIT_K is a required kernel constexpr for gptq_awq kernel;
             # only SPLIT_K=1 is used at runtime, so fix it during tuning.
@@ -1061,6 +1162,17 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--batch-size", type=int, nargs="+", required=False)
     parser.add_argument("--tune", action="store_true")
+    parser.add_argument(
+        "--tune-neighbor-configs",
+        action="store_true",
+        help="Tune a compact search space seeded from nearby checked-in configs.",
+    )
+    parser.add_argument(
+        "--tune-neighbor-count",
+        type=int,
+        default=3,
+        help="Number of neighboring config files used to seed compact tuning.",
+    )
     parser.add_argument("--trust-remote-code", action="store_true")
     parser.add_argument("--model-prefix", type=str, required=False)
     args = parser.parse_args()

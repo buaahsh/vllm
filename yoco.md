@@ -59,6 +59,261 @@ vLLM backend。每次实验前必须先固定并记录以下因素：
 
 ## 当前结论
 
+### 最终 clean serving 闭环
+
+最终自包含镜像：
+
+```text
+buaahsh/pytorch:26.02-b200-vllm-yoco-v2-v3-0729-final
+sha256:bff890479962a9267862f3903113239f48ac9de982d184239de0a41d17f1b0e6
+37,667,878,332 bytes
+```
+
+该镜像基于一次性完整 Python package overlay，不需要任何 vLLM 源码 bind
+mount；只挂载只读模型目录。镜像同时包含：
+
+- YOCO-v2 DP4 compile key `1a1773b3c5`；
+- YOCO-v3 DP4 compile key `b9be5626e8`；
+- YOCO-v2 DP8+EP compile key `be47add45b`；
+- 对应的 Torch AOT/Inductor 和首请求 Triton JIT cache。
+
+宿主入口统一使用 `/workspace/shaohanh/vllm_serve_clean.sh`。脚本会识别
+`YOCOForCausalLM`，自动启用 FlashInfer attention、Triton MoE、prefix
+cache、chunked prefill、KV-sharing fast prefill、8192 batched tokens、
+32 sequences 和非 eager `FULL_AND_PIECEWISE` CUDA Graph。YOCO-v3 默认
+设置 `enable_thinking=false`，避免短 generation budget 被长 reasoning
+耗尽；需要 thinking 时可显式覆盖 `DEFAULT_CHAT_TEMPLATE_KWARGS`。
+
+YOCO-v2 DP4：
+
+```bash
+GPU_IDS=0,1,6,7 PORT=8001 MAX_MODEL_LEN=81920 \
+  /workspace/shaohanh/vllm_serve_clean.sh \
+  /mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf \
+  4
+```
+
+YOCO-v3 DP4：
+
+```bash
+GPU_IDS=0,1,6,7 PORT=8001 MAX_MODEL_LEN=81920 \
+  /workspace/shaohanh/vllm_serve_clean.sh \
+  /mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf \
+  4
+```
+
+DP8+EP 在健康的 NVIDIA container runtime 上使用：
+
+```bash
+GPU_IDS=0,1,2,3,4,5,6,7 PORT=8001 MAX_MODEL_LEN=81920 \
+GPU_MEMORY_UTILIZATION=0.68 \
+  /workspace/shaohanh/vllm_serve_clean.sh \
+  /mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf \
+  8 --enable-expert-parallel
+```
+
+当前节点的 NVIDIA container hook 只暴露了 GPU 0、1、6、7 的
+`/proc/driver/nvidia/gpus` 条目，直接请求八卡会在容器创建阶段报缺少
+GPU2 PCI 路径；但八个 `/dev/nvidia*`、CUDA 和 NVML 都正常。使用等价的
+`runc` device/driver-library 映射后，DP8+EP 成功启动。这是宿主 runtime
+元数据问题，不是 vLLM、模型或镜像问题。
+
+DP8 验收结果：
+
+- 非 eager `FULL_AND_PIECEWISE`，capture sizes `1,2,4,8,16,32`；
+- FlashInfer attention、Triton MoE、chunked prefill、fast prefill 和 EP
+  同时开启；
+- 78,001-token prompt + 16-token decode 总耗时 `3.329s`；
+- 八张 B200 峰值 SM utilization 均为 `98-99%`；
+- GPU5 包含外部约 44GB 占用时峰值 `168,889 MiB`，仍低于 183GB；
+- 日志无 eager fallback，长上下文请求后中文对话仍正常。
+
+compile cache 只消除源码/config hash 对应的 Torch 编译，CUDA Graph
+对象仍需每个服务进程重新 capture。最终镜像实测：
+
+| 模型 | graph compile | graph capture | ready 时间 |
+| --- | ---: | ---: | ---: |
+| v2 DP4，无新 cache | `67.8s` | `6s` | 约 `5.3 min` |
+| v2 DP4，baked cache | `10.5s` | `6s` | 约 `4.7 min` |
+| v3 DP4，无新 cache | 约 `125s` | `5s` | 约 `249s` |
+| v3 DP4，baked cache | `14.9s` | `5s` | 约 `221s` |
+
+剩余启动时间主要来自权重读取、KV memory profile、模型 warmup 和
+FlashInfer/Triton 初始化，而不是 CUDA Graph capture。
+
+Agens 服务层另有两个必要修复：
+
+- tokenizer 中 `<|end|>` 不是 special token，因此 reasoning parser 声明
+  它为额外 stop string，chat serving 自动合并到请求 `stop`；
+- v3 默认关闭 thinking，但用户传入的 chat-template kwargs 保持最高优先级。
+
+最终 v3 中文直答以 `<|end|>` 正常停止、不返回 stop marker、无 reasoning
+泄漏；`get_weather({"city":"Seattle"})` tool call 能被正确解析。
+
+### Qwen 速度差距与实际 FLOPs
+
+YOCO 参数更少不代表每个 token 的 active compute 更少。按 checkpoint
+tensor shape 和真实 forward 循环计数：
+
+| 指标 | YOCO-30B-A3B | Qwen3.5-35B-A3B | YOCO / Qwen |
+| --- | ---: | ---: | ---: |
+| 总参数 | `32.2207B` | `35.9518B` | `0.896x` |
+| decode projection + MoE GEMM | `11.943 GF/token` | `4.873 GF/token` | `2.451x` |
+| 2K context core compute | `13.117 GF/token` | `5.321 GF/token` | `2.465x` |
+| 40K context core compute | `25.554 GF/token` | `11.539 GF/token` | `2.214x` |
+| 80K context core compute | `38.661 GF/token` | `18.093 GF/token` | `2.137x` |
+
+主要原因不是一个单独的坏 kernel：
+
+- YOCO 10 个 self layers 运行 `universal_loop=3`，再运行 10 个 cross
+  layers，总计 40 次 block execution；
+- hidden size 为 3072，Qwen 为 2048；
+- YOCO routed top-8 expert intermediate 为 1280，Qwen 为 512；
+- differential attention 将 Q heads 翻倍；
+- 10 个 cross-attention layer 的 decode work 随上下文增长。
+
+因此普通长上下文 decode 中 YOCO 实测慢约 1.5 倍是合理的：它实际执行
+约 2.1-2.5 倍核心计算，而不是因为参数量较少就应更快。fast prefill
+跳过重复 self-decoder 后，80K 理论 active compute 变为 YOCO
+`11.16 GF/token`、Qwen `11.54 GF/token`。最终同镜像、同代码、同后端
+测试中 YOCO wall time 为 Qwen 的 `1.28-1.30x`；这部分差距同时包含
+YOCO 更高的 decode active FLOPs 和 fast-prefill split path 的执行效率。
+
+已确认的剩余效率损失包括：
+
+- 40 层串行 launch 和较小 GEMM 难以占满 B200；
+- lambda/shared-gate、RMSClip、RoPE、differential combine 和 FP32
+  residual 等非 GEMM kernel；
+- routed/shared expert 分开的 collective；
+- tiny-token cross-decoder MoE；
+- 当前 fast-prefill split path 的额外调度和 metadata 成本。
+
+新增的 B200 Triton MoE 配置
+`E=128,N=320,device_name=NVIDIA_B200.json` 已使 decode batch 8-128 的
+MoE microbenchmark 提升约 `9-16%`。继续优化应集中在上述 fast-prefill
+执行效率，而不是假设 YOCO 与 Qwen 的 FLOPs 相同。
+
+### DP fast-prefill 与 CUDA Graph 回归修复
+
+DP fast-prefill 不能由各 rank 独立决定执行路径。任一 rank 有长 prefill
+时，所有 rank 必须统一进入 split self/cross path；否则 Naive DP+EP MoE
+collective 的 token vector 会分叉并 hang。
+
+最终 DP coordination 仍保持四行 collective，将 metadata 打包到原 flag
+row：
+
+- bit 0：ubatch；
+- bit 1：fast-prefill active；
+- bit 2 起：fast-prefill padded token count。
+
+inactive rank 在其他 rank 开启 fast prefill 时使用主 batch padded count；
+所有 rank 都是普通 decode 时返回 `None`，完全跳过 fast metadata 传播，
+继续使用普通 FULL model graph。DP4 c32 的 local batch 8 也已加入 FULL
+graph capture；原来未捕获时出现的 718s/87.9ms ITL eager fallback 已消失。
+
+最终 YOCO-v2 DP4 40-turn、80K trace：
+
+| concurrency | wall | computed prefill | generation | TTFT p50 | ITL p50 | waiting max | KV max |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 8 | `109.665s` | `5,275 tok/s` | `584 tok/s` | `323ms` | `11.73ms` | `0` | `0.57%` |
+| 16 | `123.290s` | `8,646 tok/s` | `1,038 tok/s` | `441ms` | `12.97ms` | `0` | `1.24%` |
+| 32 | `152.651s` | `14,939 tok/s` | `1,677 tok/s` | `629ms` | `15.59ms` | `5` | `2.70%` |
+
+Qwen3.5-35B-A3B 使用同一个 final image、同一 vLLM commit、BF16、
+FlashInfer attention、Triton MoE、DP4、相同 GPU 和相同 trace。分项结果：
+
+| c | wall Q/Y | prefill service tok/s Q/Y | decode service tok/s Q/Y | TTFT p50 Q/Y | ITL p50 Q/Y | avg SM Q/Y |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 8 | `85.59 / 109.66s` | `11,576 / 8,649` | `107.16 / 84.24` | `275 / 323ms` | `9.08 / 11.73ms` | `81.2 / 80.5%` |
+| 16 | `94.53 / 123.29s` | `9,684 / 7,038` | `99.29 / 74.17` | `360 / 441ms` | `9.91 / 12.97ms` | `83.4 / 81.3%` |
+| 32 | `119.42 / 152.65s` | `10,093 / 5,242` | `77.20 / 62.35` | `345 / 629ms` | `12.29 / 15.59ms` | `87.1 / 82.7%` |
+
+其中 `Q/Y` 分别表示 Qwen/YOCO。YOCO 相对 Qwen：
+
+- wall time 慢 `28.1% / 30.4% / 27.8%`；
+- normalized prefill service throughput 为 Qwen 的
+  `74.7% / 72.7% / 51.9%`；
+- normalized decode service throughput 为 Qwen 的
+  `78.6% / 74.7% / 80.8%`。
+
+c32 时 Qwen 平均 SM utilization 约 `87%`，YOCO 约 `83%`，同时 YOCO
+prefill service efficiency 明显下降；这是 fast-prefill split path、
+40 层串行执行和 tiny cross-decoder MoE 仍有优化空间的直接证据。decode
+差距则在三档都稳定约 `19-25%`，与 YOCO 更高 active FLOPs 一致，不是
+eager fallback。Qwen 当前还缺少 `E=256,N=128` 的 B200 Triton MoE tuned
+config，日志使用 default config；补齐后 Qwen 上限可能进一步提高。
+
+### Torch profiler：架构 FLOPs 与实现损失
+
+最终用同一个 clean image、同一代码和同一 DP4 后端做了短 trace profiler：
+8 个 trajectories、2 turns、每轮平均 4K prefill + 200 decode，合计
+3,200 个生成 token。torch profiler 会放大绝对 wall time，因此这里只用它
+分析比例和 kernel 结构；正式吞吐仍以上面的 40-turn 数据为准。
+
+| profiled c8 | Qwen | YOCO | YOCO / Qwen |
+| --- | ---: | ---: | ---: |
+| wall | `6.314s` | `9.035s` | `1.431x` |
+| prefill service throughput | `6,195 tok/s` | `5,370 tok/s` | `0.867x` |
+| decode service throughput | `96.58 tok/s` | `75.47 tok/s` | `0.781x` |
+
+代表性 DP rank 1 的 decode kernel trace：
+
+| 指标 | Qwen | YOCO | YOCO / Qwen |
+| --- | ---: | ---: | ---: |
+| kernel launches / scheduler step | `1,547` | `1,859` | `1.202x` |
+| summed kernel time | `3,793.7ms` | `3,920.8ms` | `1.034x` |
+| union GPU busy time | `3,382.8ms` | `3,872.2ms` | `1.145x` |
+| 被 overlap 隐藏的 kernel time | `410.9ms` (`10.8%`) | `48.7ms` (`1.2%`) | - |
+
+`summed kernel time` 会重复计算并发 stream；`union GPU busy time` 将重叠区间
+只计算一次。YOCO 的 kernel 总工作时间只多约 3%，但 launch 数多 20%，而
+Qwen 能把约 11% kernel time 隐藏在通信/计算 overlap 中，YOCO 基本串行，
+所以实际 GPU busy time 多约 15%。这部分是实现效率差距，不是模型 FLOPs。
+
+同一 rank 的 decode kernel 分类如下，时间为 raw summed CUDA time：
+
+| kernel 类别 | Qwen | YOCO |
+| --- | ---: | ---: |
+| EP collective | `1,280.4ms` (`33.8%`) | `630.0ms` (`16.1%`) |
+| routed MoE expert GEMM | `521.0ms` (`13.7%`) | `748.4ms` (`19.1%`) |
+| dense/small GEMM | `853.5ms` (`22.5%`) | `972.9ms` (`24.8%`) |
+| router / TopK / scatter | `263.0ms` (`6.9%`) | `448.7ms` (`11.4%`) |
+| model-specific attention/mixer/norm | `170.7ms` (`4.5%`) | `430.1ms` (`11.0%`) |
+| generic elementwise/norm/copy | `680.5ms` (`17.9%`) | `690.0ms` (`17.6%`) |
+
+其中 model-specific 类别对 Qwen 统计 GDN + FMHA，对 YOCO 统计
+self/cross attention + RMSClip + gate/differential combine。去掉 collective
+和通用 elementwise 后，MoE、GEMM、router、attention 等主要计算热点合计
+为 Qwen `1,808ms`、YOCO `2,600ms`，YOCO 为 `1.44x`。这与前面的 active
+FLOPs 结论一致：YOCO 的主要 decode 差距确实来自更多有效计算，不是一个
+异常慢 kernel。
+
+prefill profile 则显示另一类问题。代表性 rank 的 raw CUDA time 中，
+collective 占 `48.3%`，MoE 占 `21.9%`；YOCO rank 0 的首个 4,224-token
+prefill range 为 `2.144s`，而其他 rank 同步处理 8,192 tokens 时约
+`0.81s`。较少 token 的 rank 反而更慢，说明它在 global fast-prefill split
+path 中等待其他 rank/collective，而不是受本 rank FLOPs 限制。这与 c32
+prefill service throughput 仅为 Qwen `51.9%` 的现象一致。
+
+因此后续优化优先级已经明确：
+
+1. 合并 RMSNorm/RMSClip、gate、differential combine、router TopK/scatter
+   等小 kernel，减少 40 层串行 launch；
+2. 让 NaiveDPEP AllGather/ReduceScatter 与 expert/shared compute overlap，
+   避免当前接近全串行的 YOCO decode；
+3. 改善 DP fast-prefill 的 chunk packing 和 rank 均衡，减少 split
+   self/cross 阶段的 collective 等待；
+4. 继续调优 tiny-token cross-decoder MoE，但不能把 top-8、N=320 和
+   self/cross attention 的架构计算误判为单纯 kernel 回归。
+
+profiler 原始结果保存在
+`/workspace/shaohanh/kernel-profiles/{qwen,yoco}/`。两边均为非 eager
+`FULL_AND_PIECEWISE`，日志没有 eager fallback。
+
+三组 workload 分别严格生成 64K、128K、256K tokens，Qwen 与 YOCO 的
+output token 数和 prompt schedule 完全相同。c32 无 graph/eager fallback，
+queue 和 KV 均健康。
+
 ### YOCO-v3/L3 28k：64-query RL rollout
 
 vLLM 已同时支持旧 YOCO-v2 和新 YOCO-v3。v3 新增语义包括：

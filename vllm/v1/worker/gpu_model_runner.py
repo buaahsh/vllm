@@ -783,6 +783,8 @@ class GPUModelRunner(
         self.kv_sharing_fast_prefill_eligible_layers: set[str] = set()
 
         self.kv_sharing_fast_prefill_logits_indices = None
+        self.fast_prefill_num_tokens_padded = 0
+        self.fast_prefill_num_tokens_across_dp_cpu: torch.Tensor | None = None
         if self.cache_config.kv_sharing_fast_prefill:
             self.kv_sharing_fast_prefill_logits_indices = torch.zeros(
                 self.max_num_tokens, dtype=torch.int32, device=self.device
@@ -2253,11 +2255,27 @@ class GPUModelRunner(
                 :num_reqs_padded
             ]
 
-        if logits_indices is not None and self.cache_config.kv_sharing_fast_prefill:
-            cm_base.num_logits_indices = logits_indices.size(0)
-            cm_base.logits_indices_padded = self._prepare_kv_sharing_fast_prefill(
-                logits_indices
+        if self.cache_config.kv_sharing_fast_prefill:
+            min_query_len = (
+                8 if self.model_config.hf_config.model_type == "yoco" else 0
             )
+            use_fast_prefill = (
+                logits_indices is not None and max_query_len > min_query_len
+            )
+            if use_fast_prefill:
+                assert logits_indices is not None
+                cm_base.num_logits_indices = logits_indices.size(0)
+                cm_base.logits_indices_padded = (
+                    self._prepare_kv_sharing_fast_prefill(
+                        logits_indices,
+                        self.fast_prefill_num_tokens_padded,
+                    )
+                )
+
+            if self.parallel_config.data_parallel_size > 1:
+                cm_base.fast_prefill_num_tokens_across_dp_cpu = (
+                    self.fast_prefill_num_tokens_across_dp_cpu
+                )
 
         # Cache attention metadata builds across hybrid KV-cache groups
         # The only thing that changes between different hybrid KV-cache groups when the
@@ -2729,6 +2747,7 @@ class GPUModelRunner(
     def _prepare_kv_sharing_fast_prefill(
         self,
         logits_indices: torch.Tensor,
+        num_logits_padded: int,
     ) -> torch.Tensor:
         assert self.kv_sharing_fast_prefill_logits_indices is not None
         num_logits = logits_indices.shape[0]
@@ -2741,10 +2760,8 @@ class GPUModelRunner(
         # scalar GPU-side to avoid a D2H sync on `.item()`.
         self.kv_sharing_fast_prefill_logits_indices[num_logits:] = logits_indices[-1]
         # Dispatch for the decoder portion of the model.
-        _, batch_desc = self.cudagraph_dispatcher.dispatch(
-            num_logits, invalid_modes={CUDAGraphMode.FULL}
-        )
-        num_logits_padded = batch_desc.num_tokens
+        assert num_logits_padded >= num_logits
+
         logits_indices_padded = self.kv_sharing_fast_prefill_logits_indices[
             :num_logits_padded
         ]
@@ -3647,6 +3664,7 @@ class GPUModelRunner(
         use_cascade_attn: bool,
         allow_microbatching: bool = True,
         force_eager: bool = False,
+        fast_prefill_num_logits: int | None = None,
         # For cudagraph capture TODO(lucas): Refactor how we capture cudagraphs (will
         # be improved in model runner v2)
         force_uniform_decode: bool | None = None,
@@ -3697,6 +3715,17 @@ class GPUModelRunner(
             num_tokens_padded, disable_full=use_cascade_attn or has_encoder_output
         )
         num_tokens_padded = batch_descriptor.num_tokens
+        fast_prefill_num_tokens_padded = num_tokens_padded
+        fast_prefill_active = fast_prefill_num_logits is not None
+        if fast_prefill_active:
+            assert fast_prefill_num_logits is not None
+            _, fast_prefill_batch_descriptor = dispatch_cudagraph(
+                fast_prefill_num_logits,
+                disable_full=True,
+            )
+            fast_prefill_num_tokens_padded = (
+                fast_prefill_batch_descriptor.num_tokens
+            )
         if self.compilation_config.pass_config.enable_sp:
             assert (
                 batch_descriptor.num_tokens
@@ -3711,15 +3740,27 @@ class GPUModelRunner(
         # across ranks
         should_ubatch, num_tokens_across_dp = False, None
         if self.vllm_config.parallel_config.data_parallel_size > 1:
-            should_ubatch, num_tokens_across_dp, synced_cudagraph_mode = (
+            (
+                should_ubatch,
+                num_tokens_across_dp,
+                synced_cudagraph_mode,
+                fast_prefill_num_tokens_across_dp,
+            ) = (
                 coordinate_batch_across_dp(
                     num_tokens_unpadded=num_tokens,
                     parallel_config=self.parallel_config,
                     allow_microbatching=allow_microbatching,
                     num_tokens_padded=num_tokens_padded,
+                    fast_prefill_num_tokens_padded=(
+                        fast_prefill_num_tokens_padded
+                    ),
+                    fast_prefill_active=fast_prefill_active,
                     uniform_decode=uniform_decode,
                     cudagraph_mode=cudagraph_mode.value,
                 )
+            )
+            self.fast_prefill_num_tokens_across_dp_cpu = (
+                fast_prefill_num_tokens_across_dp
             )
 
             # Extract DP-synced values
@@ -3734,6 +3775,17 @@ class GPUModelRunner(
                 # Assert to make sure the agreed upon token count is correct otherwise
                 # num_tokens_across_dp will no-longer be valid
                 assert batch_descriptor.num_tokens == num_tokens_padded
+            if fast_prefill_num_tokens_across_dp is None:
+                self.fast_prefill_num_tokens_padded = num_tokens_padded
+            else:
+                self.fast_prefill_num_tokens_padded = int(
+                    fast_prefill_num_tokens_across_dp[
+                        self.parallel_config.data_parallel_rank
+                    ].item()
+                )
+        else:
+            self.fast_prefill_num_tokens_across_dp_cpu = None
+            self.fast_prefill_num_tokens_padded = fast_prefill_num_tokens_padded
 
         cudagraph_stats = None
         if self.vllm_config.observability_config.cudagraph_metrics:
@@ -3962,6 +4014,18 @@ class GPUModelRunner(
                 scheduler_output,
                 num_scheduled_tokens_np,
             )
+            fast_prefill_num_logits = None
+            if self.cache_config.kv_sharing_fast_prefill:
+                min_query_len = (
+                    8
+                    if self.model_config.hf_config.model_type == "yoco"
+                    else 0
+                )
+                if (
+                    logits_indices is not None
+                    and max_num_scheduled_tokens > min_query_len
+                ):
+                    fast_prefill_num_logits = logits_indices.size(0)
 
             cascade_attn_prefix_lens = None
             # Disable cascade attention when using microbatching (DBO)
@@ -3986,6 +4050,7 @@ class GPUModelRunner(
                 max_num_scheduled_tokens=max_num_scheduled_tokens,
                 use_cascade_attn=cascade_attn_prefix_lens is not None,
                 num_encoder_reqs=len(scheduler_output.scheduled_encoder_inputs),
+                fast_prefill_num_logits=fast_prefill_num_logits,
             )
 
             logger.debug(
@@ -4122,6 +4187,9 @@ class GPUModelRunner(
                 self.vllm_config,
                 num_tokens=num_tokens_padded,
                 num_tokens_across_dp=num_tokens_across_dp,
+                fast_prefill_num_tokens_across_dp_cpu=(
+                    self.fast_prefill_num_tokens_across_dp_cpu
+                ),
                 cudagraph_runtime_mode=cudagraph_mode,
                 batch_descriptor=batch_desc,
                 ubatch_slices=ubatch_slices_padded,
@@ -5688,6 +5756,9 @@ class GPUModelRunner(
                     self.vllm_config,
                     num_tokens=num_tokens_padded,
                     num_tokens_across_dp=num_tokens_across_dp,
+                    fast_prefill_num_tokens_across_dp_cpu=(
+                        self.fast_prefill_num_tokens_across_dp_cpu
+                    ),
                     cudagraph_runtime_mode=cudagraph_runtime_mode,
                     batch_descriptor=batch_desc,
                     ubatch_slices=ubatch_slices_padded,

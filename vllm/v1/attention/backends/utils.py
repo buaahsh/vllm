@@ -729,6 +729,7 @@ def subclass_attention_metadata(
 class KVSharingFastPrefillMetadata(Protocol):
     logits_indices_padded: torch.Tensor | None = None
     num_logits_indices: int | None = None
+    fast_prefill_num_tokens_across_dp_cpu: torch.Tensor | None = None
 
 
 def create_fast_prefill_custom_backend(
@@ -745,7 +746,10 @@ def create_fast_prefill_custom_backend(
             common_attn_metadata: CommonAttentionMetadata,
             fast_build: bool = False,
         ) -> AttentionMetadata:
-            use_fast_prefill = common_attn_metadata.max_query_len > min_query_len
+            use_fast_prefill = (
+                common_attn_metadata.max_query_len > min_query_len
+                and common_attn_metadata.logits_indices_padded is not None
+            )
             new_common_attn_metadata = (
                 make_kv_sharing_fast_prefill_common_attn_metadata(
                     common_attn_metadata
@@ -775,6 +779,9 @@ def create_fast_prefill_custom_backend(
                         common_attn_metadata.num_logits_indices
                         if use_fast_prefill
                         else None
+                    )
+                    self.fast_prefill_num_tokens_across_dp_cpu = (
+                        common_attn_metadata.fast_prefill_num_tokens_across_dp_cpu
                     )
 
             return KVSharingFastPrefillAttentionMetadata(metadata, common_attn_metadata)

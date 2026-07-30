@@ -93,6 +93,10 @@ def test_non_streaming_chat_uses_reasoning_content():
     assert result.reasoning_content == "thinking"
 
 
+def test_agens_reasoning_parser_declares_text_end_marker():
+    assert AgensReasoningParser.additional_stop_strings == ("<|end|>",)
+
+
 def test_responses_emits_compound_reasoning_and_tool_delta():
     processor = SimpleStreamingEventProcessor()
     delta = DeltaMessage(

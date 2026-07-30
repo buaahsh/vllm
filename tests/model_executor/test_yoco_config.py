@@ -15,6 +15,8 @@ def _make_vllm_config(
     backend: AttentionBackendEnum | None = None,
     flash_attn_version: int | None = 4,
     kv_sharing_fast_prefill: bool = True,
+    moe_backend: str = "auto",
+    data_parallel_size: int = 1,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         compilation_config=SimpleNamespace(
@@ -22,12 +24,44 @@ def _make_vllm_config(
             cudagraph_capture_sizes=cudagraph_capture_sizes,
             fast_moe_cold_start=True,
         ),
+        kernel_config=SimpleNamespace(moe_backend=moe_backend),
+        parallel_config=SimpleNamespace(data_parallel_size=data_parallel_size),
         attention_config=SimpleNamespace(
             backend=backend,
             flash_attn_version=flash_attn_version,
         ),
         cache_config=SimpleNamespace(kv_sharing_fast_prefill=kv_sharing_fast_prefill),
     )
+
+
+def test_yoco_defaults_to_triton_moe() -> None:
+    vllm_config = _make_vllm_config(cudagraph_mode=CUDAGraphMode.FULL)
+
+    YOCOForCausalLMConfig.verify_and_update_config(vllm_config)
+
+    assert vllm_config.kernel_config.moe_backend == "triton"
+
+
+def test_yoco_preserves_explicit_moe_backend() -> None:
+    vllm_config = _make_vllm_config(
+        cudagraph_mode=CUDAGraphMode.FULL,
+        moe_backend="flashinfer_cutlass",
+    )
+
+    YOCOForCausalLMConfig.verify_and_update_config(vllm_config)
+
+    assert vllm_config.kernel_config.moe_backend == "flashinfer_cutlass"
+
+
+def test_yoco_dp_preserves_kv_sharing_fast_prefill() -> None:
+    vllm_config = _make_vllm_config(
+        cudagraph_mode=CUDAGraphMode.FULL,
+        data_parallel_size=4,
+    )
+
+    YOCOForCausalLMConfig.verify_and_update_config(vllm_config)
+
+    assert vllm_config.cache_config.kv_sharing_fast_prefill
 
 
 def test_yoco_fa4_full_cudagraph_keeps_flash_attention() -> None:
@@ -108,7 +142,14 @@ def test_yoco_triton_full_cudagraph_disables_kv_sharing() -> None:
     YOCOForCausalLMConfig.verify_and_update_config(vllm_config)
 
     assert vllm_config.attention_config.backend == AttentionBackendEnum.TRITON_ATTN
-    assert vllm_config.compilation_config.cudagraph_capture_sizes == [1, 2, 4]
+    assert vllm_config.compilation_config.cudagraph_capture_sizes == [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+    ]
     assert not vllm_config.cache_config.kv_sharing_fast_prefill
 
 

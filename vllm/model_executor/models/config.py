@@ -51,6 +51,15 @@ class Ernie4_5_VLMoeForConditionalGenerationConfig(VerifyAndUpdateConfig):
 class YOCOForCausalLMConfig(VerifyAndUpdateConfig):
     @staticmethod
     def verify_and_update_config(vllm_config: "VllmConfig") -> None:
+        if vllm_config.kernel_config.moe_backend == "auto":
+            vllm_config.kernel_config.moe_backend = "triton"
+            logger.info(
+                "Using the Triton MoE backend for YOCO. FlashInfer TRTLLM "
+                "can produce incorrect output for YOCO expert shapes."
+            )
+
+        cache_config = vllm_config.cache_config
+
         # YOCO runs the same MoE module multiple times per forward pass
         # (universal_loop=3 over the first 10 layers re-uses each MoE block
         # 3 times), so the fast_moe_cold_start path that indexes a static
@@ -82,17 +91,24 @@ class YOCOForCausalLMConfig(VerifyAndUpdateConfig):
             return
 
         if compilation_config.cudagraph_capture_sizes is None:
-            compilation_config.cudagraph_capture_sizes = [1, 2, 4]
-            logger.warning(
-                "Limiting YOCO full CUDA graph capture sizes to [1, 2, 4]. "
-                "Larger request batches will use eager fallback."
+            compilation_config.cudagraph_capture_sizes = [
+                1,
+                2,
+                4,
+                8,
+                16,
+                32,
+            ]
+            logger.info(
+                "Capturing YOCO full CUDA graphs through batch size 32 to "
+                "avoid eager decode fallback under agent/RL concurrency."
             )
 
         if (
             backend == AttentionBackendEnum.TRITON_ATTN
-            and vllm_config.cache_config.kv_sharing_fast_prefill
+            and cache_config.kv_sharing_fast_prefill
         ):
-            vllm_config.cache_config.kv_sharing_fast_prefill = False
+            cache_config.kv_sharing_fast_prefill = False
             logger.warning(
                 "Disabling YOCO KV-sharing fast prefill because it is not "
                 "compatible with TRITON_ATTN full CUDA graph capture."
