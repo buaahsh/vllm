@@ -37,6 +37,7 @@ baseline branch: shaohanh/yoco-serving-final-20260730
 baseline commit: c27db1e189973cea3164ba66b1d00359d4122088
 candidate branch: prefill-cut-7-31
 candidate feature commit: e9f9fe5c3e48933b12f9eaf57f2cd290b726fabc
+static producer commit: 339409f00
 ```
 
 最终分支的普通 fast prefill 已经让后十个 cross layers 中的后九层只处理
@@ -64,20 +65,30 @@ layers。端到端测试中 P 的 HTTP `choices[0].text` 实际为一个空格 t
 exact match。因此这里的“丢弃”是 Gateway 丢弃 P 的整个 `choices`，不是要求
 P 的原始 HTTP response 必须为空。
 
-裁剪只在以下条件全部满足时启用：
+专用 P 服务使用静态角色判断，以下条件是部署契约：
 
 - 模型为 YOCO，并开启 `--kv-sharing-fast-prefill`；
-- `data_parallel_size=1`，或者 DP>1 且服务明确配置为专用 P 节点：
-  `kv_transfer_config.kv_role=kv_producer`；
-- 当前 active batch 中每个请求都是尚未产出 token 的 P 请求；
-- 每个请求均为 `max_tokens=1` 且
-  `kv_transfer_params.do_remote_decode=true`。
+- P 服务明确配置 `kv_transfer_config.kv_role=kv_producer`；
+- 该服务只接收 P 请求；请求必须为 `max_tokens=1` 且
+  `kv_transfer_params.do_remote_decode=true`；
+- D 是独立的 `kv_consumer` 服务，负责 first token 和之后全部用户可见 token。
 
-DP>1 时，本地 P-only 判定会打包进已有的 DP coordination all-reduce；只有
-所有 rank 都确认当前 batch 为 P-only，才一起跳过后十层。任一 rank 出现
-普通请求、D 请求或已经开始生成的请求，所有 rank 都保守回退到原路径，
-避免后十层 MoE collective 顺序分叉。`kv_both` 不能证明实例是专用 P 节点，
-所以 DP>1 时仍不启用；P 节点应使用：
+`kv_producer` 会让每个 DP rank 无条件走 KV-only 路径，不再逐 step 检查请求
+metadata，也不再把 YOCO P-only flag 打包到 DP coordination all-reduce。这样
+避免了原实现额外的 GPU-to-CPU `.item()` 同步。代价是这个角色变成硬约束：
+一旦普通请求或 D 请求误入 producer，其 logits 不保证正确，代码不会动态
+回退。
+
+`vllm/v1/worker/dp_utils.py` 仍然负责通用的 DP padding、CUDA Graph mode 和
+fast-prefill token 数协调，不能整体删除；本次只从中删除 YOCO 的逐 step
+一致性检查。DP>1 的空闲 rank 还会执行 runtime dummy forward，以参与 active
+rank 的 MoE collective。这个 dummy 必须同样带 `kv_only_prefill=true`，否则
+空闲 rank 会执行完整 cross layers、active rank 会跳过，二者 collective 次数
+不同而 hang。启动期 profiling、compile 和 CUDA Graph capture 的 dummy 不受
+影响。
+
+`kv_both` 不能证明实例是专用 P 节点。为了兼容旧用法，它只在 DP1 保留
+request-level 检查；DP>1 下会保守回退。专用 P 节点应使用：
 
 ```text
 --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_producer",...}'
@@ -91,7 +102,7 @@ DP>1 时，本地 P-only 判定会打包进已有的 DP coordination all-reduce�
 `tests/v1/worker/test_gpu_model_runner.py`，结果为：
 
 ```text
-46 passed, 24 warnings
+46 passed, 23 warnings
 ```
 
 NIXL cross-layer KV alias 专项结果为 `4 passed, 2 skipped`，`ruff check`
@@ -103,9 +114,9 @@ NIXL 端到端部署的前置条件，不能只部署 `e9f9fe5c3` 而漏掉它�
 
 端到端 P/D 正确性覆盖 `1,356 / 12,096 / 43,704` prompt tokens。warmed
 DP4 的三个 case 中，candidate P/D 最终 D 输出均与单体 reference exact
-match；mixed P-only/普通请求 batch 的 4 个普通请求也全部 exact match，且
-DP collective 无 hang。首次冷态 P/D 请求曾返回一次空串，未计入通过结果；
-生产发布应先完成健康检查和 warm-up，再接收流量。
+match；P response 被完整丢弃，first token 确认由 D 生成。另连续执行十个
+独立 P 请求，全部完成且无 DP collective hang。静态 producer 不支持混入
+普通请求；生产发布还应先完成健康检查和 warm-up，再接收流量。
 
 测试 Pod 为 `bonete01/lidong1-yoco-vllm-pd-0730-master-0`，节点为
 `slc01-cl02-hgx-0448`。原始日志和 JSON 结果位于：
@@ -113,6 +124,7 @@ DP collective 无 hang。首次冷态 P/D 请求曾返回一次空串，未计�
 ```text
 /mnt/pvc/lidong1/vllm_pd/prefill-cut-dp-validation-20260730-0448/
 /mnt/pvc/lidong1/vllm_pd/prefill-cut-short-retest-20260731-0448/
+/mnt/pvc/lidong1/vllm_pd/prefill-cut-static-producer-20260731-0448/
 ```
 
 #### DP1 既有结果
@@ -136,54 +148,39 @@ layers 压缩到 logits token，本次主要再移除第一个 KV-owner cross la
 #### 专用 P 节点 DP4
 
 下表使用 `kv_role=kv_producer`、`gpu-memory-utilization=0.85`，指标为
-warmed P 侧 prompt throughput。复测时 baseline 和 candidate 同时驻留在
-同一台 8×B200 Pod，分别使用 GPU 0--3 和 4--7；请求按 A/B、B/A 顺序交替，
-下表取五轮中位数。1.4K c1 每轮使用 50 个请求，以降低单请求噪声：
+warmed P 侧 prompt throughput。baseline 和 candidate 同时驻留在同一台
+8×B200 Pod，每个方向交替执行五轮；随后交换 GPU 0--3 和 4--7，再完整执行
+五轮。下表合并两个 GPU 方向共十轮后取中位数。1.4K c1 每轮使用 50 个
+请求，以降低单请求噪声：
 
 | prompt / concurrency | baseline tok/s | candidate tok/s | 提升 |
 | --- | ---: | ---: | ---: |
-| 1.4K / c1 | `11,192` | `11,020` | `-1.5%` |
-| 12.1K / c1 | `51,404` | `50,919` | `-0.9%` |
-| 43.7K / c1 | `65,859` | `68,129` | `3.4%` |
-| 12.1K / c4 | `102,534` | `100,231` | `-2.2%` |
-| 12.1K / c8 | `110,765` | `117,883` | `6.4%` |
+| 1.4K / c1 | `10,673` | `12,775` | `19.7%` |
+| 12.1K / c1 | `50,338` | `56,295` | `11.8%` |
+| 43.7K / c1 | `65,359` | `72,342` | `10.7%` |
+| 12.1K / c4 | `107,302` | `111,121` | `3.6%` |
+| 12.1K / c8 | `121,994` | `129,402` | `6.1%` |
 
-原先短 prompt c1 的 `-8.3%` 主要是抖动/JIT 长尾；复测第一轮 candidate
-仍出现一次 `1.719s` 长尾，导致该轮只有 `7,199 tok/s`，之后四轮稳定在
-`11,009--11,065 tok/s`。去掉长尾后，短 c1 仍约慢 `1%--1.5%`：其
-baseline/candidate 中位 latency 分别约为 `122.8ms` 和 `124.2ms`。这说明
-短请求的固定调度、HTTP、DP/NIXL 协调和直接写 KV 开销足以抵消少量计算
-节省；真正计算占比高的 43.7K c1 和高并发 c8 才有稳定收益。本优化不应
-宣传成所有 shape 都更快。
+三个 c1 shape 在两个 GPU 方向分别提升 `19.5%/20.2%`、
+`11.5%/12.3%` 和 `11.4%/11.2%`，交换 GPU 后结果仍一致，收益可信。短
+prompt 的相对收益最大，是因为静态 producer 除了跳过 cross layers，还删除
+了动态版本每 step 的额外 `.item()` host sync；这个固定同步成本在短请求中
+占比更高。baseline 和 candidate 的 HTTP、DP 调度、NIXL 与 KV 写入条件完全
+相同。
 
-首次访问新的 prompt/batch shape 还可能分别触发 Triton/JIT/shape warm-up：
-本次 12.1K c1 出现 `0.75--0.78s` 单请求长尾，c4 首轮最大 latency 为
-`3.54s`。生产 warm-up 必须覆盖实际使用的 prompt 长度和并发 shape，不能
-只依赖一次健康检查请求。
+c4 在两个 GPU 方向分别为 `-2.8%` 和 `+10.2%`，c8 分别为 `+2.4%` 和
+`+8.3%`。这些 shape 已接近系统吞吐饱和，调度和 batch 组合噪声明显；合并
+中位数可作为容量参考，但不应把某一个方向的数字当稳定 SLA。生产 warm-up
+仍必须覆盖实际使用的 prompt 长度和并发 shape，不能只依赖一次健康检查
+请求。
 
-#### 专用 P 节点 DP8
+#### DP8 说明
 
-DP8 使用全部八张 B200、`kv_role=kv_producer` 和相同的 `0.85` 显存比例。
-下表取三轮 warmed throughput 的中位数：
-
-| prompt / concurrency | baseline tok/s | candidate tok/s | 提升 |
-| --- | ---: | ---: | ---: |
-| 1.4K / c1 | `9,609` | `9,977` | `3.8%` |
-| 12.1K / c1 | `48,079` | `49,332` | `2.6%` |
-| 43.7K / c1 | `63,805` | `68,290` | `7.0%` |
-| 12.1K / c4 | `101,215` | `116,401` | `15.0%` |
-| 12.1K / c8 | `131,174` | `139,720` | `6.5%` |
-
-DP8 mixed P-only/普通请求同样为 4/4 exact 且无 hang。c4 的单轮波动很大：
-baseline 为 `34.1K--113.7K`，candidate 为 `56.5K--132.1K tok/s`，所以
-`15.0%` 只是三轮中位数，不应视为稳定 SLA；43.7K c1 和 12.1K c8 的提升
-更有代表性。
-
-另以 DP4 `kv_role=kv_both` 做了保守回退验收：mixed batch 4/4 exact、无
-collective hang；43.7K c1 为 `68,896 tok/s`，接近 baseline 的
-`67,019 tok/s`，没有误走专用 producer 才允许的 KV-only shortcut。结合
-单测对 role 判定和全 rank agreement 的覆盖，P 节点可以安全使用 DP>1，
-但必须明确配置 `kv_producer`；`kv_both` 在 DP>1 会保守回退。
+此前记录的 DP8 数字来自带逐 step all-rank agreement 的旧实现，不再作为
+当前静态 producer 的性能结果。静态判断支持任意 DP>1，但所有 rank 必须
+属于同一个专用 `kv_producer` 服务，且 runtime dummy 也必须走 KV-only。
+本次最终 A/B 使用 DP4，是为了在同一台 8×B200 上同时放置 baseline 和
+candidate 并做双向 GPU 交换；没有把旧 DP8 数据混入新表。
 
 ## 验证模型
 
