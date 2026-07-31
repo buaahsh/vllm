@@ -56,7 +56,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from vllm.compilation.decorators import support_torch_compile
-from vllm.config import CUDAGraphMode, CacheConfig, VllmConfig
+from vllm.config import CacheConfig, CUDAGraphMode, VllmConfig
 from vllm.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
@@ -173,63 +173,160 @@ if HAS_TRITON:
             )
 
     @triton.jit
-    def _yoco_routing_softmax_kernel(
-        logits_ptr,
-        scores_ptr,
-        num_rows,
-    ):
-        row = tl.program_id(0)
-        cols = tl.arange(0, 128)
-        row_mask = row < num_rows
-        logits = tl.load(
-            logits_ptr + row * 128 + cols,
-            mask=row_mask,
-            other=0.0,
-        )
-        masked_logits = tl.where(row_mask, logits, float("-inf"))
-        row_max = tl.max(masked_logits, axis=0)
-        numerator = tl.extra.cuda.libdevice.exp(logits - row_max)
-        denominator = tl.sum(
-            tl.where(row_mask, numerator, 0.0),
-            axis=0,
-        )
-        scores = numerator / denominator
-        tl.store(
-            scores_ptr + row * 128 + cols,
-            scores,
-            mask=row_mask,
+    def _yoco_mul_rn(x, y):
+        return tl.inline_asm_elementwise(
+            "mul.rn.f32 $0, $1, $2;",
+            constraints="=f,f,f",
+            args=[x, y],
+            dtype=tl.float32,
+            is_pure=True,
+            pack=1,
         )
 
     @triton.jit
-    def _yoco_routing_renorm_scatter_kernel(
-        topk_weights_ptr,
-        topk_ids_ptr,
-        output_ptr,
+    def _yoco_add_rn(x, y):
+        return tl.inline_asm_elementwise(
+            "add.rn.f32 $0, $1, $2;",
+            constraints="=f,f,f",
+            args=[x, y],
+            dtype=tl.float32,
+            is_pure=True,
+            pack=1,
+        )
+
+    @triton.jit
+    def _yoco_sub_rn(x, y):
+        return tl.inline_asm_elementwise(
+            "sub.rn.f32 $0, $1, $2;",
+            constraints="=f,f,f",
+            args=[x, y],
+            dtype=tl.float32,
+            is_pure=True,
+            pack=1,
+        )
+
+    @triton.jit
+    def _yoco_rotary_kernel(
+        query_ptr,
+        key_ptr,
+        query_output_ptr,
+        key_output_ptr,
+        positions_ptr,
+        cos_sin_cache_ptr,
         num_rows,
-        BLOCK_ROWS: tl.constexpr,
+        query_row_stride,
+        query_head_stride,
+        key_row_stride,
+        key_head_stride,
+        positions_stride,
+        QUERY_HEADS: tl.constexpr,
+        KEY_HEADS: tl.constexpr,
     ):
-        rows = tl.program_id(0) * BLOCK_ROWS + tl.arange(0, BLOCK_ROWS)[:, None]
-        ranks = tl.arange(0, 8)[None, :]
-        row_mask = rows < num_rows
-        weights = tl.load(
-            topk_weights_ptr + rows * 8 + ranks,
-            mask=row_mask,
+        program = tl.program_id(0)
+        total_heads = QUERY_HEADS + KEY_HEADS
+        row = program // total_heads
+        head = program % total_heads
+        cols = tl.arange(0, 64)
+        position = tl.load(
+            positions_ptr + row * positions_stride,
+            mask=row < num_rows,
             other=0.0,
         )
-        ids = tl.load(
-            topk_ids_ptr + rows * 8 + ranks,
-            mask=row_mask,
-            other=0,
-        )
-        denominator = tl.sum(
-            tl.where(row_mask, weights, 0.0),
-            axis=1,
-        )[:, None]
+        cos = tl.load(cos_sin_cache_ptr + position * 128 + cols)
+        sin = tl.load(cos_sin_cache_ptr + position * 128 + 64 + cols)
+
+        query_mask = (row < num_rows) & (head < QUERY_HEADS)
+        query_base = row * query_row_stride + head * query_head_stride
+        query_1 = tl.load(
+            query_ptr + query_base + cols,
+            mask=query_mask,
+            other=0.0,
+        ).to(tl.float32)
+        query_2 = tl.load(
+            query_ptr + query_base + 64 + cols,
+            mask=query_mask,
+            other=0.0,
+        ).to(tl.float32)
+        query_output_base = (row * QUERY_HEADS + head) * 128
         tl.store(
-            output_ptr + rows * 128 + ids,
-            weights / denominator,
-            mask=row_mask,
+            query_output_ptr + query_output_base + cols,
+            _yoco_sub_rn(
+                _yoco_mul_rn(query_1, cos),
+                _yoco_mul_rn(query_2, sin),
+            ),
+            mask=query_mask,
         )
+        tl.store(
+            query_output_ptr + query_output_base + 64 + cols,
+            _yoco_add_rn(
+                _yoco_mul_rn(query_2, cos),
+                _yoco_mul_rn(query_1, sin),
+            ),
+            mask=query_mask,
+        )
+
+        key_head = head - QUERY_HEADS
+        key_mask = (row < num_rows) & (key_head >= 0)
+        key_base = row * key_row_stride + key_head * key_head_stride
+        key_1 = tl.load(
+            key_ptr + key_base + cols,
+            mask=key_mask,
+            other=0.0,
+        ).to(tl.float32)
+        key_2 = tl.load(
+            key_ptr + key_base + 64 + cols,
+            mask=key_mask,
+            other=0.0,
+        ).to(tl.float32)
+        key_output_base = (row * KEY_HEADS + key_head) * 128
+        tl.store(
+            key_output_ptr + key_output_base + cols,
+            _yoco_sub_rn(
+                _yoco_mul_rn(key_1, cos),
+                _yoco_mul_rn(key_2, sin),
+            ),
+            mask=key_mask,
+        )
+        tl.store(
+            key_output_ptr + key_output_base + 64 + cols,
+            _yoco_add_rn(
+                _yoco_mul_rn(key_2, cos),
+                _yoco_mul_rn(key_1, sin),
+            ),
+            mask=key_mask,
+        )
+
+    @triton.jit
+    def _yoco_diff_attention_kernel(
+        attn_ptr,
+        gate_ptr,
+        output_ptr,
+        num_elements,
+        num_head_pairs,
+        DIFF_V3: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+    ):
+        offsets = tl.program_id(0) * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+        mask = offsets < num_elements
+        row_width = num_head_pairs * 128
+        row = offsets // row_width
+        pair_offset = offsets % row_width
+        pair = pair_offset // 128
+        col = pair_offset % 128
+        attn_base = row * 2 * row_width + pair * 256 + col
+        attn1 = tl.load(attn_ptr + attn_base, mask=mask).to(tl.float32)
+        attn2 = tl.load(attn_ptr + attn_base + 128, mask=mask).to(tl.float32)
+        if DIFF_V3:
+            gate_base = row * 2 * num_head_pairs + pair * 2
+            gate1 = tl.load(gate_ptr + gate_base, mask=mask).to(tl.float32)
+            gate2 = tl.load(gate_ptr + gate_base + 1, mask=mask).to(tl.float32)
+            output = attn1 * tl.sigmoid(gate1) - attn2 * tl.sigmoid(gate2)
+        else:
+            gate_value = tl.load(gate_ptr + row * num_head_pairs + pair, mask=mask).to(
+                tl.float32
+            )
+            output = attn1 - tl.sigmoid(gate_value) * attn2
+        tl.store(output_ptr + offsets, output, mask=mask)
 
 
 def _yoco_rms_clip_cuda(
@@ -296,42 +393,83 @@ def _yoco_rms_norm_fake(
     return torch.empty_like(x, dtype=torch.bfloat16)
 
 
-def _yoco_router_linear_tf32_cuda(
-    hidden_states: torch.Tensor,
-    weight: torch.Tensor,
-    normalize_weight: bool,
-) -> torch.Tensor:
-    previous_allow_tf32 = torch.backends.cuda.matmul.allow_tf32
-    previous_matmul_precision = torch.get_float32_matmul_precision()
-    previous_cuda_precision = torch.backends.cuda.matmul.fp32_precision
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.set_float32_matmul_precision("high")
-    torch.backends.cuda.matmul.fp32_precision = "tf32"
-    try:
-        if normalize_weight:
-            weight = weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
-        return F.linear(hidden_states, weight)
-    finally:
-        torch.backends.cuda.matmul.allow_tf32 = previous_allow_tf32
-        torch.set_float32_matmul_precision(previous_matmul_precision)
-        torch.backends.cuda.matmul.fp32_precision = previous_cuda_precision
-
-
-def _yoco_router_linear_tf32_fake(
-    hidden_states: torch.Tensor,
-    weight: torch.Tensor,
-    normalize_weight: bool,
-) -> torch.Tensor:
-    del normalize_weight
-    return hidden_states.new_empty((*hidden_states.shape[:-1], weight.shape[0]))
-
-
-if current_platform.is_cuda():
-    direct_register_custom_op(
-        op_name="yoco_router_linear_tf32",
-        op_func=_yoco_router_linear_tf32_cuda,
-        fake_impl=_yoco_router_linear_tf32_fake,
+def _yoco_rotary_cuda(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    query_output = torch.empty(query.shape, dtype=query.dtype, device=query.device)
+    key_output = torch.empty(key.shape, dtype=key.dtype, device=key.device)
+    num_rows = query.shape[0]
+    query_heads = query.shape[1]
+    key_heads = key.shape[1]
+    _yoco_rotary_kernel[(num_rows * (query_heads + key_heads),)](
+        query,
+        key,
+        query_output,
+        key_output,
+        positions,
+        cos_sin_cache,
+        num_rows,
+        query.stride(0),
+        query.stride(1),
+        key.stride(0),
+        key.stride(1),
+        positions.stride(0),
+        QUERY_HEADS=query_heads,
+        KEY_HEADS=key_heads,
+        num_warps=2,
+        num_stages=1,
     )
+    return query_output, key_output
+
+
+def _yoco_rotary_fake(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del positions, cos_sin_cache
+    return torch.empty_like(query), torch.empty_like(key)
+
+
+def _yoco_diff_attention_cuda(
+    attn_out: torch.Tensor,
+    gate: torch.Tensor,
+    diff_v3: bool,
+) -> torch.Tensor:
+    num_head_pairs = attn_out.shape[1] // 2
+    output = torch.empty(
+        (attn_out.shape[0], num_head_pairs, attn_out.shape[2]),
+        dtype=attn_out.dtype,
+        device=attn_out.device,
+    )
+    _yoco_diff_attention_kernel[(triton.cdiv(output.numel(), 256),)](
+        attn_out,
+        gate,
+        output,
+        output.numel(),
+        num_head_pairs,
+        DIFF_V3=diff_v3,
+        BLOCK_SIZE=256,
+        num_warps=4,
+        num_stages=1,
+    )
+    return output
+
+
+def _yoco_diff_attention_fake(
+    attn_out: torch.Tensor,
+    gate: torch.Tensor,
+    diff_v3: bool,
+) -> torch.Tensor:
+    del gate, diff_v3
+    return attn_out.new_empty(
+        (attn_out.shape[0], attn_out.shape[1] // 2, attn_out.shape[2])
+    )
+
 
 if HAS_TRITON and current_platform.is_cuda():
     direct_register_custom_op(
@@ -343,6 +481,16 @@ if HAS_TRITON and current_platform.is_cuda():
         op_name="yoco_rms_norm",
         op_func=_yoco_rms_norm_cuda,
         fake_impl=_yoco_rms_norm_fake,
+    )
+    direct_register_custom_op(
+        op_name="yoco_rotary",
+        op_func=_yoco_rotary_cuda,
+        fake_impl=_yoco_rotary_fake,
+    )
+    direct_register_custom_op(
+        op_name="yoco_diff_attention",
+        op_func=_yoco_diff_attention_cuda,
+        fake_impl=_yoco_diff_attention_fake,
     )
 
 
@@ -394,45 +542,6 @@ def _maybe_build_yoco_quant_config(
     return quant_config
 
 
-def _yoco_routing_renorm_block(num_rows: int) -> int:
-    # Match the Native Inductor choices for the verified 3/66/110-token shapes
-    # without runtime autotuning, which can select different reduction tiles.
-    return 32 if num_rows >= 96 else 1
-
-
-def _yoco_topk_routing_impl(
-    router_logits: torch.Tensor,
-    topk: int,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    assert router_logits.dtype == torch.float32
-    assert router_logits.shape[-1] == 128
-    assert topk == 8
-    router_logits = router_logits.contiguous()
-    num_rows = router_logits.shape[0]
-    gate_scores = torch.empty_like(router_logits)
-    _yoco_routing_softmax_kernel[(num_rows,)](
-        router_logits,
-        gate_scores,
-        num_rows,
-        num_warps=2,
-        num_stages=1,
-    )
-    scores, topk_ids = torch.topk(gate_scores, k=topk, dim=-1)
-    routing_probs = torch.zeros_like(router_logits)
-    renorm_block = _yoco_routing_renorm_block(num_rows)
-    _yoco_routing_renorm_scatter_kernel[(triton.cdiv(num_rows, renorm_block),)](
-        scores,
-        topk_ids,
-        routing_probs,
-        num_rows,
-        BLOCK_ROWS=renorm_block,
-        num_warps=2,
-        num_stages=1,
-    )
-    routing_map = routing_probs != 0
-    return routing_probs, routing_map, gate_scores
-
-
 def _yoco_topk_routing(
     hidden_states: torch.Tensor,
     gating_output: torch.Tensor,
@@ -441,13 +550,11 @@ def _yoco_topk_routing(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     del hidden_states
     assert renormalize
-    if gating_output.shape[-1] != 128 or topk != 8:
-        gate_scores = F.softmax(gating_output, dim=-1, dtype=torch.float32)
-        topk_weights, topk_ids = torch.topk(gate_scores, k=topk, dim=-1)
-        topk_weights /= topk_weights.sum(dim=-1, keepdim=True)
-        return topk_weights, topk_ids
-    routing_probs, _, _ = _yoco_topk_routing_impl(gating_output, topk)
-    return torch.topk(routing_probs, k=topk, dim=-1)
+    topk_logits, topk_ids = torch.topk(gating_output.float(), k=topk, dim=-1)
+    # softmax(all logits) followed by top-k renormalization is algebraically
+    # identical to softmax over the selected top-k logits.
+    topk_weights = F.softmax(topk_logits, dim=-1, dtype=torch.float32)
+    return topk_weights, topk_ids
 
 
 class RMSClip(nn.Module):
@@ -542,7 +649,7 @@ class RMSNorm(nn.Module):
 
 
 @torch.compile
-def _yoco_apply_rotary_emb(
+def _yoco_apply_rotary_emb_fallback(
     query: torch.Tensor,
     key: torch.Tensor,
     cos: torch.Tensor,
@@ -560,8 +667,17 @@ def _yoco_apply_rotary_emb(
     return apply(query), apply(key)
 
 
+def _yoco_apply_rotary_emb(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    return _yoco_apply_rotary_emb_fallback(query, key, cos, sin)
+
+
 @torch.compile
-def _yoco_diff_attention_v2(
+def _yoco_diff_attention_v2_fallback(
     attn1: torch.Tensor,
     attn2: torch.Tensor,
     gate: torch.Tensor,
@@ -569,26 +685,33 @@ def _yoco_diff_attention_v2(
     return attn1 - torch.sigmoid(gate).unsqueeze(-1) * attn2
 
 
+def _yoco_diff_attention_v2(
+    attn1: torch.Tensor,
+    attn2: torch.Tensor,
+    gate: torch.Tensor,
+) -> torch.Tensor:
+    return _yoco_diff_attention_v2_fallback(attn1, attn2, gate)
+
+
 @torch.compile
-def _yoco_diff_attention_v3(
+def _yoco_diff_attention_v3_fallback(
     attn1: torch.Tensor,
     attn2: torch.Tensor,
     gate: torch.Tensor,
 ) -> torch.Tensor:
     gate1 = gate[:, 0::2]
     gate2 = gate[:, 1::2]
-    return (
-        attn1 * torch.sigmoid(gate1).unsqueeze(-1)
-        - attn2 * torch.sigmoid(gate2).unsqueeze(-1)
-    )
+    return attn1 * torch.sigmoid(gate1).unsqueeze(-1) - attn2 * torch.sigmoid(
+        gate2
+    ).unsqueeze(-1)
 
 
-def _yoco_normalized_router_linear(
-    hidden_states: torch.Tensor,
-    weight: torch.Tensor,
+def _yoco_diff_attention_v3(
+    attn1: torch.Tensor,
+    attn2: torch.Tensor,
+    gate: torch.Tensor,
 ) -> torch.Tensor:
-    weight = weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
-    return F.linear(hidden_states, weight)
+    return _yoco_diff_attention_v3_fallback(attn1, attn2, gate)
 
 
 class YOCORotaryEmbedding(nn.Module):
@@ -643,13 +766,21 @@ class YOCORotaryEmbedding(nn.Module):
         key: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         cache = self._get_cos_sin_cache(query.device)
-        cos_sin = cache.index_select(
-            0, positions.to(device=query.device, dtype=torch.long)
-        )
-        cos, sin = cos_sin.chunk(2, dim=-1)
         query = query.view(query.shape[0], -1, self.head_size)
         key = key.view(key.shape[0], -1, self.head_size)
-        query, key = _yoco_apply_rotary_emb(query, key, cos, sin)
+        positions = positions.to(device=query.device, dtype=torch.long)
+        if (
+            HAS_TRITON
+            and query.is_cuda
+            and query.dtype == torch.bfloat16
+            and self.head_size == 128
+            and current_platform.is_cuda()
+        ):
+            query, key = torch.ops.vllm.yoco_rotary(query, key, positions, cache)
+        else:
+            cos_sin = cache.index_select(0, positions)
+            cos, sin = cos_sin.chunk(2, dim=-1)
+            query, key = _yoco_apply_rotary_emb(query, key, cos, sin)
         return query.flatten(-2), key.flatten(-2)
 
 
@@ -752,8 +883,7 @@ class YOCOSelfAttention(nn.Module):
         self.num_kv_heads = max(1, self.total_num_kv_heads // tp_size)
         gate_heads = (2 if self.diff_v3 else 1) * self.total_num_heads
         assert gate_heads % tp_size == 0, (
-            f"gate_heads={gate_heads} must be divisible "
-            f"by TP size {tp_size}"
+            f"gate_heads={gate_heads} must be divisible by TP size {tp_size}"
         )
         self.num_lambda_heads = self.total_num_heads // tp_size
         self.num_gate_heads = gate_heads // tp_size
@@ -843,12 +973,21 @@ class YOCOSelfAttention(nn.Module):
         """
         # (n_tokens, 2 * num_heads_per_pair, head_dim)
         attn_view = attn_out.view(-1, 2 * num_heads_per_pair, self.head_dim)
-        attn1 = attn_view[:, 0::2, :]
-        attn2 = attn_view[:, 1::2, :]
-        if self.diff_v3:
-            out = _yoco_diff_attention_v3(attn1, attn2, gate)
+        if (
+            HAS_TRITON
+            and attn_view.is_cuda
+            and attn_view.dtype == torch.bfloat16
+            and self.head_dim == 128
+            and current_platform.is_cuda()
+        ):
+            out = torch.ops.vllm.yoco_diff_attention(attn_view, gate, self.diff_v3)
         else:
-            out = _yoco_diff_attention_v2(attn1, attn2, gate)
+            attn1 = attn_view[:, 0::2, :]
+            attn2 = attn_view[:, 1::2, :]
+            if self.diff_v3:
+                out = _yoco_diff_attention_v3(attn1, attn2, gate)
+            else:
+                out = _yoco_diff_attention_v2(attn1, attn2, gate)
         return out.reshape(-1, num_heads_per_pair * self.head_dim)
 
     # ------------------------------------------------------------------ #
@@ -988,12 +1127,21 @@ class YOCOCrossAttention(nn.Module):
         self, attn_out: torch.Tensor, gate: torch.Tensor
     ) -> torch.Tensor:
         attn_view = attn_out.view(-1, 2 * self.num_lambda_heads, self.head_dim)
-        attn1 = attn_view[:, 0::2, :]
-        attn2 = attn_view[:, 1::2, :]
-        if self.diff_v3:
-            out = _yoco_diff_attention_v3(attn1, attn2, gate)
+        if (
+            HAS_TRITON
+            and attn_view.is_cuda
+            and attn_view.dtype == torch.bfloat16
+            and self.head_dim == 128
+            and current_platform.is_cuda()
+        ):
+            out = torch.ops.vllm.yoco_diff_attention(attn_view, gate, self.diff_v3)
         else:
-            out = _yoco_diff_attention_v2(attn1, attn2, gate)
+            attn1 = attn_view[:, 0::2, :]
+            attn2 = attn_view[:, 1::2, :]
+            if self.diff_v3:
+                out = _yoco_diff_attention_v3(attn1, attn2, gate)
+            else:
+                out = _yoco_diff_attention_v2(attn1, attn2, gate)
         return out.reshape(-1, self.num_lambda_heads * self.head_dim)
 
     def forward(
@@ -1097,6 +1245,13 @@ class YOCOMoE(nn.Module):
         self.router_weights_normalized = bool(
             getattr(config, "router_weights_normalized", False)
         )
+        if current_platform.is_cuda():
+            # YOCO training uses TF32 for the FP32 router GEMM. Configure it
+            # once during model construction rather than switching global
+            # matmul state in every layer on every forward.
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.set_float32_matmul_precision("high")
+            torch.backends.cuda.matmul.fp32_precision = "tf32"
 
         # Router gate — runs in fp32 to match training.
         self.gate = GateLinear(
@@ -1207,19 +1362,7 @@ class YOCOMoE(nn.Module):
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        if hidden_states.is_cuda and current_platform.is_cuda():
-            router_logits = torch.ops.vllm.yoco_router_linear_tf32(
-                hidden_states.float(),
-                self.gate.weight,
-                not self.router_weights_normalized,
-            )
-        else:
-            if self.router_weights_normalized:
-                router_logits = F.linear(hidden_states.float(), self.gate.weight)
-            else:
-                router_logits = _yoco_normalized_router_linear(
-                    hidden_states.float(), self.gate.weight
-                )
+        router_logits = F.linear(hidden_states.float(), self.gate.weight)
         if self.fc1_latent_proj is not None:
             assert self.fc1_latent_norm is not None
             expert_input = self.fc1_latent_norm(self.fc1_latent_proj(hidden_states))
@@ -1887,9 +2030,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
             original_dp_metadata is not None
             and fast_prefill_num_tokens_across_dp_cpu is not None
         ):
-            fwd_ctx.dp_metadata = DPMetadata(
-                fast_prefill_num_tokens_across_dp_cpu
-            )
+            fwd_ctx.dp_metadata = DPMetadata(fast_prefill_num_tokens_across_dp_cpu)
         try:
             decode_hidden = model.cross_block(
                 model.fp_positions[:n],
@@ -2099,9 +2240,14 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
             if is_pp_missing_parameter(name, self):
                 continue
             param = params_dict[name]
-            # Cast bf16 router gate weights to fp32 to match training.
-            if name.endswith(".mlp.gate.weight") and param.dtype != loaded_weight.dtype:
+            # Cast router gates to FP32 and normalize once at load time when
+            # the exported checkpoint has not already done so.
+            if name.endswith(".mlp.gate.weight"):
                 loaded_weight = loaded_weight.to(param.dtype)
+                if not bool(getattr(self.config, "router_weights_normalized", False)):
+                    loaded_weight = loaded_weight / loaded_weight.norm(
+                        dim=1, keepdim=True
+                    ).clamp_min(1e-6)
             weight_loader = getattr(param, "weight_loader", default_weight_loader)
             try:
                 weight_loader(param, loaded_weight)

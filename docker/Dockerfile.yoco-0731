@@ -1,0 +1,27 @@
+# Self-contained B200 YOCO runtime with compiled vLLM CUDA extensions.
+# Model-specific Torch/Triton caches can be added by starting this image and
+# committing the warmed container.
+FROM buaahsh/pytorch:26.02-b200-vllm-yoco-v2-v3-0729-final
+
+ENV VLLM_TARGET_DEVICE=cuda \
+    VLLM_CACHE_ROOT=/root/.cache/vllm \
+    VLLM_FLOAT32_MATMUL_PRECISION=high
+
+WORKDIR /workspace/vllm
+
+COPY vllm/model_executor/models/yoco.py \
+    /workspace/vllm/vllm/model_executor/models/yoco.py
+COPY vllm/model_executor/layers/fused_moe/configs/E=128,N=1280,device_name=NVIDIA_B200.json \
+    /workspace/vllm/vllm/model_executor/layers/fused_moe/configs/E=128,N=1280,device_name=NVIDIA_B200.json
+COPY benchmarks/benchmark_yoco_inferencex.py \
+    /workspace/vllm/benchmarks/benchmark_yoco_inferencex.py
+COPY yoco.md /workspace/vllm/yoco.md
+
+RUN python -m py_compile \
+      vllm/model_executor/models/yoco.py \
+      benchmarks/benchmark_yoco_inferencex.py \
+    && test -f vllm/_C.abi3.so \
+    && test -f vllm/_moe_C.abi3.so \
+    && test -f vllm/vllm_flash_attn/_vllm_fa3_C.abi3.so \
+    && test -f \
+      "vllm/model_executor/layers/fused_moe/configs/E=128,N=1280,device_name=NVIDIA_B200.json"

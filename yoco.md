@@ -1,5 +1,110 @@
 # YOCO B200 最终验收报告
 
+## 2026-07-31 优化版
+
+Git 分支：
+
+```text
+shaohanh/yoco-0731
+```
+
+自包含 Docker runtime：
+
+```text
+buaahsh/pytorch:26.02-b200-vllm-yoco-0731
+```
+
+该镜像以 0729 final runtime 为基础，用户不需要挂载 vLLM 源码，直接运行
+`vllm serve`。镜像包含：
+
+- 已编译的 vLLM CUDA/C++ 扩展、FA4 beta13 和 Triton MoE runtime；
+- B200 TP1 YOCO MoE 的 `E=128,N=1280` 调优配置；
+- YOCO router 的 top-k 等价化简，删除 dense routing buffer、scatter 和第二次
+  top-k；
+- BF16 `head_dim=128` 的 YOCO RoPE 与 differential-attention Triton kernel；
+- `benchmarks/benchmark_yoco_inferencex.py` 匹配 1K→1K、8K→1K workload。
+
+能够在构建时生成的原生扩展已经包含在镜像中。Torch AOT、Triton JIT 和 CUDA
+Graph 与模型、batch shape、启动参数有关；发布镜像额外使用下方 FA4 BF16
+配置完成一次模型 warmup，并保留生成的磁盘 cache。首次遇到未覆盖的新模型或
+shape 时仍会进行一次正常的编译/捕获。
+
+发布镜像还包含 YOCO-v2 DP4 agentic 配置生成的 compile key
+`c956686f7d`，镜像内 `/root/.cache/vllm` 共 6.9 GiB，最终镜像约 38.3 GB。
+
+### 0731 单 B200 性能
+
+模型：
+
+```text
+/mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu
+```
+
+BF16、TP1、FA4、Triton MoE、精确 token-ID 输入，128 条请求：
+
+| Workload | 0729 final warm | 0731 | 提升 |
+|---|---:|---:|---:|
+| 1K input / 1K output，concurrency 128 | 4,994.76 tok/s | 5,610.39 tok/s | 12.33% |
+| 8K input / 1K output，concurrency 32 | 751.60 tok/s | 751.92 tok/s | 0.04% |
+
+短上下文 decode 明显受益；8K input workload 仍主要受 prefill 和长上下文
+cross-attention 限制。
+
+### 0731 YOCO-v2 DP4 agentic trace
+
+使用本文 `Agentic 验证方法` 中的 40-turn workload。每条 trajectory 包含
+72K logical prefill、8K generation，最终上下文 80K；服务启动参数与本文
+YOCO-v2 DP4 命令一致。本机 Docker hook 使用 GPU `0,1,2,3` 替代文档示例的
+`0,1,6,7`，其余参数不变。
+
+| Concurrency | 完成 turns | Wall | Generation tok/s | Computed prefill tok/s | Prefix hit | Mean latency | Mean TTFT | Mean ITL |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 8 | 320/320 | 86.71s | 738.11 | 6,671.75 | 95.57% | 2.164s | 0.301s | 9.37ms |
+| 16 | 640/640 | 100.18s | 1,277.71 | 11,288.89 | 95.67% | 2.494s | 0.366s | 10.70ms |
+| 32 | 1280/1280 | 121.70s | **2,103.49** | **18,737.92** | 95.63% | 3.033s | 0.548s | 12.49ms |
+
+c32 没有请求失败，等待队列均值为 0.09、最大值为 3；四张 B200 平均 SM
+utilization 约 92%，说明新镜像可以直接执行完整 agentic workload。
+
+### 0731 单卡启动
+
+```bash
+docker run --rm \
+  --name yoco-0731 \
+  --network host \
+  --ipc host \
+  --gpus '"device=0"' \
+  -v /mnt/msranlphot:/mnt/msranlphot:ro \
+  buaahsh/pytorch:26.02-b200-vllm-yoco-0731 \
+  vllm serve \
+  /mnt/msranlphot/shaohanh/exp/sft/30A3B-73k-sft-65k-muon-bsz1M-shaohan_sft_260629/0000-6000-hf-gpu \
+  --served-model-name yoco-0731 \
+  --host 0.0.0.0 \
+  --port 8001 \
+  --trust-remote-code \
+  --attention-config.backend FLASH_ATTN \
+  --attention-config.flash_attn_version 4 \
+  --moe-backend triton \
+  --tensor-parallel-size 1 \
+  --data-parallel-size 1 \
+  --gpu-memory-utilization 0.85 \
+  --max-model-len 16384 \
+  --max-num-batched-tokens 8192 \
+  --max-num-seqs 128 \
+  --enable-prefix-caching \
+  --enable-chunked-prefill \
+  --kv-sharing-fast-prefill \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+```
+
+构建基础 runtime：
+
+```bash
+docker build \
+  -f docker/Dockerfile.yoco-0731 \
+  -t buaahsh/pytorch:26.02-b200-vllm-yoco-0731 .
+```
+
 本文只记录本次 YOCO-v2/v3 在 B200 上的最终配置、验收方法和结果，不包含
 旧镜像、旧分支或中间调试过程。
 
