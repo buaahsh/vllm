@@ -112,6 +112,7 @@ DP collective 无 hang。首次冷态 P/D 请求曾返回一次空串，未计�
 
 ```text
 /mnt/pvc/lidong1/vllm_pd/prefill-cut-dp-validation-20260730-0448/
+/mnt/pvc/lidong1/vllm_pd/prefill-cut-short-retest-20260731-0448/
 ```
 
 #### DP1 既有结果
@@ -135,19 +136,30 @@ layers 压缩到 logits token，本次主要再移除第一个 KV-owner cross la
 #### 专用 P 节点 DP4
 
 下表使用 `kv_role=kv_producer`、`gpu-memory-utilization=0.85`，指标为
-warmed P 侧 prompt throughput。baseline 和 candidate 顺序运行在同一 Pod
-的 B200 上：
+warmed P 侧 prompt throughput。复测时 baseline 和 candidate 同时驻留在
+同一台 8×B200 Pod，分别使用 GPU 0--3 和 4--7；请求按 A/B、B/A 顺序交替，
+下表取五轮中位数。1.4K c1 每轮使用 50 个请求，以降低单请求噪声：
 
 | prompt / concurrency | baseline tok/s | candidate tok/s | 提升 |
 | --- | ---: | ---: | ---: |
-| 1.4K / c1 | `10,372` | `9,513` | `-8.3%` |
-| 12.1K / c1 | `51,630` | `52,000` | `0.7%` |
-| 43.7K / c1 | `67,019` | `70,111` | `4.6%` |
-| 12.1K / c4 | `107,174` | `112,501` | `5.0%` |
-| 12.1K / c8 | `120,017` | `121,749` | `1.4%` |
+| 1.4K / c1 | `11,192` | `11,020` | `-1.5%` |
+| 12.1K / c1 | `51,404` | `50,919` | `-0.9%` |
+| 43.7K / c1 | `65,859` | `68,129` | `3.4%` |
+| 12.1K / c4 | `102,534` | `100,231` | `-2.2%` |
+| 12.1K / c8 | `110,765` | `117,883` | `6.4%` |
 
-短 prompt c1 没有收益；主要收益出现在长 prompt 和 c4。本优化不应宣传成
-所有 shape 都更快。
+原先短 prompt c1 的 `-8.3%` 主要是抖动/JIT 长尾；复测第一轮 candidate
+仍出现一次 `1.719s` 长尾，导致该轮只有 `7,199 tok/s`，之后四轮稳定在
+`11,009--11,065 tok/s`。去掉长尾后，短 c1 仍约慢 `1%--1.5%`：其
+baseline/candidate 中位 latency 分别约为 `122.8ms` 和 `124.2ms`。这说明
+短请求的固定调度、HTTP、DP/NIXL 协调和直接写 KV 开销足以抵消少量计算
+节省；真正计算占比高的 43.7K c1 和高并发 c8 才有稳定收益。本优化不应
+宣传成所有 shape 都更快。
+
+首次访问新的 prompt/batch shape 还可能分别触发 Triton/JIT/shape warm-up：
+本次 12.1K c1 出现 `0.75--0.78s` 单请求长尾，c4 首轮最大 latency 为
+`3.54s`。生产 warm-up 必须覆盖实际使用的 prompt 长度和并发 shape，不能
+只依赖一次健康检查请求。
 
 #### 专用 P 节点 DP8
 
