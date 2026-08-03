@@ -98,6 +98,10 @@ class FusedMoE(PluggableLayer):
                                       output. It is applied to the experts output
                                       instead of the topk_weights when this feature is
                                       not supported by the router (or the experts).
+        shared_output_transform: Optional model-specific transform applied after the
+                                 shared-expert output is reduced.
+        reduce_shared_experts_separately: Preserve separate routed-then-shared
+                                          reductions instead of reducing their sum.
     """
 
     # Auto-incrementing layer ID for routing replay buffer binding.
@@ -143,6 +147,8 @@ class FusedMoE(PluggableLayer):
         shared_expert_gate: torch.nn.Module | None = None,
         routed_input_transform: torch.nn.Module | None = None,
         routed_output_transform: torch.nn.Module | None = None,
+        shared_output_transform: torch.nn.Module | None = None,
+        reduce_shared_experts_separately: bool = False,
         apply_routed_scale_to_output: bool = False,
         zero_expert_type: str | None = None,
         hash_indices_table: torch.Tensor | None = None,
@@ -238,6 +244,8 @@ class FusedMoE(PluggableLayer):
             else 0
         )
         self.shared_expert_gate = shared_expert_gate
+        if reduce_shared_experts_separately and shared_experts is None:
+            raise ValueError("reduce_shared_experts_separately requires shared_experts")
 
         if (
             not self.aiter_fmoe_shared_expert_enabled
@@ -443,6 +451,8 @@ class FusedMoE(PluggableLayer):
             enable_dbo=self.vllm_config.parallel_config.enable_dbo,
             routed_input_transform=routed_input_transform,
             routed_output_transform=routed_output_transform,
+            shared_output_transform=shared_output_transform,
+            reduce_shared_experts_separately=reduce_shared_experts_separately,
             # When apply_routed_scale_to_output is True, we allow
             # the scaling factor to be passed to the runner, otherwise
             # we pass 1.0 so it ends up being a nop.

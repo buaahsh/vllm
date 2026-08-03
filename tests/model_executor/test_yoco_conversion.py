@@ -12,10 +12,89 @@ from vllm.model_executor.models.yoco import (
     YOCOCrossBlock,
     YOCODecoderLayer,
     YOCOForCausalLM,
+    YOCOLatentInputTransform,
+    YOCOLatentOutputTransform,
+    YOCOSharedOutputTransform,
     _yoco_diff_attention_v2,
     _yoco_diff_attention_v3,
     _yoco_topk_routing,
 )
+
+
+def test_yoco_latent_transforms_preserve_reference_order() -> None:
+    class Linear(torch.nn.Module):
+        def __init__(self, weight: torch.Tensor) -> None:
+            super().__init__()
+            self.weight = torch.nn.Parameter(weight)
+
+        def forward(self, x: torch.Tensor):
+            return torch.nn.functional.linear(x, self.weight), None
+
+    x = torch.tensor([[1.0, -2.0, 3.0, -4.0]], dtype=torch.bfloat16)
+    down = Linear(torch.arange(12, dtype=torch.bfloat16).view(3, 4) / 10)
+    up = Linear(torch.arange(12, dtype=torch.bfloat16).view(4, 3) / 20)
+    norm = RMSNorm(3, eps=1e-6, dtype=torch.float32)
+
+    input_transform = YOCOLatentInputTransform(down, norm)
+    latent = input_transform(x)
+    expected_latent = norm(down(x)[0])
+    torch.testing.assert_close(latent, expected_latent, rtol=0, atol=0)
+
+    output_transform = YOCOLatentOutputTransform(norm, up)
+    output = output_transform(latent)
+    expected_output = up(norm(latent))[0]
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+
+def test_yoco_shared_output_gate_runs_after_reduction() -> None:
+    gate = torch.nn.Linear(4, 1, bias=False)
+    gate.weight.data.copy_(torch.tensor([[0.25, -0.5, 0.75, 1.0]]))
+    transform = YOCOSharedOutputTransform(gate)  # type: ignore[arg-type]
+    hidden_states = torch.tensor([[1.0, 2.0, -1.0, 0.5]])
+    reduced_shared = torch.tensor([[2.0, -3.0, 4.0, -5.0]])
+
+    actual = transform(reduced_shared, hidden_states)
+    scale = torch.sigmoid(torch.nn.functional.linear(hidden_states, gate.weight))
+    expected = scale * reduced_shared
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+def test_yoco_separate_shared_reduction_keeps_collective_order(monkeypatch) -> None:
+    import vllm.model_executor.layers.fused_moe.runner.moe_runner as runner_module
+    from vllm.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
+
+    class MoEConfig:
+        is_sequence_parallel = False
+        tp_size = 2
+        ep_size = 1
+
+    class QuantMethod:
+        moe_kernel = None
+
+    runner = MoERunner.__new__(MoERunner)
+    runner.reduce_shared_experts_separately = True
+    runner.moe_config = MoEConfig()
+    runner._quant_method = QuantMethod()
+
+    calls: list[torch.Tensor] = []
+
+    def fake_all_reduce(x: torch.Tensor) -> torch.Tensor:
+        calls.append(x)
+        return x + len(calls)
+
+    monkeypatch.setattr(
+        runner_module, "tensor_model_parallel_all_reduce", fake_all_reduce
+    )
+    shared = torch.tensor([10.0])
+    routed = torch.tensor([20.0])
+    reduced_shared, reduced_routed = runner._maybe_reduce_expert_outputs_separately(
+        shared, routed
+    )
+
+    assert calls[0] is routed
+    assert calls[1] is shared
+    torch.testing.assert_close(reduced_routed, routed + 1)
+    torch.testing.assert_close(reduced_shared, shared + 2)
 
 
 def test_yoco_diff_v2_and_v3_formulas() -> None:

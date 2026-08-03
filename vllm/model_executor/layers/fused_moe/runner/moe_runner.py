@@ -225,6 +225,8 @@ class MoERunner(MoERunnerInterface):
         enable_dbo: bool,
         shared_expert_gate: torch.nn.Module | None = None,
         routed_output_transform: torch.nn.Module | None = None,
+        shared_output_transform: torch.nn.Module | None = None,
+        reduce_shared_experts_separately: bool = False,
         routed_scaling_factor: float = 1.0,
     ):
         super().__init__()
@@ -232,6 +234,8 @@ class MoERunner(MoERunnerInterface):
         self.router = router
         self.routed_input_transform = routed_input_transform
         self.routed_output_transform = routed_output_transform
+        self.shared_output_transform = shared_output_transform
+        self.reduce_shared_experts_separately = reduce_shared_experts_separately
         self.routed_scaling_factor = routed_scaling_factor
         self.gate = gate
         self.shared_expert_gate = shared_expert_gate
@@ -391,6 +395,36 @@ class MoERunner(MoERunnerInterface):
             shared_output = tensor_model_parallel_all_reduce(shared_output)
         return shared_output
 
+    def _maybe_reduce_expert_outputs_separately(
+        self,
+        shared_output: torch.Tensor | None,
+        fused_output: torch.Tensor,
+    ) -> tuple[torch.Tensor | None, torch.Tensor]:
+        """Reduce routed then shared outputs without changing their sum order.
+
+        Some models require the two TP reductions to remain separate for exact
+        numerical parity with their reference implementation.  Shared-expert
+        GEMMs may still execute on the auxiliary stream; only the collectives
+        are serialized on the current stream, routed first and shared second.
+        """
+        if not self.reduce_shared_experts_separately:
+            return shared_output, fused_output
+
+        assert shared_output is not None
+        if self.moe_config.is_sequence_parallel:
+            return shared_output, fused_output
+
+        has_parallel_reduction = (
+            self.moe_config.tp_size > 1 or self.moe_config.ep_size > 1
+        )
+        if not has_parallel_reduction:
+            return shared_output, fused_output
+
+        if not self._fused_output_is_reduced:
+            fused_output = tensor_model_parallel_all_reduce(fused_output)
+        shared_output = tensor_model_parallel_all_reduce(shared_output)
+        return shared_output, fused_output
+
     def _maybe_reduce_final_output(
         self,
         states: torch.Tensor,
@@ -410,10 +444,22 @@ class MoERunner(MoERunnerInterface):
             not self.moe_config.is_sequence_parallel
             and (self.moe_config.tp_size > 1 or self.moe_config.ep_size > 1)
             and not self._fused_output_is_reduced
+            and not self.reduce_shared_experts_separately
         ):
             states = tensor_model_parallel_all_reduce(states)
 
         return states[..., :trunc_size]
+
+    def apply_shared_output_transform(
+        self,
+        shared_output: torch.Tensor | None,
+        shared_experts_input: torch.Tensor | None,
+    ) -> torch.Tensor | None:
+        """Apply a model-specific transform after shared-output reduction."""
+        if shared_output is None or self.shared_output_transform is None:
+            return shared_output
+        assert shared_experts_input is not None
+        return self.shared_output_transform(shared_output, shared_experts_input)
 
     def _encode_layer_name(self) -> str | LayerName:
         if _USE_LAYERNAME:
@@ -665,9 +711,16 @@ class MoERunner(MoERunnerInterface):
         ) and hidden_dim_was_padded:
             fused_output = fused_output[..., :routed_hidden_dim]
 
-        # If combine kernel already reduced fused, reduce shared to match.
-        # See note above re: the two all-reduce points.
-        shared_output = self._maybe_reduce_shared_expert_output(shared_output)
+        # Preserve model-specific reduction boundaries when requested.  This
+        # path reduces routed first and shared second; the default path keeps
+        # the existing late combined reduction optimization.
+        shared_output, fused_output = self._maybe_reduce_expert_outputs_separately(
+            shared_output, fused_output
+        )
+        if not self.reduce_shared_experts_separately:
+            # If combine kernel already reduced fused, reduce shared to match.
+            # See note above re: the two all-reduce points.
+            shared_output = self._maybe_reduce_shared_expert_output(shared_output)
 
         shared_output, fused_output = self._maybe_apply_routed_scale_to_output(
             shared_output, fused_output
@@ -675,6 +728,9 @@ class MoERunner(MoERunnerInterface):
 
         # Apply output transform (e.g. latent -> full dim)
         fused_output = self.apply_routed_output_transform(fused_output)
+        shared_output = self.apply_shared_output_transform(
+            shared_output, shared_experts_input
+        )
 
         if shared_output is not None:
             result = shared_output + fused_output

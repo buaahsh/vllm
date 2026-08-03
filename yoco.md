@@ -673,3 +673,71 @@ vllm/v1/attention/backends/utils.py
 vllm/v1/worker/dp_utils.py
 vllm/v1/worker/gpu_model_runner.py
 ```
+
+## Shared Expert 与 Routed MoE 并行（2026-08-03）
+
+开发分支 `yoco-shared-expert-overlap-0803` 基于
+`yoco-router-fusion-0803@921d330d6c`。目标是优化 decode 阶段每个 YOCO
+MoE block 中原先串行的 routed experts 与 shared expert，同时继续保持长上下文
+精度和 collective 安全。
+
+### 实现
+
+- `YOCOSharedExperts.down_proj` 改为输出 TP-local partial，并作为
+  `FusedMoE(shared_experts=...)` 传入现有 shared-expert runner。token 数不超过
+  `VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD`（默认 256）时，本地 shared
+  GEMM 在 vLLM 全局 auxiliary CUDA stream 上执行，与 routed top-k、dispatch
+  和 expert kernel 重叠；大 batch 或设置
+  `VLLM_DISABLE_SHARED_EXPERTS_STREAM=1` 时自动回退到单 stream。
+- 没有采用 vLLM 默认的“先加 local routed/shared、再做一次 all-reduce”。YOCO
+  新增 `reduce_shared_experts_separately` 路径，继续在主 stream 上按原顺序执行
+  routed reduction、shared reduction。这样 auxiliary stream 上没有 NCCL，避免
+  不同 stream 的 collective 顺序竞争，也不改变两个 reduction 的浮点边界。
+- shared sigmoid gate 作为 reduction 后的 `shared_output_transform`，仍使用
+  原来的 `F.linear(hidden, shared_gate.weight.to(hidden.dtype))`，再执行 sigmoid
+  和乘法；没有把 gate 提前到 TP-local partial 上。
+- latent MoE 的 `fc1 projection -> RMSNorm` 与
+  `RMSNorm -> fc2 projection` 被接到 FusedMoE 的 routed-only transform hook。
+  shared path 始终读取原始 full hidden state，参数名和 checkpoint loader 契约
+  不变。
+
+### 正确性与运行稳定性
+
+- 本机 CPU/结构测试：`34 passed`。
+- B200 CUDA YOCO/配置测试：`34 passed`；GPU model runner 测试：
+  `34 passed`，合计 `68 passed`。
+- TP1 baseline `921d330d6c` 与 candidate 在两次 GPU 交换中均完成非 eager
+  `FULL_AND_PIECEWISE` CUDA Graph capture。`1,360 / 12,097 / 43,709`
+  prompt tokens 的生成文本、token 序列、token logprob 和 top-5 logprob 在
+  两个 GPU 布局中都逐项一致。
+- TP2 使用 GPU 6/7、FlashInfer TRTLLM all-reduce 和完整 CUDA Graph 成功启动，
+  首次通信 kernel 编译、双 rank capture 和请求执行均未出现 collective hang。
+  在同一 TP2 topology 上分别开启/关闭 auxiliary stream，`1,363 / 12,102 /
+  43,711` prompt tokens 的文本、token、token logprob 和 top-5 logprob 也全部
+  逐项一致。
+- TP1×DP4 使用 GPU 0/1/6/7 完成四个 rank 的模型加载、torch.compile 和
+  `FULL_AND_PIECEWISE` CUDA Graph capture。随后以 c8 发出 32 个真实 completion
+  请求，`32/32` 均返回 HTTP 200 且响应结构有效；四个 API/DP rank 分别处理
+  `3 / 7 / 9 / 13` 个请求。服务日志未发现 5xx、CUDA/NCCL error、OOM 或 hang。
+
+### Decode 性能
+
+同一 4×B200 Pod 同时运行 TP1 baseline/candidate，随后交换 GPU 0/1。每个
+布局对 c1/c4/c8 交替执行三轮；请求使用约 1.3K prompt tokens、强制生成 128
+tokens。下表合并两个 GPU 布局的六个样本并取中位数：
+
+| concurrency | baseline completion tok/s | candidate completion tok/s | 变化 |
+| ---: | ---: | ---: | ---: |
+| 1 | 126.20 | 129.17 | `+2.35%` |
+| 4 | 310.32 | 323.82 | `+4.35%` |
+| 8 | 548.50 | 552.70 | `+0.77%` |
+
+c8 收益已经接近运行噪声；这项优化的明确收益集中在低/中并发 decode。实现仍
+保留两次 collective，因此收益只来自 shared/routed compute overlap，不包含
+通过改变 reduction 语义换取的通信收益。
+
+原始请求、两个 GPU 布局结果、汇总和服务日志位于：
+
+```text
+/mnt/pvc/lidong1/vllm_pd/shared-expert-overlap-0803/
+```
