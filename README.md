@@ -101,6 +101,33 @@ UCX 1.21.0 + NIXL 1.3.2。
 /mnt/pvc/lidong1/vllm_pd/merged-0803-gpu-validation/
 ```
 
+### YOCO Router / RMSNorm 优化（2026-08-03）
+
+开发分支 `yoco-router-fusion-0803` 在上述 PD 版本上增加两项保持数值语义的
+YOCO 专用优化：
+
+- Router 直接返回 `topk_weights/topk_ids`，删除 dense `routing_probs`、
+  `routing_map`、scatter 和第二次 `topk`；softmax、`torch.topk` 和 top-k
+  renormalization 的既有计算顺序保持不变。
+- 每个 decoder layer 把 attention residual add 和 post-attention RMSNorm 合并为
+  一个 Triton kernel。完整 FP32 hidden state 仍在每层结束时物化；不跨层传递
+  拆分的 MLP output/residual，以保持原编译图的长上下文数值行为。
+
+B200 验收结果：
+
+- CUDA/模型单测 `20 passed`；fused add-RMSNorm 的输出和 FP32 residual 均与
+  顺序实现 bitwise 一致。
+- `1,356 / 12,096 / 43,704` prompt tokens 三档的生成文本、token 序列、token
+  logprob 和 top-5 logprob 均与 `4ea08bc6d4` baseline 逐项一致。
+- fused add-RMSNorm 算子微基准提升约 `1.23x` 到 `1.35x`。standalone endpoint
+  的交替三轮中位 prompt throughput 变化为：c1 短 prompt `+4.26%`、c1 12K
+  `+0.84%`、c1 43K `+1.79%`、12K c4 `-1.19%`、12K c8 `+1.06%`；整体收益
+  较小，主要价值是减少 layer 内的小 kernel launch。
+
+实验过的 Router 单-kernel 版本没有纳入分支：虽然 Router 微基准约快 `2.1x`，
+但 top-k weight 最大误差约 `8.94e-8`，并会放大成长上下文 logprob 差异。除非能
+恢复 bitwise 计算顺序，否则不应替换当前 Router 路径。
+
 ### 构建和当前状态
 
 ```bash
