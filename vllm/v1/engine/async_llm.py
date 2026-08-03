@@ -682,10 +682,11 @@ class AsyncLLM(EngineClient):
                         if end < num_outputs:
                             await asyncio.sleep(0)
 
-                        # 3) Abort any reqs that finished due to stop strings.
-                        if processed_outputs.reqs_to_abort:
-                            await engine_core.abort_requests_async(
-                                processed_outputs.reqs_to_abort
+                        # 3) Normally finish requests whose stop strings were
+                        # detected by the frontend detokenizer.
+                        if processed_outputs.reqs_to_stop:
+                            await engine_core.stop_requests_async(
+                                processed_outputs.reqs_to_stop
                             )
 
                     output_processor.update_scheduler_stats(outputs.scheduler_stats)

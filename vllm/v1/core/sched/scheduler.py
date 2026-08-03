@@ -1698,6 +1698,22 @@ class Scheduler(SchedulerInterface):
             Tuple of (req_id, client_index) for requests that were aborted. Will not
             include any that were already finished.
         """
+        return [
+            (req_id, client_index)
+            for req_id, client_index, _ in self._finish_requests(
+                request_ids, finished_status
+            )
+        ]
+
+    def finish_requests_with_kv_transfer_params(
+        self, request_ids: str | Iterable[str] | None, finished_status: RequestStatus
+    ) -> list[tuple[str, int, dict[str, Any] | None]]:
+        """Finish requests and preserve connector metadata for final outputs."""
+        return self._finish_requests(request_ids, finished_status)
+
+    def _finish_requests(
+        self, request_ids: str | Iterable[str] | None, finished_status: RequestStatus
+    ) -> list[tuple[str, int, dict[str, Any] | None]]:
         assert RequestStatus.is_finished(finished_status)
         if isinstance(request_ids, str):
             request_ids = (request_ids,)
@@ -1733,6 +1749,7 @@ class Scheduler(SchedulerInterface):
             self.skipped_waiting.remove_requests(waiting_requests_to_remove)
 
         # Second pass: set status and free requests
+        finished_requests = []
         for request in valid_requests:
             delay_free_blocks = False
             if request.status == RequestStatus.WAITING_FOR_REMOTE_KVS:
@@ -1743,9 +1760,14 @@ class Scheduler(SchedulerInterface):
                 self.failed_recving_kv_req_ids.discard(request.request_id)
 
             request.status = finished_status
-            self._free_request(request, delay_free_blocks=delay_free_blocks)
+            kv_transfer_params = self._free_request(
+                request, delay_free_blocks=delay_free_blocks
+            )
+            finished_requests.append(
+                (request.request_id, request.client_index, kv_transfer_params)
+            )
 
-        return [(r.request_id, r.client_index) for r in valid_requests]
+        return finished_requests
 
     def _free_request(
         self, request: Request, delay_free_blocks: bool = False

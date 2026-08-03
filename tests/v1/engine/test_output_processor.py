@@ -22,6 +22,7 @@ from vllm.tokenizers import TokenizerLike
 from vllm.v1.engine import (
     EngineCoreEvent,
     EngineCoreEventType,
+    EngineCoreOutput,
     EngineCoreOutputs,
     EngineCoreRequest,
     FinishReason,
@@ -814,7 +815,7 @@ def test_stop_string(
     gen_logprobs = {}
     gen_prompt_logprobs = {}
     gen_cumulative_logprobs = {}
-    aborted = []
+    stopped = []
     while True:
         # Mock output from the EngineCore.
         outputs = engine_core.get_outputs()
@@ -824,11 +825,26 @@ def test_stop_string(
         # Step the Detokenizer.
         processed_outputs = output_processor.process_outputs(outputs)
         request_outputs = processed_outputs.request_outputs
-        requests_to_abort = processed_outputs.reqs_to_abort
+        requests_to_stop = processed_outputs.reqs_to_stop
+        if requests_to_stop:
+            stopped.extend(requests_to_stop)
+            final_outputs = output_processor.process_outputs(
+                [
+                    EngineCoreOutput(
+                        request_id=request_id,
+                        new_token_ids=[],
+                        finish_reason=FinishReason.STOP,
+                        kv_transfer_params={"test": request_id},
+                    )
+                    for request_id in requests_to_stop
+                ]
+            )
+            request_outputs.extend(final_outputs.request_outputs)
         for request_output in request_outputs:
-            # If aborted, we should not get a request output.
-            assert request_output.request_id not in aborted
-        aborted.extend(requests_to_abort)
+            if request_output.finished:
+                assert request_output.kv_transfer_params == {
+                    "test": request_output.request_id + "-int"
+                }
 
         # Update tracking.
         for request_output in request_outputs:
@@ -862,9 +878,9 @@ def test_stop_string(
     for idx, (ref_gen_str, stop_str) in enumerate(
         zip(dummy_test_vectors.generation_strings, STOP_STRINGS)
     ):
-        # Request should be aborted (check internal ID in abort list).
+        # Request should be normally stopped (check internal ID in stop list).
         internal_request_id = f"request-{idx}-int"
-        assert internal_request_id in aborted
+        assert internal_request_id in stopped
 
         # Use external ID for collecting outputs
         request_id = f"request-{idx}"

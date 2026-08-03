@@ -396,6 +396,7 @@ class OpenAIServingCompletion(OpenAIServing):
                         object="text_completion",
                         created=created_time,
                         model=model_name,
+                        kv_transfer_params=res.kv_transfer_params,
                         choices=[
                             CompletionResponseStreamChoice(
                                 index=i,
