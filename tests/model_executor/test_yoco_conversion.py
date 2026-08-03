@@ -8,7 +8,9 @@ from convert_to_hf import convert_state_dict, create_hf_config
 from vllm.forward_context import ForwardContext, override_forward_context
 from vllm.model_executor.models.yoco import (
     RMSClip,
+    RMSNorm,
     YOCOCrossBlock,
+    YOCODecoderLayer,
     YOCOForCausalLM,
     _yoco_diff_attention_v2,
     _yoco_diff_attention_v3,
@@ -45,6 +47,108 @@ def test_weighted_rms_clip_matches_training_order() -> None:
     expected = (x_float * coef).to(x.dtype) * module.weight.to(x.dtype)
 
     torch.testing.assert_close(module(x), expected)
+
+
+def test_yoco_fused_add_rms_norm_cpu_fallback_matches_sequential() -> None:
+    module = RMSNorm(4, eps=1e-6, dtype=torch.float32)
+    module.weight.data.copy_(torch.tensor([0.5, 1.0, 1.5, 2.0]))
+    x = torch.tensor([[1.0, -2.0, 3.0, -4.0]], dtype=torch.bfloat16)
+    residual = torch.tensor([[0.25, 0.5, -0.75, 1.0]], dtype=torch.float32)
+
+    expected_residual = residual + x.float()
+    expected_normalized = module(expected_residual)
+    actual = module(x, residual)
+    assert isinstance(actual, tuple)
+    actual_normalized, actual_residual = actual
+
+    torch.testing.assert_close(actual_residual, expected_residual, rtol=0, atol=0)
+    torch.testing.assert_close(actual_normalized, expected_normalized, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("num_tokens", [1, 66, 128])
+def test_yoco_fused_add_rms_norm_cuda_matches_sequential(num_tokens: int) -> None:
+    generator = torch.Generator(device="cuda").manual_seed(4321 + num_tokens)
+    module = RMSNorm(3072, eps=1e-6, dtype=torch.bfloat16).cuda()
+    module.weight.data.uniform_(-1.0, 1.0, generator=generator)
+    x = torch.randn(
+        num_tokens,
+        3072,
+        dtype=torch.bfloat16,
+        device="cuda",
+        generator=generator,
+    )
+    residual = torch.randn(
+        num_tokens,
+        3072,
+        dtype=torch.float32,
+        device="cuda",
+        generator=generator,
+    )
+
+    expected_residual = residual + x.float()
+    expected_normalized = module(expected_residual)
+    actual = module(x, residual)
+    assert isinstance(actual, tuple)
+    actual_normalized, actual_residual = actual
+
+    torch.testing.assert_close(actual_residual, expected_residual, rtol=0, atol=0)
+    torch.testing.assert_close(actual_normalized, expected_normalized, rtol=0, atol=0)
+
+
+def test_yoco_decoder_residual_carry_matches_unfused_forward() -> None:
+    class SelfAttention(torch.nn.Module):
+        def forward(self, positions, hidden_states, loop_idx):
+            del positions
+            return (hidden_states * (loop_idx + 1) * 0.25).to(torch.bfloat16)
+
+    class MLP(torch.nn.Module):
+        def forward(self, hidden_states):
+            return torch.tanh(hidden_states).to(torch.bfloat16)
+
+    layer = YOCODecoderLayer.__new__(YOCODecoderLayer)
+    torch.nn.Module.__init__(layer)
+    layer.is_self_layer = True
+    layer.input_layernorm = RMSNorm(4, eps=1e-6, dtype=torch.float32)
+    layer.post_attention_layernorm = RMSNorm(4, eps=1e-6, dtype=torch.float32)
+    layer.self_attn = SelfAttention()
+    layer.mlp = MLP()
+
+    positions = torch.arange(2)
+    initial = torch.tensor(
+        [[1.0, -2.0, 3.0, -4.0], [0.5, 1.5, -2.5, 3.5]],
+        dtype=torch.float32,
+    )
+
+    legacy_hidden = initial
+    for loop_idx in range(2):
+        legacy_residual = legacy_hidden
+        legacy_attention_input = layer.input_layernorm(legacy_hidden)
+        assert isinstance(legacy_attention_input, torch.Tensor)
+        legacy_attention_output = layer.self_attn(
+            positions, legacy_attention_input, loop_idx
+        )
+        legacy_hidden = legacy_residual + legacy_attention_output.float()
+        legacy_residual = legacy_hidden
+        legacy_mlp_input = layer.post_attention_layernorm(legacy_hidden)
+        assert isinstance(legacy_mlp_input, torch.Tensor)
+        legacy_hidden = legacy_residual + layer.mlp(legacy_mlp_input).float()
+
+    hidden_states = initial
+    residual = None
+    for loop_idx in range(2):
+        hidden_states, residual = layer(
+            positions,
+            hidden_states,
+            residual,
+            loop_idx,
+            None,
+            None,
+        )
+    assert residual is not None
+    fused_hidden = residual + hidden_states.float()
+
+    torch.testing.assert_close(fused_hidden, legacy_hidden, rtol=0, atol=0)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
@@ -103,6 +207,7 @@ def test_fast_prefill_runs_all_cross_layers_on_compact_tokens() -> None:
             self,
             positions,
             hidden_states,
+            residual,
             loop_idx,
             yoco_key,
             yoco_value,
@@ -117,7 +222,9 @@ def test_fast_prefill_runs_all_cross_layers_on_compact_tokens() -> None:
                     "skip_kv_cache_update": skip_kv_cache_update,
                 }
             )
-            return hidden_states + 1
+            if residual is None:
+                residual = hidden_states
+            return hidden_states + 1, residual
 
     block = YOCOCrossBlock.__new__(YOCOCrossBlock)
     torch.nn.Module.__init__(block)
