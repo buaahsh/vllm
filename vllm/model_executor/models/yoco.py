@@ -701,10 +701,9 @@ def _yoco_diff_attention_v3(
 ) -> torch.Tensor:
     gate1 = gate[:, 0::2]
     gate2 = gate[:, 1::2]
-    return (
-        attn1 * torch.sigmoid(gate1).unsqueeze(-1)
-        - attn2 * torch.sigmoid(gate2).unsqueeze(-1)
-    )
+    return attn1 * torch.sigmoid(gate1).unsqueeze(-1) - attn2 * torch.sigmoid(
+        gate2
+    ).unsqueeze(-1)
 
 
 def _yoco_normalized_router_linear(
@@ -876,8 +875,7 @@ class YOCOSelfAttention(nn.Module):
         self.num_kv_heads = max(1, self.total_num_kv_heads // tp_size)
         gate_heads = (2 if self.diff_v3 else 1) * self.total_num_heads
         assert gate_heads % tp_size == 0, (
-            f"gate_heads={gate_heads} must be divisible "
-            f"by TP size {tp_size}"
+            f"gate_heads={gate_heads} must be divisible by TP size {tp_size}"
         )
         self.num_lambda_heads = self.total_num_heads // tp_size
         self.num_gate_heads = gate_heads // tp_size
@@ -1440,23 +1438,15 @@ class YOCODecoderLayer(nn.Module):
         self,
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
-        residual: torch.Tensor | None,
         loop_idx: int,
         yoco_key: torch.Tensor | None,
         yoco_value: torch.Tensor | None,
         kv_cache_dummy_dep: torch.Tensor | None = None,
         skip_kv_cache_update: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Keep the most recent sublayer output separate from the accumulated
-        # FP32 residual. The following RMSNorm can then fuse their addition.
-        if residual is None:
-            residual = hidden_states
-            x = self.input_layernorm(hidden_states)
-            assert isinstance(x, torch.Tensor)
-        else:
-            norm_output = self.input_layernorm(hidden_states, residual)
-            assert isinstance(norm_output, tuple)
-            x, residual = norm_output
+    ) -> torch.Tensor:
+        residual = hidden_states
+        x = self.input_layernorm(hidden_states)
+        assert isinstance(x, torch.Tensor)
         if self.is_self_layer:
             x = self.self_attn(positions, x, loop_idx)
         else:
@@ -1472,7 +1462,7 @@ class YOCODecoderLayer(nn.Module):
         assert isinstance(norm_output, tuple)
         x, residual = norm_output
         x = self.mlp(x)
-        return x, residual
+        return residual + x.float()
 
 
 # --------------------------------------------------------------------------- #
@@ -1519,20 +1509,17 @@ class YOCOCrossBlock(nn.Module):
         yoco_value: torch.Tensor,
         kv_cache_dummy_dep: torch.Tensor,
     ) -> torch.Tensor:
-        residual = None
         for index, layer in enumerate(self._cross_layers):
-            hidden_states, residual = layer(
+            hidden_states = layer(
                 positions,
                 hidden_states,
-                residual,
                 0,
                 yoco_key,
                 yoco_value,
                 kv_cache_dummy_dep=kv_cache_dummy_dep if index == 0 else None,
                 skip_kv_cache_update=index == 0,
             )
-        assert residual is not None
-        return residual + hidden_states.float()
+        return hidden_states
 
 
 # --------------------------------------------------------------------------- #
@@ -1588,13 +1575,11 @@ class YOCOSelfBlock(nn.Module):
             hidden_states = model.embed_tokens(input_ids).float()
 
         # Self-attention layers (universal loop) — all tokens.
-        residual = None
         for loop_idx in range(model.universal_loop):
             for layer_idx in range(model.first_cross_layer_idx):
-                hidden_states, residual = model.layers[layer_idx](
+                hidden_states = model.layers[layer_idx](
                     positions,
                     hidden_states,
-                    residual,
                     loop_idx,
                     None,
                     None,
@@ -1603,10 +1588,8 @@ class YOCOSelfBlock(nn.Module):
         # Produce shared K/V for all tokens and write them directly to the
         # first cross layer's cache.  The cross layer itself is deferred to the
         # compact cross block and therefore only runs for logits tokens.
-        assert residual is not None
-        norm_output = model.yoco_norm(hidden_states, residual)
-        assert isinstance(norm_output, tuple)
-        h_norm, hidden_states = norm_output
+        h_norm = model.yoco_norm(hidden_states)
+        assert isinstance(h_norm, torch.Tensor)
         yoco_key, _ = model.yoco_k_proj(h_norm)
         yoco_value, _ = model.yoco_v_proj(h_norm)
         if model.yoco_k_norm is not None:
@@ -1811,13 +1794,11 @@ class YOCOModel(nn.Module):
 
         # Universal loop: run layers 0..first_cross_layer_idx-1
         # ``universal_loop`` times.
-        residual = None
         for loop_idx in range(self.universal_loop):
             for layer_idx in range(self.first_cross_layer_idx):
-                hidden_states, residual = self.layers[layer_idx](
+                hidden_states = self.layers[layer_idx](
                     positions,
                     hidden_states,
-                    residual,
                     loop_idx,
                     None,
                     None,
@@ -1828,10 +1809,8 @@ class YOCOModel(nn.Module):
             assert self.yoco_norm is not None
             assert self.yoco_k_proj is not None
             assert self.yoco_v_proj is not None
-            assert residual is not None
-            norm_output = self.yoco_norm(hidden_states, residual)
-            assert isinstance(norm_output, tuple)
-            h_norm, hidden_states = norm_output
+            h_norm = self.yoco_norm(hidden_states)
+            assert isinstance(h_norm, torch.Tensor)
             yoco_key, _ = self.yoco_k_proj(h_norm)
             yoco_value, _ = self.yoco_v_proj(h_norm)
             if self.yoco_k_norm is not None:
@@ -1841,25 +1820,19 @@ class YOCOModel(nn.Module):
                     self.yoco_kv_head_dim,
                     self.yoco_k_norm,
                 )
-            residual = None
             # No RoPE on cross-layer K (``rope_dim = 0`` in HF config).
             for layer_idx in range(self.first_cross_layer_idx, self.num_hidden_layers):
-                hidden_states, residual = self.layers[layer_idx](
+                hidden_states = self.layers[layer_idx](
                     positions,
                     hidden_states,
-                    residual,
                     0,
                     yoco_key,
                     yoco_value,
                 )
 
-        if residual is None:
-            output = self.norm(hidden_states)
-            assert isinstance(output, torch.Tensor)
-            return output
-        norm_output = self.norm(hidden_states, residual)
-        assert isinstance(norm_output, tuple)
-        return norm_output[0]
+        output = self.norm(hidden_states)
+        assert isinstance(output, torch.Tensor)
+        return output
 
 
 # --------------------------------------------------------------------------- #
@@ -2076,9 +2049,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
             original_dp_metadata is not None
             and fast_prefill_num_tokens_across_dp_cpu is not None
         ):
-            fwd_ctx.dp_metadata = DPMetadata(
-                fast_prefill_num_tokens_across_dp_cpu
-            )
+            fwd_ctx.dp_metadata = DPMetadata(fast_prefill_num_tokens_across_dp_cpu)
         try:
             decode_hidden = model.cross_block(
                 model.fp_positions[:n],

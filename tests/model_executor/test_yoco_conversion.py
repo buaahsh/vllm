@@ -41,9 +41,7 @@ def test_weighted_rms_clip_matches_training_order() -> None:
     x = torch.tensor([[3.0, 4.0]], dtype=torch.bfloat16)
 
     x_float = x.float()
-    coef = (
-        torch.rsqrt(x_float.square().mean(-1, keepdim=True) + 1e-6)
-    ).clamp(max=1.0)
+    coef = (torch.rsqrt(x_float.square().mean(-1, keepdim=True) + 1e-6)).clamp(max=1.0)
     expected = (x_float * coef).to(x.dtype) * module.weight.to(x.dtype)
 
     torch.testing.assert_close(module(x), expected)
@@ -96,7 +94,7 @@ def test_yoco_fused_add_rms_norm_cuda_matches_sequential(num_tokens: int) -> Non
     torch.testing.assert_close(actual_normalized, expected_normalized, rtol=0, atol=0)
 
 
-def test_yoco_decoder_residual_carry_matches_unfused_forward() -> None:
+def test_yoco_decoder_post_attention_fusion_matches_unfused_forward() -> None:
     class SelfAttention(torch.nn.Module):
         def forward(self, positions, hidden_states, loop_idx):
             del positions
@@ -135,20 +133,16 @@ def test_yoco_decoder_residual_carry_matches_unfused_forward() -> None:
         legacy_hidden = legacy_residual + layer.mlp(legacy_mlp_input).float()
 
     hidden_states = initial
-    residual = None
     for loop_idx in range(2):
-        hidden_states, residual = layer(
+        hidden_states = layer(
             positions,
             hidden_states,
-            residual,
             loop_idx,
             None,
             None,
         )
-    assert residual is not None
-    fused_hidden = residual + hidden_states.float()
 
-    torch.testing.assert_close(fused_hidden, legacy_hidden, rtol=0, atol=0)
+    torch.testing.assert_close(hidden_states, legacy_hidden, rtol=0, atol=0)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
@@ -207,7 +201,6 @@ def test_fast_prefill_runs_all_cross_layers_on_compact_tokens() -> None:
             self,
             positions,
             hidden_states,
-            residual,
             loop_idx,
             yoco_key,
             yoco_value,
@@ -222,9 +215,7 @@ def test_fast_prefill_runs_all_cross_layers_on_compact_tokens() -> None:
                     "skip_kv_cache_update": skip_kv_cache_update,
                 }
             )
-            if residual is None:
-                residual = hidden_states
-            return hidden_states + 1, residual
+            return hidden_states + 1
 
     block = YOCOCrossBlock.__new__(YOCOCrossBlock)
     torch.nn.Module.__init__(block)
@@ -305,9 +296,7 @@ def test_convert_yoco_v3_attention_and_latent_moe_weights() -> None:
 
     converted = convert_state_dict(state)
 
-    assert torch.equal(
-        converted["model.layers.0.self_attn.lambda_proj.weight"], gate
-    )
+    assert torch.equal(converted["model.layers.0.self_attn.lambda_proj.weight"], gate)
     assert torch.equal(converted["model.layers.0.mlp.fc1_latent_proj.weight"], fc1)
     assert torch.equal(converted["model.layers.0.mlp.fc2_latent_proj.weight"], fc2)
     assert torch.equal(converted["model.layers.0.mlp.fc1_latent_norm.weight"], norm)
