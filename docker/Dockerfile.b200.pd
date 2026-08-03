@@ -1,0 +1,160 @@
+# Reproducible YOCO 1P2D image with one UCX implementation shared by NIXL
+# and the rest of the HPC-X stack.
+#
+# Local build:
+#   docker build -f docker/Dockerfile.b200.pd \
+#     -t vllm-yoco-pd:ucx121-local .
+
+ARG BASE_IMAGE=registry.hub.docker.com/buaahsh/pytorch@sha256:08a08f36ab8c6c80ee1c7f09b9e5f8b6ce0b91cc684455982b2e5e286c736f2b
+
+FROM ${BASE_IMAGE} AS native-builder
+
+ARG UCX_COMMIT=b6a9d47fccce849c28111f05a7fa8f1c930ff17d
+ARG NIXL_COMMIT=de8115ca97d3f8fb63a4988e9b4d4a038b2e0f72
+ARG MAX_JOBS=16
+
+ENV UCX_HOME=/opt/hpcx/ucx \
+    PATH=/opt/hpcx/ucx/bin:${PATH} \
+    LD_LIBRARY_PATH=/opt/hpcx/ucx/lib:${LD_LIBRARY_PATH}
+
+# Replace, rather than supplement, the UCX 1.20 tree inherited from HPC-X.
+# The prefix stays unchanged so existing HPC-X paths continue to resolve to
+# the sole UCX implementation in the image.
+RUN ln -sf libibverbs.so.1 /usr/lib/x86_64-linux-gnu/libibverbs.so \
+    && ln -sf libmlx5.so.1 /usr/lib/x86_64-linux-gnu/libmlx5.so \
+    && ln -sf librdmacm.so.1 /usr/lib/x86_64-linux-gnu/librdmacm.so \
+    && rm -rf /opt/hpcx/ucx \
+    && git init /tmp/ucx \
+    && cd /tmp/ucx \
+    && git remote add origin https://github.com/openucx/ucx.git \
+    && git fetch --depth 1 origin "${UCX_COMMIT}" \
+    && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "${UCX_COMMIT}" \
+    && ./autogen.sh \
+    && mkdir build \
+    && cd build \
+    && ../contrib/configure-release-mt \
+        --prefix=/opt/hpcx/ucx \
+        --enable-shared \
+        --disable-static \
+        --disable-doxygen-doc \
+        --enable-optimizations \
+        --enable-cma \
+        --enable-devel-headers \
+        --with-cuda=/usr/local/cuda \
+        --with-verbs=/usr \
+        --with-mlx5 \
+        --with-rdmacm \
+        --with-dm \
+        --with-gdrcopy \
+        --without-efa \
+        --without-java \
+        --without-knem \
+        --without-xpmem \
+    && make -j"${MAX_JOBS}" \
+    && make install-strip \
+    && test -f /opt/hpcx/ucx/lib/ucx/libuct_ib.so \
+    && test -f /opt/hpcx/ucx/lib/ucx/libuct_ib_mlx5.so \
+    && test -f /opt/hpcx/ucx/lib/ucx/libuct_rdmacm.so \
+    && /opt/hpcx/ucx/bin/ucx_info -v \
+    && test "$(/opt/hpcx/ucx/bin/ucx_info -v \
+        | sed -n 's/^# Library version: //p' | head -n 1)" = "1.21.0" \
+    && rm -rf /tmp/ucx
+
+# NIXL's platform wheel is built locally without auditwheel repair, so its UCX
+# plugin keeps generic SONAME dependencies and an explicit canonical RUNPATH;
+# no hashed/private UCX libraries are copied into the wheel.
+RUN git init /tmp/nixl \
+    && cd /tmp/nixl \
+    && git remote add origin https://github.com/ai-dynamo/nixl.git \
+    && git fetch --depth 1 origin "${NIXL_COMMIT}" \
+    && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "${NIXL_COMMIT}" \
+    && uv venv --system-site-packages /tmp/nixl-build-venv \
+    && uv pip install --python /tmp/nixl-build-venv/bin/python \
+        'meson==1.10.1' \
+        'meson-python==0.19.0' \
+        'ninja==1.13.0' \
+        'patchelf==0.17.2.4' \
+        'pybind11==3.0.2' \
+        'pyyaml==6.0.3' \
+        'tomlkit==0.14.0' \
+        'build==1.4.0' \
+        'setuptools==80.10.2' \
+    && /tmp/nixl-build-venv/bin/python \
+        contrib/tomlutil.py --wheel-name nixl-cu13 pyproject.toml \
+    && mkdir -p /tmp/nixl-wheels \
+    && uv build --python /tmp/nixl-build-venv/bin/python \
+        --no-build-isolation --wheel --out-dir /tmp/nixl-wheels \
+        --config-setting=setup-args=-Ducx_path=/opt/hpcx/ucx \
+        --config-setting=setup-args=-Denable_plugins=UCX,POSIX \
+        --config-setting=setup-args=-Dbuild_tests=false \
+        --config-setting=setup-args=-Dbuild_examples=false \
+        --config-setting=setup-args=-Dbuild_nixl_ep=false \
+        --config-setting=setup-args=-Dinstall_headers=false \
+        --config-setting=setup-args=-Dnixl_cuda_arch_list=100 \
+        /tmp/nixl \
+    && /tmp/nixl-build-venv/bin/meson setup /tmp/nixl-meta-build /tmp/nixl \
+        -Ducx_path=/opt/hpcx/ucx \
+        -Denable_plugins=UCX,POSIX \
+        -Dbuild_tests=false \
+        -Dbuild_examples=false \
+        -Dbuild_nixl_ep=false \
+        -Dinstall_headers=false \
+        -Dnixl_cuda_arch_list=100 \
+    && /tmp/nixl-build-venv/bin/ninja -C /tmp/nixl-meta-build \
+        src/bindings/python/nixl-meta/nixl-1.3.2-py3-none-any.whl \
+    && cp /tmp/nixl-meta-build/src/bindings/python/nixl-meta/nixl-*.whl \
+        /tmp/nixl-wheels/ \
+    && find /tmp/nixl-wheels -maxdepth 1 -type f -name '*.whl' -print
+
+FROM ${BASE_IMAGE} AS runtime
+
+ENV PATH=/opt/hpcx/ucx/bin:${PATH} \
+    LD_LIBRARY_PATH=/opt/hpcx/ucx/lib:${LD_LIBRARY_PATH} \
+    VLLM_TARGET_DEVICE=cuda \
+    VLLM_CACHE_ROOT=/root/.cache/vllm
+
+RUN rm -rf /opt/hpcx/ucx
+COPY --from=native-builder /opt/hpcx/ucx/ /opt/hpcx/ucx/
+COPY --from=native-builder /tmp/nixl-wheels/ /tmp/nixl-wheels/
+
+# The metadata wheel still installs the optional nixl_ep import shim even
+# when the native EP extension is disabled. Hide that shim so vLLM does not
+# eagerly select an unavailable nixl_ep_cu13 module while importing FusedMoE
+# models. NIXL KV transfer remains available through `nixl`.
+RUN uv pip uninstall --system --break-system-packages \
+        nixl nixl-cu12 nixl-cu13 || true \
+    && uv pip install --system --break-system-packages --no-deps \
+        /tmp/nixl-wheels/nixl_cu13-1.3.2-*.whl \
+    && uv pip install --system --break-system-packages --no-deps \
+        /tmp/nixl-wheels/nixl-1.3.2-py3-none-any.whl \
+    && nixl_ep_dir="$(find /usr/local/lib/python3.12/dist-packages \
+        -maxdepth 1 -type d -name nixl_ep -print -quit)" \
+    && if test -n "${nixl_ep_dir}"; then \
+        mv "${nixl_ep_dir}" "${nixl_ep_dir}.disabled"; \
+    fi \
+    && rm -rf /tmp/nixl-wheels /root/.cache/uv
+
+WORKDIR /workspace/vllm
+
+# The base image already contains native extensions built from the common
+# f4964c9 ancestor. Overlay the complete Python tree so committed YOCO changes
+# and the current, reviewable PD edits are included together.
+COPY vllm /workspace/vllm/vllm
+COPY docker/verify_single_ucx.sh /usr/local/bin/verify-single-ucx
+
+RUN chmod 0755 /usr/local/bin/verify-single-ucx \
+    && verify-single-ucx \
+    && uv venv --system-site-packages /tmp/image-check-venv \
+    && /tmp/image-check-venv/bin/python -c \
+        "import importlib.metadata as m; import nixl; from vllm.utils.import_utils import has_nixl_ep; assert m.version('nixl') == m.version('nixl-cu13') == '1.3.2'; assert not has_nixl_ep(); print(nixl.__name__)" \
+    && /tmp/image-check-venv/bin/python -m compileall -q /workspace/vllm/vllm \
+    && rm -rf /tmp/image-check-venv \
+    && uv pip list --system | grep -E '^nixl(-cu13)?[[:space:]]+1\.3\.2'
+
+LABEL org.opencontainers.image.description="YOCO vLLM PD runtime with one source-built UCX 1.21/NIXL 1.3.2 stack" \
+      org.opencontainers.image.ucx.version="1.21.0" \
+      org.opencontainers.image.ucx.revision="b6a9d47fccce849c28111f05a7fa8f1c930ff17d" \
+      org.opencontainers.image.nixl.version="1.3.2" \
+      org.opencontainers.image.nixl.revision="de8115ca97d3f8fb63a4988e9b4d4a038b2e0f72"
