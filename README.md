@@ -19,6 +19,102 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 ---
 
+## YOCO PD 分离开发版本
+
+当前开发分支 `shaohanh/yoco-serving-final-20260730-dev` 基于
+`origin/shaohanh/yoco-serving-final-20260730`，并已合入
+`origin/prefill-cut-7-31`（集成点 `0522e44b11`）。这个 fork 面向 YOCO-v2/v3
+在 NVIDIA B200 上的 Prefill/Decode（PD）分离，不是通用 vLLM 发布分支。
+
+更完整的历史配置、模型路径和早期 B200 A/B 数据见 [YOCO 验收报告](yoco.md)。
+
+### 这个版本做了什么
+
+1. **裁掉专用 Prefill 节点不需要的 YOCO cross-layer 计算。** YOCO 的 self
+   block 直接把共享 K/V 写入第一个 KV-owner cross layer 的 cache。对于只负责
+   传 KV 的请求，十个 cross layers 全部跳过；Decode 路径不变。
+2. **把专用 Producer 的 KV-only 模式静态化。** 当服务明确配置
+   `kv_role=kv_producer` 时，每个 DP rank 都固定走 KV-only 路径，不再逐 step
+   检查请求 metadata，也不再执行额外的 GPU-to-CPU `.item()` 同步。DP 的空闲
+   rank 仍执行带相同 KV-only 标记的 dummy forward，避免 MoE collective 次数
+   不一致导致 hang。
+3. **修复 YOCO 与 NIXL 的 KV cache alias。** YOCO 的多个 cross layers 会指向
+   同一块物理 KV cache；NIXL worker 现在会正确处理这些 alias，避免按 layer
+   名查原始 `KVCacheConfig` 时触发 `KeyError`。
+4. **保留流式 PD 的 KV transfer metadata。** OpenAI-compatible completion 和
+   chat completion 的 SSE 最终 chunk 会携带 `kv_transfer_params`，与非流式响应
+   一致。
+5. **正确处理前端发现的多 token stop string。** 这类请求不再被当作 abort；
+   EngineCore 会以正常 `STOP` 完成请求，让 KV connector 有机会释放资源并把
+   transfer metadata 放进最终输出。同步、异步、MP、DP load-balancing 路径均
+   使用相同语义。
+6. **提供单一 UCX 的 B200 PD 镜像。** [Dockerfile.b200.pd](docker/Dockerfile.b200.pd)
+   在 `/opt/hpcx/ucx` 构建唯一的 UCX 1.21.0，并针对它构建 NIXL 1.3.2。镜像会
+   隐藏不可用的 `nixl_ep` shim，避免 FusedMoE 导入时误选 `nixl_ep_cu13`。
+   [verify_single_ucx.sh](docker/verify_single_ucx.sh) 会检查重复 UCX、NIXL plugin
+   的 RUNPATH/动态链接，以及可选目标进程实际加载的 UCX。
+
+### PD 请求契约
+
+专用 Producer 必须满足以下条件：
+
+- YOCO 模型启用 `--kv-sharing-fast-prefill`；
+- P 服务使用 `NixlConnector` 和 `kv_role=kv_producer`；
+- P 请求使用 `max_tokens=1`，并设置
+  `kv_transfer_params.do_remote_decode=true`；
+- Gateway 丢弃 P response 的整个 `choices`，只把原始 prompt 和 P 返回的
+  `kv_transfer_params` 交给 `kv_consumer`；
+- D 负责 first token 和之后所有用户可见 token。
+
+示意配置：
+
+```text
+P: --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_producer",...}'
+D: --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_consumer",...}'
+```
+
+`kv_producer` 是专用角色，不能混入普通生成或 Decode 请求；这类误路由不会动态
+回退，返回的 logits 不保证正确。兼容角色 `kv_both` 在 DP1 仍保留逐请求检查，
+DP>1 则保守回退，不应替代生产环境的专用 P 服务。
+
+### B200 合并后验证（2026-08-03）
+
+测试使用同一台机器上的 4 张 B200：静态 `kv_producer`、`kv_consumer`、
+standalone reference 和动态 `kv_both` baseline 各占一张卡。运行时为单一
+UCX 1.21.0 + NIXL 1.3.2。
+
+- `1,356 / 12,096 / 43,704` prompt tokens 的 P/D 输出均与 standalone
+  reference 逐字一致；三轮 D -> P -> D 复用也全部一致。
+- 流式 completion 的普通停止和跨 token stop-string 均逐字一致，最终 SSE
+  chunk 均包含 `kv_transfer_params`。
+- 静态 Producer 相对动态 baseline 的五轮中位 prompt throughput 提升为
+  `+0.52%` 到 `+2.24%`，不同 prompt/concurrency shape 均未观察到回退。
+- 完整 P -> D 相对 standalone：c1 因两次 HTTP/握手开销吞吐低 `14%` 到
+  `21%`；c4 吞吐 `+7.87%`、中位延迟 `-12.10%`；c8 吞吐 `+2.85%`、中位
+  延迟 `-5.15%`。
+- 四个服务日志中未发现 UCX/NIXL transfer error、HTTP 5xx 或 EngineCore
+  error。
+
+原始 JSON 和日志位于共享 PVC：
+
+```text
+/mnt/pvc/lidong1/vllm_pd/merged-0803-gpu-validation/
+```
+
+### 构建和当前状态
+
+```bash
+docker build -f docker/Dockerfile.b200.pd \
+  -t vllm-yoco-pd:ucx121-local .
+
+# 容器启动后检查镜像；传 PID 可继续检查进程实际加载的动态库。
+verify-single-ucx [pid]
+```
+
+`Dockerfile.b200.pd` 已通过 `docker build --check`。上述 GPU 测试是在 Pod 内
+统一 UCX/NIXL 后完成；加入 `nixl_ep` 防护后的镜像仍需实际重建和做一次镜像级
+短回归后再发布，不能把当前验证结果视为新镜像已验收。
+
 ## About
 
 vLLM is a fast and easy-to-use library for LLM inference and serving.
