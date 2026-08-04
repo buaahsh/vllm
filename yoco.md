@@ -179,6 +179,56 @@ c4 和 c8 为降低小样本波动，每轮各发送 80 个请求。每个 shape
 `/mnt/pvc/lidong1/vllm_pd/pr01-dp4-20260804-node0331/alternating-benchmark-warmed.json`
 和同目录的 `concurrency-benchmark-warmed.json`。
 
+## NIXL KV-sharing alias 注册修复
+
+这是 KV-only producer 优化之后的独立 follow-up，避免把 NIXL 兼容性修复和
+算子裁剪放在同一个 PR：
+
+```text
+baseline branch: fhb-dev
+baseline commit: 85eab7b56ec4cb1208364bb0daa74d04f09f440e
+candidate branch: review/yoco-02-nixl-kv-alias
+candidate commit: this PR HEAD
+```
+
+### 修改文件
+
+- `vllm/distributed/kv_transfer/kv_connector/v1/nixl/worker.py`：识别缺少独立
+  layer spec、但底层 tensor 地址已经注册的 KV-sharing alias，并跳过重复
+  NIXL memory registration。
+- `tests/v1/kv_connector/unit/test_nixl_connector.py`：让现有 cache registration
+  参数化测试覆盖“alias 在 connector 捕获 KVCacheConfig 后才加入”的真实顺序。
+- `yoco.md`：记录问题边界、测试和性能影响。
+
+ModelRunner 会在 NIXL worker 捕获 `KVCacheConfig` 后加入 cross-layer
+KV-sharing alias。alias 与 owner layer 指向相同 tensor，但没有独立 layer
+spec；旧逻辑会先用 alias 名称索引 spec，因此尚未执行地址去重就抛出
+`KeyError`。
+
+新逻辑保持 fail-closed：有 spec 的 layer 完全走原路径；缺少 spec 时，只有
+所有 tensor 地址都已经注册才能判定为 alias 并跳过；缺少 spec 的唯一 tensor
+仍抛出 `KeyError`，不会掩盖错误配置。
+
+### 测试与性能
+
+定向 cache-registration 单测覆盖 FlashAttention、TritonAttention 和
+cross-layer blocks 开关，结果为：
+
+```text
+4 passed, 2 skipped, 55 deselected, 14 warnings in 9.32s
+```
+
+这份完全相同的两文件补丁已作为测试 overlay 在 B200 producer DP4 验证中
+运行：受影响测试集合为 `43 passed, 24 warnings in 80.85s`；四个 producer
+worker 均成功初始化 NIXL/UCX，随后完成 1,356、12,096、43,704 prompt
+tokens 的 P/D exact-match，以及额外 43 个 c1/c4/c8 请求，无 hang 或
+collective mismatch。
+
+这是一次启动期 memory registration 正确性修复，不进入请求稳态热路径。
+参数化单测验证 block-first layout 仍只生成 2 个 registration entries，分离
+K/V layout 仍为 4 个，alias 新增 registration entries 为 0；因此预期稳态
+吞吐变化为 0，不单独复用上一条算子优化 PR 的吞吐收益。
+
 ## 验证模型
 
 YOCO-v2 agentic serving：

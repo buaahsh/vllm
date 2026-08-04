@@ -850,7 +850,32 @@ class NixlConnectorWorker:
             # However, physical page_size may differ when kernel requires a specific
             # block size. This leads to SSM and FA layers having different num_blocks.
             # `_physical_blocks_per_logical_kv_block` ratio is used to adjust for this.
-            layer_spec = self._layer_specs[layer_name]
+            layer_spec = self._layer_specs.get(layer_name)
+            if layer_spec is None:
+                # Cross-layer KV sharing adds alias entries to ``kv_caches``
+                # after the connector has captured ``kv_cache_config``. The
+                # alias therefore has no independent layer spec, but points
+                # at a cache region that was already registered for its
+                # target layer. Skip that duplicate before consulting the
+                # missing spec. Keep raising for a genuinely unknown, unique
+                # cache so configuration errors are not hidden.
+                raw_caches = (
+                    (cache_or_caches,)
+                    if isinstance(cache_or_caches, torch.Tensor)
+                    else cache_or_caches
+                )
+                if raw_caches and all(
+                    cache.data_ptr() in seen_base_addresses for cache in raw_caches
+                ):
+                    logger.debug(
+                        "Skipping KV-sharing alias %s because its cache is "
+                        "already registered",
+                        layer_name,
+                    )
+                    continue
+                raise KeyError(
+                    f"No KV cache spec found for unique cache layer {layer_name!r}"
+                )
             if isinstance(layer_spec, UniformTypeKVCacheSpecs):
                 # MLA DSv32 Indexer case: UniformTypeKVCacheSpecs merges kv_cache_specs
                 layer_spec = layer_spec.kv_cache_specs[layer_name]
