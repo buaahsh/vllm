@@ -201,10 +201,8 @@ if HAS_TRITON:
         )
 
     @triton.jit
-    def _yoco_routing_renorm_scatter_kernel(
+    def _yoco_routing_renorm_kernel(
         topk_weights_ptr,
-        topk_ids_ptr,
-        output_ptr,
         num_rows,
         BLOCK_ROWS: tl.constexpr,
     ):
@@ -216,17 +214,12 @@ if HAS_TRITON:
             mask=row_mask,
             other=0.0,
         )
-        ids = tl.load(
-            topk_ids_ptr + rows * 8 + ranks,
-            mask=row_mask,
-            other=0,
-        )
         denominator = tl.sum(
             tl.where(row_mask, weights, 0.0),
             axis=1,
         )[:, None]
         tl.store(
-            output_ptr + rows * 128 + ids,
+            topk_weights_ptr + rows * 8 + ranks,
             weights / denominator,
             mask=row_mask,
         )
@@ -403,7 +396,7 @@ def _yoco_routing_renorm_block(num_rows: int) -> int:
 def _yoco_topk_routing_impl(
     router_logits: torch.Tensor,
     topk: int,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     assert router_logits.dtype == torch.float32
     assert router_logits.shape[-1] == 128
     assert topk == 8
@@ -417,20 +410,16 @@ def _yoco_topk_routing_impl(
         num_warps=2,
         num_stages=1,
     )
-    scores, topk_ids = torch.topk(gate_scores, k=topk, dim=-1)
-    routing_probs = torch.zeros_like(router_logits)
+    topk_weights, topk_ids = torch.topk(gate_scores, k=topk, dim=-1)
     renorm_block = _yoco_routing_renorm_block(num_rows)
-    _yoco_routing_renorm_scatter_kernel[(triton.cdiv(num_rows, renorm_block),)](
-        scores,
-        topk_ids,
-        routing_probs,
+    _yoco_routing_renorm_kernel[(triton.cdiv(num_rows, renorm_block),)](
+        topk_weights,
         num_rows,
         BLOCK_ROWS=renorm_block,
         num_warps=2,
         num_stages=1,
     )
-    routing_map = routing_probs != 0
-    return routing_probs, routing_map, gate_scores
+    return topk_weights, topk_ids
 
 
 def _yoco_topk_routing(
@@ -446,8 +435,7 @@ def _yoco_topk_routing(
         topk_weights, topk_ids = torch.topk(gate_scores, k=topk, dim=-1)
         topk_weights /= topk_weights.sum(dim=-1, keepdim=True)
         return topk_weights, topk_ids
-    routing_probs, _, _ = _yoco_topk_routing_impl(gating_output, topk)
-    return torch.topk(routing_probs, k=topk, dim=-1)
+    return _yoco_topk_routing_impl(gating_output, topk)
 
 
 class RMSClip(nn.Module):

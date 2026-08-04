@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+import pytest
 import torch
 
 from convert_to_hf import convert_state_dict, create_hf_config
@@ -11,6 +12,7 @@ from vllm.model_executor.models.yoco import (
     YOCOForCausalLM,
     _yoco_diff_attention_v2,
     _yoco_diff_attention_v3,
+    _yoco_topk_routing,
 )
 
 
@@ -41,6 +43,54 @@ def test_weighted_rms_clip_matches_training_order() -> None:
     expected = (x_float * coef).to(x.dtype) * module.weight.to(x.dtype)
 
     torch.testing.assert_close(module(x), expected)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("num_tokens", [1, 3, 66, 110, 256])
+def test_yoco_router_fused_topk_matches_reference(num_tokens: int) -> None:
+    generator = torch.Generator(device="cuda").manual_seed(1234 + num_tokens)
+    logits = torch.randn(
+        num_tokens,
+        128,
+        dtype=torch.float32,
+        device="cuda",
+        generator=generator,
+    )
+    hidden_states = torch.empty(num_tokens, 1, device="cuda")
+
+    actual_weights, actual_ids = _yoco_topk_routing(
+        hidden_states,
+        logits,
+        topk=8,
+        renormalize=True,
+    )
+
+    reference_scores = torch.softmax(logits, dim=-1, dtype=torch.float32)
+    reference_weights, reference_ids = torch.topk(reference_scores, k=8, dim=-1)
+    reference_weights /= reference_weights.sum(dim=-1, keepdim=True)
+
+    torch.testing.assert_close(actual_weights, reference_weights, rtol=2e-6, atol=0)
+    torch.testing.assert_close(actual_ids, reference_ids, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_yoco_router_fused_topk_preserves_tie_order() -> None:
+    logits = torch.zeros(4, 128, dtype=torch.float32, device="cuda")
+    hidden_states = torch.empty(4, 1, device="cuda")
+
+    actual_weights, actual_ids = _yoco_topk_routing(
+        hidden_states,
+        logits,
+        topk=8,
+        renormalize=True,
+    )
+    reference_weights, reference_ids = torch.topk(
+        torch.softmax(logits, dim=-1), k=8, dim=-1
+    )
+    reference_weights /= reference_weights.sum(dim=-1, keepdim=True)
+
+    torch.testing.assert_close(actual_weights, reference_weights, rtol=0, atol=0)
+    torch.testing.assert_close(actual_ids, reference_ids, rtol=0, atol=0)
 
 
 def test_fast_prefill_runs_all_cross_layers_on_compact_tokens() -> None:

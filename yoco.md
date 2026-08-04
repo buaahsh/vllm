@@ -229,6 +229,66 @@ collective mismatch。
 K/V layout 仍为 4 个，alias 新增 registration entries 为 0；因此预期稳态
 吞吐变化为 0，不单独复用上一条算子优化 PR 的吞吐收益。
 
+## Router Top-K 简化
+
+这是 NIXL alias 修复之后的第三个独立 PR，只优化 YOCO 128-expert、Top-8
+Router，不混入 RMSNorm 或其他算子改动：
+
+```text
+baseline branch: fhb-dev
+baseline commit: ea4f80d1b4882ffbddc9aa7135863bab38ba0fee
+candidate branch: review/yoco-03-router-topk
+candidate commit: this PR HEAD
+```
+
+### 修改文件
+
+- `vllm/model_executor/models/yoco.py`：Top-K 后直接原地归一化并返回
+  `[tokens, 8]` weights/ids，删除 dense routing materialization、scatter、
+  routing map 和第二次 `torch.topk`。
+- `tests/model_executor/test_yoco_conversion.py`：覆盖 1、3、66、110、256
+  token 的随机 logits，以及全相等 logits 的 tie order。
+- `yoco.md`：记录功能边界、测试数据和独立性能指标。
+
+数值路径保持 FP32 softmax、`torch.topk` 和 post-top-k renormalization 不变；
+没有改 expert 选择和 tie-breaking 语义。原实现先生成 `[tokens, 128]` 的
+FP32 `routing_probs` 和 bool `routing_map`，再从 dense tensor 做第二次
+Top-K；新实现让第一次 Top-K 的结果直接成为最终输出，并用 Triton kernel
+原地归一化。每个 token 明确少分配 `128 * (4 + 1) = 640` bytes 的两个
+dense 临时 tensor；第二次 Top-K 的额外 workspace 未计入这个保守值。
+
+### B200 正确性与性能
+
+独立 B200 Pod `lidong1-yoco-pr03-router-g1-0804-master-0`（节点
+`slc01-cl02-hgx-0346`）上的 Router 定向测试结果为：
+
+```text
+6 passed, 9 deselected, 19 warnings in 4.05s
+```
+
+随机 case 的 expert ids 与 baseline exact match，归一化 weights 在
+`rtol=2e-6, atol=0` 下通过；全相等 logits 的 expert ids 和 weights 均 exact
+match，确认保留 `torch.topk` 的 tie order。
+
+性能是同一张 B200 上的纯 Router microbenchmark。两边使用相同 FP32 logits、
+相同 softmax kernel 和相同 Top-K 参数；分别捕获为 CUDA Graph，warmup 后每个
+shape 计时 1,000 次 graph replay，报告中位延迟。这样仍包含实际 GPU kernel
+和显存读写成本，但不把 Python/kernel-launch 开销误算成主要收益：
+
+| tokens | baseline (us) | candidate (us) | 加速 | 少分配 dense 临时内存 |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | `24.704` | `16.096` | `1.535x` | 640 B |
+| 3 | `28.864` | `15.968` | `1.808x` | 1,920 B |
+| 66 | `30.784` | `17.824` | `1.727x` | 42,240 B |
+| 110 | `32.288` | `18.336` | `1.761x` | 70,400 B |
+| 256 | `34.768` | `20.112` | `1.729x` | 160 KiB |
+| 1,024 | `38.912` | `22.048` | `1.765x` | 640 KiB |
+| 4,096 | `73.248` | `40.320` | `1.817x` | 2.5 MiB |
+| 16,384 | `214.944` | `116.480` | `1.845x` | 10 MiB |
+
+这里报告的是 Router 单算子的 CUDA Graph 数据，不复用此前
+Router + fused add-RMSNorm 的端到端收益，也不外推为整模型吞吐提升。
+
 ## 验证模型
 
 YOCO-v2 agentic serving：
