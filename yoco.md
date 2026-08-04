@@ -674,6 +674,71 @@ vllm/v1/worker/dp_utils.py
 vllm/v1/worker/gpu_model_runner.py
 ```
 
+## 前两轮 YOCO 算子优化记录（2026-08-03）
+
+Shared Expert/Routed MoE 并行之前，分支 `yoco-router-fusion-0803` 基于
+`4ea08bc6d4` 依次完成了 Router 简化和 fused add-RMSNorm。最终验收点为
+`921d330d6c`，也是后续 Shared Expert 并行分支的直接基线。
+
+### 第一轮：Router 中间张量简化
+
+对应提交：`98c77b8544`（`perf(yoco): remove redundant router materialization`）。
+
+- 保留原来的 FP32 softmax、`torch.topk` 和 top-k renormalization 顺序，但让
+  `_yoco_topk_routing_impl` 直接返回 `[tokens, 8]` 的 `topk_weights` 和
+  `topk_ids`。
+- 删除 `[tokens, 128]` dense `routing_probs` 的分配、top-k weight scatter、
+  `routing_map = routing_probs != 0`，以及为了从 dense tensor 重新取回结果而
+  执行的第二次 `torch.topk`。
+- renormalization Triton kernel 改为原地更新 `topk_weights`；tie 行为和 expert
+  id 顺序仍由原来的 `torch.topk` 决定。CPU/non-Triton fallback 也保持相同公式。
+- 增加不同 token 数（1/3/66/110/256）以及全相等 logits 的测试，覆盖普通输入
+  和 top-k tie order。
+
+这轮还实验过把 Router softmax/top-k/renormalization 全部写成单个 Triton
+kernel。该版本微基准约快 `2.1x`，但 top-k weight 最大误差约 `8.94e-8`，并在
+长上下文中放大为 logprob 差异，因此没有合入。当前实现的原则是只消除冗余
+materialization，不改变 softmax 和 top-k 的数值路径。
+
+### 第二轮：fused residual add-RMSNorm
+
+对应提交：`d934b7411b`，精度修正提交为 `cb5b179a44`。
+
+- 新增 YOCO 专用 Triton `yoco_fused_add_rms_norm`：在一个 kernel 中读取 sublayer
+  BF16/FP32 output 和 FP32 residual，先物化完整 FP32 `residual_out = residual +
+  x.float()`，同时累加平方和，再生成 BF16 RMSNorm output。
+- 融合点放在每个 decoder layer 的 attention output 与
+  `post_attention_layernorm` 之间，消除独立 FP32 residual-add kernel 及其一次
+  额外读写。非 CUDA、不满足 dtype/shape 条件或 hidden size 不是 3072 时走原来的
+  顺序 fallback。
+- 初版曾尝试把 MLP output 和 FP32 residual 拆开跨 decoder layer 传递，以便下一
+  层继续融合；虽然局部算子结果正确，但改变了 layer boundary 的物化/舍入点，
+  长上下文不能保持 bitwise 一致。`cb5b179a44` 撤销了跨层 residual carry：每层
+  结束仍执行原顺序的 `residual + mlp_output.float()`，只保留层内一次
+  attention add-RMSNorm 融合。
+- CPU fallback、CUDA token 数 1/66/128、normalized output、FP32 residual output
+  和完整 decoder layer 均有逐项测试；融合输出与顺序实现 bitwise 一致。
+
+### 两轮合并验收
+
+- B200 CUDA/模型测试：`20 passed`。
+- 相对 `4ea08bc6d4` baseline，`1,356 / 12,096 / 43,704` prompt tokens 三档的
+  生成文本、token 序列、token logprob 和 top-5 logprob 全部逐项一致。
+- fused add-RMSNorm 算子微基准提升约 `1.23x` 到 `1.35x`。
+- standalone endpoint 交替三轮的 prompt throughput 中位数变化如下。该结果包含
+  Router 简化与 add-RMSNorm 两轮，不能把端到端收益单独归因到某一轮：
+
+| workload | throughput 变化 |
+| --- | ---: |
+| c1，短 prompt | `+4.26%` |
+| c1，12K prompt | `+0.84%` |
+| c1，43K prompt | `+1.79%` |
+| c4，12K prompt | `-1.19%` |
+| c8，12K prompt | `+1.06%` |
+
+整体端到端收益较小，主要价值是减少 Router 临时张量以及 decoder layer 内的小
+kernel launch；长上下文 bitwise 精度优先于进一步扩大融合边界。
+
 ## Shared Expert 与 Routed MoE 并行（2026-08-03）
 
 开发分支 `yoco-shared-expert-overlap-0803` 基于
