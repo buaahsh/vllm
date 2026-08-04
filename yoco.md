@@ -27,6 +27,158 @@ size: 37,667,878,332 bytes
 - YOCO-v2 DP8+EP compile key `be47add45b`；
 - 对应的 Torch AOT/Inductor 和首请求 Triton JIT cache。
 
+## Prefill-only 后十层裁剪
+
+这是最终分支之后的 follow-up 优化，尚未写入上面的最终镜像，避免与已发布
+镜像内容混淆：
+
+```text
+baseline branch: shaohanh/yoco-serving-final-20260730
+baseline commit: c27db1e189973cea3164ba66b1d00359d4122088
+candidate branch: review/yoco-01-kv-only-prefill
+candidate commit: this PR HEAD
+```
+
+### 修改文件
+
+- `vllm/model_executor/layers/attention/attention.py`：允许 YOCO 复用已完成的
+  KV cache 写入，并跳过重复写入。
+- `vllm/model_executor/models/yoco.py`：直接写入共享 K/V；普通 fast prefill
+  的十个 cross layers 只处理 logits token，KV-only P 请求跳过全部十层。
+- `vllm/v1/worker/gpu_model_runner.py`：为专用 YOCO `kv_producer` 服务启用
+  任意 DP 的 KV-only 路径；DP1 `kv_both` 保留逐请求安全检查。
+- `vllm/v1/worker/gpu_worker.py`：让专用 producer 的空闲 DP rank runtime
+  dummy 同样走 KV-only 路径，保持 MoE collective 顺序一致。
+- `tests/model_executor/test_yoco_conversion.py`：覆盖十层 compact-token 执行和
+  KV-only 全跳过行为。
+- `tests/v1/worker/test_gpu_model_runner.py`：覆盖 P batch、静态 producer 和
+  空闲 rank dummy 判定。
+- `yoco.md`：记录功能边界、测试数据、正确性和性能指标。
+
+最终分支的普通 fast prefill 已经让后十个 cross layers 中的后九层只处理
+logits token，但第一个 KV-owner cross layer 仍处理完整 prompt。本次改为由
+self block 直接把共享 K/V 写入第一个 cross layer 的 cache，再让十个 cross
+layers 都只处理 logits token。对于只负责传 KV 的 P 请求，十个 cross layers
+全部跳过；D 侧的正常 decode 路径不变。
+
+### P/D token 归属和启用条件
+
+当前约定是 **P token 必须丢弃，D 负责 first token 和之后所有用户可见
+token**：
+
+1. Gateway 向 P 发送原始 prompt，并设置 `max_tokens=1`、
+   `kv_transfer_params.do_remote_decode=true`；
+2. P 为了完成 vLLM 请求仍会产生一个 disposable sampled token，但 Gateway
+   必须丢弃 P response 的整个 `choices`，只取 `kv_transfer_params`；
+3. Gateway 将原始 prompt 和 P 返回的 KV transfer metadata 一起发送给 D；
+4. D 生成第一个以及后续全部用户可见 token。
+
+这不是可选的展示策略，而是本优化的正确性前提。如果 Gateway 拼接或返回
+P token，输出不保证正确，因为 P 的 disposable logits 没有经过 cross
+layers。
+
+专用 P 服务使用静态角色判断，以下条件是部署契约：
+
+- 模型为 YOCO，并开启 `--kv-sharing-fast-prefill`；
+- P 服务配置 `kv_transfer_config.kv_role=kv_producer`；
+- 该服务只接收 P 请求，每个请求均为 `max_tokens=1` 且
+  `kv_transfer_params.do_remote_decode=true`；
+- D 是独立的 `kv_consumer` 服务，负责 first token 和之后全部用户可见 token。
+
+`kv_producer` 是整个服务所有 rank 共享的静态角色，因此支持 DP1、DP2、
+DP4、DP8 等任意 DP 数；它会无条件走 KV-only 路径，不再逐 step 检查请求
+metadata。代价是 producer 不能混入普通请求，否则其 logits 不保证正确。
+DP>1 的空闲 rank 会执行 runtime dummy forward 以参与 active rank 的 MoE
+collective，这个 dummy 也必须使用 KV-only 路径，否则两边 collective 次数
+不同会 hang。
+
+为了兼容旧部署，`kv_both` 仍在 DP1 下使用 request-level 条件动态判断；
+`kv_both` 的 DP>1 不能证明服务是纯 P 节点，因此保守回退。专用 P 节点应
+使用：
+
+```text
+--kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_producer",...}'
+```
+
+### B200 正确性与性能
+
+本机定向回归为 `3 passed`；完整的两个受影响测试文件在独立 B200 Pod
+`lidong1-yoco-pr01-b200-g4-0804-master-0`（节点
+`slc01-cl02-hgx-0017`）内运行，结果为：
+
+```text
+42 passed, 24 warnings in 86.64s
+```
+
+受影响文件通过 `ruff-check`、`ruff-format` 和 `git diff --check`。本机完整
+运行同一组测试时有 `40 passed`，另两个失败分别来自已被 Dashboard 占用的
+`localhost:12345` 和已被其他服务占满的四张 A6000；因此在隔离 B200 Pod
+重跑，并确认全部 42 项通过。
+
+端到端 P/D 正确性覆盖 `1,356 / 12,096 / 43,704` prompt tokens。三个
+case 中，baseline P/D、candidate P/D 和单体 reference 的最终 D 输出均
+exact match。另做了三轮连续 D -> P -> D KV 回传；前一轮 D 输出进入下一轮
+prompt，三轮最终输出也都与单体 reference exact match。
+
+下面是相同 B200 节点、相同 YOCO-v3 模型和服务参数下的 warmed A/B；每个
+实例为 DP1，指标是 P 侧 prompt throughput。Baseline 和 candidate 都叠加
+相同的 NIXL alias 测试补丁，该补丁不属于本 PR，保证唯一变量是本次
+KV-only prefill 裁剪。每个 shape 跑五轮，并按轮次交替 A/B 执行顺序；表中
+报告五轮中位数：
+
+| prompt / concurrency | baseline tok/s | candidate tok/s | 提升 |
+| --- | ---: | ---: | ---: |
+| 1.4K / c1 | `12,838` | `16,479` | `28.36%` |
+| 12.1K / c1 | `39,315` | `40,895` | `4.02%` |
+| 43.7K / c1 | `44,910` | `47,899` | `6.66%` |
+| 12.1K / c4 | `49,099` | `51,888` | `5.68%` |
+| 12.1K / c8 | `48,814` | `51,104` | `4.69%` |
+
+五个 shape 每轮分别发送 `50 / 10 / 5 / 12 / 16` 个请求。各组吞吐的
+coefficient of variation 为 `0.30%` 到 `2.07%`；长 prompt 和并发场景
+稳定提升约 `4%` 到 `7%`。原因是 baseline 已经把九个 cross layers 压缩到
+logits token，本次主要再移除第一个 KV-owner cross layer 对完整 prompt
+的计算，而不是从零裁掉完整十层计算，因此该收益量级符合预期。
+
+#### DP4 专用 producer 补充验证（2026-08-04）
+
+用户侧部署是纯 P 节点，因此 producer 不需要限制为 DP1。本轮在 8×B200
+节点 `slc01-cl02-hgx-0331` 上验证专用 `kv_producer` 的 DP4 路径：candidate
+P 使用 GPU 0-3，独立 D 和 reference 分别使用 GPU 4、5；正确性完成后停止
+D/reference，再在 GPU 4-7 启动 baseline P 做同机 DP4 A/B。P、D 和 baseline
+都使用同一套 UCX 1.21 CUDA modules。
+
+受影响的两个单测文件在 B200 上结果为：
+
+```text
+43 passed, 24 warnings in 80.85s
+```
+
+端到端 P/D 正确性覆盖 `1,356 / 12,096 / 43,704` prompt tokens。三个 case
+均由 DP4 P 产出 KV，再由独立 D 生成全部用户可见 token，并与单体 reference
+做 exact match，结果全部通过。随后又发送 43 个独立 P 请求（2 个 warmup、
+41 个计量请求），覆盖 c1、c4、c8 和最长 43.7K prompt；全部完成，无 hang
+或 collective 次数不一致。
+
+性能 baseline 是 `c27db1e189`，candidate 是本 PR HEAD；两边都是
+`kv_producer`、DP4、相同模型和相同服务参数，并叠加相同的测试专用 NIXL
+alias 修复，该修复不属于 PR。c1 shape 每轮分别发送 `50 / 10 / 5` 个请求；
+c4 和 c8 为降低小样本波动，每轮各发送 80 个请求。每个 shape 五轮交替执行
+顺序，报告 warmed 吞吐中位数：
+
+| prompt / concurrency | baseline tok/s | candidate tok/s | 提升 |
+| --- | ---: | ---: | ---: |
+| 1.4K / c1 | `10,419` | `12,507` | `20.04%` |
+| 12.1K / c1 | `48,828` | `54,069` | `10.74%` |
+| 43.7K / c1 | `64,757` | `70,462` | `8.81%` |
+| 12.1K / c4 | `119,388` | `121,266` | `1.57%` |
+| 12.1K / c8 | `152,172` | `157,103` | `3.24%` |
+
+正式五轮数据的 coefficient of variation 为 `1.17%` 到 `3.20%`。完整 JSON
+保存在
+`/mnt/pvc/lidong1/vllm_pd/pr01-dp4-20260804-node0331/alternating-benchmark-warmed.json`
+和同目录的 `concurrency-benchmark-warmed.json`。
+
 ## 验证模型
 
 YOCO-v2 agentic serving：

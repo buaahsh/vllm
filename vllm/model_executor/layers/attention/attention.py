@@ -438,6 +438,8 @@ class Attention(nn.Module, AttentionLayerBase):
         # shape does not match the query shape, so we optionally let the model
         # definition specify the output tensor shape.
         output_shape: torch.Size | None = None,
+        kv_cache_dummy_dep: torch.Tensor | None = None,
+        skip_kv_cache_update: bool = False,
     ) -> torch.Tensor:
         """
         The KV cache is stored inside this class and is accessed via
@@ -481,11 +483,11 @@ class Attention(nn.Module, AttentionLayerBase):
             key = key.view(-1, self.num_kv_heads, self.head_size)
         if value is not None:
             value = value.view(-1, self.num_kv_heads, self.head_size_v)
-        kv_cache_dummy_dep = None
         if self.use_direct_call:
             # Skip this if sharing KV cache with an earlier attention layer.
             if (
-                not self.attn_backend.forward_includes_kv_cache_update
+                not skip_kv_cache_update
+                and not self.attn_backend.forward_includes_kv_cache_update
                 and self.kv_sharing_target_layer_name is None
                 and key is not None
                 and value is not None
@@ -505,7 +507,8 @@ class Attention(nn.Module, AttentionLayerBase):
             # Skip this if sharing KV cache with an earlier attention layer.
             encoded = _encode_layer_name(self.layer_name)
             if (
-                not self.attn_backend.forward_includes_kv_cache_update
+                not skip_kv_cache_update
+                and not self.attn_backend.forward_includes_kv_cache_update
                 and self.kv_sharing_target_layer_name is None
                 and key is not None
                 and value is not None

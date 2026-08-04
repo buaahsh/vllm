@@ -56,7 +56,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from vllm.compilation.decorators import support_torch_compile
-from vllm.config import CUDAGraphMode, CacheConfig, VllmConfig
+from vllm.config import CacheConfig, CUDAGraphMode, VllmConfig
 from vllm.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
@@ -89,7 +89,7 @@ from vllm.model_executor.models.utils import (
 from vllm.platforms import current_platform
 from vllm.sequence import IntermediateTensors
 from vllm.triton_utils import HAS_TRITON, tl, tldevice, triton
-from vllm.utils.torch_utils import direct_register_custom_op
+from vllm.utils.torch_utils import _encode_layer_name, direct_register_custom_op
 from vllm.v1.attention.backends.utils import KVSharingFastPrefillMetadata
 
 if HAS_TRITON:
@@ -577,10 +577,9 @@ def _yoco_diff_attention_v3(
 ) -> torch.Tensor:
     gate1 = gate[:, 0::2]
     gate2 = gate[:, 1::2]
-    return (
-        attn1 * torch.sigmoid(gate1).unsqueeze(-1)
-        - attn2 * torch.sigmoid(gate2).unsqueeze(-1)
-    )
+    return attn1 * torch.sigmoid(gate1).unsqueeze(-1) - attn2 * torch.sigmoid(
+        gate2
+    ).unsqueeze(-1)
 
 
 def _yoco_normalized_router_linear(
@@ -752,8 +751,7 @@ class YOCOSelfAttention(nn.Module):
         self.num_kv_heads = max(1, self.total_num_kv_heads // tp_size)
         gate_heads = (2 if self.diff_v3 else 1) * self.total_num_heads
         assert gate_heads % tp_size == 0, (
-            f"gate_heads={gate_heads} must be divisible "
-            f"by TP size {tp_size}"
+            f"gate_heads={gate_heads} must be divisible by TP size {tp_size}"
         )
         self.num_lambda_heads = self.total_num_heads // tp_size
         self.num_gate_heads = gate_heads // tp_size
@@ -1001,11 +999,19 @@ class YOCOCrossAttention(nn.Module):
         hidden_states: torch.Tensor,
         yoco_key: torch.Tensor,
         yoco_value: torch.Tensor,
+        kv_cache_dummy_dep: torch.Tensor | None = None,
+        skip_kv_cache_update: bool = False,
     ) -> torch.Tensor:
         q, _ = self.q_proj(hidden_states)
         if self.q_norm is not None:
             q = _apply_per_head_norm(q, self.num_heads, self.head_dim, self.q_norm)
-        attn_out = self.attn(q, yoco_key, yoco_value)
+        attn_out = self.attn(
+            q,
+            yoco_key,
+            yoco_value,
+            kv_cache_dummy_dep=kv_cache_dummy_dep,
+            skip_kv_cache_update=skip_kv_cache_update,
+        )
         gate, _ = self.lambda_proj(hidden_states)
         out = self._diff_attention_combine(attn_out, gate)
         out, _ = self.o_proj(out)
@@ -1311,6 +1317,8 @@ class YOCODecoderLayer(nn.Module):
         loop_idx: int,
         yoco_key: torch.Tensor | None,
         yoco_value: torch.Tensor | None,
+        kv_cache_dummy_dep: torch.Tensor | None = None,
+        skip_kv_cache_update: bool = False,
     ) -> torch.Tensor:
         residual = hidden_states
         x = self.input_layernorm(hidden_states)
@@ -1318,7 +1326,13 @@ class YOCODecoderLayer(nn.Module):
             x = self.self_attn(positions, x, loop_idx)
         else:
             assert yoco_key is not None and yoco_value is not None
-            x = self.self_attn(x, yoco_key, yoco_value)
+            x = self.self_attn(
+                x,
+                yoco_key,
+                yoco_value,
+                kv_cache_dummy_dep=kv_cache_dummy_dep,
+                skip_kv_cache_update=skip_kv_cache_update,
+            )
         x = residual + x.float()
 
         residual = x
@@ -1342,8 +1356,13 @@ class YOCODecoderLayer(nn.Module):
     enable_if=lambda vllm_config: vllm_config.cache_config.kv_sharing_fast_prefill,
 )
 class YOCOCrossBlock(nn.Module):
-    """Wraps cross-attention layers 11..N-1 (KV-sharing layers) for separate
-    compilation when --kv-sharing-fast-prefill is enabled."""
+    """Runs every cross-attention layer on compact logits-token inputs.
+
+    The self block has already written the full shared K/V tensors to the
+    first cross layer's cache.  The first layer therefore skips its normal
+    cache update while retaining a dependency on that write; all cross layers
+    only compute the tokens that need logits.
+    """
 
     def __init__(
         self,
@@ -1364,14 +1383,17 @@ class YOCOCrossBlock(nn.Module):
         hidden_states: torch.Tensor,
         yoco_key: torch.Tensor,
         yoco_value: torch.Tensor,
+        kv_cache_dummy_dep: torch.Tensor,
     ) -> torch.Tensor:
-        for layer in self._cross_layers:
+        for index, layer in enumerate(self._cross_layers):
             hidden_states = layer(
                 positions,
                 hidden_states,
                 0,
                 yoco_key,
                 yoco_value,
+                kv_cache_dummy_dep=kv_cache_dummy_dep if index == 0 else None,
+                skip_kv_cache_update=index == 0,
             )
         return hidden_states
 
@@ -1392,10 +1414,11 @@ class YOCOCrossBlock(nn.Module):
 class YOCOSelfBlock(nn.Module):
     """Self-attention portion compiled as a separate unit for fast prefill.
 
-    Runs (on ALL tokens) the universal-loop self-attention layers, the
-    model-level shared-KV producer, and the first cross layer (which owns and
-    writes the shared KV cache).  Returns the hidden states together with the
-    shared ``yoco_key`` / ``yoco_value`` so the cross block can consume them.
+    Runs (on ALL tokens) the universal-loop self-attention layers and the
+    model-level shared-KV producer, then writes K/V directly to the first cross
+    layer's cache without running that layer.  Returns the hidden states,
+    shared ``yoco_key`` / ``yoco_value``, and the cache-write dependency so the
+    compact cross block can consume them.
     Keeping this as its own ``@support_torch_compile`` unit (alongside
     ``YOCOCrossBlock``) means the whole fast-prefill forward is an uncompiled
     wrapper around two piecewise CUDA-graph units, which avoids nesting a
@@ -1419,7 +1442,7 @@ class YOCOSelfBlock(nn.Module):
         input_ids: torch.Tensor | None,
         positions: torch.Tensor,
         inputs_embeds: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         model = self._model_ref[0]
         if inputs_embeds is not None:
             hidden_states = inputs_embeds.float()
@@ -1438,8 +1461,9 @@ class YOCOSelfBlock(nn.Module):
                     None,
                 )
 
-        # Shared-KV producer + first cross layer (owns the shared KV cache);
-        # both run on ALL tokens.
+        # Produce shared K/V for all tokens and write them directly to the
+        # first cross layer's cache.  The cross layer itself is deferred to the
+        # compact cross block and therefore only runs for logits tokens.
         h_norm = model.yoco_norm(hidden_states)
         yoco_key, _ = model.yoco_k_proj(h_norm)
         yoco_value, _ = model.yoco_v_proj(h_norm)
@@ -1450,14 +1474,17 @@ class YOCOSelfBlock(nn.Module):
                 model.yoco_kv_head_dim,
                 model.yoco_k_norm,
             )
-        hidden_states = model.layers[model.first_cross_layer_idx](
-            positions,
-            hidden_states,
-            0,
-            yoco_key,
-            yoco_value,
+        owner_attn = model.layers[model.first_cross_layer_idx].self_attn.attn
+        yoco_key_view = yoco_key.view(-1, owner_attn.num_kv_heads, owner_attn.head_size)
+        yoco_value_view = yoco_value.view(
+            -1, owner_attn.num_kv_heads, owner_attn.head_size_v
         )
-        return hidden_states, yoco_key, yoco_value
+        kv_cache_dummy_dep = torch.ops.vllm.unified_kv_cache_update(
+            yoco_key_view,
+            yoco_value_view,
+            _encode_layer_name(owner_attn.layer_name),
+        )
+        return hidden_states, yoco_key, yoco_value, kv_cache_dummy_dep
 
 
 # --------------------------------------------------------------------------- #
@@ -1572,18 +1599,17 @@ class YOCOModel(nn.Module):
             # Importing at top level causes issues during tests (see gemma3n).
             from vllm.compilation.backends import set_model_tag
 
-            # Self portion: self layers + shared-KV + first cross layer.
+            # Self portion: self layers + shared-KV cache write.
             with set_model_tag("self_decoder"):
                 self.self_block = YOCOSelfBlock(
                     vllm_config=vllm_config,
                     prefix=f"{prefix}.self_block",
                     model=self,
                 )
-            # Cross portion: layers first_cross+1 .. N-1 share KV from layer
-            # first_cross; only decode tokens are processed during prefill.
-            kv_sharing_cross_layers = list(
-                self.layers[self.first_cross_layer_idx + 1 :]
-            )
+            # Cross portion: every cross layer only processes logits/decode
+            # tokens. The first layer's full shared-KV cache was populated by
+            # the self block above.
+            kv_sharing_cross_layers = list(self.layers[self.first_cross_layer_idx :])
             with set_model_tag("cross_decoder"):
                 self.cross_block = YOCOCrossBlock(
                     vllm_config=vllm_config,
@@ -1763,6 +1789,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         positions: torch.Tensor,
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
+        kv_only_prefill: bool = False,
     ) -> torch.Tensor:
         # Default loading initializes this eagerly. This fallback covers
         # loaders that assign tensors without calling this model's load_weights.
@@ -1779,6 +1806,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
             positions=positions,
             intermediate_tensors=intermediate_tensors,
             inputs_embeds=inputs_embeds,
+            kv_only_prefill=kv_only_prefill,
         )
 
     def _fast_prefill_forward(
@@ -1787,6 +1815,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         positions: torch.Tensor,
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
+        kv_only_prefill: bool = False,
     ) -> torch.Tensor:
         """Forward with fast prefill: cross-attention layers that share KV
         only process decode tokens during prefill.
@@ -1817,7 +1846,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
             fast_prefill_num_tokens_across_dp_cpu,
         ) = self._get_fast_prefill_indices()
         fwd_ctx = get_forward_context()
-        global_fast_prefill = logits_indices_padded is not None
+        global_fast_prefill = kv_only_prefill or logits_indices_padded is not None
         if (
             not global_fast_prefill
             and fwd_ctx.dp_metadata is not None
@@ -1854,14 +1883,20 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
                 inputs_embeds=inputs_embeds,
             )
 
-        # Self portion on ALL tokens (separate piecewise CUDA graph).  Also
-        # produces the shared KV (yoco_key / yoco_value) and writes layer
-        # ``first_cross_layer_idx``'s shared KV cache.
-        hidden_states, yoco_key, yoco_value = model.self_block(
+        # Self portion on ALL tokens (separate piecewise CUDA graph). It also
+        # produces and writes the full shared KV cache without executing any
+        # cross layer.
+        hidden_states, yoco_key, yoco_value, kv_cache_dummy_dep = model.self_block(
             input_ids,
             positions,
             inputs_embeds,
         )
+
+        # A disaggregated P request only needs the shared K/V produced above.
+        # Its sampled token is ignored by the proxy, so use the self-decoder
+        # state as a disposable logits input and avoid all ten cross layers.
+        if kv_only_prefill:
+            return model.norm(hidden_states)
 
         if logits_indices_padded is None:
             logits_indices_padded = torch.arange(
@@ -1887,15 +1922,14 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
             original_dp_metadata is not None
             and fast_prefill_num_tokens_across_dp_cpu is not None
         ):
-            fwd_ctx.dp_metadata = DPMetadata(
-                fast_prefill_num_tokens_across_dp_cpu
-            )
+            fwd_ctx.dp_metadata = DPMetadata(fast_prefill_num_tokens_across_dp_cpu)
         try:
             decode_hidden = model.cross_block(
                 model.fp_positions[:n],
                 model.fp_hidden_states[:n],
                 model.fp_yoco_key[:n],
                 model.fp_yoco_value[:n],
+                kv_cache_dummy_dep,
             )
         finally:
             fwd_ctx.dp_metadata = original_dp_metadata
