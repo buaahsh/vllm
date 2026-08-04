@@ -1202,6 +1202,55 @@ class YOCOSharedExperts(nn.Module):
         return x
 
 
+class YOCOLatentInputTransform(nn.Module):
+    """Project and normalize only the routed-expert input."""
+
+    def __init__(self, proj: nn.Module, norm: nn.Module) -> None:
+        super().__init__()
+        self.proj = proj
+        self.norm = norm
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        projected = self.proj(x)
+        if isinstance(projected, tuple):
+            projected = projected[0]
+        return self.norm(projected)
+
+
+class YOCOLatentOutputTransform(nn.Module):
+    """Normalize and project only the routed-expert output."""
+
+    def __init__(self, norm: nn.Module, proj: nn.Module) -> None:
+        super().__init__()
+        self.norm = norm
+        self.proj = proj
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        projected = self.proj(self.norm(x))
+        return projected[0] if isinstance(projected, tuple) else projected
+
+
+class YOCOSharedOutputTransform(nn.Module):
+    """Apply YOCO's replicated sigmoid gate after the shared TP reduction."""
+
+    def __init__(self, shared_gate: ReplicatedLinear) -> None:
+        super().__init__()
+        self.shared_gate = shared_gate
+
+    def forward(
+        self,
+        shared_output: torch.Tensor,
+        hidden_states: torch.Tensor,
+    ) -> torch.Tensor:
+        # llm-train builds shared_gate with default MixPrecisionLinear settings:
+        # no MXFP8 path and the parameter follows the module default dtype.
+        scale = F.linear(
+            hidden_states,
+            self.shared_gate.weight.to(hidden_states.dtype),
+        )
+        return torch.sigmoid(scale) * shared_output
+
+
 class YOCOMoE(nn.Module):
     """YOCO MoE block: routed top-k + gated shared expert + final reduce."""
 
@@ -1239,13 +1288,14 @@ class YOCOMoE(nn.Module):
         )
         self.gate.set_out_dtype(torch.float32)
 
-        # ``reduce_results=True`` so the shared-expert output is tensor-parallel
-        # all-reduced on its own; the routed path is reduced inside ``FusedMoE``.
+        # Keep the shared output local so FusedMoE can execute these GEMMs on its
+        # auxiliary stream. The runner still performs a separate TP all-reduce
+        # after the routed reduction to preserve YOCO's numerical boundaries.
         self.shared_experts = YOCOSharedExperts(
             hidden_size=self.hidden_size,
             intermediate_size=self.shared_intermediate_size,
             quant_config=quant_config,
-            reduce_results=True,
+            reduce_results=False,
             prefix=f"{prefix}.shared_experts",
             swiglu_limit=self.swiglu_limit,
         )
@@ -1297,6 +1347,18 @@ class YOCOMoE(nn.Module):
             self.fc1_latent_norm = None
             self.fc2_latent_norm = None
 
+        routed_input_transform = (
+            YOCOLatentInputTransform(self.fc1_latent_proj, self.fc1_latent_norm)
+            if self.fc1_latent_proj is not None and self.fc1_latent_norm is not None
+            else None
+        )
+        routed_output_transform = (
+            YOCOLatentOutputTransform(self.fc2_latent_norm, self.fc2_latent_proj)
+            if self.fc2_latent_proj is not None and self.fc2_latent_norm is not None
+            else None
+        )
+        shared_output_transform = YOCOSharedOutputTransform(self.shared_gate)
+
         # NOTE(swiglu_limit): Both the shared expert (above, via
         # ``YOCOClampedSwiGLU``) and the ROUTED experts (below) apply the
         # training ``swiglu_limit`` clamp (clamp-before-silu), for exact
@@ -1311,6 +1373,7 @@ class YOCOMoE(nn.Module):
         # greedy decoding; use temperature>0 in production. Kept on per owner's
         # request for training fidelity.
         self.experts = FusedMoE(
+            shared_experts=self.shared_experts,
             num_experts=self.num_experts,
             top_k=self.top_k,
             hidden_size=expert_hidden_size,
@@ -1322,15 +1385,11 @@ class YOCOMoE(nn.Module):
             custom_routing_function=_yoco_topk_routing,
             swiglu_limit=self.swiglu_limit,
             apply_router_weight_before_w2=True,
+            routed_input_transform=routed_input_transform,
+            routed_output_transform=routed_output_transform,
+            shared_output_transform=shared_output_transform,
+            reduce_shared_experts_separately=True,
             prefix=f"{prefix}.experts",
-        )
-
-    def _shared_gate_linear(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # llm-train builds shared_gate with default MixPrecisionLinear settings:
-        # no MXFP8 path and the parameter follows the module default dtype.
-        return F.linear(
-            hidden_states,
-            self.shared_gate.weight.to(hidden_states.dtype),
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -1350,31 +1409,11 @@ class YOCOMoE(nn.Module):
                 router_logits = _yoco_normalized_router_linear(
                     hidden_states.float(), self.gate.weight
                 )
-        if self.fc1_latent_proj is not None:
-            assert self.fc1_latent_norm is not None
-            expert_input = self.fc1_latent_norm(self.fc1_latent_proj(hidden_states))
-        else:
-            expert_input = hidden_states
-        routed_out = self.experts(
-            hidden_states=expert_input, router_logits=router_logits
-        )
-        if self.fc2_latent_proj is not None:
-            assert self.fc2_latent_norm is not None
-            routed_out = self.fc2_latent_proj(self.fc2_latent_norm(routed_out))
-
-        # YOCO-specific scalar sigmoid gate on the shared expert path.
-        # ``shared_gate`` is replicated, so ``scale`` is identical on every TP
-        # rank; applying it to the already-reduced shared output is equivalent
-        # to applying it before reduction.
-        shared_out_unscaled = self.shared_experts(hidden_states)
-        scale = self._shared_gate_linear(hidden_states)
-        shared_gate_sigmoid = torch.sigmoid(scale)
-        shared_out = shared_gate_sigmoid * shared_out_unscaled
-
-        # ``routed_out`` (reduced inside FusedMoE) and ``shared_out`` (reduced
-        # inside YOCOSharedExperts.down_proj) are both already tensor-parallel
-        # all-reduced, so their sum needs no further reduction.
-        final = routed_out + shared_out
+        # FusedMoE overlaps the local shared-expert GEMMs with routed dispatch
+        # and expert compute. It then preserves YOCO's original order: routed
+        # TP reduction, shared TP reduction, latent output transform, sigmoid
+        # shared gate, and finally the sum.
+        final = self.experts(hidden_states=hidden_states, router_logits=router_logits)
         return final.view(num_tokens, hidden_dim)
 
 
