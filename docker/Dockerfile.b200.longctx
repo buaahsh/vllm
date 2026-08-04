@@ -10,6 +10,7 @@ COPY benchmarks/multi_turn/benchmark_agent_trace.py \
     /workspace/vllm/benchmarks/multi_turn/benchmark_agent_trace.py
 COPY tools/yoco_serving /workspace/vllm/tools/yoco_serving
 COPY yoco.md /workspace/vllm/yoco.md
+COPY long_context/README.md /workspace/vllm/long_context/README.md
 
 RUN python -m py_compile \
       benchmarks/multi_turn/benchmark_agent_trace.py \

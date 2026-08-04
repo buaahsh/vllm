@@ -6,9 +6,14 @@ model_name="${MODEL_NAME:-yoco-v2-long}"
 host="${HOST:-0.0.0.0}"
 port="${PORT:-8001}"
 dp_size="${DP_SIZE:-1}"
-max_local_seqs="${MAX_LOCAL_SEQS:-16}"
-max_num_seqs="${MAX_NUM_SEQS:-$((dp_size * max_local_seqs))}"
+max_num_seqs="${MAX_NUM_SEQS:-128}"
 async_scheduling="${ASYNC_SCHEDULING:-1}"
+
+if [[ ! "${dp_size}" =~ ^[1-9][0-9]*$ ]] \
+  || [[ ! "${max_num_seqs}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "DP_SIZE and MAX_NUM_SEQS must be positive integers" >&2
+  exit 2
+fi
 
 case "${async_scheduling}" in
   1 | true) scheduler_args=(--async-scheduling) ;;

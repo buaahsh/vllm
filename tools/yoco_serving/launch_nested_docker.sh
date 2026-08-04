@@ -5,7 +5,7 @@ image="${IMAGE:-buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-multigpu-20260804}"
 model="${MODEL:?Set MODEL to the host checkpoint path}"
 dp_size="${DP_SIZE:-1}"
 gpu_list="${GPU_LIST:-0}"
-max_local_seqs="${MAX_LOCAL_SEQS:-16}"
+max_num_seqs="${MAX_NUM_SEQS:-128}"
 port="${PORT:-8001}"
 name="${NAME:-yoco-longctx-dp${dp_size}}"
 result_dir="${RESULT_DIR:-/data/yoco-longctx-results/dp${dp_size}}"
@@ -13,8 +13,8 @@ allow_busy_gpus="${ALLOW_BUSY_GPUS:-0}"
 
 IFS=, read -r -a selected_gpus <<<"${gpu_list}"
 if [[ ! "${dp_size}" =~ ^[1-9][0-9]*$ ]] \
-  || [[ ! "${max_local_seqs}" =~ ^[1-9][0-9]*$ ]]; then
-  echo "DP_SIZE and MAX_LOCAL_SEQS must be positive integers" >&2
+  || [[ ! "${max_num_seqs}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "DP_SIZE and MAX_NUM_SEQS must be positive integers" >&2
   exit 2
 fi
 if [[ "${#selected_gpus[@]}" -ne "${dp_size}" ]]; then
@@ -83,8 +83,7 @@ docker run -d \
   -e GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.85}" \
   -e MAX_MODEL_LEN="${MAX_MODEL_LEN:-131072}" \
   -e MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-32768}" \
-  -e MAX_LOCAL_SEQS="${max_local_seqs}" \
-  -e MAX_NUM_SEQS="$((dp_size * max_local_seqs))" \
+  -e MAX_NUM_SEQS="${max_num_seqs}" \
   -v "${model}:${model}:ro" \
   -v "${result_dir}:/results" \
   "${image}" \
