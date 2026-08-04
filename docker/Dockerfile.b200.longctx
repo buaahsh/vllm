@@ -1,0 +1,23 @@
+# Lightweight long-context runtime layer over the validated YOCO B200 image.
+# Build from the repository root after generating the E=128,N=1280 config.
+FROM buaahsh/pytorch:26.02-b200-vllm-yoco-v2-v3-0729-final
+
+WORKDIR /workspace/vllm
+
+COPY vllm/model_executor/layers/fused_moe/configs/E=128,N=1280,device_name=NVIDIA_B200.json \
+    /workspace/vllm/vllm/model_executor/layers/fused_moe/configs/E=128,N=1280,device_name=NVIDIA_B200.json
+COPY benchmarks/multi_turn/benchmark_agent_trace.py \
+    /workspace/vllm/benchmarks/multi_turn/benchmark_agent_trace.py
+COPY tools/yoco_serving /workspace/vllm/tools/yoco_serving
+COPY yoco.md /workspace/vllm/yoco.md
+
+RUN python -m py_compile \
+      benchmarks/multi_turn/benchmark_agent_trace.py \
+    && chmod 755 \
+      tools/yoco_serving/serve_long_context.sh \
+      tools/yoco_serving/warmup_long_context.sh \
+      tools/yoco_serving/benchmark_long_context.sh \
+      tools/yoco_serving/tune_moe_b200.sh
+
+LABEL org.opencontainers.image.title="YOCO B200 long-context runtime" \
+      org.opencontainers.image.description="BF16 FlashInfer runtime with tuned YOCO Triton MoE and full-range warmup tooling"

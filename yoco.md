@@ -1,5 +1,210 @@
 # YOCO B200 最终验收报告
 
+## 2026-08-04 long-context BF16 serving extension
+
+This section is the current reference for the 131K YOCO-v2 workload. The
+original acceptance report remains below for historical comparison.
+
+### Artifacts and decision summary
+
+```text
+Git branch: shaohanh/yoco-b200-longctx-20260804
+Docker image: buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-20260804
+Registry digest: sha256:cdc3ebf990c0539190756c2aaac48c123f4243eefa386ad3eb4fccb1a7ae2d24
+Model: /mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf
+Precision: BF16 only
+```
+
+The production decision is FlashInfer attention, Triton MoE, TP=1, data
+parallel replication, 32K maximum batched prefill tokens, prefix caching,
+chunked prefill, YOCO KV-sharing fast prefill, and
+`FULL_AND_PIECEWISE` CUDA graphs. Each B200 holds one complete model replica;
+use DP=1, 4, or 8 for one GPU, four GPUs, or one eight-GPU node. Expert
+parallelism is intentionally disabled for this independent-request benchmark.
+
+The three benchmark workloads are:
+
+| Workload | Shape | Notes |
+| --- | --- | --- |
+| W1 | 8,192 input + 65,536 output | Single turn, decode-heavy |
+| W2 | 65,536 input + 16,384 output | Single turn, prefill + decode |
+| W3 | 40 turns; 117K incremental input + 13K output | 130K final trajectory with prefix reuse |
+
+W3 uses 130K rather than 131K input plus 13K output because the latter would
+exceed the model's hard 131,072-token context limit.
+
+### Exact B200 MoE tuning evidence
+
+The base image did not contain a Triton MoE configuration for this model's
+exact `E=128, N=1280, K=3072, top-k=8` shape. The new image includes:
+
+```text
+vllm/model_executor/layers/fused_moe/configs/E=128,N=1280,device_name=NVIDIA_B200.json
+```
+
+Both columns below use vLLM's `benchmarks/kernels/benchmark_moe.py` on the same
+B200 and checkpoint. Lower kernel time is better.
+
+| MoE token batch | Base image | Tuned image | Speedup |
+| ---: | ---: | ---: | ---: |
+| 1 | 61.62 us | 61.63 us | neutral |
+| 2 | 95.63 us | 90.05 us | 5.8% |
+| 4 | 147.40 us | 137.80 us | 6.5% |
+| 8 | 225.97 us | 218.67 us | 3.2% |
+| 16 | 326.96 us | 319.60 us | 2.3% |
+| 32 | 425.87 us | 421.80 us | 1.0% |
+| 128 | 519.57 us | 482.30 us | 7.2% |
+| 1,024 | 699.49 us | 666.80 us | 4.7% |
+| 2,843 | 1,235.96 us | 997.15 us | 19.3% |
+| 3,899 | 1,394.78 us | 1,185.36 us | 15.0% |
+| 8,192 | 3,107.94 us | 2,221.93 us | 28.5% |
+| 32,768 | 9,071.07 us | 7,354.35 us | 18.9% |
+
+This optimization targets prefill and mixed agentic steps. It should not be
+described as a batch-1 decode speedup.
+
+### Start inference
+
+Set the common paths once:
+
+```bash
+IMAGE=buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-20260804
+MODEL=/mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf
+mkdir -p "$PWD/yoco-results"
+```
+
+One GPU:
+
+```bash
+docker run --rm --name yoco-long-dp1 --network host --ipc host \
+  --gpus '"device=0"' \
+  -e MODEL="$MODEL" -e DP_SIZE=1 \
+  -v /mnt/msranlphot:/mnt/msranlphot:ro \
+  -v "$PWD/yoco-results:/results" \
+  "$IMAGE" bash tools/yoco_serving/serve_long_context.sh
+```
+
+Four GPUs:
+
+```bash
+docker run --rm --name yoco-long-dp4 --network host --ipc host \
+  --gpus '"device=0,1,2,3"' \
+  -e MODEL="$MODEL" -e DP_SIZE=4 \
+  -v /mnt/msranlphot:/mnt/msranlphot:ro \
+  -v "$PWD/yoco-results:/results" \
+  "$IMAGE" bash tools/yoco_serving/serve_long_context.sh
+```
+
+One eight-GPU B200 node:
+
+```bash
+docker run --rm --name yoco-long-dp8 --network host --ipc host \
+  --gpus all \
+  -e MODEL="$MODEL" -e DP_SIZE=8 \
+  -v /mnt/msranlphot:/mnt/msranlphot:ro \
+  -v "$PWD/yoco-results:/results" \
+  "$IMAGE" bash tools/yoco_serving/serve_long_context.sh
+```
+
+The service exposes the OpenAI-compatible API at `http://127.0.0.1:8001/v1`.
+Wait for `GET /health` to return HTTP 200 before warming or benchmarking.
+
+### Warm the full context range
+
+A short two-turn warmup misses kernels that first occur near the end of the
+trajectory. Run this once after each cold service start; set `DP_SIZE` and
+`GPU_INDICES` to match the launcher.
+
+```bash
+docker exec \
+  -e TOKENIZER="$MODEL" \
+  -e DP_SIZE=1 \
+  -e GPU_INDICES=0 \
+  -e RESULT_DIR=/results/warmup-dp1 \
+  yoco-long-dp1 \
+  bash tools/yoco_serving/warmup_long_context.sh
+```
+
+Examples for the larger deployments are `DP_SIZE=4 GPU_INDICES=0,1,2,3` and
+`DP_SIZE=8 GPU_INDICES=0,1,2,3,4,5,6,7`.
+
+### Reproduce the speed report
+
+The runner forces exact output lengths, uses unique random seeds to avoid
+cross-run prompt-cache contamination, and emits detailed JSON. Recommended
+batch/concurrency sweeps are 1/2/4/8 for DP1, 4/8/16/32 for DP4, and
+8/16/32/64 for DP8.
+
+```bash
+docker exec \
+  -e TOKENIZER="$MODEL" \
+  -e DP_SIZE=1 \
+  -e GPU_INDICES=0 \
+  -e BATCHES="1 2 4 8" \
+  -e RESULT_DIR=/results/dp1 \
+  yoco-long-dp1 \
+  bash tools/yoco_serving/benchmark_long_context.sh
+```
+
+The single-turn JSON reports request throughput, input/output/total token
+throughput, mean/P95 TTFT, and mean TPOT. The W3 JSON additionally reports
+logical incremental prefill throughput, generation throughput, prefix-cache
+hit rate, queue depth, KV use, and GPU telemetry.
+
+### Scaled end-to-end results
+
+The tables in this subsection are generated from the detailed JSON described
+above. Total time is wall time for the whole batch, and throughput is aggregate
+across the selected GPU count.
+
+<!-- LONG_CONTEXT_RESULTS -->
+
+#### DP1 / one B200
+
+W1 — 8K input, 64K output:
+
+| Mode | GPUs | Batch | Total time (s) | Req/s | Input tok/s | Output tok/s | Total tok/s | Mean TTFT (s) | P95 TTFT (s) | Mean TPOT (ms) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| BF16 | 1 | 1 | 533.969 | 0.0019 | 15.34 | 122.73 | 138.08 | 0.182 | 0.182 | 8.15 |
+| BF16 | 1 | 2 | 585.329 | 0.0034 | 27.99 | 223.93 | 251.92 | 0.317 | 0.337 | 8.93 |
+| BF16 | 1 | 4 | 705.400 | 0.0057 | 46.45 | 371.62 | 418.08 | 0.589 | 0.632 | 10.75 |
+| BF16 | 1 | 8 | 826.238 | 0.0097 | 79.32 | 634.55 | 713.87 | 0.962 | 1.091 | 12.59 |
+
+W2 — 64K input, 16K output:
+
+| Mode | GPUs | Batch | Total time (s) | Req/s | Input tok/s | Output tok/s | Total tok/s | Mean TTFT (s) | P95 TTFT (s) | Mean TPOT (ms) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| BF16 | 1 | 1 | 137.405 | 0.0073 | 476.95 | 119.24 | 596.19 | 1.215 | 1.215 | 8.31 |
+| BF16 | 1 | 2 | 153.344 | 0.0130 | 854.76 | 213.69 | 1,068.44 | 2.024 | 2.337 | 9.24 |
+| BF16 | 1 | 4 | 190.258 | 0.0210 | 1,377.83 | 344.46 | 1,722.29 | 3.008 | 3.961 | 11.43 |
+| BF16 | 1 | 8 | 234.583 | 0.0341 | 2,234.98 | 558.74 | 2,793.72 | 5.445 | 8.916 | 13.98 |
+
+W3 — 40-turn, 130K agentic trajectory. Input and total rates count logical
+incremental tokens, not repeatedly submitted cached prefixes.
+
+| Mode | GPUs | Batch | Total time (s) | Traj/s | Input tok/s | Output tok/s | Total tok/s | Mean TTFT (s) | P95 TTFT (s) | Mean ITL (ms) | Cache hit |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| BF16 | 1 | 1 | 104.181 | 0.0096 | 1,123.04 | 124.78 | 1,247.82 | 0.156 | 0.213 | 7.55 | 95.58% |
+| BF16 | 1 | 2 | 127.083 | 0.0157 | 1,841.32 | 204.59 | 2,045.91 | 0.268 | 0.345 | 8.97 | 95.58% |
+| BF16 | 1 | 4 | 162.339 | 0.0246 | 2,882.86 | 320.32 | 3,203.18 | 0.409 | 0.578 | 11.25 | 95.58% |
+| BF16 | 1 | 8 | 222.274 | 0.0360 | 4,211.02 | 467.89 | 4,678.91 | 0.734 | 1.088 | 14.82 | 95.58% |
+
+<!-- LONG_CONTEXT_MORE_RESULTS -->
+
+Only the DP1 sweep above completed in this allocation. Kubernetes reclaimed
+`settled-foal-b200g4-dev-46d12b9f-master-0` at approximately 12:28 PDT on
+2026-08-04 before the DP4 and DP8 sweeps could start. Those rows are omitted,
+not estimated from DP1. The DP4/DP8 launch and benchmark commands above are
+ready to rerun when an eight-GPU B200 node is available.
+
+The earlier concurrency-1 figures in the historical report below were taken
+on GPU 0 with a different prompt seed; this scaled DP1 sweep ran on GPU 7.
+W1/W2 differ by about 8% between those executions while W3 differs by about
+1%, so that cross-run difference is treated as system/GPU variance rather
+than evidence of a decode regression or speedup. The paired MoE table above,
+which uses the same GPU and inputs for both configurations, is the controlled
+optimization result.
+
 本文只记录本次 YOCO-v2/v3 在 B200 上的最终配置、验收方法和结果，不包含
 旧镜像、旧分支或中间调试过程。
 

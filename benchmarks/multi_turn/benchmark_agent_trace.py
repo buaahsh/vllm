@@ -8,11 +8,12 @@ import hashlib
 import json
 import math
 import os
-import re
+import shutil
 import statistics
 import time
 
 import httpx
+import regex as re
 from transformers import AutoTokenizer
 
 CORPUS = """
@@ -51,7 +52,7 @@ def parse_metrics(text):
     for line in text.splitlines():
         if not line or line.startswith("#"):
             continue
-        match = re.match(r'^([^{\s]+)(?:\{([^}]*)\})?\s+([^\s]+)$', line)
+        match = re.match(r"^([^{\s]+)(?:\{([^}]*)\})?\s+([^\s]+)$", line)
         if not match:
             continue
         name, raw_labels, raw_value = match.groups()
@@ -111,9 +112,7 @@ async def stream_completion(client, endpoint, body, headers=None):
     first_token_at = None
     token_ids = []
     finish_reason = None
-    async with client.stream(
-        "POST", endpoint, json=body, headers=headers
-    ) as response:
+    async with client.stream("POST", endpoint, json=body, headers=headers) as response:
         response.raise_for_status()
         async for line in response.aiter_lines():
             if not line.startswith("data: "):
@@ -123,9 +122,7 @@ async def stream_completion(client, endpoint, body, headers=None):
                 break
             chunk = json.loads(payload)
             if "choices" not in chunk:
-                raise RuntimeError(
-                    f"completion stream returned error payload: {chunk}"
-                )
+                raise RuntimeError(f"completion stream returned error payload: {chunk}")
             choice = chunk["choices"][0]
             delta = choice.get("token_ids") or []
             if delta and first_token_at is None:
@@ -144,10 +141,9 @@ async def stream_completion(client, endpoint, body, headers=None):
     }
 
 
-async def sample_runtime(
-    stop, root_url, gpu_indices, metric_samples, gpu_samples
-):
+async def sample_runtime(stop, root_url, gpu_indices, metric_samples, gpu_samples):
     timeout = httpx.Timeout(30)
+    nvidia_smi = shutil.which("nvidia-smi")
     async with httpx.AsyncClient(timeout=timeout) as client:
         while not stop.is_set():
             sampled_at = time.time()
@@ -156,15 +152,9 @@ async def sample_runtime(
                 metric_samples.append(
                     {
                         "timestamp": sampled_at,
-                        "running": metric_sum(
-                            metrics, "vllm:num_requests_running"
-                        ),
-                        "waiting": metric_sum(
-                            metrics, "vllm:num_requests_waiting"
-                        ),
-                        "kv": metric_sum(
-                            metrics, "vllm:kv_cache_usage_perc"
-                        )
+                        "running": metric_sum(metrics, "vllm:num_requests_running"),
+                        "waiting": metric_sum(metrics, "vllm:num_requests_waiting"),
+                        "kv": metric_sum(metrics, "vllm:kv_cache_usage_perc")
                         / max(
                             sum(
                                 1
@@ -176,33 +166,32 @@ async def sample_runtime(
                     }
                 )
             except Exception as error:
-                metric_samples.append(
-                    {"timestamp": sampled_at, "error": repr(error)}
+                metric_samples.append({"timestamp": sampled_at, "error": repr(error)})
+            if nvidia_smi is not None:
+                process = await asyncio.create_subprocess_exec(
+                    nvidia_smi,
+                    "--query-gpu=index,utilization.gpu,utilization.memory,memory.used,power.draw",
+                    "--format=csv,noheader,nounits",
+                    "-i",
+                    gpu_indices,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
-            process = await asyncio.create_subprocess_exec(
-                "nvidia-smi",
-                "--query-gpu=index,utilization.gpu,utilization.memory,memory.used,power.draw",
-                "--format=csv,noheader,nounits",
-                "-i",
-                gpu_indices,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await process.communicate()
-            if process.returncode == 0:
-                for line in stdout.decode().splitlines():
-                    fields = [field.strip() for field in line.split(",")]
-                    if len(fields) == 5:
-                        gpu_samples.append(
-                            {
-                                "timestamp": sampled_at,
-                                "index": fields[0],
-                                "utilization": float(fields[1]),
-                                "memory_utilization": float(fields[2]),
-                                "memory_mib": float(fields[3]),
-                                "power_w": float(fields[4]),
-                            }
-                        )
+                stdout, _ = await process.communicate()
+                if process.returncode == 0:
+                    for line in stdout.decode().splitlines():
+                        fields = [field.strip() for field in line.split(",")]
+                        if len(fields) == 5:
+                            gpu_samples.append(
+                                {
+                                    "timestamp": sampled_at,
+                                    "index": fields[0],
+                                    "utilization": float(fields[1]),
+                                    "memory_utilization": float(fields[2]),
+                                    "memory_mib": float(fields[3]),
+                                    "power_w": float(fields[4]),
+                                }
+                            )
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=1)
 
@@ -224,7 +213,26 @@ async def main():
     parser.add_argument("--seed", type=int, default=20260729)
     parser.add_argument("--timeout", type=float, default=3600)
     parser.add_argument("--skip-warmup", action="store_true")
+    parser.add_argument(
+        "--warmup-turns",
+        type=int,
+        default=2,
+        help=(
+            "Number of trajectory turns used by the excluded warmup. Use the "
+            "full trajectory length to compile long-context YOCO kernels before "
+            "serving production traffic."
+        ),
+    )
+    parser.add_argument(
+        "--warmup-only",
+        action="store_true",
+        help="Run the excluded warmup, reset prefix cache, and exit.",
+    )
     args = parser.parse_args()
+    if not 1 <= args.warmup_turns <= args.turns:
+        raise ValueError("warmup-turns must be between 1 and turns")
+    if args.warmup_only and args.skip_warmup:
+        raise ValueError("warmup-only cannot be combined with skip-warmup")
 
     trajectory_count = args.trajectories or args.concurrency
     if trajectory_count < args.concurrency:
@@ -232,28 +240,22 @@ async def main():
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     root_url = args.base_url.removesuffix("/v1").rstrip("/")
     endpoint = f"{args.base_url.rstrip('/')}/completions"
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.tokenizer, trust_remote_code=True
-    )
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, trust_remote_code=True)
     corpus_ids = tokenizer.encode(CORPUS, add_special_tokens=False)
     if not corpus_ids:
         raise RuntimeError("tokenizer produced an empty corpus")
 
-    final_tokens = args.turns * (
-        args.prefill_per_turn + args.output_per_turn
-    )
+    final_tokens = args.turns * (args.prefill_per_turn + args.output_per_turn)
     prefill_schedule = []
     previous_prompt = 0
     for turn in range(1, args.turns + 1):
         ideal_prompt = (
-            turn * (args.prefill_per_turn + args.output_per_turn)
-            - args.output_per_turn
+            turn * (args.prefill_per_turn + args.output_per_turn) - args.output_per_turn
         )
         target_prompt = (
             final_tokens - args.output_per_turn
             if turn == args.turns
-            else round(ideal_prompt / args.cache_alignment)
-            * args.cache_alignment
+            else round(ideal_prompt / args.cache_alignment) * args.cache_alignment
         )
         delta = (
             target_prompt
@@ -261,9 +263,7 @@ async def main():
             else target_prompt - previous_prompt - args.output_per_turn
         )
         if delta <= 0:
-            raise ValueError(
-                "cache alignment produced a non-positive prefill delta"
-            )
+            raise ValueError("cache alignment produced a non-positive prefill delta")
         prefill_schedule.append(delta)
         previous_prompt = target_prompt
 
@@ -288,14 +288,12 @@ async def main():
         if not args.skip_warmup:
 
             async def warmup_rank(rank):
-                async with httpx.AsyncClient(
-                    timeout=timeout, limits=limits
-                ) as client:
+                async with httpx.AsyncClient(timeout=timeout, limits=limits) as client:
                     history = []
                     salt = hashlib.sha256(
                         f"agent-trace-warmup:{rank}".encode()
                     ).hexdigest()
-                    for turn in range(2):
+                    for turn in range(args.warmup_turns):
                         history.extend(prompt_delta(999999 + rank, turn))
                         output, _ = await stream_completion(
                             client,
@@ -317,10 +315,15 @@ async def main():
                         )
                         history.extend(output)
 
-            await asyncio.gather(
-                *(warmup_rank(rank) for rank in range(args.dp_size))
-            )
+            await asyncio.gather(*(warmup_rank(rank) for rank in range(args.dp_size)))
             await reset_prefix_cache(control, root_url)
+            if args.warmup_only:
+                print(
+                    "completed warmup-only run: "
+                    f"{args.warmup_turns} turns on {args.dp_size} DP ranks",
+                    flush=True,
+                )
+                return
 
         before = await fetch_metrics(control, root_url)
         records = []
@@ -336,9 +339,7 @@ async def main():
                 salt = hashlib.sha256(
                     f"{args.seed}:{trajectory_id}".encode()
                 ).hexdigest()
-                async with httpx.AsyncClient(
-                    timeout=timeout, limits=limits
-                ) as client:
+                async with httpx.AsyncClient(timeout=timeout, limits=limits) as client:
                     for turn in range(args.turns):
                         history.extend(prompt_delta(trajectory_id, turn))
                         prompt_tokens = len(history)
@@ -352,11 +353,7 @@ async def main():
                                 "min_tokens": args.output_per_turn,
                                 "ignore_eos": True,
                                 "temperature": 0.0,
-                                "seed": (
-                                    args.seed
-                                    + trajectory_id * args.turns
-                                    + turn
-                                ),
+                                "seed": (args.seed + trajectory_id * args.turns + turn),
                                 "add_special_tokens": False,
                                 "skip_special_tokens": False,
                                 "return_token_ids": True,
@@ -366,11 +363,7 @@ async def main():
                                 ),
                                 "cache_salt": salt,
                             },
-                            {
-                                "X-data-parallel-rank": str(
-                                    trajectory_id % args.dp_size
-                                )
-                            },
+                            {"X-data-parallel-rank": str(trajectory_id % args.dp_size)},
                         )
                         if len(output) != args.output_per_turn:
                             raise RuntimeError(
@@ -418,10 +411,7 @@ async def main():
         started = time.perf_counter()
         try:
             trajectories = await asyncio.gather(
-                *(
-                    run_trajectory(index)
-                    for index in range(trajectory_count)
-                )
+                *(run_trajectory(index) for index in range(trajectory_count))
             )
         finally:
             stop.set()
@@ -433,9 +423,7 @@ async def main():
         await control.aclose()
 
     logical_prefill = trajectory_count * sum(prefill_schedule)
-    logical_generation = (
-        trajectory_count * args.turns * args.output_per_turn
-    )
+    logical_generation = trajectory_count * args.turns * args.output_per_turn
     submitted_prompt = sum(record["prompt_tokens"] for record in records)
     computed_prefill = metric_delta(
         before,
@@ -449,21 +437,15 @@ async def main():
         "vllm:prompt_tokens_by_source_total",
         source="local_cache_hit",
     )
-    generated = metric_delta(
-        before, after, "vllm:generation_tokens_total"
-    )
+    generated = metric_delta(before, after, "vllm:generation_tokens_total")
     prefill_service_seconds = metric_delta(
         before, after, "vllm:request_prefill_time_seconds_sum"
     )
     decode_service_seconds = metric_delta(
         before, after, "vllm:request_decode_time_seconds_sum"
     )
-    cache_queries = metric_delta(
-        before, after, "vllm:prefix_cache_queries_total"
-    )
-    cache_hits = metric_delta(
-        before, after, "vllm:prefix_cache_hits_total"
-    )
+    cache_queries = metric_delta(before, after, "vllm:prefix_cache_queries_total")
+    cache_hits = metric_delta(before, after, "vllm:prefix_cache_hits_total")
     queue = [sample for sample in metric_samples if "waiting" in sample]
 
     gpu_summary = {}
@@ -494,9 +476,7 @@ async def main():
         "dp_size": args.dp_size,
         "trajectories": trajectory_count,
         "turns_per_trajectory": args.turns,
-        "average_prefill_tokens_per_turn": (
-            sum(prefill_schedule) / args.turns
-        ),
+        "average_prefill_tokens_per_turn": (sum(prefill_schedule) / args.turns),
         "prefill_schedule": prefill_schedule,
         "output_tokens_per_turn": args.output_per_turn,
         "cache_alignment": args.cache_alignment,
@@ -509,9 +489,7 @@ async def main():
         "computed_prefill_tokens": computed_prefill,
         "cached_prefill_tokens": cached_prefill,
         "generated_tokens": generated,
-        "computed_prefill_tokens_per_second": (
-            computed_prefill / wall_seconds
-        ),
+        "computed_prefill_tokens_per_second": (computed_prefill / wall_seconds),
         "generation_tokens_per_second": generated / wall_seconds,
         "prefill_service_seconds": prefill_service_seconds,
         "decode_service_seconds": decode_service_seconds,
@@ -521,12 +499,9 @@ async def main():
         "generation_tokens_per_service_second": (
             generated / max(decode_service_seconds, 1e-9)
         ),
-        "logical_trajectory_tokens_per_second": (
-            logical_prefill + logical_generation
-        )
+        "logical_trajectory_tokens_per_second": (logical_prefill + logical_generation)
         / wall_seconds,
-        "generation_compute_fraction": generated
-        / max(computed_prefill + generated, 1),
+        "generation_compute_fraction": generated / max(computed_prefill + generated, 1),
         "prefix_cache_queries": cache_queries,
         "prefix_cache_hits": cache_hits,
         "prefix_cache_hit_rate": cache_hits / max(cache_queries, 1),
@@ -555,39 +530,26 @@ async def main():
             "max": max(trajectory_times),
         },
         "queue": {
-            "running_mean": statistics.fmean(
-                sample["running"] for sample in queue
-            ),
+            "running_mean": statistics.fmean(sample["running"] for sample in queue),
             "running_max": max(sample["running"] for sample in queue),
-            "waiting_mean": statistics.fmean(
-                sample["waiting"] for sample in queue
-            ),
-            "waiting_p95": percentile(
-                [sample["waiting"] for sample in queue], 0.95
-            ),
+            "waiting_mean": statistics.fmean(sample["waiting"] for sample in queue),
+            "waiting_p95": percentile([sample["waiting"] for sample in queue], 0.95),
             "waiting_max": max(sample["waiting"] for sample in queue),
-            "kv_mean": statistics.fmean(
-                sample["kv"] for sample in queue
-            ),
-            "kv_p95": percentile(
-                [sample["kv"] for sample in queue], 0.95
-            ),
+            "kv_mean": statistics.fmean(sample["kv"] for sample in queue),
+            "kv_p95": percentile([sample["kv"] for sample in queue], 0.95),
             "kv_max": max(sample["kv"] for sample in queue),
         },
         "gpu": gpu_summary,
+        "gpu_telemetry_available": bool(gpu_samples),
     }
     with open(args.output, "w", encoding="utf-8") as file:
         json.dump(summary, file, indent=2)
-    with open(
-        f"{args.output}.turns.jsonl", "w", encoding="utf-8"
-    ) as file:
+    with open(f"{args.output}.turns.jsonl", "w", encoding="utf-8") as file:
         for record in sorted(
             records, key=lambda item: (item["trajectory"], item["turn"])
         ):
             file.write(json.dumps(record) + "\n")
-    with open(
-        f"{args.output}.runtime.json", "w", encoding="utf-8"
-    ) as file:
+    with open(f"{args.output}.runtime.json", "w", encoding="utf-8") as file:
         json.dump(
             {
                 "metrics": metric_samples,
