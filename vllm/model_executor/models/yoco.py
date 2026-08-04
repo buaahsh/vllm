@@ -173,6 +173,72 @@ if HAS_TRITON:
             )
 
     @triton.jit
+    def _yoco_fused_add_rms_norm_kernel(
+        x_ptr,
+        residual_ptr,
+        weight_ptr,
+        output_ptr,
+        residual_out_ptr,
+        num_rows,
+        eps: tl.constexpr,
+        HIDDEN_SIZE: tl.constexpr,
+        REDUCTION_BLOCK: tl.constexpr,
+        BLOCK_ROWS: tl.constexpr,
+    ):
+        row = tl.program_id(0) * BLOCK_ROWS + tl.arange(0, BLOCK_ROWS)[:, None]
+        row_mask = row < num_rows
+        cols = tl.arange(0, REDUCTION_BLOCK)[None, :]
+        square_acc = tl.full([BLOCK_ROWS, REDUCTION_BLOCK], 0.0, tl.float32)
+
+        # Materialize the FP32 residual sum while accumulating its norm. This
+        # preserves the existing add-then-normalize order but removes the
+        # standalone residual-add kernel and its extra read.
+        for offset in tl.range(0, HIDDEN_SIZE, REDUCTION_BLOCK):
+            hidden_offsets = offset + cols
+            mask = (hidden_offsets < HIDDEN_SIZE) & row_mask
+            offsets = row * HIDDEN_SIZE + hidden_offsets
+            x = tl.load(
+                x_ptr + offsets,
+                mask=mask,
+                other=0.0,
+                eviction_policy="evict_last",
+            ).to(tl.float32)
+            residual = tl.load(
+                residual_ptr + offsets,
+                mask=mask,
+                other=0.0,
+                eviction_policy="evict_last",
+            ).to(tl.float32)
+            values = x + residual
+            tl.store(residual_out_ptr + offsets, values, mask=mask)
+            square_acc = tl.where(mask, square_acc + values * values, square_acc)
+
+        square_sum = tl.sum(square_acc, axis=1)[:, None]
+        inv_rms = tldevice.rsqrt(square_sum / HIDDEN_SIZE + eps)
+
+        for offset in tl.range(0, HIDDEN_SIZE, REDUCTION_BLOCK):
+            hidden_offsets = offset + cols
+            mask = (hidden_offsets < HIDDEN_SIZE) & row_mask
+            offsets = row * HIDDEN_SIZE + hidden_offsets
+            values = tl.load(
+                residual_out_ptr + offsets,
+                mask=mask,
+                other=0.0,
+                eviction_policy="evict_first",
+            ).to(tl.float32)
+            weight = tl.load(
+                weight_ptr + hidden_offsets,
+                mask=mask,
+                other=0.0,
+                eviction_policy="evict_last",
+            ).to(tl.float32)
+            tl.store(
+                output_ptr + offsets,
+                values * inv_rms * weight,
+                mask=mask,
+            )
+
+    @triton.jit
     def _yoco_routing_softmax_kernel(
         logits_ptr,
         scores_ptr,
@@ -289,6 +355,49 @@ def _yoco_rms_norm_fake(
     return torch.empty_like(x, dtype=torch.bfloat16)
 
 
+def _yoco_fused_add_rms_norm_cuda(
+    x: torch.Tensor,
+    residual: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    x_contiguous = x.contiguous()
+    residual_contiguous = residual.contiguous()
+    weight_contiguous = weight.to(torch.bfloat16).contiguous()
+    output = torch.empty_like(x_contiguous, dtype=torch.bfloat16)
+    residual_out = torch.empty_like(residual_contiguous, dtype=torch.float32)
+    num_rows = x_contiguous.numel() // x_contiguous.shape[-1]
+    reduction_block = 4096 if num_rows >= 128 else 2048
+    block_rows = 1
+    _yoco_fused_add_rms_norm_kernel[(triton.cdiv(num_rows, block_rows),)](
+        x_contiguous,
+        residual_contiguous,
+        weight_contiguous,
+        output,
+        residual_out,
+        num_rows,
+        eps=eps,
+        HIDDEN_SIZE=x_contiguous.shape[-1],
+        REDUCTION_BLOCK=reduction_block,
+        BLOCK_ROWS=block_rows,
+        num_warps=16,
+        num_stages=1,
+    )
+    return output, residual_out
+
+
+def _yoco_fused_add_rms_norm_fake(
+    x: torch.Tensor,
+    residual: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    return (
+        torch.empty_like(x, dtype=torch.bfloat16),
+        torch.empty_like(residual, dtype=torch.float32),
+    )
+
+
 def _yoco_router_linear_tf32_cuda(
     hidden_states: torch.Tensor,
     weight: torch.Tensor,
@@ -336,6 +445,11 @@ if HAS_TRITON and current_platform.is_cuda():
         op_name="yoco_rms_norm",
         op_func=_yoco_rms_norm_cuda,
         fake_impl=_yoco_rms_norm_fake,
+    )
+    direct_register_custom_op(
+        op_name="yoco_fused_add_rms_norm",
+        op_func=_yoco_fused_add_rms_norm_cuda,
+        fake_impl=_yoco_fused_add_rms_norm_fake,
     )
 
 
@@ -512,7 +626,29 @@ class RMSNorm(nn.Module):
     def extra_repr(self) -> str:
         return f"dim={self.dim}, eps={self.eps}"
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        residual: torch.Tensor | None = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        if residual is not None:
+            if (
+                HAS_TRITON
+                and x.is_cuda
+                and residual.is_cuda
+                and x.dtype in (torch.bfloat16, torch.float32)
+                and residual.dtype == torch.float32
+                and x.shape == residual.shape
+                and x.shape[-1] == 3072
+                and current_platform.is_cuda()
+            ):
+                return torch.ops.vllm.yoco_fused_add_rms_norm(
+                    x, residual, self.weight, self.eps
+                )
+            residual_out = residual + x.float()
+            normalized = self.forward(residual_out)
+            assert isinstance(normalized, torch.Tensor)
+            return normalized, residual_out
         if (
             HAS_TRITON
             and x.is_cuda
@@ -1310,6 +1446,7 @@ class YOCODecoderLayer(nn.Module):
     ) -> torch.Tensor:
         residual = hidden_states
         x = self.input_layernorm(hidden_states)
+        assert isinstance(x, torch.Tensor)
         if self.is_self_layer:
             x = self.self_attn(positions, x, loop_idx)
         else:
@@ -1321,10 +1458,9 @@ class YOCODecoderLayer(nn.Module):
                 kv_cache_dummy_dep=kv_cache_dummy_dep,
                 skip_kv_cache_update=skip_kv_cache_update,
             )
-        x = residual + x.float()
-
-        residual = x
-        x = self.post_attention_layernorm(x)
+        norm_output = self.post_attention_layernorm(x, residual)
+        assert isinstance(norm_output, tuple)
+        x, residual = norm_output
         x = self.mlp(x)
         return residual + x.float()
 
@@ -1453,6 +1589,7 @@ class YOCOSelfBlock(nn.Module):
         # first cross layer's cache.  The cross layer itself is deferred to the
         # compact cross block and therefore only runs for logits tokens.
         h_norm = model.yoco_norm(hidden_states)
+        assert isinstance(h_norm, torch.Tensor)
         yoco_key, _ = model.yoco_k_proj(h_norm)
         yoco_value, _ = model.yoco_v_proj(h_norm)
         if model.yoco_k_norm is not None:
@@ -1673,6 +1810,7 @@ class YOCOModel(nn.Module):
             assert self.yoco_k_proj is not None
             assert self.yoco_v_proj is not None
             h_norm = self.yoco_norm(hidden_states)
+            assert isinstance(h_norm, torch.Tensor)
             yoco_key, _ = self.yoco_k_proj(h_norm)
             yoco_value, _ = self.yoco_v_proj(h_norm)
             if self.yoco_k_norm is not None:
@@ -1692,8 +1830,9 @@ class YOCOModel(nn.Module):
                     yoco_value,
                 )
 
-        hidden_states = self.norm(hidden_states)
-        return hidden_states
+        output = self.norm(hidden_states)
+        assert isinstance(output, torch.Tensor)
+        return output
 
 
 # --------------------------------------------------------------------------- #

@@ -289,6 +289,101 @@ shape 计时 1,000 次 graph replay，报告中位延迟。这样仍包含实际
 这里报告的是 Router 单算子的 CUDA Graph 数据，不复用此前
 Router + fused add-RMSNorm 的端到端收益，也不外推为整模型吞吐提升。
 
+## Fused residual add-RMSNorm
+
+这是 Router 简化之后的第四个独立功能，只融合 decoder layer 内的 attention
+residual add 与 post-attention RMSNorm：
+
+```text
+baseline branch: fhb-dev
+baseline commit: d77fed9d2a6e6b84a7a1573b6a0a868667648e95
+candidate branch: review/yoco-04-fused-add-rmsnorm
+candidate commit: this commit
+```
+
+### 修改文件
+
+- `vllm/model_executor/models/yoco.py`：增加 YOCO 专用 mixed-dtype Triton
+  add-RMSNorm，并接入每个 decoder layer 的 attention 后融合点。
+- `tests/model_executor/test_yoco_conversion.py`：覆盖 CPU fallback、B200
+  fast path、FP32 residual、BF16 normalized output 和完整 layer boundary。
+- `yoco.md`：记录功能边界、正确性和独立性能。
+
+YOCO 的 sublayer output 是 BF16/FP32，长期 residual 是 FP32，RMSNorm output
+必须是 BF16。vLLM 通用 fused add-RMSNorm 要求 input、residual 和 weight 同
+dtype，并原地更新同 dtype residual，因此不能直接复用。本次 kernel 保持原顺序：
+
+```text
+residual_out = residual_fp32 + attention_output.float()
+normalized = RMSNorm(residual_out) -> BF16
+```
+
+第一遍同时执行 FP32 add、写出完整 `residual_out` 并累加平方和；第二遍读取
+`residual_out`、应用 BF16 weight 并输出 BF16 normalized tensor。非 CUDA、
+shape/dtype 不匹配或 hidden size 不是 3072 时走相同公式的 PyTorch fallback。
+
+旧实验曾把 MLP output 和 residual 拆开跨 decoder layer 携带，以争取下一层继续
+融合，但这会改变 layer boundary 的 FP32 物化/舍入点。本提交没有带入该实验；
+每层末尾仍执行原来的 `residual + mlp_output.float()`，只保留层内一个安全融合点。
+
+### B200 正确性
+
+独立 Pod `lidong1-yoco-pr04-add-rmsnorm-g1-0804-master-0`（节点
+`slc01-cl02-hgx-0418`）上的定向测试结果为：
+
+```text
+5 passed, 15 deselected, 19 warnings in 2.52s
+```
+
+完整 YOCO conversion/model test 文件结果为：
+
+```text
+20 passed, 19 warnings in 20.55s
+```
+
+CUDA case 覆盖 1、66、128 tokens；`residual_out` 和 normalized output 都与顺序
+实现 bitwise match（`rtol=0, atol=0`）。完整 decoder layer 测试连续执行两个
+loop，证明每层末尾 residual boundary 未被移动。编译版 microbenchmark 还对
+1/3/66/110/128/256/1024/4096 tokens 逐 shape 做 exact-match 后才计时。
+
+### B200 CUDA Graph 性能
+
+baseline 是 torch.compile 后的 FP32 add + 原 YOCO RMSNorm，candidate 是本次
+mixed-dtype fused op。两边分别 capture 为 CUDA Graph，warmup 后计时 1,000 次并
+报告中位数。
+
+单独 replay 一个微算子 graph 时，约 9 us 的整图固定开销会掩盖小 shape 的 GPU
+work 差异；它仍能证明大 prefill shape 的独立收益：
+
+| tokens | baseline (us) | candidate (us) | 加速 |
+| ---: | ---: | ---: | ---: |
+| 1 | `9.568` | `9.152` | `1.045x` |
+| 3 | `9.472` | `9.184` | `1.031x` |
+| 66 | `9.536` | `9.472` | `1.007x` |
+| 110 | `9.408` | `9.408` | `1.000x` |
+| 128 | `9.376` | `9.376` | `1.000x` |
+| 256 | `9.472` | `9.472` | `1.000x` |
+| 1,024 | `17.184` | `11.136` | `1.543x` |
+| 4,096 | `48.032` | `31.136` | `1.543x` |
+
+YOCO 每个 token step 有 40 次 decoder block execution。为了不把单次 graph
+replay 固定开销重复算 40 次，第二个口径在同一 graph 中放置 40 个算子节点，再
+用总延迟除以 40；输入彼此独立，所以它只代表算子节点摊销，不代表整模型：
+
+| tokens | baseline/op (us) | candidate/op (us) | 加速 |
+| ---: | ---: | ---: | ---: |
+| 1 | `3.217` | `2.162` | `1.488x` |
+| 3 | `3.376` | `2.202` | `1.533x` |
+| 66 | `3.898` | `2.403` | `1.622x` |
+| 110 | `4.505` | `2.456` | `1.834x` |
+| 128 | `4.604` | `2.300` | `2.002x` |
+| 256 | `6.444` | `2.864` | `2.250x` |
+| 1,024 | `18.273` | `6.629` | `2.756x` |
+| 4,096 | `68.862` | `26.533` | `2.595x` |
+
+以上是 fused add-RMSNorm 单功能数据。旧分支 Router + Norm 的端到端吞吐变化没有
+作为本提交收益复用；整模型收益仍需由后续独立 A/B 判断。
+
 ## 验证模型
 
 YOCO-v2 agentic serving：
