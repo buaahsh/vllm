@@ -307,6 +307,9 @@ def test_yoco_kv_only_prefill_batch_detection():
     runner.model_config = SimpleNamespace(hf_config=SimpleNamespace(model_type="yoco"))
     runner.cache_config = SimpleNamespace(kv_sharing_fast_prefill=True)
     runner.parallel_config = SimpleNamespace(data_parallel_size=1)
+    runner.vllm_config = SimpleNamespace(
+        kv_transfer_config=SimpleNamespace(kv_role="kv_both")
+    )
     runner.input_batch = SimpleNamespace(req_ids=["prefill"])
     runner.requests = {
         "prefill": SimpleNamespace(
@@ -335,6 +338,40 @@ def test_yoco_kv_only_prefill_batch_detection():
     ]["do_remote_decode"] = True
     runner.parallel_config.data_parallel_size = 2
     assert not runner._is_yoco_kv_only_prefill_batch()
+
+    runner.vllm_config.kv_transfer_config.kv_role = "kv_producer"
+    assert runner.is_yoco_dedicated_kv_producer()
+    assert runner._is_yoco_kv_only_prefill_batch()
+
+    # A dedicated producer uses the static service role on every DP rank;
+    # request metadata is intentionally not part of the branch decision.
+    runner.requests["prefill"].sampling_params.extra_args[  # type: ignore[index]
+        "kv_transfer_params"
+    ]["do_remote_decode"] = False
+    assert runner._is_yoco_kv_only_prefill_batch()
+
+    runner.vllm_config.kv_transfer_config.kv_role = "kv_consumer"
+    assert not runner.is_yoco_dedicated_kv_producer()
+    assert not runner._is_yoco_kv_only_prefill_batch()
+
+
+def test_dedicated_yoco_producer_dummy_run_uses_kv_only():
+    from vllm.v1.worker.gpu_worker import Worker
+
+    worker = Worker.__new__(Worker)
+    worker.model_runner = SimpleNamespace(
+        uniform_decode_query_len=1,
+        is_yoco_dedicated_kv_producer=Mock(return_value=True),
+        _dummy_run=Mock(),
+    )
+
+    Worker.execute_dummy_batch(worker)
+
+    worker.model_runner._dummy_run.assert_called_once_with(
+        1,
+        uniform_decode=True,
+        yoco_kv_only_prefill=True,
+    )
 
 
 def test_select_common_block_size_no_valid_option():

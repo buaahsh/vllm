@@ -1026,22 +1026,37 @@ class GPUModelRunner(
         )
         return model_kwargs
 
+    def is_yoco_dedicated_kv_producer(self) -> bool:
+        """Whether this runner is a dedicated YOCO prefill service."""
+        kv_transfer_config = self.vllm_config.kv_transfer_config
+        return (
+            self.model_config.hf_config.model_type == "yoco"
+            and self.cache_config.kv_sharing_fast_prefill
+            and kv_transfer_config is not None
+            and kv_transfer_config.kv_role == "kv_producer"
+        )
+
     def _is_yoco_kv_only_prefill_batch(self) -> bool:
-        """Whether this DP1 batch consists only of P-side transfer requests.
+        """Whether cross layers can be skipped for this YOCO prefill.
 
-        NIXL marks requests sent to a prefiller with ``do_remote_decode``.
-        Their one sampled token is only a completion signal for the proxy, so
-        YOCO can stop once its shared K/V has been populated.  Mixed batches
-        retain the normal path so regular requests still receive exact logits.
+        ``kv_producer`` is a dedicated P service: every rank uses the same
+        static role and its disposable output token is ignored by the proxy.
+        This lets DP ranks omit the cross-layer MoE collectives without a
+        per-step agreement flag. A producer must not serve ordinary requests.
 
-        DP needs an additional cross-rank role synchronization before ranks
-        may omit MoE collectives, so keep this first implementation on DP1.
+        DP1 keeps the request-level check for ``kv_both`` compatibility.
         """
+        dp_size = self.parallel_config.data_parallel_size
         if (
             self.model_config.hf_config.model_type != "yoco"
             or not self.cache_config.kv_sharing_fast_prefill
-            or self.parallel_config.data_parallel_size != 1
         ):
+            return False
+
+        if self.is_yoco_dedicated_kv_producer():
+            return True
+
+        if dp_size > 1:
             return False
 
         req_ids = self.input_batch.req_ids
@@ -5532,6 +5547,7 @@ class GPUModelRunner(
         is_graph_capturing: bool = False,
         num_active_loras: int = 0,
         profile_seq_lens: int | None = None,
+        yoco_kv_only_prefill: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Run a dummy forward pass to warm up/profile run or capture the
@@ -5759,6 +5775,9 @@ class GPUModelRunner(
             else:
                 input_ids = self.input_ids.gpu[:num_tokens_padded]
                 inputs_embeds = None
+
+            if yoco_kv_only_prefill:
+                model_kwargs["kv_only_prefill"] = True
 
             if self.uses_mrope:
                 positions = self.mrope_positions.gpu[:, :num_tokens_padded]

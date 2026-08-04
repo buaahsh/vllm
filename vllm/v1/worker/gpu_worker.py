@@ -928,7 +928,11 @@ class Worker(WorkerBase):
 
     def execute_dummy_batch(self) -> None:
         num_tokens = getattr(self.model_runner, "uniform_decode_query_len", 1)
-        self.model_runner._dummy_run(num_tokens, uniform_decode=True)
+        self.model_runner._dummy_run(
+            num_tokens,
+            uniform_decode=True,
+            yoco_kv_only_prefill=(self.model_runner.is_yoco_dedicated_kv_producer()),
+        )
 
     def add_lora(self, lora_request: LoRARequest) -> bool:
         return self.model_runner.add_lora(lora_request)
