@@ -8,19 +8,20 @@ original acceptance report remains below for historical comparison.
 ### Artifacts and decision summary
 
 ```text
-Git branch: shaohanh/yoco-b200-longctx-20260804
-Docker image: buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-20260804
-Registry digest: sha256:cdc3ebf990c0539190756c2aaac48c123f4243eefa386ad3eb4fccb1a7ae2d24
+Git branch: shaohanh/yoco-b200-longctx-multigpu-20260804
+Docker image: buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-multigpu-20260804
 Model: /mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf
 Precision: BF16 only
 ```
 
-The production decision is FlashInfer attention, Triton MoE, TP=1, data
-parallel replication, 32K maximum batched prefill tokens, prefix caching,
-chunked prefill, YOCO KV-sharing fast prefill, and
-`FULL_AND_PIECEWISE` CUDA graphs. Each B200 holds one complete model replica;
-use DP=1, 4, or 8 for one GPU, four GPUs, or one eight-GPU node. Expert
-parallelism is intentionally disabled for this independent-request benchmark.
+The production decision is FlashInfer attention, Triton MoE, TP=1, DP=1/4/8,
+32K maximum batched prefill tokens, prefix caching, chunked prefill, YOCO
+KV-sharing fast prefill, and `FULL_AND_PIECEWISE` CUDA graphs. Async scheduling
+is enabled. The observed local fused-MoE width is N1280 at DP1, N320 at DP4,
+and N160 at DP8, so the multigpu modes must not be interpreted as isolated
+full-model replicas. In the final cold-start logs, the DP1 worker loads about
+60.62 GiB while each DP4 worker loads about 18.43 GiB. The optional DeepEP
+backend is not used.
 
 The three benchmark workloads are:
 
@@ -60,15 +61,53 @@ B200 and checkpoint. Lower kernel time is better.
 | 8,192 | 3,107.94 us | 2,221.93 us | 28.5% |
 | 32,768 | 9,071.07 us | 7,354.35 us | 18.9% |
 
-This optimization targets prefill and mixed agentic steps. It should not be
-described as a batch-1 decode speedup.
+This optimization targets DP1 prefill and mixed agentic steps. It should not
+be described as a batch-1 decode speedup. A separately generated DP8/N160
+table improved isolated kernels but regressed two clean end-to-end runs, so it
+is deliberately not packaged. See `long_context/README.md` for that A/B.
+
+### New-node disk and nested Docker setup
+
+The final multigpu run used
+`assuring-owl-b200g4-dev-d5aab19e-master-0`. Verify the block device before
+mounting it; these commands intentionally keep Docker's large layers on the
+persistent `/data` disk.
+
+```bash
+apt-get update
+apt-get install -y sudo util-linux fdisk docker.io fuse-overlayfs
+mkdir -p /data
+findmnt /data || mount -t ext4 /dev/md1 /data
+mkdir -p /data/docker
+
+dockerd \
+  --data-root=/data/docker \
+  --storage-driver=fuse-overlayfs \
+  --iptables=false \
+  --bridge=none \
+  --pidfile=/data/dockerd.pid \
+  >/data/dockerd.log 2>&1 &
+```
+
+On a standard host with NVIDIA Container Toolkit, use the `docker run`
+examples below. Inside a Kubernetes container that has GPU device nodes but no
+NVIDIA Docker runtime, use the checked-in launcher instead. It maps the GPU and
+NVML devices and preloads the CUDA compatibility driver needed by Triton:
+
+```bash
+MODEL=/data/models/yoco-0000-0800-hf \
+IMAGE=buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-multigpu-20260804 \
+DP_SIZE=8 GPU_LIST=0,1,2,3,4,5,6,7 \
+RESULT_DIR=/data/yoco-longctx-results/dp8 \
+bash tools/yoco_serving/launch_nested_docker.sh
+```
 
 ### Start inference
 
 Set the common paths once:
 
 ```bash
-IMAGE=buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-20260804
+IMAGE=buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-multigpu-20260804
 MODEL=/mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf
 mkdir -p "$PWD/yoco-results"
 ```
@@ -108,6 +147,18 @@ docker run --rm --name yoco-long-dp8 --network host --ipc host \
 
 The service exposes the OpenAI-compatible API at `http://127.0.0.1:8001/v1`.
 Wait for `GET /health` to return HTTP 200 before warming or benchmarking.
+`MAX_NUM_SEQS` is a per-engine cap, not a deployment-wide cap. The supplied
+launcher defaults it to 128 for DP1, DP4, and DP8; for example, a DP8 batch of
+192 is distributed to about 24 active requests per rank rather than requiring
+192 slots on every rank. Change this only after checking both queue depth and
+KV-cache use in the exported vLLM metrics.
+
+With the documented 85% memory utilization, the final cold-start logs report
+space for 19.43 full 131,072-token sequences on DP1 and 26.69 per DP4 engine.
+Thus DP1 batch 24 is an intentional over-capacity saturation probe, while DP4
+batch 96 is still under the deployment's roughly 107-sequence full-context
+capacity. Shorter live contexts can sustain more requests than these
+worst-case figures.
 
 ### Warm the full context range
 
@@ -130,21 +181,30 @@ Examples for the larger deployments are `DP_SIZE=4 GPU_INDICES=0,1,2,3` and
 
 ### Reproduce the speed report
 
-The runner forces exact output lengths, uses unique random seeds to avoid
-cross-run prompt-cache contamination, and emits detailed JSON. Recommended
-batch/concurrency sweeps are 1/2/4/8 for DP1, 4/8/16/32 for DP4, and
-8/16/32/64 for DP8.
+The runner forces exact output lengths, gives every measurement a unique
+server-side cache namespace, resumes complete JSON files, and emits detailed
+results. Recommended saturation sweeps are 1/2/4/8/12/16/24 for DP1,
+4/8/16/32/48/64/96 for DP4, and 8/16/32/64/96/128/192 for DP8. W1 is expensive
+because every request generates 65,536 tokens; use `WORKLOADS` to run the
+three shapes independently.
 
 ```bash
 docker exec \
   -e TOKENIZER="$MODEL" \
   -e DP_SIZE=1 \
   -e GPU_INDICES=0 \
-  -e BATCHES="1 2 4 8" \
+  -e WORKLOADS="1 2 3" \
+  -e BATCHES="1 2 4 8 12 16 24" \
+  -e RUN_ID=dp1-production-20260804 \
   -e RESULT_DIR=/results/dp1 \
   yoco-long-dp1 \
   bash tools/yoco_serving/benchmark_long_context.sh
 ```
+
+Use a fresh `RUN_ID` for an independent repeat. The default
+`SKIP_EXISTING=1` skips only nonempty, valid JSON results tagged with that same
+run identity, so an interrupted sweep can be resumed safely. Set
+`SKIP_EXISTING=0` only when intentionally replacing results.
 
 The single-turn JSON reports request throughput, input/output/total token
 throughput, mean/P95 TTFT, and mean TPOT. The W3 JSON additionally reports
@@ -159,51 +219,33 @@ across the selected GPU count.
 
 <!-- LONG_CONTEXT_RESULTS -->
 
-#### DP1 / one B200
+The full presentation tables are kept in `long_context/README.md` so this
+operational guide does not drift from the raw JSON. The measured batch knees
+are:
 
-W1 — 8K input, 64K output:
+| Deployment | W1 knee | W2 knee | W3 knee | Max-throughput probes |
+| --- | ---: | ---: | ---: | --- |
+| One B200 | 16 | 16 | 16 | W2/W3 batch 24 |
+| Four B200s | 64 | 64 | 64 | Batch 96 |
+| One eight-B200 node | 128 | 128 | 128 | Batch 192 |
 
-| Mode | GPUs | Batch | Total time (s) | Req/s | Input tok/s | Output tok/s | Total tok/s | Mean TTFT (s) | P95 TTFT (s) | Mean TPOT (ms) |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| BF16 | 1 | 1 | 533.969 | 0.0019 | 15.34 | 122.73 | 138.08 | 0.182 | 0.182 | 8.15 |
-| BF16 | 1 | 2 | 585.329 | 0.0034 | 27.99 | 223.93 | 251.92 | 0.317 | 0.337 | 8.93 |
-| BF16 | 1 | 4 | 705.400 | 0.0057 | 46.45 | 371.62 | 418.08 | 0.589 | 0.632 | 10.75 |
-| BF16 | 1 | 8 | 826.238 | 0.0097 | 79.32 | 634.55 | 713.87 | 0.962 | 1.091 | 12.59 |
-
-W2 — 64K input, 16K output:
-
-| Mode | GPUs | Batch | Total time (s) | Req/s | Input tok/s | Output tok/s | Total tok/s | Mean TTFT (s) | P95 TTFT (s) | Mean TPOT (ms) |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| BF16 | 1 | 1 | 137.405 | 0.0073 | 476.95 | 119.24 | 596.19 | 1.215 | 1.215 | 8.31 |
-| BF16 | 1 | 2 | 153.344 | 0.0130 | 854.76 | 213.69 | 1,068.44 | 2.024 | 2.337 | 9.24 |
-| BF16 | 1 | 4 | 190.258 | 0.0210 | 1,377.83 | 344.46 | 1,722.29 | 3.008 | 3.961 | 11.43 |
-| BF16 | 1 | 8 | 234.583 | 0.0341 | 2,234.98 | 558.74 | 2,793.72 | 5.445 | 8.916 | 13.98 |
-
-W3 — 40-turn, 130K agentic trajectory. Input and total rates count logical
-incremental tokens, not repeatedly submitted cached prefixes.
-
-| Mode | GPUs | Batch | Total time (s) | Traj/s | Input tok/s | Output tok/s | Total tok/s | Mean TTFT (s) | P95 TTFT (s) | Mean ITL (ms) | Cache hit |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| BF16 | 1 | 1 | 104.181 | 0.0096 | 1,123.04 | 124.78 | 1,247.82 | 0.156 | 0.213 | 7.55 | 95.58% |
-| BF16 | 1 | 2 | 127.083 | 0.0157 | 1,841.32 | 204.59 | 2,045.91 | 0.268 | 0.345 | 8.97 | 95.58% |
-| BF16 | 1 | 4 | 162.339 | 0.0246 | 2,882.86 | 320.32 | 3,203.18 | 0.409 | 0.578 | 11.25 | 95.58% |
-| BF16 | 1 | 8 | 222.274 | 0.0360 | 4,211.02 | 467.89 | 4,678.91 | 0.734 | 1.088 | 14.82 | 95.58% |
+These are starting points, not hard request limits. Use the detailed TTFT and
+TPOT/ITL columns in the report to choose a lower batch for latency-sensitive
+traffic or the max-throughput probe when aggregate rate is the priority.
 
 <!-- LONG_CONTEXT_MORE_RESULTS -->
 
-Only the DP1 sweep above completed in this allocation. Kubernetes reclaimed
-`settled-foal-b200g4-dev-46d12b9f-master-0` at approximately 12:28 PDT on
-2026-08-04 before the DP4 and DP8 sweeps could start. Those rows are omitted,
-not estimated from DP1. The DP4/DP8 launch and benchmark commands above are
-ready to rerun when an eight-GPU B200 node is available.
+The complete DP1, DP4, and DP8 tables, controlled scheduler/MoE A/B results,
+batch-knee decisions, and raw-evidence locations are maintained in
+[`long_context/README.md`](long_context/README.md). Every published scaled row
+was measured with only that deployment active on the node. Diagnostic rows
+from an accidentally co-located DP1/DP4 run are retained under
+`co-located-invalid/` for auditability and are excluded from the report.
 
-The earlier concurrency-1 figures in the historical report below were taken
-on GPU 0 with a different prompt seed; this scaled DP1 sweep ran on GPU 7.
-W1/W2 differ by about 8% between those executions while W3 differs by about
-1%, so that cross-run difference is treated as system/GPU variance rather
-than evidence of a decode regression or speedup. The paired MoE table above,
-which uses the same GPU and inputs for both configurations, is the controlled
-optimization result.
+Use the same GPU count, `RUN_ID`, workload shape, and batch when comparing a
+change. Kernel microbenchmarks are supporting evidence only: the generated
+DP8/N160 MoE table improved isolated kernels but failed the clean end-to-end
+gate, so the final image intentionally keeps the runtime fallback.
 
 本文只记录本次 YOCO-v2/v3 在 B200 上的最终配置、验收方法和结果，不包含
 旧镜像、旧分支或中间调试过程。
