@@ -6,7 +6,18 @@ model_name="${MODEL_NAME:-yoco-v2-long}"
 host="${HOST:-0.0.0.0}"
 port="${PORT:-8001}"
 dp_size="${DP_SIZE:-1}"
-max_num_seqs="${MAX_NUM_SEQS:-$((dp_size * 8))}"
+max_local_seqs="${MAX_LOCAL_SEQS:-16}"
+max_num_seqs="${MAX_NUM_SEQS:-$((dp_size * max_local_seqs))}"
+async_scheduling="${ASYNC_SCHEDULING:-1}"
+
+case "${async_scheduling}" in
+  1 | true) scheduler_args=(--async-scheduling) ;;
+  0 | false) scheduler_args=(--no-async-scheduling) ;;
+  *)
+    echo "ASYNC_SCHEDULING must be 0, 1, false, or true" >&2
+    exit 2
+    ;;
+esac
 
 exec vllm serve "${model}" \
   --served-model-name "${model_name}" \
@@ -28,4 +39,5 @@ exec vllm serve "${model}" \
   --enable-auto-tool-choice \
   --tool-call-parser agens \
   --reasoning-parser agens \
+  "${scheduler_args[@]}" \
   --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'

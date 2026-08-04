@@ -17,7 +17,8 @@ RUN python -m py_compile \
       tools/yoco_serving/serve_long_context.sh \
       tools/yoco_serving/warmup_long_context.sh \
       tools/yoco_serving/benchmark_long_context.sh \
+      tools/yoco_serving/launch_nested_docker.sh \
       tools/yoco_serving/tune_moe_b200.sh
 
 LABEL org.opencontainers.image.title="YOCO B200 long-context runtime" \
-      org.opencontainers.image.description="BF16 FlashInfer runtime with tuned YOCO Triton MoE and full-range warmup tooling"
+      org.opencontainers.image.description="BF16 FlashInfer runtime with validated DP1 Triton MoE and multigpu long-context tooling"

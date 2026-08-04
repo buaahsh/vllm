@@ -3,21 +3,27 @@ set -euo pipefail
 
 model="${MODEL:?Set MODEL to the YOCO checkpoint path}"
 repo_root="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-config_dir="${repo_root}/vllm/model_executor/layers/fused_moe/configs"
-config_name="E=128,N=1280,device_name=NVIDIA_B200.json"
+config_dir="${CONFIG_DIR:-${repo_root}/vllm/model_executor/layers/fused_moe/configs}"
+tp_size="${TP_SIZE:-1}"
+if [[ ! "${tp_size}" =~ ^[1-9][0-9]*$ ]] || ((1280 % tp_size != 0)); then
+  echo "TP_SIZE must be a positive divisor of 1280" >&2
+  exit 2
+fi
+local_intermediate_size="$((1280 / tp_size))"
+config_name="E=128,N=${local_intermediate_size},device_name=NVIDIA_B200.json"
 batch_sizes=(1 2 4 8 16 32 128 1024 2843 3899 8192 32768)
 
 cd "${repo_root}"
 
 python benchmarks/kernels/benchmark_moe.py \
   --model "${model}" \
-  --tp-size 1 \
+  --tp-size "${tp_size}" \
   --trust-remote-code \
   --batch-size "${batch_sizes[@]}"
 
 python benchmarks/kernels/benchmark_moe.py \
   --model "${model}" \
-  --tp-size 1 \
+  --tp-size "${tp_size}" \
   --trust-remote-code \
   --batch-size "${batch_sizes[@]}" \
   --tune \
@@ -34,6 +40,6 @@ fi
 
 python benchmarks/kernels/benchmark_moe.py \
   --model "${model}" \
-  --tp-size 1 \
+  --tp-size "${tp_size}" \
   --trust-remote-code \
   --batch-size "${batch_sizes[@]}"

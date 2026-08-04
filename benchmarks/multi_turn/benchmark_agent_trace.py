@@ -211,6 +211,10 @@ async def main():
     parser.add_argument("--cache-alignment", type=int, default=1056)
     parser.add_argument("--gpu-indices", default="1,7")
     parser.add_argument("--seed", type=int, default=20260729)
+    parser.add_argument(
+        "--cache-salt-prefix",
+        help="Namespace prefix-cache entries independently from generation seeds.",
+    )
     parser.add_argument("--timeout", type=float, default=3600)
     parser.add_argument("--skip-warmup", action="store_true")
     parser.add_argument(
@@ -233,6 +237,7 @@ async def main():
         raise ValueError("warmup-turns must be between 1 and turns")
     if args.warmup_only and args.skip_warmup:
         raise ValueError("warmup-only cannot be combined with skip-warmup")
+    cache_salt_prefix = args.cache_salt_prefix or str(args.seed)
 
     trajectory_count = args.trajectories or args.concurrency
     if trajectory_count < args.concurrency:
@@ -291,7 +296,7 @@ async def main():
                 async with httpx.AsyncClient(timeout=timeout, limits=limits) as client:
                     history = []
                     salt = hashlib.sha256(
-                        f"agent-trace-warmup:{rank}".encode()
+                        f"{cache_salt_prefix}:agent-trace-warmup:{rank}".encode()
                     ).hexdigest()
                     for turn in range(args.warmup_turns):
                         history.extend(prompt_delta(999999 + rank, turn))
@@ -337,7 +342,7 @@ async def main():
                 history = []
                 started = time.perf_counter()
                 salt = hashlib.sha256(
-                    f"{args.seed}:{trajectory_id}".encode()
+                    f"{cache_salt_prefix}:{trajectory_id}".encode()
                 ).hexdigest()
                 async with httpx.AsyncClient(timeout=timeout, limits=limits) as client:
                     for turn in range(args.turns):
@@ -472,6 +477,7 @@ async def main():
     summary = {
         "model": args.model,
         "tokenizer": args.tokenizer,
+        "cache_salt_prefix": cache_salt_prefix,
         "concurrency": args.concurrency,
         "dp_size": args.dp_size,
         "trajectories": trajectory_count,
