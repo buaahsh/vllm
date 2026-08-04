@@ -17,6 +17,7 @@ from vllm.model_executor.layers.activation import (
     QuickGELU,
     SiluAndMul,
     SiluAndMulWithClamp,
+    SiluAndMulWithClampFP32,
     SwigluOAIAndMul,
     SwigluStepAndMul,
     swiglustep_and_mul_triton,
@@ -194,6 +195,62 @@ def test_silu_and_mul_with_clamp(
     # opcheck
     out_buf = torch.empty(x.shape[:-1] + (d,), dtype=dtype, device=device)
     opcheck(torch.ops._C.silu_and_mul_with_clamp, (out_buf, x, swiglu_limit))
+
+
+@pytest.mark.parametrize("swiglu_limit", [10.0])
+@pytest.mark.parametrize(
+    ("num_tokens", "d"),
+    [
+        pytest.param(1, 1279, id="scalar-fallback"),
+        pytest.param(1, 1280, id="single-token"),
+        pytest.param(7, 1280, id="multi-token"),
+        pytest.param(128, 1280, id="128b-boundary"),
+        pytest.param(129, 1280, id="256b-sm100"),
+    ],
+)
+@pytest.mark.parametrize("dtype", DTYPES)
+@pytest.mark.parametrize("device", CUDA_DEVICES)
+@torch.inference_mode()
+def test_silu_and_mul_with_clamp_fp32(
+    default_vllm_config,
+    swiglu_limit: float,
+    num_tokens: int,
+    d: int,
+    dtype: torch.dtype,
+    device: str,
+) -> None:
+    """The fused kernel preserves YOCO's FP32 intermediate semantics."""
+    generator = torch.Generator(device=device).manual_seed(20260803 + num_tokens)
+    x = (
+        torch.randn(
+            num_tokens,
+            2 * d,
+            dtype=dtype,
+            device=device,
+            generator=generator,
+        )
+        * swiglu_limit
+        * 2
+    )
+
+    layer = SiluAndMulWithClampFP32(
+        swiglu_limit,
+        compile_native=False,
+        enforce_enable=True,
+    )
+    out = layer(x)
+    ref_out = layer.forward_native(x)
+    torch.testing.assert_close(out, ref_out, atol=0.0, rtol=0.0)
+
+    if dtype != torch.float32:
+        low_precision_out = SiluAndMulWithClamp(swiglu_limit, compile_native=False)(x)
+        assert not torch.equal(out, low_precision_out)
+
+    out_buf = torch.empty(x.shape[:-1] + (d,), dtype=dtype, device=device)
+    opcheck(
+        torch.ops._C.silu_and_mul_with_clamp_fp32,
+        (out_buf, x, swiglu_limit),
+    )
 
 
 @pytest.mark.parametrize(

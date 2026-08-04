@@ -165,6 +165,9 @@ void silu_and_mul(torch::Tensor& out, torch::Tensor& input);
 
 void silu_and_mul_clamp(torch::Tensor& out, torch::Tensor& input, double limit);
 
+void silu_and_mul_clamp_fp32(torch::Tensor& out, torch::Tensor& input,
+                             double limit);
+
 void silu_and_mul_quant(torch::Tensor& out, torch::Tensor& input,
                         torch::Tensor& scale);
 

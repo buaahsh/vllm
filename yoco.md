@@ -806,3 +806,106 @@ c8 收益已经接近运行噪声；这项优化的明确收益集中在低/中�
 ```text
 /mnt/pvc/lidong1/vllm_pd/shared-expert-overlap-0803/
 ```
+
+## Shared Expert FP32 clamped-SwiGLU 单 kernel（2026-08-03）
+
+这轮在 `fhb0804@21f2066621` 上继续优化 Shared Expert activation。原实现为保证
+训练一致性，先把 `gate_up` 转为 FP32，再依次执行 gate clamp、up clamp、SiLU、
+multiply，最后转回 projection dtype；CUDA eager profile 中实际是 6 个 GPU
+kernel。不能直接替换为已有的 `silu_and_mul_with_clamp`，因为该 kernel 会在
+BF16/FP16 路径把 clamp 和 SiLU 中间结果提前舍入回输入 dtype，与 YOCO 的 FP32
+中间语义不同。
+
+### 实现
+
+- 新增 `_C.silu_and_mul_with_clamp_fp32` CUDA op。kernel 从 BF16/FP16 输入加载后
+  在 FP32 中完成 gate `clamp(max=limit)`、up `clamp(-limit, limit)`、SiLU 和
+  multiply，只在最终 store 前转换一次输出 dtype；FP32 输入也走相同公式。
+- 新 kernel 沿用 activation kernel 的 128-bit vector load/store，并在 CUDA
+  12.9+、SM100+ 且 token 数大于 128 时使用 256-bit 路径；不满足对齐条件时有
+  scalar fallback。clamp 使用比较而不是 `fminf/fmaxf`，以保留 PyTorch 对 NaN
+  的行为。
+- 新增 `SiluAndMulWithClampFP32` CustomOp，YOCO Shared Expert 使用
+  `enforce_enable=True`，确保 Inductor 和 CUDA Graph 路径实际保留这个单 kernel，
+  而不是回退成多个 eager op。CPU、ROCm 和其他非 CUDA backend 保留原 FP32
+  PyTorch reference fallback。
+- 原有 `SiluAndMulWithClamp` 未修改，避免改变 DeepSeek-V4 等使用低精度中间语义
+  的模型。`swiglu_limit <= 0` 时 YOCO 仍走原来的普通 `SiluAndMul`。
+
+### 本机正确性与微基准
+
+- 新增 FP16/BF16/FP32、两张 A6000 的 CUDA/opcheck 覆盖：`30 passed`。case
+  包括非对齐 `d=1279` scalar fallback、常用 `d=1280` 的单/多 token、128-token
+  边界和 129-token SM100 分支输入。新 kernel 与旧 YOCO FP32 多算子 reference
+  逐元素 bitwise 一致；测试同时确认 FP16/BF16 输出不同于已有的低精度中间
+  kernel，防止误接语义。
+- YOCO conversion/config、Router、fused add-RMSNorm 等定向回归：`34 passed`。
+- Torch profiler（BF16、`tokens=8`、`d=1280`）中，activation 从 6 个 CUDA
+  kernel 降为 1 个 `silu_and_mul_clamp_fp32_kernel`。
+- A6000 CUDA event 微基准如下；每个样本 400 次调用、7 轮取中位数。这里只代表
+  activation microbenchmark，不等价于 B200 端到端 serving 收益。
+
+| tokens | FP32 多算子 | fused 单 kernel | 加速 |
+| ---: | ---: | ---: | ---: |
+| 1 | `83.472 us` | `21.166 us` | `3.94x` |
+| 8 | `89.244 us` | `21.760 us` | `4.10x` |
+| 128 | `89.106 us` | `19.796 us` | `4.50x` |
+
+### B200 SM100 kernel 验收
+
+在 `bonete01/lidong1-yoco-swiglu-b200-0803` 的两张 B200 上，使用 CUDA 13.1、
+PyTorch `2.11.0a0+nv26.02` 为 SM100 重新编译并链接完整 `_C`。两张卡各执行
+15 个 correctness 和 15 个 opcheck case，合计 30 个 correctness、30 个
+opcheck 全部通过。覆盖 FP16/BF16/FP32、非对齐 scalar fallback、128-bit 路径
+以及 `tokens=129` 的 256-bit 路径；显式 NaN case、YOCO 使用的 CustomOp 和
+`tokens=16384` 长 batch 也都与旧 FP32 多算子 reference bitwise 一致。Profiler
+确认一次 activation 只有一个 `silu_and_mul_clamp_fp32_kernel`。
+
+CUDA Graph 验收不是只对同一输入回放：capture 后原地更换 static input，再
+replay 并与新输入 reference 对比，两张 B200 均 bitwise 一致。B200 BF16、
+`d=1280` 的 CUDA event 微基准如下，每项 7 轮取中位数：
+
+| tokens | FP32 多算子 eager | fused eager | eager 加速 |
+| ---: | ---: | ---: | ---: |
+| 1 | `71.245 us` | `12.861 us` | `5.54x` |
+| 8 | `72.088 us` | `12.802 us` | `5.63x` |
+| 128 | `72.254 us` | `12.770 us` | `5.66x` |
+| 129 | `71.973 us` | `12.864 us` | `5.60x` |
+| 512 | `71.564 us` | `12.769 us` | `5.61x` |
+| 4096 | `72.008 us` | `12.919 us` | `5.57x` |
+
+单独 capture activation graph 后，reference graph 含多个 kernel node，fused
+graph 只有一个 activation node：
+
+| tokens | FP32 多算子 graph | fused graph | graph 加速 |
+| ---: | ---: | ---: | ---: |
+| 129 | `16.396 us` | `5.680 us` | `2.89x` |
+| 4096 | `63.929 us` | `10.289 us` | `6.21x` |
+
+### B200 完整模型 A/B
+
+完整模型使用 61 GiB YOCO-v3/L3 checkpoint，baseline 为未修改的
+`fhb0804@21f2066621`，candidate 为本轮工作树。两边共用同一个新编译 SM100
+`_C`，但 baseline Python 不包含也不调用新 CustomOp，因此 A/B 的变量仅是
+Shared Expert activation 路径。服务使用 BF16、TP1、FlashInfer、Triton MoE、
+非 eager `FULL_AND_PIECEWISE` CUDA Graph；baseline/candidate 同时运行在 GPU
+0/1，随后交换 GPU 再完整执行一轮。
+
+- `1360 / 12097 / 43709` prompt tokens 各强制生成 64 tokens；两个 GPU 布局
+  中，文本、token IDs、token 字符串、token logprob 和 top-5 logprob 均 exact。
+- Decode A/B 使用 1360-token prompt、强制生成 128 tokens；每个 GPU 布局对
+  c1/c4/c8 交替执行 3 轮，合并两个布局的 6 个样本取中位数：
+
+| concurrency | baseline completion tok/s | candidate completion tok/s | 变化 |
+| ---: | ---: | ---: | ---: |
+| 1 | `133.521` | `136.044` | `+1.89%` |
+| 4 | `351.494` | `354.833` | `+0.95%` |
+| 8 | `749.076` | `756.981` | `+1.06%` |
+
+c1 在两个 GPU 布局分别为 `+2.34% / +1.36%`，c4 为
+`+1.31% / +0.71%`；方向一致。c8 分别为 `+2.36% / +0.08%`，已接近运行
+噪声，不应把约 1% 的 pooled 结果当稳定 SLA。原始 A/B JSON 位于：
+
+```text
+/mnt/pvc/lidong1/vllm_pd/fp32-clamped-swiglu-0804/
+```

@@ -112,6 +112,13 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, ops) {
       "-> ()");
   ops.impl("silu_and_mul_with_clamp", torch::kCUDA, &silu_and_mul_clamp);
 
+  // Clamped SwiGLU with FP32 intermediates and one final output conversion.
+  ops.def(
+      "silu_and_mul_with_clamp_fp32(Tensor! result, Tensor input, float limit) "
+      "-> ()");
+  ops.impl("silu_and_mul_with_clamp_fp32", torch::kCUDA,
+           &silu_and_mul_clamp_fp32);
+
   ops.def(
       "silu_and_mul_quant(Tensor! result, Tensor input, Tensor scale) -> ()");
   ops.impl("silu_and_mul_quant", torch::kCUDA, &silu_and_mul_quant);

@@ -70,6 +70,37 @@ __device__ __forceinline__ packed_t packed_compute(const packed_t& x,
   }
 }
 
+// YOCO performs its clamped SwiGLU in FP32 and converts only the final result
+// back to the projection dtype. Keep this separate from packed_compute above:
+// that path intentionally rounds the clamped inputs and activation back to
+// scalar_t for models whose reference implementation uses low-precision
+// intermediates.
+template <typename scalar_t>
+__device__ __forceinline__ scalar_t silu_and_mul_clamp_fp32_compute(
+    const scalar_t& x, const scalar_t& y, const float limit) {
+  float gate = (float)x;
+  float up = (float)y;
+  // Comparisons preserve NaNs, matching torch.clamp.
+  gate = gate > limit ? limit : gate;
+  up = up < -limit ? -limit : (up > limit ? limit : up);
+  const float silu = gate / (1.0f + expf(-gate));
+  return (scalar_t)(silu * up);
+}
+
+template <typename packed_t>
+__device__ __forceinline__ packed_t silu_and_mul_clamp_fp32_packed_compute(
+    const packed_t& x, const packed_t& y, const float limit) {
+  float2 gate = cast_to_float2(x);
+  float2 up = cast_to_float2(y);
+  gate.x = gate.x > limit ? limit : gate.x;
+  gate.y = gate.y > limit ? limit : gate.y;
+  up.x = up.x < -limit ? -limit : (up.x > limit ? limit : up.x);
+  up.y = up.y < -limit ? -limit : (up.y > limit ? limit : up.y);
+  gate.x = gate.x / (1.0f + expf(-gate.x)) * up.x;
+  gate.y = gate.y / (1.0f + expf(-gate.y)) * up.y;
+  return cast_to_packed<packed_t>(gate);
+}
+
 // Activation and gating kernel template.
 template <typename scalar_t, typename packed_t,
           scalar_t (*ACT_FN)(const scalar_t&),
@@ -120,6 +151,54 @@ __global__ void act_and_mul_kernel(
       const scalar_t y = VLLM_LDG(&y_ptr[idx]);
       out_ptr[idx] =
           compute<scalar_t, ACT_FN, act_first, HAS_CLAMP>(x, y, limit);
+    }
+  }
+}
+
+template <typename scalar_t, typename packed_t, bool use_vec,
+          bool use_256b = false>
+__global__ void silu_and_mul_clamp_fp32_kernel(
+    scalar_t* __restrict__ out,          // [..., d]
+    const scalar_t* __restrict__ input,  // [..., 2, d]
+    const int d, const float limit) {
+  const scalar_t* x_ptr = input + blockIdx.x * 2 * d;
+  const scalar_t* y_ptr = x_ptr + d;
+  scalar_t* out_ptr = out + blockIdx.x * d;
+
+  if constexpr (use_vec) {
+    using cuda_t = typename CUDATypeConverter<scalar_t>::Type;
+    using pvec_t = PackedVec<cuda_t, use_256b>;
+
+    const pvec_t* x_vec = reinterpret_cast<const pvec_t*>(x_ptr);
+    const pvec_t* y_vec = reinterpret_cast<const pvec_t*>(y_ptr);
+    pvec_t* out_vec = reinterpret_cast<pvec_t*>(out_ptr);
+    const int num_vecs = d / 2 / pvec_t::NUM_ELTS;
+
+    for (int i = threadIdx.x; i < num_vecs; i += blockDim.x) {
+      pvec_t x, y;
+      if constexpr (use_256b) {
+        ld256(x, &x_vec[i]);
+        ld256(y, &y_vec[i]);
+      } else {
+        ld128(x, &x_vec[i]);
+        ld128(y, &y_vec[i]);
+      }
+#pragma unroll
+      for (int j = 0; j < pvec_t::NUM_ELTS; j++) {
+        x.elts[j] =
+            silu_and_mul_clamp_fp32_packed_compute(x.elts[j], y.elts[j], limit);
+      }
+      if constexpr (use_256b) {
+        st256(x, &out_vec[i]);
+      } else {
+        st128(x, &out_vec[i]);
+      }
+    }
+  } else {
+    for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
+      const scalar_t x = VLLM_LDG(&x_ptr[idx]);
+      const scalar_t y = VLLM_LDG(&y_ptr[idx]);
+      out_ptr[idx] = silu_and_mul_clamp_fp32_compute(x, y, limit);
     }
   }
 }
@@ -264,6 +343,58 @@ void silu_and_mul_clamp(torch::Tensor& out,    // [..., d]
                         double limit) {
   LAUNCH_ACTIVATION_GATE_KERNEL(vllm::silu_kernel, vllm::packed_silu_kernel,
                                 true, true, (float)limit);
+}
+
+void silu_and_mul_clamp_fp32(torch::Tensor& out,    // [..., d]
+                             torch::Tensor& input,  // [..., 2 * d]
+                             double limit) {
+  auto dtype = input.scalar_type();
+  int d = input.size(-1) / 2;
+  int64_t num_tokens = input.numel() / input.size(-1);
+  if (num_tokens == 0) {
+    return;
+  }
+  dim3 grid(num_tokens);
+  int cc_major = at::cuda::getCurrentDeviceProperties()->major;
+  int support_vec =
+      (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128)
+          ? vllm::VecTraits<true>::ARCH_MAX_VEC_SIZE
+          : vllm::VecTraits<false>::ARCH_MAX_VEC_SIZE;
+  int vec_size = support_vec / at::elementSize(dtype);
+  const bool use_vec = (d % vec_size == 0);
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  if (use_vec) {
+    dim3 block(std::min(d / vec_size, 1024));
+    if (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128) {
+      VLLM_DISPATCH_FLOATING_TYPES(
+          dtype, "silu_and_mul_clamp_fp32_kernel", [&] {
+            vllm::silu_and_mul_clamp_fp32_kernel<
+                scalar_t, typename vllm::PackedTypeConverter<scalar_t>::Type,
+                true, true><<<grid, block, 0, stream>>>(
+                out.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(), d,
+                (float)limit);
+          });
+    } else {
+      VLLM_DISPATCH_FLOATING_TYPES(
+          dtype, "silu_and_mul_clamp_fp32_kernel", [&] {
+            vllm::silu_and_mul_clamp_fp32_kernel<
+                scalar_t, typename vllm::PackedTypeConverter<scalar_t>::Type,
+                true, false><<<grid, block, 0, stream>>>(
+                out.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(), d,
+                (float)limit);
+          });
+    }
+  } else {
+    dim3 block(std::min(d, 1024));
+    VLLM_DISPATCH_FLOATING_TYPES(dtype, "silu_and_mul_clamp_fp32_kernel", [&] {
+      vllm::silu_and_mul_clamp_fp32_kernel<
+          scalar_t, typename vllm::PackedTypeConverter<scalar_t>::Type, false>
+          <<<grid, block, 0, stream>>>(out.data_ptr<scalar_t>(),
+                                       input.data_ptr<scalar_t>(), d,
+                                       (float)limit);
+    });
+  }
 }
 
 void mul_and_silu(torch::Tensor& out,    // [..., d]
