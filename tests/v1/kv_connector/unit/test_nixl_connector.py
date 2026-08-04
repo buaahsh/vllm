@@ -1683,6 +1683,10 @@ def test_register_kv_caches(
                 "layer1": unique_tensor,
                 "layer2": shared_tensor,
             }
+            # ModelRunner adds cross-layer KV-sharing aliases after the NIXL
+            # worker captures its KVCacheConfig. Such aliases have no separate
+            # layer spec and must be deduplicated by their shared tensor.
+            connector.connector_worker._layer_specs.pop("layer2")
 
             # Store tensor info for validation
             if is_blocks_first:
