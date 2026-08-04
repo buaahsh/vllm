@@ -39,6 +39,7 @@
 | 1 | `85eab7b56e` | 性能/PD | KV-only producer 跳过 cross layers | 已进入 `fhb-dev` |
 | 2 | `ea4f80d1b4` | 正确性/NIXL | 去重 KV-sharing alias 注册 | 已进入 `fhb-dev` |
 | 3 | `d11cc022bd` | 性能/Router | 删除 dense routing materialization | 已进入 `fhb-dev` |
+| 4 | `ef60ee0255` | 性能/Norm | 融合 residual add 与 RMSNorm | 已进入 `fhb-dev` |
 
 ---
 
@@ -463,6 +464,283 @@ batch shape 和显存带宽占比影响，必须通过后续整模型 A/B 单独
 - 需要关注非常大 token batch 下 Top-K workspace 和 graph capture pool；显式
   dense 临时内存已经删除，但不能把 640 bytes/token 解释成完整峰值显存差。
 - revert 该 commit 可恢复旧 Router，模型接口不变，不影响前两个 PD/NIXL 提交。
+
+---
+
+## 4. Fused residual add-RMSNorm
+
+### 提交信息
+
+```text
+commit: ef60ee02559f788e2ea829a942e40704074c62a6
+subject: perf(yoco): fuse residual add with RMSNorm
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: d77fed9d2a6e6b84a7a1573b6a0a868667648e95
+branch: review/yoco-04-fused-add-rmsnorm
+source final state: d934b7411b + cb5b179a44
+diff: 3 files, 341 insertions, 7 deletions
+```
+
+该功能完成检查和 B200 验证后，由 `Snow2022jlu` 直接同步到 `fhb-dev`，没有创建
+PR。旧开发分支的初版实现和 residual-boundary 精度修复在本次迁移时被合并成一个
+最终 commit，因此 `fhb-dev` 不包含已知有问题的中间状态。
+
+### 目的
+
+YOCO 每个 token step 执行 40 次 decoder block：10 个 self layers 经过三次
+universal loop，再执行 10 个 cross layers。每个 block 的 attention sublayer 后
+都依次执行：
+
+```text
+attention_output
+  -> FP32 residual add
+  -> materialize FP32 residual_out
+  -> RMSNorm reduction
+  -> BF16 normalized output
+  -> MoE
+```
+
+旧路径的 residual add 与 RMSNorm 是两个独立阶段。RMSNorm 的第一遍 reduction
+又需要读取刚写出的完整 FP32 residual，因此存在额外 kernel node 和全量显存读取。
+
+本提交的目标是把 attention output 的 FP32 residual add 放进 RMSNorm reduction
+的第一遍：同一次读取中生成 `residual_out` 并累加平方和，第二遍完成 normalize 和
+weight multiply。这样仍输出完整 FP32 residual 给 layer 末尾使用，但少一个独立
+add 阶段。
+
+### 为什么不能直接使用 vLLM 通用 fused add-RMSNorm
+
+vLLM 已有 `_C.fused_add_rms_norm` 和 `vllm.ir.ops.fused_add_rms_norm`，但当前 CUDA
+实现要求 activation、residual 和 weight dtype 与 input dtype 匹配，并原地更新
+同 dtype 的 input/residual。
+
+YOCO 的数值契约不同：
+
+```text
+attention/MLP sublayer output: BF16 或 FP32
+long-lived residual:           FP32
+RMSNorm weight:                BF16 checkpoint weight
+normalized output:             BF16
+```
+
+如果为了复用通用 op 把 residual 降为 BF16，会移动舍入点并在 40 个 block execution
+中累积误差；如果让 normalized output 保持 FP32，则又改变后续 projection/MoE 的
+输入 dtype 和已验证路径。因此新增 YOCO 专用 mixed-dtype kernel，而不是放宽通用
+kernel 的全局 dtype 契约。
+
+### 实现细节
+
+#### 第一遍：add、residual materialization 和 reduction
+
+Triton kernel 每行对应一个 token 的 hidden vector，hidden size 固定为 3072：
+
+1. BF16/FP32 `x` 和 FP32 `residual` 都转为 FP32；
+2. 计算 `values = x + residual`；
+3. 立即把 `values` 写入 FP32 `residual_out`；
+4. 同时以 FP32 累加 `values * values`；
+5. reduction 完成后计算 `rsqrt(mean(square) + eps)`。
+
+token 数小于 128 时使用 `REDUCTION_BLOCK=2048`，否则使用 4096；这与原 YOCO
+RMSNorm 的选择一致，保留 B200 上已验证的 reduction order。
+
+#### 第二遍：normalize 和 BF16 output
+
+1. 再读 FP32 `residual_out`；
+2. 读取转换为 BF16 layout 的 RMSNorm weight，并在 kernel 中转为 FP32；
+3. 计算 `values * inv_rms * weight`；
+4. 写入 BF16 normalized output，供后续 MoE 使用。
+
+返回值是：
+
+```text
+(normalized_bf16, residual_out_fp32)
+```
+
+#### fast path 条件与 fallback
+
+只有同时满足以下条件才进入 Triton fast path：
+
+- Triton 可用且运行平台为 CUDA；
+- `x` 和 `residual` 都在 CUDA；
+- `x` 为 BF16 或 FP32；
+- `residual` 为 FP32；
+- 两者 shape 完全相同；
+- hidden size 为 3072。
+
+其他 device、dtype、shape 或 hidden size 走 PyTorch fallback：先执行
+`residual + x.float()`，再调用原 RMSNorm。fallback 不是近似路径，公式和返回
+dtype 与融合语义相同。
+
+### 融合边界与被拒绝的旧实验
+
+融合只发生在 decoder layer 内部：
+
+```text
+residual_before_attention + attention_output
+  -> fused RMSNorm input for MLP
+MLP output
+  -> residual_out + mlp_output.float()
+  -> materialize layer output
+```
+
+旧分支初版 `d934b7411b` 还尝试把 MLP output 与 FP32 residual 拆开跨 decoder
+layer 携带，让下一层继续融合。这一做法局部算子测试正确，但改变了 layer boundary
+的 FP32 materialization/rounding point；长上下文不能保持 bitwise 一致。
+
+后续修复 `cb5b179a44` 撤销跨层 residual carry，只保留 attention 后的层内融合。
+本次 `ef60ee0255` 直接移植两者的最终净效果，确保每层末尾仍与旧实现完全相同，
+没有把错误中间版本写入 `fhb-dev`。
+
+### 修改文件及职责
+
+#### `vllm/model_executor/models/yoco.py`
+
+- 增加 `_yoco_fused_add_rms_norm_kernel`；
+- 增加 CUDA wrapper 和 fake implementation；
+- 注册 `torch.ops.vllm.yoco_fused_add_rms_norm`，可被 torch.compile 和 CUDA Graph
+  捕获；
+- 扩展 YOCO `RMSNorm.forward(x, residual=None)`：无 residual 时完全保留旧接口，
+  有 residual 时返回 `(normalized, residual_out)`；
+- `YOCODecoderLayer` 在 attention 后调用融合接口；
+- layer 末尾继续执行原 MLP residual add，不跨层携带未物化 partial；
+- 对无 residual 的 norm call 增加类型断言，明确 compile graph 中返回值仍是单
+  tensor。
+
+#### `tests/model_executor/test_yoco_conversion.py`
+
+- CPU hidden-size 4 case 验证 fallback 的 FP32 residual 和 normalized output；
+- B200 hidden-size 3072 case 覆盖 1、66、128 tokens；
+- CUDA fast path 的 FP32 residual 与 BF16 normalized output 都要求 bitwise match，
+  使用 `rtol=0, atol=0`；
+- 构造最小 `YOCODecoderLayer` 连续执行两个 loop，与逐语句 legacy forward 对比，
+  防止再次移动 layer boundary；
+- 原 Router、fast-prefill、KV-only 和权重转换测试继续在同一文件完整运行。
+
+#### `yoco.md`
+
+- 记录独立 baseline、B200 测试、两种 CUDA Graph 计时口径以及边界说明。
+
+### 提交前测试拦截的问题
+
+首次手工迁移时，重载 `forward(x, residual)` 的补丁因上下文匹配过宽，错误落到了
+相邻的 `RMSClip` 类，而不是 `RMSNorm`。首轮 B200 定向测试立即得到：
+
+```text
+5 failed, 15 deselected
+TypeError: RMSNorm.forward() takes 2 positional arguments but 3 were given
+```
+
+该失败状态从未 commit 或推送。修正后检查类定义位置，重新同步完整文件，并从零
+重跑定向测试、完整测试和 microbenchmark。记录这次拦截的目的，是提醒后续移植
+同文件多个 `forward` 方法时必须用 class context 定位，不能只依赖方法签名。
+
+### 最终正确性验证
+
+独立 B200 Pod：
+
+```text
+pod:  lidong1-yoco-pr04-add-rmsnorm-g1-0804-master-0
+node: slc01-cl02-hgx-0418
+GPU:  NVIDIA B200
+```
+
+修正后的定向结果：
+
+```text
+5 passed, 15 deselected, 19 warnings in 2.52s
+```
+
+完整 `tests/model_executor/test_yoco_conversion.py`：
+
+```text
+20 passed, 19 warnings in 20.55s
+```
+
+验证覆盖：
+
+- CPU fallback；
+- CUDA fast path 1/66/128 tokens；
+- normalized BF16 output bitwise match；
+- FP32 residual output bitwise match；
+- 两个连续 decoder loop 的 layer-boundary exact match；
+- 原 Router random/tie cases；
+- fast-prefill 与 KV-only control flow；
+- YOCO v2/v3 state-dict conversion 和配置默认值。
+
+受影响文件还通过 `ruff-check`、`ruff-format`、`mypy`、`markdownlint-cli2`、
+`git diff --check` 和其余适用的 pre-commit hooks。
+
+### 性能方法
+
+baseline 与 candidate 都先经过 `torch.compile(fullgraph=True)`：
+
+```text
+baseline:
+  residual_out = residual + x.float()
+  normalized = yoco_rms_norm(residual_out)
+
+candidate:
+  normalized, residual_out = yoco_fused_add_rms_norm(x, residual)
+```
+
+每个 shape 在计时前先比较两个输出，要求 exact match。随后分别 capture 为 CUDA
+Graph，warmup 后执行 1,000 次 graph replay，报告中位数。硬件、输入、weight、
+reduction block 和输出 dtype 保持一致。
+
+### 单微算子 CUDA Graph replay
+
+每个 graph 只有一个 add-RMSNorm 操作。约 9 us 的整图固定开销对小 shape 占比很
+高，因此该口径更接近“单独发起一个微型 graph”的上限，不适合推断 40 个 layer
+中的累计节省：
+
+| tokens | baseline (us) | candidate (us) | 加速 |
+| ---: | ---: | ---: | ---: |
+| 1 | `9.568` | `9.152` | `1.045x` |
+| 3 | `9.472` | `9.184` | `1.031x` |
+| 66 | `9.536` | `9.472` | `1.007x` |
+| 110 | `9.408` | `9.408` | `1.000x` |
+| 128 | `9.376` | `9.376` | `1.000x` |
+| 256 | `9.472` | `9.472` | `1.000x` |
+| 1,024 | `17.184` | `11.136` | `1.543x` |
+| 4,096 | `48.032` | `31.136` | `1.543x` |
+
+### 40 个算子节点同图摊销
+
+YOCO 的实际模型 graph 包含 40 次 decoder block execution，而不是为每个 norm
+单独 replay 一张 CUDA Graph。第二个 benchmark 把 40 个算子节点 capture 到同一
+graph，总延迟除以 40，从而只支付一次整图 replay 固定开销：
+
+| tokens | baseline/op (us) | candidate/op (us) | 加速 |
+| ---: | ---: | ---: | ---: |
+| 1 | `3.217` | `2.162` | `1.488x` |
+| 3 | `3.376` | `2.202` | `1.533x` |
+| 66 | `3.898` | `2.403` | `1.622x` |
+| 110 | `4.505` | `2.456` | `1.834x` |
+| 128 | `4.604` | `2.300` | `2.002x` |
+| 256 | `6.444` | `2.864` | `2.250x` |
+| 1,024 | `18.273` | `6.629` | `2.756x` |
+| 4,096 | `68.862` | `26.533` | `2.595x` |
+
+40 个输入在 microbenchmark 中彼此独立，所以该数据衡量的是同图 kernel-node 和
+显存流量摊销，不包含真实 attention、MoE 或 collective，也不能直接换算成整模型
+tok/s。它的意义是证明即使 serving 已启用 CUDA Graph，减少 graph 内部 kernel
+node 和 FP32 tensor 读写仍然有效。
+
+旧分支曾报告 Router + add-RMSNorm 两项合并后的 endpoint 变化；本提交没有把该
+组合数据作为单功能收益。后续若报告端到端收益，必须以 `d77fed9d2a` 为 baseline，
+只切换本 commit，并交替执行同 workload。
+
+### 风险、观察点与回滚
+
+- 最大正确性风险是再次扩大融合边界、移动 layer-end FP32 materialization；完整
+  layer test 和长上下文 exact-match 必须保留。
+- fast path 固定 hidden size 3072 和已验证 dtype；其他 shape 必须继续 fallback，
+  不应仅为覆盖更多模型而放宽断言。
+- reduction block 的 128-token 切换点影响 reduction order；修改 tile 前必须重做
+  bitwise test，不能只看 `allclose`。
+- custom op 是 inference-only；本提交没有注册 autograd kernel，也不应用于训练。
+- revert `ef60ee0255` 可恢复顺序 residual add + RMSNorm；Router、PD 和 NIXL 提交
+  不受影响，模型功能仍正确但恢复额外 kernel/显存读取。
 
 ---
 
