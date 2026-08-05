@@ -749,6 +749,157 @@ final output。这可能增加微小的 terminal latency，但是让 connector �
 - revert `1c51cac0d7` 可恢复旧 abort 行为，但 P/D frontend stop-string 会再次
   丢失 KV transfer metadata；六个 YOCO 优化 commit 不受影响。
 
+## 统一 UCX 1.21 PD runtime
+
+这是第八个独立功能，目标是让 NIXL 和 HPC-X 只加载一套 UCX，并让当前
+YOCO Python/native 源码在同一个 B200 runtime 内保持一致：
+
+```text
+baseline branch:  fhb-dev
+baseline commit:  0f8c9d95b550179b662f67d184b12c0688de8ad0
+candidate branch: review/yoco-08-ucx-121-runtime
+candidate commit: 2765c22a1b1572e2a9fc8dc16465c04a6dfd47a7
+```
+
+最终本地镜像：
+
+```text
+tag:      vllm-yoco-pd:ucx121-fhb-dev-0804-r2
+image id: sha256:02caed17c8793830bd88748baa8fb203489384b1a00263d3312162afb54c0f47
+size:     38,002,453,833 bytes
+```
+
+### 修改文件
+
+- `docker/Dockerfile.b200.pd`：固定 base/UCX/NIXL revision；原位替换
+  HPC-X UCX；从源码构建无私有 UCX 副本的 NIXL wheels；为 SM100 重编译
+  当前 `_C`；在 build 中执行版本、符号和 Python 检查。
+- `docker/verify_single_ucx.sh`：fail-closed 检查 UCX 版本、重复 library、
+  NIXL plugin RUNPATH/实际链接；可选 PID 参数还会检查进程已加载的 UCX
+  路径。
+
+功能 commit 只增加这两个文件，`299 insertions`，没有修改模型、scheduler
+或请求协议。
+
+### 固定版本和单 UCX 契约
+
+```text
+base image digest:
+  sha256:08a08f36ab8c6c80ee1c7f09b9e5f8b6ce0b91cc684455982b2e5e286c736f2b
+base native revision:
+  f4964c907db7ce2d77c2b0ea39e263375b7eba4f
+UCX:
+  1.21.0 @ b6a9d47fccce849c28111f05a7fa8f1c930ff17d
+NIXL / NIXL-cu13:
+  1.3.2 @ de8115ca97d3f8fb63a4988e9b4d4a038b2e0f72
+native architecture:
+  TORCH_CUDA_ARCH_LIST=10.0
+```
+
+镜像不会在 UCX 1.20 旁边再安装 1.21，而是删除 inherited
+`/opt/hpcx/ucx`，再把 1.21 安装回相同 prefix。这样 HPC-X 既有路径不变，
+文件系统中也不会同时存在两个版本。
+
+NIXL platform wheel 本地构建且不经过 auditwheel repair。UCX plugin 保留
+generic `libuc*.so` SONAME，并把 `/opt/hpcx/ucx/lib` 写入 RUNPATH；不会把
+hash 命名的私有 UCX library 打进 wheel。runtime 中先卸载旧
+`nixl/nixl-cu12/nixl-cu13`，再安装同一源码生成的 `nixl==nixl-cu13==1.3.2`。
+本镜像只需要 NIXL KV transfer，所以关闭 NIXL EP，并隐藏 metadata wheel
+仍会安装的 `nixl_ep` shim；实测 `has_nixl_ep() == False`。
+
+### 为什么必须重编译 `_C`
+
+首个 UCX/NIXL 镜像 `765b69b65871...` 只用 `COPY vllm` 覆盖 Python tree，
+仍沿用 base image 在 `f4964c9` 编译的 `_C.abi3.so`。检查立即得到：
+
+```text
+hasattr(torch.ops._C, "silu_and_mul_with_clamp_fp32") == False
+```
+
+这意味着第六项新增的 `SiluAndMulWithClampFP32` Python 类存在，但对应 C++/CUDA
+operator 不存在；YOCO Shared Expert 启动时会失败。该镜像只用于 UCX/NIXL
+诊断，没有作为最终 runtime。
+
+最终 Dockerfile 在 pinned base source 上只覆盖当前分支相对 base 变化的三个
+native 文件：
+
+```text
+csrc/activation_kernels.cu
+csrc/ops.h
+csrc/torch_bindings.cpp
+```
+
+随后只构建和安装 CMake `_C` target，保留 base 的 `_moe_C`、FlashMLA 等
+其他 native extension。构建前检查 base Git revision 和三个文件未被 base
+镜像额外修改；构建后通过 CUDA stub import 检查新 operator 已注册。最终
+`_C.abi3.so` SHA256 为：
+
+```text
+c3faa036746f43a50a10e4013021613b851f84b79e0de5c15bf39c7fdef4b298
+```
+
+`cuobjdump` 确认该文件包含 `sm_100` cubin。
+
+### B200 正确性和运行态验证
+
+最终镜像先在本机 A6000 上验证 operator 注册、NIXL UCX backend 和 PID
+maps；因为 `_C` 是纯 SM100，该机器不用于执行 fused kernel。
+
+B200 使用独立 Volcano Pod：
+
+```text
+pod:  lidong1-yoco-ucx121-native-g1-0804-master-0
+node: slc01-cl02-hgx-0346
+GPU:  NVIDIA B200, compute capability 10.0
+```
+
+集群没有发布本地临时 tag，因此从最终镜像提取 216 MiB runtime delta，覆盖到
+同一 pinned base digest；覆盖后再次比较 `_C` SHA256，确认与最终镜像逐字节
+相同。验证结果：
+
+- FP16/BF16/FP32，`d=1280`，tokens `1/7/128/129/4096` 共 15 个 case，
+  fused output 与 FP32-intermediate native reference 全部 bitwise match；
+- BF16、129-token operator `opcheck` 通过；
+- YOCO `SiluAndMulWithClampFP32` CustomOp 路径 bitwise match；
+- CUDA Graph capture 后替换 static input 并 replay，结果 bitwise match；
+- NIXL 1.3.2 成功实例化 UCX backend；
+- `verify-single-ucx <pid>` 确认进程 maps 中只有 `/opt/hpcx/ucx/lib`；
+- `has_nixl_ep() == False`。
+
+另外，`EXPECTED_UCX_VERSION=9.99` 和向 `/usr/local/lib` 注入额外
+`libucs.so.duplicate-test` 都被校验脚本拒绝，证明检查是 fail-closed，不是
+只打印版本。
+
+### RDMA device 选择边界
+
+测试节点暴露了 12 个有有效 InfiniBand GID 的 `mlx5_*` HCA，以及一个 active
+但没有 GID 的 Ethernet `mlx5_bond_0`。不设置拓扑变量时，UCX 自动选择
+`mlx5_bond_0:1`，NIXL 初始化按预期失败并报告：
+
+```text
+uct_iface_open(rc_verbs/mlx5_bond_0:1) failed: Address not valid
+```
+
+设置 `UCX_NET_DEVICES=mlx5_0:1` 后，RDMA backend 和 PID maps 验证立即通过。
+因此镜像故意不硬编码 HCA；P/D launch profile 必须按 GPU/NIC 拓扑给每个进程
+选择有效、GPU-local 的 RDMA device。统一 library 版本能消除 ABI/loader
+混用，但不能替代部署层的网卡选择。
+
+### 性能、风险与回滚
+
+这是 build/runtime 稳定性功能，不改变请求 steady-state 算法，也不把第六项
+activation 的历史性能重复归因到本 commit，所以不报告 tok/s 提升。UCX/NIXL
+端到端带宽和 P/D endpoint 吞吐应在真实多节点拓扑下单独验收，不能用单 agent
+初始化冒充性能数据。
+
+- 当前 `_C` 只面向 B200/SM100；A6000 可检查注册但不能执行该 cubin。
+- 后续若新增其他 native 源文件，必须更新 Dockerfile overlay 列表并重编译；
+  只覆盖 Python tree 会再次造成 ABI/operator 不一致。
+- `NIXL EP` 被有意关闭；该镜像支持 NIXL KV transfer，不宣称支持 NIXL EP MoE。
+- `UCX_NET_DEVICES` 是 deployment contract，必须按节点拓扑配置。
+- revert `2765c22a1b` 只移除新 image recipe 和校验脚本，不影响前七个
+  `fhb-dev` 功能；已构建镜像也不会被 Git revert 自动删除。
+
 ## 验证模型
 
 YOCO-v2 agentic serving：

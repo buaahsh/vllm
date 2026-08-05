@@ -43,6 +43,7 @@
 | 5 | `9988ae737f` | 性能/MoE | Shared Expert 与 Routed MoE 并行 | 已进入 `fhb-dev` |
 | 6 | `8eae22948c` | 性能/Activation | FP32 clamped-SwiGLU 单 kernel | 已进入 `fhb-dev` |
 | 7 | `1c51cac0d7` | 正确性/PD | Streaming stop 保留 KV metadata | 已进入 `fhb-dev` |
+| 8 | `2765c22a1b` | 构建/PD | UCX 1.21 单 runtime 与 SM100 `_C` | 已进入 `fhb-dev` |
 
 ---
 
@@ -1381,6 +1382,336 @@ connector metadata 的必要成本；性能优先不能覆盖 P/D 正确性。
 - API 字段是 optional vLLM extension，只在 metadata 非空时出现。
 - revert `1c51cac0d7` 可恢复旧 abort path，但会恢复 P/D streaming stop
   metadata 丢失问题；前六个 `fhb-dev` commit 不受影响。
+
+---
+
+## 8. UCX 1.21 单 runtime 与 SM100 native 同步
+
+### 提交信息
+
+```text
+commit: 2765c22a1b1572e2a9fc8dc16465c04a6dfd47a7
+subject: build(pd): unify runtime on UCX 1.21
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: 0f8c9d95b550179b662f67d184b12c0688de8ad0
+branch: review/yoco-08-ucx-121-runtime
+diff: 2 files, 299 insertions
+```
+
+该功能在独立 B200 Pod 完成 correctness/runtime 验证后，由 `Snow2022jlu`
+直接同步到 `fhb-dev`，不创建 PR。
+
+### 目的和旧 runtime 风险
+
+基础镜像继承 HPC-X UCX 1.20。若再直接安装带 auditwheel repair 的 NIXL wheel，
+wheel 可能在私有目录携带 hash 命名的另一套 `libucs/libucp/libuct/libucm`。
+此时同一进程可能出现：
+
+```text
+HPC-X / vLLM -> /opt/hpcx/ucx/lib (UCX 1.20)
+NIXL plugin   -> nixl_cu13.libs/libuc*-<hash>.so (另一版本)
+```
+
+即使两边 API 分别可 import，也不能保证同一进程中的 UCX ABI、global state、
+memory registration 和 worker 生命周期兼容。P/D 传 KV 时，这类问题通常表现为
+握手卡住、backend 初始化失败或运行一段时间后 transport error，而不是稳定的
+Python exception。
+
+本 commit 把契约改成：
+
+1. `/opt/hpcx/ucx` 是镜像内唯一 UCX root；
+2. 该 root 原位升级为固定 revision 的 UCX 1.21.0；
+3. NIXL UCX plugin 只通过 generic SONAME + canonical RUNPATH 链接该 root；
+4. image build、容器启动前检查和可选进程 maps 检查都 fail closed；
+5. 当前 YOCO Python 与 `_C` native operator 必须来自同一源码状态。
+
+### 固定依赖和可复现输入
+
+```text
+base image:
+  registry.hub.docker.com/buaahsh/pytorch@
+  sha256:08a08f36ab8c6c80ee1c7f09b9e5f8b6ce0b91cc684455982b2e5e286c736f2b
+base vLLM native revision:
+  f4964c907db7ce2d77c2b0ea39e263375b7eba4f
+UCX revision / version:
+  b6a9d47fccce849c28111f05a7fa8f1c930ff17d / 1.21.0
+NIXL revision / version:
+  de8115ca97d3f8fb63a4988e9b4d4a038b2e0f72 / 1.3.2
+CUDA target:
+  TORCH_CUDA_ARCH_LIST=10.0
+```
+
+base image 使用 digest 而不是 mutable tag；UCX/NIXL 都按完整 commit SHA shallow
+fetch，并在 build 中比较实际 `HEAD`。镜像 labels 记录 UCX/NIXL version 和
+revision、vLLM native base revision、CUDA architecture。
+
+### 修改文件及职责
+
+#### `docker/Dockerfile.b200.pd`
+
+Dockerfile 使用同一个 pinned base 的 multi-stage build：
+
+- 删除 inherited UCX 1.20 tree，再把 1.21 安装回 `/opt/hpcx/ucx`；不是在
+  第二个 prefix 并排安装；
+- 保留 HPC-X 既有 prefix，避免 OpenMPI/HPC-X path 失效；
+- source build 启用 shared、MT、CUDA、verbs、mlx5、rdmacm、DM 和 GDRCopy，
+  关闭不需要的 static/EFA/Java/KNEM/XPMEM；
+- 检查 `libuct_ib.so`、`libuct_ib_mlx5.so`、`libuct_rdmacm.so` 和
+  `ucx_info` 版本；
+- 从固定 NIXL commit 构建 UCX/POSIX platform wheel，不执行 auditwheel repair，
+  因此不会复制私有 UCX library；
+- NIXL build 显式关闭 tests/examples、headers 和 `nixl_ep`，CUDA arch 固定 100；
+- runtime 卸载所有 inherited `nixl/nixl-cu12/nixl-cu13`，只安装本次生成的
+  `nixl==nixl-cu13==1.3.2`；
+- metadata wheel 即使关闭 EP 仍会生成 `nixl_ep` import shim，因此把该目录
+  重命名为 `.disabled`，防止 vLLM 错选不存在的 `nixl_ep_cu13`；
+- overlay 当前完整 Python tree，并用本次 source build 的 `_C.abi3.so` 替换
+  base `_C`；其他 native extensions 继续使用 pinned base 版本；
+- image build 内执行 single-UCX、NIXL version、`has_nixl_ep()==False`、
+  operator registration 和 Python compileall 检查。
+
+Dockerfile 没有写死 `UCX_NET_DEVICES`。不同 GPU/rank 对应的 NUMA-local HCA
+不同，网卡选择必须由 P/D launch profile 根据部署拓扑提供。
+
+#### `docker/verify_single_ucx.sh`
+
+脚本默认要求 `/opt/hpcx/ucx` 和 `1.21.x`，也允许通过环境变量覆盖预期值：
+
+```text
+EXPECTED_UCX_ROOT
+EXPECTED_UCX_VERSION
+```
+
+检查顺序：
+
+1. canonical `ucx_info` 存在且版本匹配；
+2. `/usr/local/ucx` 如果存在，必须 resolve 到 canonical root；
+3. 扫描 `/usr`、`/opt`、`/workspace` 中所有 `libucm/libucp/libucs/libuct`
+   文件和 symlink，任何 resolve 到 canonical root 之外的副本都失败；
+4. 找到 NIXL `libplugin_UCX.so`；
+5. `readelf` 必须看到 canonical UCX RUNPATH/RPATH；
+6. `ldd` 中所有 UCX dependency 必须 resolve 到 canonical root；
+7. 传入 PID 时，`/proc/<pid>/maps` 必须已加载 UCX，且每条 UCX mapping 都
+   位于 canonical root。
+
+脚本使用 `set -euo pipefail`，失败直接返回非零，不把错误降级为 warning。
+
+### 提交前发现并拦截的 native mismatch
+
+第一次构建得到的诊断镜像：
+
+```text
+image id: 765b69b6587109660c184431a672148522a2f6a445b8ca57a75777004c7c9209
+UCX/NIXL check: passed
+new Python activation class: present
+torch.ops._C.silu_and_mul_with_clamp_fp32: absent
+```
+
+原因是最初 recipe 只 `COPY vllm`，而 base `_C` 来自
+`f4964c907db7ce2d77c2b0ea39e263375b7eba4f`。第六项功能已在当前分支修改：
+
+```text
+csrc/activation_kernels.cu
+csrc/ops.h
+csrc/torch_bindings.cpp
+```
+
+Python `SiluAndMulWithClampFP32` 会在实例化时读取新 operator；只覆盖 Python
+必然在 YOCO Shared Expert 启动时失败。该诊断镜像没有被当作最终结果，也没有
+提交一个已知不可启动的 recipe。
+
+修复方式不是复制本机 A6000/SM86 `_C`，而是在 builder 中：
+
+1. 检查 base Git HEAD 等于 pinned native revision；
+2. 检查 base 没有额外修改这三个 native 文件；
+3. 只覆盖当前分支的三个文件；
+4. `TORCH_CUDA_ARCH_LIST=10.0` 配置 CMake；
+5. 只构建和安装 `_C` target，避免无关 extension 重编；
+6. 使用 CUDA driver stub import 新 `_C` 并断言 operator 已注册。
+
+最终 `_C` 构建了 57 个 object，link/install 成功；`cuobjdump` 可见
+`sm_100` cubin。文件 SHA256：
+
+```text
+c3faa036746f43a50a10e4013021613b851f84b79e0de5c15bf39c7fdef4b298
+```
+
+### 最终镜像和 build-time 验证
+
+```text
+tag:      vllm-yoco-pd:ucx121-fhb-dev-0804-r2
+image id: sha256:02caed17c8793830bd88748baa8fb203489384b1a00263d3312162afb54c0f47
+size:     38,002,453,833 bytes
+```
+
+build 内结果：
+
+```text
+UCX:       1.21.0
+revision:  b6a9d47fccce849c28111f05a7fa8f1c930ff17d
+NIXL:      1.3.2
+NIXL-cu13: 1.3.2
+plugin RUNPATH includes: /opt/hpcx/ucx/lib
+has_nixl_ep(): False
+new fused op registered: True
+Python compileall: passed
+```
+
+错误注入验证：
+
+- `EXPECTED_UCX_VERSION=9.99` 被拒绝；
+- 复制额外 `/usr/local/lib/libucs.so.duplicate-test` 后被拒绝；
+- 两种情况都返回非零，证明 fail-closed 生效。
+
+### A6000 runtime smoke
+
+本机用最终镜像、GPU0 做运行态 smoke：
+
+```text
+GPU: NVIDIA RTX A6000, compute capability 8.6
+new fused op registered: True
+NIXL backends: [UCX]
+has_nixl_ep(): False
+PID single-UCX maps: passed
+```
+
+该 `_C` 只编译 SM100，所以 A6000 只验证 import/registration 和 NIXL/UCX，
+没有执行 fused CUDA kernel；数值执行必须在 B200 完成，不能拿 A6000 smoke
+替代 SM100 correctness。
+
+### B200 correctness 和 CUDA Graph
+
+独立 B200 资源：
+
+```text
+pod:  lidong1-yoco-ucx121-native-g1-0804-master-0
+node: slc01-cl02-hgx-0346
+GPU:  NVIDIA B200, compute capability 10.0
+```
+
+本地临时 image tag 未发布到 cluster registry。为确保测试内容仍与最终镜像一致，
+从 image 提取 UCX、NIXL packages/plugin、校验脚本和 `_C` 共 216 MiB，覆盖到
+相同 pinned base digest；当前 Git Python tree 用 `git archive` 覆盖。覆盖后比较
+`_C` SHA256，与最终 image 完全一致。该方法验证的是最终 image runtime 文件，
+不是在 Pod 内重新编译另一份 binary。
+
+数值 matrix：
+
+```text
+d:       1280
+limit:   10.0
+dtypes:  FP16, BF16, FP32
+tokens:  1, 7, 128, 129, 4096
+cases:   15
+oracle:  FP32 clamp -> FP32 SiLU -> FP32 multiply -> output dtype cast
+result:  all bitwise match (rtol=0, atol=0)
+```
+
+附加验证：
+
+- BF16、129 tokens 的 torch library `opcheck` 通过；
+- YOCO `SiluAndMulWithClampFP32(..., enforce_enable=True)` CustomOp bitwise；
+- CUDA Graph capture 后原地替换 static input，replay output bitwise；
+- NIXL 1.3.2 成功实例化 UCX backend；
+- `verify-single-ucx <pid>` 确认进程只加载 canonical UCX；
+- `has_nixl_ep() == False`。
+
+最终摘要：
+
+```text
+B200_RUNTIME_RESULT={
+  "bitwise_cases": 15,
+  "capability": [10, 0],
+  "cuda_graph": "bitwise",
+  "custom_op": "bitwise",
+  "gpu": "NVIDIA B200",
+  "has_nixl_ep": false,
+  "nixl_backends": ["UCX"],
+  "opcheck": "passed",
+  "ucx_net_devices": "mlx5_0:1"
+}
+```
+
+测试结束后删除 Volcano Job，未占用遗留 B200 资源。
+
+### RDMA HCA 自动选择问题和部署契约
+
+B200 节点同时暴露：
+
+- 12 个 active、具有效 InfiniBand GID 的 `mlx5_0-4`、`mlx5_7-13` HCA；
+- 一个 active Ethernet `mlx5_bond_0`，但其 GID 列表为空。
+
+首次不设置 `UCX_NET_DEVICES` 时，UCX 自动选择无 GID 的 bond，NIXL backend
+创建失败：
+
+```text
+uct_iface_open(rc_verbs/mlx5_bond_0:1) failed: Address not valid
+NIXL_ERR_BACKEND
+```
+
+这次失败发生在 15 个数值 case、opcheck、CustomOp 和 CUDA Graph 已完成之后；
+它不是 fused operator failure。显式设置：
+
+```text
+UCX_NET_DEVICES=mlx5_0:1
+```
+
+后，NIXL UCX backend 和 PID maps 立即通过，证明 source-built UCX 1.21 的
+verbs/mlx5 transport 可工作。不能在 image 中把 `mlx5_0` 硬编码给所有 rank，
+因为多 GPU P/D 节点必须选择各 GPU 对应的 NUMA-local HCA。因此最终约定是：
+
+- image 负责版本、library path 和 ABI 单一性；
+- deployment profile 负责按 rank 设置有效的 `UCX_NET_DEVICES`；
+- 上线前必须排除 active 但无 GID 的 bond/虚拟 RDMA device；
+- 换节点或改 GPU placement 后重新做 agent creation 和 PID maps smoke。
+
+统一到 UCX 1.21 能解决“进程同时加载 1.20/1.21 或 wheel 私有副本”的问题，
+但不会自动修复无效网卡选择；两者是独立的稳定性条件。
+
+### 提交前静态检查
+
+通过：
+
+- `docker build --check -f docker/Dockerfile.b200.pd .`，无 warning；
+- `bash -n docker/verify_single_ucx.sh`；
+- pinned shellcheck 对新脚本单独检查；
+- `git diff --check`；
+- pre-commit 的 typos、Docker dependency graph、configuration validation、
+  attention docs、filename 和 suggestion 等所有适用 hook。
+
+仓库 shellcheck pre-commit hook 即使传入单个新文件仍会扫描全仓，因既有
+`.buildkite`、integration 和 utility scripts 的历史告警返回 123。新脚本单独
+shellcheck 为 0；没有修改或顺手清理无关旧脚本，功能 commit 仅跳过该全仓 hook。
+
+### 性能说明
+
+这是构建/loader/ABI 稳定性 commit，不改变 YOCO forward、scheduler 或 steady-state
+请求算法，预期 tok/s、TTFT 和 kernel 数收益为零。因此：
+
+- 不报告虚构的 endpoint 加速；
+- 不把第六项 FP32 activation 的 A6000/B200 性能数据重复算到本 commit；
+- B200 测试只报告 bitwise、graph、NIXL backend 和 loader correctness；
+- UCX 1.21 多节点带宽、P/D KV transfer throughput 和 tail latency 需要真实
+  P/D topology 的独立 A/B，不能用单进程 agent 初始化代替。
+
+build 本身为 SM100 `_C` 编译 57 个 object；这是离线 image build 成本，不进入
+请求 latency。
+
+### 风险、观察点与回滚
+
+- `UCX_NET_DEVICES` 必须由部署按 GPU/NIC 拓扑设置；无 GID bond 会让 backend
+  初始化失败。
+- `_C` 是 SM100-only；不能把本机 SM86 binary 复制进 B200 image，也不能期待
+  该 image 在 A6000 执行 CUDA op。
+- 当前 native overlay 列表只有三个相对 pinned base 发生变化的文件。后续新增
+  C++/CUDA 修改时必须同步扩展列表并重编，不能只 `COPY vllm`。
+- NIXL EP 有意关闭；KV transfer 可用不等于 NIXL EP MoE 可用。
+- verifier 扫描 `/usr`、`/opt`、`/workspace`。若将来有合法 UCX 安装在另一
+  prefix，必须先决定是否仍满足“单 UCX”契约，不能直接放宽检查。
+- HPC-X 保留相同 prefix，但 UCX ABI 已升级为 1.21；后续 OpenMPI/HCOLL 集成
+  验证应继续使用该 image，不应从宿主 bind-mount 回 1.20。
+- revert `2765c22a1b` 可从源码删除 recipe/校验脚本；前七个功能 commit 不受
+  影响。已生成的 local Docker image 需要单独按 image lifecycle 清理。
 
 ---
 
