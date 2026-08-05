@@ -33,17 +33,17 @@ DP4 and DP8 use local MoE widths N320 and N160, so the final DP1/N1280 hybrid
 change does not affect them. The DP1 knee rows are the dedicated new-node
 scaled sweep; batch 1 above is the final hybrid gate.
 
-| Deployment | Workload | Selected batch | Output tok/s | Mean TTFT (s) | Mean TPOT/ITL (ms) | Max-throughput probe |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| 1 B200 | W1 | 16 | 903.60 | 1.653 | 17.68 | 16 |
-| 1 B200 | W2 | 16 | 740.59 | 9.991 | 20.97 | 24 |
-| 1 B200 | W3 | 16 | 642.13 | 1.294 | 20.97 | 24 |
-| 4 B200 | W1 | 64 | 3,721.44 | 2.069 | 17.16 | 96 |
-| 4 B200 | W2 | 64 | 3,295.66 | 13.767 | 18.55 | 96 |
-| 4 B200 | W3 | 64 | 2,568.58 | 1.097 | 21.51 | 96 |
-| 8 B200 | W1 | 128 | 7,042.67 | 2.977 | 18.13 | 192 |
-| 8 B200 | W2 | 128 | 5,803.94 | 18.989 | 20.87 | 192 |
-| 8 B200 | W3 | 128 | 4,321.22 | 1.881 | 23.67 | 192 |
+| Deployment | Workload | Selected batch | Selected output tok/s | Mean TTFT (s) | Mean TPOT/ITL (ms) | Max-throughput batch | Max-throughput output tok/s |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 B200 | W1 | 16 | 903.60 | 1.653 | 17.68 | 16 | 903.60 |
+| 1 B200 | W2 | 16 | 740.59 | 9.991 | 20.97 | 24 | 811.35 |
+| 1 B200 | W3 | 16 | 642.13 | 1.294 | 20.97 | 24 | 690.70 |
+| 4 B200 | W1 | 64 | 3,721.44 | 2.069 | 17.16 | 96 | 4,836.23 |
+| 4 B200 | W2 | 64 | 3,295.66 | 13.767 | 18.55 | 96 | 3,612.73 |
+| 4 B200 | W3 | 64 | 2,568.58 | 1.097 | 21.51 | 96 | 2,813.92 |
+| 8 B200 | W1 | 128 | 7,042.67 | 2.977 | 18.13 | 192 | 8,318.24 |
+| 8 B200 | W2 | 128 | 5,803.94 | 18.989 | 20.87 | 192 | 6,704.27 |
+| 8 B200 | W3 | 128 | 4,321.22 | 1.881 | 23.67 | 192 | 4,792.22 |
 
 ## 3. Attention backend probe
 
