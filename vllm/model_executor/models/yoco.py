@@ -1450,6 +1450,12 @@ class YOCOMoE(nn.Module):
         self.router_weights_normalized = bool(
             getattr(config, "router_weights_normalized", False)
         )
+        # Older YOCO checkpoints keep the raw router weights and normalize
+        # them at inference time. The weights are immutable after loading, so
+        # cache that normalized FP32 tensor once instead of rebuilding it in
+        # every decoder-block execution. Keep it non-persistent so checkpoint
+        # names and serialization remain unchanged.
+        self.register_buffer("_normalized_gate_weight", None, persistent=False)
 
         # Router gate — runs in fp32 to match training.
         self.gate = GateLinear(
@@ -1566,22 +1572,38 @@ class YOCOMoE(nn.Module):
             prefix=f"{prefix}.experts",
         )
 
+    def initialize_router_weight_cache(self) -> None:
+        if self.router_weights_normalized:
+            self._normalized_gate_weight = None
+            return
+        with torch.no_grad():
+            weight = self.gate.weight
+            self._normalized_gate_weight = weight / weight.norm(
+                dim=1, keepdim=True
+            ).clamp_min(1e-6)
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
+        gate_weight = self.gate.weight
+        normalize_gate_weight = not self.router_weights_normalized
+        if self._normalized_gate_weight is not None:
+            gate_weight = self._normalized_gate_weight
+            normalize_gate_weight = False
+
         if hidden_states.is_cuda and current_platform.is_cuda():
             router_logits = torch.ops.vllm.yoco_router_linear_tf32(
                 hidden_states.float(),
-                self.gate.weight,
-                not self.router_weights_normalized,
+                gate_weight,
+                normalize_gate_weight,
             )
         else:
-            if self.router_weights_normalized:
-                router_logits = F.linear(hidden_states.float(), self.gate.weight)
+            if not normalize_gate_weight:
+                router_logits = F.linear(hidden_states.float(), gate_weight)
             else:
                 router_logits = _yoco_normalized_router_linear(
-                    hidden_states.float(), self.gate.weight
+                    hidden_states.float(), gate_weight
                 )
         # FusedMoE overlaps the local shared-expert GEMMs with routed dispatch
         # and expert compute. It then preserves YOCO's original order: routed
@@ -2089,6 +2111,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
             self.model.make_empty_intermediate_tensors
         )
         self._rotary_caches_initialized = False
+        self._router_weight_caches_initialized = False
 
     # ------------------------------------------------------------------ #
     # standard forward / compute_logits API                              #
@@ -2123,6 +2146,14 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
                 module.cos_sin_cache = cache
         self._rotary_caches_initialized = True
 
+    def _initialize_router_weight_caches(self) -> None:
+        if self._router_weight_caches_initialized:
+            return
+        for module in self.modules():
+            if isinstance(module, YOCOMoE):
+                module.initialize_router_weight_cache()
+        self._router_weight_caches_initialized = True
+
     def forward(
         self,
         input_ids: torch.Tensor | None,
@@ -2134,6 +2165,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         # Default loading initializes this eagerly. This fallback covers
         # loaders that assign tensors without calling this model's load_weights.
         self._initialize_rotary_caches()
+        self._initialize_router_weight_caches()
         if not self.fast_prefill_enabled:
             return self.model(
                 input_ids=input_ids,
@@ -2488,5 +2520,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         # Piecewise compilation cannot trace a forward that mutates module
         # buffers, so initialize caches before profile/warmup forwards begin.
         self._initialize_rotary_caches()
+        self._router_weight_caches_initialized = False
+        self._initialize_router_weight_caches()
 
         return loaded_names

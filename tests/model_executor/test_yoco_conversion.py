@@ -14,6 +14,7 @@ from vllm.model_executor.models.yoco import (
     YOCOForCausalLM,
     YOCOLatentInputTransform,
     YOCOLatentOutputTransform,
+    YOCOMoE,
     YOCORotaryEmbedding,
     YOCOSharedOutputTransform,
     _yoco_apply_rotary_emb,
@@ -333,6 +334,68 @@ def test_yoco_router_fused_topk_preserves_tie_order() -> None:
 
     torch.testing.assert_close(actual_weights, reference_weights, rtol=0, atol=0)
     torch.testing.assert_close(actual_ids, reference_ids, rtol=0, atol=0)
+
+
+def test_yoco_router_weight_cache_matches_runtime_normalization() -> None:
+    module = YOCOMoE.__new__(YOCOMoE)
+    torch.nn.Module.__init__(module)
+    module.gate = torch.nn.Linear(8, 4, bias=False, dtype=torch.float32)
+    module.gate.weight.data.copy_(
+        torch.arange(32, dtype=torch.float32).view(4, 8) / 7 - 2
+    )
+    module.router_weights_normalized = False
+    module.register_buffer("_normalized_gate_weight", None, persistent=False)
+
+    expected = module.gate.weight / module.gate.weight.norm(
+        dim=1, keepdim=True
+    ).clamp_min(1e-6)
+    module.initialize_router_weight_cache()
+
+    assert module._normalized_gate_weight is not None
+    torch.testing.assert_close(module._normalized_gate_weight, expected, rtol=0, atol=0)
+    assert "_normalized_gate_weight" not in module.state_dict()
+
+
+def test_yoco_router_weight_cache_skips_already_normalized_weights() -> None:
+    module = YOCOMoE.__new__(YOCOMoE)
+    torch.nn.Module.__init__(module)
+    module.gate = torch.nn.Linear(8, 4, bias=False, dtype=torch.float32)
+    module.router_weights_normalized = True
+    module.register_buffer(
+        "_normalized_gate_weight",
+        torch.full_like(module.gate.weight, float("nan")),
+        persistent=False,
+    )
+
+    module.initialize_router_weight_cache()
+
+    assert module._normalized_gate_weight is None
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("num_tokens", [1, 8, 128])
+def test_yoco_cached_router_linear_is_bitwise_exact(num_tokens: int) -> None:
+    generator = torch.Generator(device="cuda").manual_seed(8128 + num_tokens)
+    hidden_states = torch.randn(
+        num_tokens,
+        3072,
+        dtype=torch.float32,
+        device="cuda",
+        generator=generator,
+    )
+    weight = torch.randn(
+        128,
+        3072,
+        dtype=torch.float32,
+        device="cuda",
+        generator=generator,
+    )
+    cached_weight = weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
+
+    expected = torch.ops.vllm.yoco_router_linear_tf32(hidden_states, weight, True)
+    actual = torch.ops.vllm.yoco_router_linear_tf32(hidden_states, cached_weight, False)
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 def test_fast_prefill_runs_all_cross_layers_on_compact_tokens() -> None:
