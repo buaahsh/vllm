@@ -62,7 +62,10 @@ from vllm.distributed import (
     get_tensor_model_parallel_world_size,
 )
 from vllm.forward_context import DPMetadata, get_forward_context
-from vllm.model_executor.layers.activation import SiluAndMul
+from vllm.model_executor.layers.activation import (
+    SiluAndMul,
+    SiluAndMulWithClampFP32,
+)
 from vllm.model_executor.layers.attention.attention import Attention, AttentionType
 from vllm.model_executor.layers.fused_moe import FusedMoE
 from vllm.model_executor.layers.fused_moe.router.gate_linear import GateLinear
@@ -1147,18 +1150,6 @@ class YOCOCrossAttention(nn.Module):
 # --------------------------------------------------------------------------- #
 
 
-class YOCOClampedSwiGLU(nn.Module):
-    def __init__(self, swiglu_limit: float) -> None:
-        super().__init__()
-        self.swiglu_limit = float(swiglu_limit)
-
-    def forward(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up.float().chunk(2, dim=-1)
-        gate = gate.clamp(max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        return (F.silu(gate) * up).to(gate_up.dtype)
-
-
 class YOCOSharedExperts(nn.Module):
     """Shared-expert MLP for YOCO MoE blocks (SwiGLU)."""
 
@@ -1191,7 +1182,10 @@ class YOCOSharedExperts(nn.Module):
         # non-positive, fall back to the plain (unclamped) activation.
         self.swiglu_limit = float(swiglu_limit)
         if self.swiglu_limit > 0:
-            self.act_fn = YOCOClampedSwiGLU(self.swiglu_limit)
+            self.act_fn = SiluAndMulWithClampFP32(
+                self.swiglu_limit,
+                enforce_enable=True,
+            )
         else:
             self.act_fn = SiluAndMul()
 
@@ -1359,10 +1353,10 @@ class YOCOMoE(nn.Module):
         )
         shared_output_transform = YOCOSharedOutputTransform(self.shared_gate)
 
-        # NOTE(swiglu_limit): Both the shared expert (above, via
-        # ``YOCOClampedSwiGLU``) and the ROUTED experts (below) apply the
-        # training ``swiglu_limit`` clamp (clamp-before-silu), for exact
-        # train/inference parity. The routed clamp is threaded via
+        # NOTE(swiglu_limit): Both the shared expert (above, via the fused FP32
+        # clamped SwiGLU op) and the ROUTED experts (below) apply the training
+        # ``swiglu_limit`` clamp (clamp-before-silu), for exact train/inference
+        # parity. The routed clamp is threaded via
         # ``FusedMoE(swiglu_limit=...)`` -> ``UnquantizedFusedMoEMethod.
         # forward_native`` -> ``FusedMoEExpertsModular.activation`` ->
         # ``swiglu_limit_func`` (gate/up ordering verified identical to
