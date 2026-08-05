@@ -3,7 +3,7 @@
 import enum
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from vllm.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
 
@@ -155,6 +155,15 @@ class SchedulerInterface(ABC):
             Tuple of (req_id, client_index) for requests that were aborted. Will not
             include any that were already finished.
         """
+        raise NotImplementedError
+
+    @abstractmethod
+    def finish_requests_with_kv_transfer_params(
+        self,
+        request_ids: str | Iterable[str] | None,
+        finished_status: "RequestStatus",
+    ) -> list[tuple[str, int, dict[str, Any] | None]]:
+        """Finish requests while retaining connector metadata for output."""
         raise NotImplementedError
 
     @abstractmethod

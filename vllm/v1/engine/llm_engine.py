@@ -304,9 +304,20 @@ class LLMEngine:
             )
             self.output_processor.update_scheduler_stats(outputs.scheduler_stats)
 
-        # 3) Abort any reqs that finished due to stop strings.
-        with record_function_or_nullcontext("llm_engine step: abort_requests"):
-            self.engine_core.abort_requests(processed_outputs.reqs_to_abort)
+        # 3) Normally finish requests whose stop strings were detected by the
+        # frontend detokenizer. InprocClient returns the final output directly;
+        # multiprocessing clients deliver it through their output queue.
+        with record_function_or_nullcontext("llm_engine step: stop_requests"):
+            stop_outputs = self.engine_core.stop_requests(
+                processed_outputs.reqs_to_stop
+            )
+            if stop_outputs is not None:
+                final_outputs = self.output_processor.process_outputs(
+                    stop_outputs.outputs,
+                    engine_core_timestamp=stop_outputs.timestamp,
+                    iteration_stats=iteration_stats,
+                )
+                processed_outputs.request_outputs.extend(final_outputs.request_outputs)
 
         # 4) Record stats
         with record_function_or_nullcontext("llm_engine step: record_stats"):

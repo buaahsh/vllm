@@ -112,7 +112,12 @@ class RequestOutputCollector:
 @dataclass
 class OutputProcessorOutput:
     request_outputs: list[RequestOutput | PoolingRequestOutput]
-    reqs_to_abort: list[str]
+    reqs_to_stop: list[str]
+
+    @property
+    def reqs_to_abort(self) -> list[str]:
+        """Deprecated compatibility alias for frontend-detected stops."""
+        return self.reqs_to_stop
 
 
 @dataclass
@@ -184,6 +189,10 @@ class RequestState:
 
         # Streaming input queue
         self.streaming_input = stream_input
+        # Set when the frontend detokenizer finds a multi-token stop string.
+        # EngineCore must first finish the request normally so KV connectors
+        # can attach transfer metadata to the final output.
+        self.pending_stop_reason: str | None = None
         self.input_chunk_queue: deque[StreamingUpdate] | None = (
             deque() if stream_input else None
         )
@@ -418,7 +427,7 @@ class RequestState:
         # Prepare logprobs, based on delta mode
         logprobs = self.logprobs_processor.logprobs
         if delta and logprobs:
-            logprobs = logprobs[-len(token_ids) :]
+            logprobs = logprobs[-len(token_ids) :] if token_ids else []
 
         return CompletionOutput(
             index=self.request_index,
@@ -623,7 +632,7 @@ class OutputProcessor:
         """
 
         request_outputs: list[RequestOutput | PoolingRequestOutput] = []
-        reqs_to_abort: list[str] = []
+        reqs_to_stop: list[str] = []
         for engine_core_output in engine_core_outputs:
             req_id = engine_core_output.request_id
             req_state = self.request_states.get(req_id)
@@ -661,6 +670,26 @@ class OutputProcessor:
                     finish_reason = FinishReason.STOP
                     stop_reason = stop_string
 
+                    if (
+                        not engine_core_output.finished
+                        and not req_state.streaming_input
+                    ):
+                        # The stop string is checked after detokenization, so
+                        # EngineCore still considers this request active. Keep
+                        # the frontend state alive until EngineCore returns a
+                        # normal STOP output, potentially with KV metadata.
+                        req_state.pending_stop_reason = stop_string
+                        finish_reason = None
+                        stop_reason = None
+                        reqs_to_stop.append(req_id)
+                elif (
+                    finish_reason == FinishReason.STOP
+                    and req_state.pending_stop_reason is not None
+                ):
+                    # Final empty-token output sent in response to STOP.
+                    stop_reason = req_state.pending_stop_reason
+                    req_state.pending_stop_reason = None
+
                 # 3) Compute sample and prompt logprobs for request,
                 # if required.
                 req_state.logprobs_processor.update_from_output(engine_core_output)
@@ -694,10 +723,6 @@ class OutputProcessor:
                         req_state.input_chunk_queue = None
                 else:
                     self._finish_request(req_state)
-                    if not engine_core_output.finished:
-                        # If req not finished in EngineCore, but Detokenizer
-                        # detected stop string, abort needed in EngineCore.
-                        reqs_to_abort.append(req_id)
 
                     # Track per-request stats
                     self._update_stats_from_finished(
@@ -708,7 +733,7 @@ class OutputProcessor:
 
         return OutputProcessorOutput(
             request_outputs=request_outputs,
-            reqs_to_abort=reqs_to_abort,
+            reqs_to_stop=reqs_to_stop,
         )
 
     def _finish_request(self, req_state: RequestState) -> None:

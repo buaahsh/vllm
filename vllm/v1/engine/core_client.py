@@ -173,6 +173,9 @@ class EngineCoreClient(ABC):
     def abort_requests(self, request_ids: list[str]) -> None:
         raise NotImplementedError
 
+    def stop_requests(self, request_ids: list[str]) -> EngineCoreOutputs | None:
+        raise NotImplementedError
+
     def add_lora(self, lora_request: LoRARequest) -> bool:
         raise NotImplementedError
 
@@ -244,6 +247,9 @@ class EngineCoreClient(ABC):
     async def abort_requests_async(self, request_ids: list[str]) -> None:
         raise NotImplementedError
 
+    async def stop_requests_async(self, request_ids: list[str]) -> None:
+        raise NotImplementedError
+
     async def add_lora_async(self, lora_request: LoRARequest) -> bool:
         raise NotImplementedError
 
@@ -299,6 +305,11 @@ class InprocClient(EngineCoreClient):
     def abort_requests(self, request_ids: list[str]) -> None:
         if len(request_ids) > 0:
             self.engine_core.abort_requests(request_ids)
+
+    def stop_requests(self, request_ids: list[str]) -> EngineCoreOutputs | None:
+        if not request_ids:
+            return None
+        return self.engine_core.stop_requests(request_ids).get(0)
 
     def shutdown(self, timeout: float | None = None) -> None:
         self.engine_core.shutdown()
@@ -829,6 +840,11 @@ class SyncMPClient(MPClient):
         if request_ids and not self.resources.engine_dead:
             self._send_input(EngineCoreRequestType.ABORT, request_ids)
 
+    def stop_requests(self, request_ids: list[str]) -> EngineCoreOutputs | None:
+        if request_ids and not self.resources.engine_dead:
+            self._send_input(EngineCoreRequestType.STOP, request_ids)
+        return None
+
     def profile(self, is_start: bool = True, profile_prefix: str | None = None) -> None:
         self.call_utility("profile", is_start, profile_prefix)
 
@@ -1063,6 +1079,10 @@ class AsyncMPClient(MPClient):
     async def abort_requests_async(self, request_ids: list[str]) -> None:
         if request_ids and not self.resources.engine_dead:
             await self._send_input(EngineCoreRequestType.ABORT, request_ids)
+
+    async def stop_requests_async(self, request_ids: list[str]) -> None:
+        if request_ids and not self.resources.engine_dead:
+            await self._send_input(EngineCoreRequestType.STOP, request_ids)
 
     async def pause_scheduler_async(
         self, mode: PauseMode = "abort", clear_cache: bool = True
@@ -1473,6 +1493,17 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
                 by_engine[engine].append(req_id)
         for engine, req_ids in by_engine.items():
             await self._abort_requests(req_ids, engine)
+
+    async def stop_requests_async(self, request_ids: list[str]) -> None:
+        if not request_ids or self.resources.engine_dead:
+            return
+
+        by_engine = defaultdict[EngineIdentity, list[str]](list)
+        for req_id in request_ids:
+            if engine := self.reqs_in_flight.get(req_id):
+                by_engine[engine].append(req_id)
+        for engine, req_ids in by_engine.items():
+            await self._send_input(EngineCoreRequestType.STOP, req_ids, engine)
 
     async def _abort_requests(
         self, request_ids: list[str], engine: EngineIdentity

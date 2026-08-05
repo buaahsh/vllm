@@ -376,6 +376,29 @@ class EngineCore:
         # (i.e. client-aborted vs stop criteria met).
         self.scheduler.finish_requests(request_ids, RequestStatus.FINISHED_ABORTED)
 
+    def stop_requests(self, request_ids: list[str]) -> dict[int, EngineCoreOutputs]:
+        """Normally finish requests stopped by the frontend detokenizer."""
+        stopped = self.scheduler.finish_requests_with_kv_transfer_params(
+            request_ids, RequestStatus.FINISHED_STOPPED
+        )
+        by_client: defaultdict[int, list[EngineCoreOutput]] = defaultdict(list)
+        for req_id, client_index, kv_transfer_params in stopped:
+            by_client[client_index].append(
+                EngineCoreOutput(
+                    request_id=req_id,
+                    new_token_ids=[],
+                    finish_reason=FinishReason.STOP,
+                    kv_transfer_params=kv_transfer_params,
+                )
+            )
+        return {
+            client_index: EngineCoreOutputs(
+                finished_requests=[output.request_id for output in outputs],
+                outputs=outputs,
+            )
+            for client_index, outputs in by_client.items()
+        }
+
     @contextmanager
     def log_error_detail(self, scheduler_output: SchedulerOutput):
         """Execute the model and log detailed info on failure."""
@@ -1300,6 +1323,9 @@ class EngineCoreProc(EngineCore):
             self.add_request(req, request_wave)
         elif request_type == EngineCoreRequestType.ABORT:
             self.abort_requests(request)
+        elif request_type == EngineCoreRequestType.STOP:
+            for client_index, outputs in self.stop_requests(request).items():
+                self.output_queue.put_nowait((client_index, outputs))
         elif request_type == EngineCoreRequestType.UTILITY:
             client_idx, call_id, method_name, args = request
             if self._reject_utility_in_shutdown(client_idx, call_id, method_name):

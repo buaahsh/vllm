@@ -254,6 +254,9 @@ class EngineCoreRequestType(enum.Enum):
     EXECUTOR_FAILED = b"\x04"
     # Sentinel to wake up input_queue.get() during shutdown.
     WAKEUP = b"\x05"
+    # A stop string was detected by the frontend detokenizer. Unlike ABORT,
+    # this is a successful completion and connectors may return final KV data.
+    STOP = b"\x06"
 
 
 class ReconfigureDistributedRequest(msgspec.Struct):

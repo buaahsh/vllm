@@ -140,6 +140,9 @@ class ChatCompletionStreamResponse(OpenAIBaseModel):
     # Set only on the final chunk of a stream to mirror non-streaming responses
     # without the per-chunk serialization overhead.
     system_fingerprint: str | None = None
+    # vLLM-specific field, emitted only when the engine returns transfer
+    # metadata (normally on the terminal chunk of a remote-decode request).
+    kv_transfer_params: dict[str, Any] | None = None
     # not part of the OpenAI spec but for tracing the tokens
     prompt_token_ids: list[int] | None = None
     # Rendered prompt text from chat templating (only set when
