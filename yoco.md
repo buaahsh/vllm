@@ -92,18 +92,10 @@ dockerd \
   >/data/dockerd.log 2>&1 &
 ```
 
-On a standard host with NVIDIA Container Toolkit, use the `docker run`
-examples below. Inside a Kubernetes container that has GPU device nodes but no
-NVIDIA Docker runtime, use the checked-in launcher instead. It maps the GPU and
-NVML devices and preloads the CUDA compatibility driver needed by Triton:
-
-```bash
-MODEL=/data/models/yoco-0000-0800-hf \
-IMAGE=buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-multigpu-20260804 \
-DP_SIZE=8 GPU_LIST=0,1,2,3,4,5,6,7 \
-RESULT_DIR=/data/yoco-longctx-results/dp8 \
-bash tools/yoco_serving/launch_nested_docker.sh
-```
+The commands below assume a standard host with NVIDIA Container Toolkit. The
+benchmark Kubernetes job used nested Docker and therefore also needed
+cluster-specific GPU device and NVML library mappings; those infrastructure
+details are intentionally kept out of the minimal inference commands.
 
 ### Start inference
 
@@ -120,10 +112,19 @@ One GPU:
 ```bash
 docker run --rm --name yoco-long-dp1 --network host --ipc host \
   --gpus '"device=0"' \
-  -e MODEL="$MODEL" -e DP_SIZE=1 \
   -v /mnt/msranlphot:/mnt/msranlphot:ro \
   -v "$PWD/yoco-results:/results" \
-  "$IMAGE" bash tools/yoco_serving/serve_long_context.sh
+  "$IMAGE" vllm serve "$MODEL" \
+  --served-model-name yoco-v2-long --host 0.0.0.0 --port 8001 \
+  --trust-remote-code --dtype bfloat16 \
+  --attention-backend FLASHINFER --moe-backend triton \
+  --tensor-parallel-size 1 --data-parallel-size 1 \
+  --gpu-memory-utilization 0.85 --max-model-len 131072 \
+  --max-num-batched-tokens 32768 --max-num-seqs 128 \
+  --enable-prefix-caching --enable-chunked-prefill --kv-sharing-fast-prefill \
+  --enable-auto-tool-choice --tool-call-parser agens --reasoning-parser agens \
+  --async-scheduling \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
 ```
 
 Four GPUs:
@@ -131,10 +132,19 @@ Four GPUs:
 ```bash
 docker run --rm --name yoco-long-dp4 --network host --ipc host \
   --gpus '"device=0,1,2,3"' \
-  -e MODEL="$MODEL" -e DP_SIZE=4 \
   -v /mnt/msranlphot:/mnt/msranlphot:ro \
   -v "$PWD/yoco-results:/results" \
-  "$IMAGE" bash tools/yoco_serving/serve_long_context.sh
+  "$IMAGE" vllm serve "$MODEL" \
+  --served-model-name yoco-v2-long --host 0.0.0.0 --port 8001 \
+  --trust-remote-code --dtype bfloat16 \
+  --attention-backend FLASHINFER --moe-backend triton \
+  --tensor-parallel-size 1 --data-parallel-size 4 \
+  --gpu-memory-utilization 0.85 --max-model-len 131072 \
+  --max-num-batched-tokens 32768 --max-num-seqs 128 \
+  --enable-prefix-caching --enable-chunked-prefill --kv-sharing-fast-prefill \
+  --enable-auto-tool-choice --tool-call-parser agens --reasoning-parser agens \
+  --async-scheduling \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
 ```
 
 One eight-GPU B200 node:
@@ -142,22 +152,30 @@ One eight-GPU B200 node:
 ```bash
 docker run --rm --name yoco-long-dp8 --network host --ipc host \
   --gpus all \
-  -e MODEL="$MODEL" -e DP_SIZE=8 \
   -v /mnt/msranlphot:/mnt/msranlphot:ro \
   -v "$PWD/yoco-results:/results" \
-  "$IMAGE" bash tools/yoco_serving/serve_long_context.sh
+  "$IMAGE" vllm serve "$MODEL" \
+  --served-model-name yoco-v2-long --host 0.0.0.0 --port 8001 \
+  --trust-remote-code --dtype bfloat16 \
+  --attention-backend FLASHINFER --moe-backend triton \
+  --tensor-parallel-size 1 --data-parallel-size 8 \
+  --gpu-memory-utilization 0.85 --max-model-len 131072 \
+  --max-num-batched-tokens 32768 --max-num-seqs 128 \
+  --enable-prefix-caching --enable-chunked-prefill --kv-sharing-fast-prefill \
+  --enable-auto-tool-choice --tool-call-parser agens --reasoning-parser agens \
+  --async-scheduling \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
 ```
 
 The service exposes the OpenAI-compatible API at `http://127.0.0.1:8001/v1`.
 Wait for `GET /health` to return HTTP 200 before warming or benchmarking.
-`ATTENTION_BACKEND` defaults to the validated `FLASHINFER`; set it to
-`FLASH_ATTN` only for a controlled FA4 comparison. Keep every other launch
-setting and the cache-salt namespace fixed when running that A/B.
-`MAX_NUM_SEQS` is a per-engine cap, not a deployment-wide cap. The supplied
-launcher defaults it to 128 for DP1, DP4, and DP8; for example, a DP8 batch of
-192 is distributed to about 24 active requests per rank rather than requiring
-192 slots on every rank. Change this only after checking both queue depth and
-KV-cache use in the exported vLLM metrics.
+The commands explicitly select the validated `FLASHINFER` backend. Replace it
+with `FLASH_ATTN` only for a controlled FA4 comparison, keeping every other
+setting and the cache-salt namespace fixed. `--max-num-seqs` is a per-engine
+cap, not a deployment-wide cap. It is 128 for DP1, DP4, and DP8; for example, a
+DP8 batch of 192 is distributed to about 24 active requests per rank rather
+than requiring 192 slots on every rank. Change it only after checking both
+queue depth and KV-cache use in the exported vLLM metrics.
 
 With the documented 85% memory utilization, the final cold-start logs report
 space for 19.43 full 131,072-token sequences on DP1 and 26.69 per DP4 engine.
@@ -170,7 +188,7 @@ worst-case figures.
 
 A short two-turn warmup misses kernels that first occur near the end of the
 trajectory. Run this once after each cold service start; set `DP_SIZE` and
-`GPU_INDICES` to match the launcher.
+`GPU_INDICES` to match the running server.
 
 ```bash
 docker exec \
