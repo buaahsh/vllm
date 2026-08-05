@@ -14,7 +14,9 @@ from vllm.model_executor.models.yoco import (
     YOCOForCausalLM,
     YOCOLatentInputTransform,
     YOCOLatentOutputTransform,
+    YOCORotaryEmbedding,
     YOCOSharedOutputTransform,
+    _yoco_apply_rotary_emb,
     _yoco_diff_attention_v2,
     _yoco_diff_attention_v3,
     _yoco_topk_routing,
@@ -111,6 +113,67 @@ def test_yoco_diff_v2_and_v3_formulas() -> None:
         _yoco_diff_attention_v3(attn1, attn2, v3_gate),
         attn1 * torch.sigmoid(v3_gate[:, 0::2]).unsqueeze(-1)
         - attn2 * torch.sigmoid(v3_gate[:, 1::2]).unsqueeze(-1),
+    )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("num_tokens", [1, 17, 128])
+@pytest.mark.parametrize("query_heads,key_heads", [(48, 4), (64, 8)])
+def test_yoco_rotary_cuda_matches_compiled_fallback(
+    num_tokens: int, query_heads: int, key_heads: int
+) -> None:
+    generator = torch.Generator(device="cuda").manual_seed(19 + num_tokens)
+    head_dim = 128
+    total_dim = (query_heads + 2 * key_heads) * head_dim
+    qkv = torch.randn(
+        num_tokens,
+        total_dim,
+        device="cuda",
+        dtype=torch.bfloat16,
+        generator=generator,
+    )
+    query, key, _ = qkv.split(
+        [query_heads * head_dim, key_heads * head_dim, key_heads * head_dim],
+        dim=-1,
+    )
+    positions = torch.arange(num_tokens, device="cuda", dtype=torch.long) * 3
+    rope = YOCORotaryEmbedding(
+        head_size=head_dim,
+        max_position_embeddings=max(4096, num_tokens * 3),
+        base=10000.0,
+    ).cuda()
+
+    cache = rope._get_cos_sin_cache(query.device)
+    cos, sin = cache.index_select(0, positions).chunk(2, dim=-1)
+    expected_query, expected_key = _yoco_apply_rotary_emb(
+        query.view(num_tokens, query_heads, head_dim),
+        key.view(num_tokens, key_heads, head_dim),
+        cos,
+        sin,
+    )
+    actual_query, actual_key = rope(positions, query, key)
+
+    torch.testing.assert_close(
+        actual_query.view_as(expected_query), expected_query, rtol=0, atol=0
+    )
+    torch.testing.assert_close(
+        actual_key.view_as(expected_key), expected_key, rtol=0, atol=0
+    )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_yoco_rotary_custom_op_opcheck() -> None:
+    qkv = torch.randn(3, 80 * 128, device="cuda", dtype=torch.bfloat16)
+    query, key, _ = qkv.split([64 * 128, 8 * 128, 8 * 128], dim=-1)
+    query = query.view(3, 64, 128)
+    key = key.view(3, 8, 128)
+    positions = torch.tensor([0, 7, 31], device="cuda", dtype=torch.long)
+    rope = YOCORotaryEmbedding(128, 128, 10000.0).cuda()
+    cache = rope._get_cos_sin_cache(query.device)
+
+    torch.library.opcheck(
+        torch.ops.vllm.yoco_rotary.default,
+        (query, key, positions, cache),
     )
 
 

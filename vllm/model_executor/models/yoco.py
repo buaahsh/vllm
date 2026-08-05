@@ -293,6 +293,122 @@ if HAS_TRITON:
             mask=row_mask,
         )
 
+    # Match the current Inductor fallback's PTX exactly: it rounds the second
+    # product, then fuses the first product with the final add/subtract.
+    @triton.jit
+    def _yoco_mul_rn(x, y):
+        return tl.inline_asm_elementwise(
+            "mul.rn.f32 $0, $1, $2;",
+            constraints="=f,f,f",
+            args=[x, y],
+            dtype=tl.float32,
+            is_pure=True,
+            pack=1,
+        )
+
+    @triton.jit
+    def _yoco_fma_rn(x, y, z):
+        return tl.inline_asm_elementwise(
+            "fma.rn.f32 $0, $1, $2, $3;",
+            constraints="=f,f,f,f",
+            args=[x, y, z],
+            dtype=tl.float32,
+            is_pure=True,
+            pack=1,
+        )
+
+    @triton.jit
+    def _yoco_rotary_kernel(
+        query_ptr,
+        key_ptr,
+        query_output_ptr,
+        key_output_ptr,
+        positions_ptr,
+        cos_sin_cache_ptr,
+        num_rows,
+        query_row_stride,
+        query_head_stride,
+        key_row_stride,
+        key_head_stride,
+        positions_stride,
+        QUERY_HEADS: tl.constexpr,
+        KEY_HEADS: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+    ):
+        pair_offsets = tl.program_id(0) * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+        query_pairs = num_rows * QUERY_HEADS * 64
+        total_pairs = num_rows * (QUERY_HEADS + KEY_HEADS) * 64
+        valid = pair_offsets < total_pairs
+        is_query = pair_offsets < query_pairs
+        local_offsets = tl.where(
+            is_query,
+            pair_offsets,
+            pair_offsets - query_pairs,
+        )
+        num_heads = tl.where(is_query, QUERY_HEADS, KEY_HEADS)
+        row = local_offsets // (num_heads * 64)
+        head = (local_offsets // 64) % num_heads
+        rotary_col = local_offsets % 64
+        position = tl.load(
+            positions_ptr + row * positions_stride,
+            mask=valid,
+            other=0,
+        )
+        cos = tl.load(
+            cos_sin_cache_ptr + position * 128 + rotary_col,
+            mask=valid,
+            other=0.0,
+        )
+        sin = tl.load(
+            cos_sin_cache_ptr + position * 128 + 64 + rotary_col,
+            mask=valid,
+            other=0.0,
+        )
+        row_stride = tl.where(is_query, query_row_stride, key_row_stride)
+        head_stride = tl.where(is_query, query_head_stride, key_head_stride)
+        input_offsets = row * row_stride + head * head_stride + rotary_col
+        input_ptrs = tl.where(
+            is_query,
+            query_ptr + input_offsets,
+            key_ptr + input_offsets,
+        )
+        first_half = tl.load(
+            input_ptrs,
+            mask=valid,
+            other=0.0,
+        ).to(tl.float32)
+        second_half = tl.load(
+            input_ptrs + 64,
+            mask=valid,
+            other=0.0,
+        ).to(tl.float32)
+        first_output = _yoco_fma_rn(
+            first_half,
+            cos,
+            -_yoco_mul_rn(second_half, sin),
+        )
+        second_output = _yoco_fma_rn(
+            second_half,
+            cos,
+            _yoco_mul_rn(first_half, sin),
+        )
+        output_base = row * num_heads * 128 + head * 128 + rotary_col
+        output_ptrs = tl.where(
+            is_query,
+            query_output_ptr + output_base,
+            key_output_ptr + output_base,
+        )
+        tl.store(
+            output_ptrs,
+            first_output,
+            mask=valid,
+        )
+        tl.store(
+            output_ptrs + 64,
+            second_output,
+            mask=valid,
+        )
+
 
 def _yoco_rms_clip_cuda(
     x: torch.Tensor,
@@ -401,6 +517,54 @@ def _yoco_fused_add_rms_norm_fake(
     )
 
 
+def _yoco_rotary_cuda(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    query_output = torch.empty_like(query, memory_format=torch.contiguous_format)
+    key_output = torch.empty_like(key, memory_format=torch.contiguous_format)
+    num_rows = query.shape[0]
+    query_heads = query.shape[1]
+    key_heads = key.shape[1]
+    block_size = 256
+    num_pairs = num_rows * (query_heads + key_heads) * 64
+    _yoco_rotary_kernel[(triton.cdiv(num_pairs, block_size),)](
+        query,
+        key,
+        query_output,
+        key_output,
+        positions,
+        cos_sin_cache,
+        num_rows,
+        query.stride(0),
+        query.stride(1),
+        key.stride(0),
+        key.stride(1),
+        positions.stride(0),
+        QUERY_HEADS=query_heads,
+        KEY_HEADS=key_heads,
+        BLOCK_SIZE=block_size,
+        num_warps=8,
+        num_stages=1,
+    )
+    return query_output, key_output
+
+
+def _yoco_rotary_fake(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del positions, cos_sin_cache
+    return (
+        torch.empty_like(query, memory_format=torch.contiguous_format),
+        torch.empty_like(key, memory_format=torch.contiguous_format),
+    )
+
+
 def _yoco_router_linear_tf32_cuda(
     hidden_states: torch.Tensor,
     weight: torch.Tensor,
@@ -453,6 +617,11 @@ if HAS_TRITON and current_platform.is_cuda():
         op_name="yoco_fused_add_rms_norm",
         op_func=_yoco_fused_add_rms_norm_cuda,
         fake_impl=_yoco_fused_add_rms_norm_fake,
+    )
+    direct_register_custom_op(
+        op_name="yoco_rotary",
+        op_func=_yoco_rotary_cuda,
+        fake_impl=_yoco_rotary_fake,
     )
 
 
@@ -769,13 +938,24 @@ class YOCORotaryEmbedding(nn.Module):
         key: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         cache = self._get_cos_sin_cache(query.device)
-        cos_sin = cache.index_select(
-            0, positions.to(device=query.device, dtype=torch.long)
-        )
-        cos, sin = cos_sin.chunk(2, dim=-1)
         query = query.view(query.shape[0], -1, self.head_size)
         key = key.view(key.shape[0], -1, self.head_size)
-        query, key = _yoco_apply_rotary_emb(query, key, cos, sin)
+        positions = positions.to(device=query.device, dtype=torch.long)
+        if (
+            HAS_TRITON
+            and query.is_cuda
+            and query.dtype == torch.bfloat16
+            and key.dtype == torch.bfloat16
+            and query.stride(-1) == 1
+            and key.stride(-1) == 1
+            and self.head_size == 128
+            and current_platform.is_cuda()
+        ):
+            query, key = torch.ops.vllm.yoco_rotary(query, key, positions, cache)
+        else:
+            cos_sin = cache.index_select(0, positions)
+            cos, sin = cos_sin.chunk(2, dim=-1)
+            query, key = _yoco_apply_rotary_emb(query, key, cos, sin)
         return query.flatten(-2), key.flatten(-2)
 
 
