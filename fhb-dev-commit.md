@@ -41,6 +41,7 @@
 | 3 | `d11cc022bd` | 性能/Router | 删除 dense routing materialization | 已进入 `fhb-dev` |
 | 4 | `ef60ee0255` | 性能/Norm | 融合 residual add 与 RMSNorm | 已进入 `fhb-dev` |
 | 5 | `9988ae737f` | 性能/MoE | Shared Expert 与 Routed MoE 并行 | 已进入 `fhb-dev` |
+| 6 | `8eae22948c` | 性能/Activation | FP32 clamped-SwiGLU 单 kernel | 已进入 `fhb-dev` |
 
 ---
 
@@ -935,6 +936,258 @@ fhb-moe7-0804-b200-564c6e49-master-0
 - 优化了 stream 时间线但没有减少 CUDA Graph 内的 kernel node 数；后续若继续
   开发单 kernel 融合，必须与本 overlap 分开测量。
 - revert `9988ae737f` 可完整恢复串行 shared expert 路径，其他四个
+  `fhb-dev` 功能提交不受影响。
+
+---
+
+## 6. Shared Expert FP32 clamped-SwiGLU 单 kernel
+
+### 提交信息
+
+```text
+commit: 8eae22948cd627e924d9583f1946eb2b88e8b9eb
+subject: perf(yoco): fuse FP32 clamped SwiGLU
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: 2e1b8ecc53705574ec38597dcdae81c939b40158
+branch: review/yoco-06-fp32-clamped-swiglu
+diff: 6 files, 253 insertions, 18 deletions
+source validated patch: f265362d2905216c81b8571db20d19f16023a344
+```
+
+该功能完成当前分支 A6000 重编译、bitwise/opcheck、YOCO 回归和
+microbenchmark 后，由 `Snow2022jlu` 直接同步到 `fhb-dev`；不创建 PR。
+
+### 目的和不能复用旧 kernel 的原因
+
+YOCO-v3 Shared Expert 在 `swiglu_limit > 0` 时必须保持训练侧的 FP32
+中间语义：
+
+```python
+gate, up = gate_up.float().chunk(2, dim=-1)
+gate = gate.clamp(max=limit)
+up = up.clamp(min=-limit, max=limit)
+output = (silu(gate) * up).to(gate_up.dtype)
+```
+
+原实现是一组 PyTorch op，CUDA eager profile 中对应 6 个 GPU kernel。YOCO
+每个 token step 有 40 次 decoder block execution，因此即使 serving 已开启 CUDA
+Graph，graph 内仍会反复保留这些 kernel node 和 FP32 中间 tensor 读写。
+
+vLLM 已有 `SiluAndMulWithClamp`，但它的 BF16/FP16 路径在 clamp 和
+activation 中间会舍入回 input dtype。这是其他模型已建立的数值契约，
+直接复用会让 YOCO 离开训练参考路径，全局修改又会破坏其他模型。
+因此本提交新增独立 FP32-intermediate op，不改已有 op。
+
+### 数值契约和 kernel 路径
+
+新 kernel 对 BF16、FP16 和 FP32 input 都使用同一公式：
+
+1. input load 后转为 FP32 gate/up；
+2. gate 仅设置上界 `limit`；
+3. up 设置 `[-limit, limit]` 上下界；
+4. 在 FP32 中执行 `gate / (1 + exp(-gate)) * up`；
+5. 只在最后 store 时转回 input dtype。
+
+clamp 使用条件比较表达式，而不是 `fminf/fmaxf`。原因是两者的 NaN
+选择语义可能不同；条件比较保留 NaN，与 `torch.clamp` 对齐。
+
+launch 路径：
+
+- hidden dim 对齐时使用 `PackedVec` 和 128-bit `ld128/st128`；
+- CUDA >= 12.9、SM major >= 10 且 token 数 > 128 时使用 256-bit
+  `ld256/st256`；
+- 不对齐时使用 scalar fallback；
+- zero-token input 直接返回，不 launch 空 grid；
+- CUDA stream 使用 PyTorch current stream，可被 torch.compile 和 CUDA Graph
+  正常捕获。
+
+### CustomOp 与 YOCO 接入
+
+`SiluAndMulWithClampFP32` 同时提供：
+
+- `forward_native`：CPU、ROCm、XPU 和测试使用的 FP32 PyTorch reference；
+- `forward_cuda`：分配 output 并调用新 `_C` op；
+- 返回 shape 为 input 最后一维的一半，dtype/device 与 input 相同。
+
+YOCO 用 `enforce_enable=True` 实例化该 CustomOp。这保证即使全局 custom-op
+编译配置改变，Shared Expert 仍保留已验证的单 kernel 边界，不在
+opaque/compiled 路径里重新展开为多个 PyTorch op。
+
+`swiglu_limit <= 0` 时没有 clamp 契约，YOCO 仍使用原来的 `SiluAndMul`，
+不强制经过新 op。Routed experts 的 clamp 路径不在本提交范围。
+
+### 非目标
+
+- 不改变 Routed MoE 的 activation 或 fused expert kernel；
+- 不改变 Shared/Routed auxiliary-stream overlap 时间线；
+- 不修改其他模型使用的 `SiluAndMulWithClamp`；
+- 不把 activation microbenchmark 直接换算成整模型 tok/s；
+- 不把旧 source commit 的 B200 endpoint 结果冒充为当前 commit 的新重跑。
+
+### 修改文件及职责
+
+#### `csrc/activation_kernels.cu`
+
+- 增加 scalar 和 packed FP32-intermediate compute helper；
+- 增加 `silu_and_mul_clamp_fp32_kernel`；
+- 增加 zero-token、scalar、128-bit 和 SM100 256-bit launch dispatch。
+
+#### `csrc/ops.h`
+
+- 声明 `silu_and_mul_clamp_fp32` C++/CUDA 入口。
+
+#### `csrc/torch_bindings.cpp`
+
+- 注册 `_C.silu_and_mul_with_clamp_fp32(Tensor! result, Tensor input,
+  float limit) -> ()`；
+- 只为 CUDA backend 绑定新 kernel。
+
+#### `vllm/model_executor/layers/activation.py`
+
+- 增加 `SiluAndMulWithClampFP32` CustomOp；
+- 定义 FP32 native reference 和 CUDA output buffer 语义；
+- ROCm 显式回退 native，CPU/XPU 复用 CustomOp 基类 native fallback。
+
+#### `vllm/model_executor/models/yoco.py`
+
+- 删除多算子 `YOCOClampedSwiGLU` wrapper；
+- Shared Expert 在 positive limit 时实例化强制开启的新 CustomOp；
+- 保留 Routed Expert 的原 clamp 参数传递和 non-positive fallback。
+
+#### `tests/kernels/core/test_activation.py`
+
+- dtype：FP16、BF16、FP32；
+- device：两张 CUDA GPU；
+- shape：`d=1279` scalar fallback，`d=1280` 的 1/7/128/129 tokens；
+- 新 kernel 与 native FP32 reference 要求 bitwise match；
+- 低精度 case 必须与旧 low-precision-intermediate kernel 不同；
+- 每个 dtype/shape/device 组合执行 PyTorch opcheck。
+
+### 当前 clean-history 分支的测试
+
+本地硬件和编译环境：
+
+```text
+GPU:       NVIDIA RTX A6000, GPU0 and GPU1
+PyTorch:   2.11.0+cu130
+CUDA:      13.0
+NVCC arch: sm_86
+extension: current branch _C rebuilt from source
+```
+
+activation correctness/opcheck：
+
+```text
+30 passed, 468 deselected, 14 warnings in 15.11s
+```
+
+YOCO conversion/config 组合回归：
+
+```text
+34 passed, 14 warnings in 18.95s
+```
+
+当前分支的 6 个功能文件还通过：
+
+- ruff-check 和 ruff-format；
+- clang-format；
+- mypy；
+- typos 和 SPDX header；
+- forbidden import / CUDA API / lazy import 检查；
+- configuration default/docstring 检查；
+- `git diff --check`。
+
+测试环境有两个非代码问题，都在提交前解决：
+
+1. CMake 通过 pip CUDA toolkit 自动配置时未找到已安装的 `libnvrtc.so.13`；
+   显式传入 `CUDA_nvrtc_LIBRARY`/`CUDA_NVRTC_LIB` 后，`_C` 完整编译和
+   链接通过。
+2. repo root 有一个指向不可读外部 mount 的 tokenizer symlink，pytest 在
+   收集阶段触发 `EIO`。测试时临时移出该 symlink，shell trap 在测试后原位
+   恢复；实际 test case 首次执行即全部通过。
+
+这两个失败都发生在源码测试执行前，不是 kernel/test failure，也没有通过
+放宽数值阈值规避。
+
+### 当前分支 A6000 microbenchmark
+
+eager 口径：BF16、`d=1280`，每轮 400 次调用，7 轮取中位数。每个
+shape 在计时前要求输出 bitwise match。
+
+| tokens | FP32 多算子 (us) | fused 单 kernel (us) | 加速 |
+| ---: | ---: | ---: | ---: |
+| 1 | `107.771` | `18.611` | `5.79x` |
+| 8 | `103.790` | `19.855` | `5.23x` |
+| 128 | `110.897` | `18.895` | `5.87x` |
+
+CUDA Graph 口径：两个实现分别 capture；每轮 1,000 次 replay，7 轮取
+中位数。capture 后先 replay 并要求输出 bitwise match。
+
+| tokens | FP32 多算子 graph (us) | fused graph (us) | 加速 |
+| ---: | ---: | ---: | ---: |
+| 129 | `14.402` | `4.833` | `2.98x` |
+| 4,096 | `488.818` | `53.897` | `9.07x` |
+
+eager 和 graph 都是 activation 局部数据。graph 结果证明收益来自 graph 内部
+node 和中间显存流量减少，不是未开 CUDA Graph 造成的 launch 假收益。
+
+### 原 patch 的 B200 实机验证
+
+当前移植的 6 个功能文件与
+`f265362d2905216c81b8571db20d19f16023a344` 的对应 tree 内容完全一致。其旧
+parent `21f20666218b6672fccac3230caa7405d29bc7af` 与当前 baseline 在这 6 个
+文件上也完全一致。
+
+因此下列数据能证明“相同代码 patch”在 B200/SM100 上的 correctness 和
+性能，但记录为 source-patch validation，不宣称是当前 hash 的新 Job。
+
+B200 kernel 验证：
+
+- 两张 B200 使用 CUDA 13.1、PyTorch `2.11.0a0+nv26.02` 为 SM100 重编译
+  `_C`；
+- 合计 30 correctness + 30 opcheck 全通过；
+- 覆盖 FP16/BF16/FP32、scalar、128-bit、256-bit、显式 NaN、CustomOp 和
+  16,384-token long batch；
+- CUDA Graph capture 后原地更换 static input，replay 仍与新 input reference
+  bitwise match；
+- profiler 确认 activation 从 6 个 GPU kernel 变为 1 个
+  `silu_and_mul_clamp_fp32_kernel`。
+
+B200 endpoint A/B：YOCO-v3/L3 BF16，TP1，FlashInfer attention，Triton MoE，
+非 eager `FULL_AND_PIECEWISE` CUDA Graph。baseline/candidate 在 GPU0/1 同时运行并
+交换 GPU 布局后重复。
+
+1,360/12,097/43,709-token prompt 各固定生成 64 tokens，在两个 GPU 布局中
+文本、token id/string、token logprob 和 top-5 logprob 全部 exact match。
+
+decode A/B 使用 1,360-token prompt、固定生成 128 tokens；每个 GPU 布局对
+c1/c4/c8 交替执行 3 轮，合并 6 个 sample 取中位数：
+
+| 并发 | baseline tok/s | candidate tok/s | 变化 |
+| ---: | ---: | ---: | ---: |
+| 1 | `133.521` | `136.044` | `+1.89%` |
+| 4 | `351.494` | `354.833` | `+0.95%` |
+| 8 | `749.076` | `756.981` | `+1.06%` |
+
+c1 两个布局分别为 `+2.34% / +1.36%`，c4 为 `+1.31% / +0.71%`，
+方向一致。c8 为 `+2.36% / +0.08%`，pooled 约 1% 已接近噪声，不作
+SLA 承诺。原始数据：
+
+```text
+/mnt/pvc/lidong1/vllm_pd/fp32-clamped-swiglu-0804/
+```
+
+### 风险、观察点与回滚
+
+- FP32 intermediate 是 correctness 契约，不是可以为了速度关闭的精度选项；
+- packed/scalar 和 128/256-bit 路径要继续保留 NaN、bitwise 和 opcheck
+  matrix；
+- 256-bit 实际分支只在 SM100+ 且 tokens > 128 时执行，A6000 的
+  129-token case 不代替 B200 分支验证；
+- `enforce_enable=True` 是确保 graph 中只有一个 activation node 的关键，
+  后续修改 CustomOp dispatch 时要重跑 profiler；
+- 当前提速局限于 Shared Expert activation，不会减少 Routed MoE kernel；
+- revert `8eae22948c` 可恢复多算子 FP32 activation，其他五个
   `fhb-dev` 功能提交不受影响。
 
 ---
