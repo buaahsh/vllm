@@ -44,6 +44,10 @@
 | 6 | `8eae22948c` | 性能/Activation | FP32 clamped-SwiGLU 单 kernel | 已进入 `fhb-dev` |
 | 7 | `1c51cac0d7` | 正确性/PD | Streaming stop 保留 KV metadata | 已进入 `fhb-dev` |
 | 8 | `2765c22a1b` | 构建/PD | UCX 1.21 单 runtime 与 SM100 `_C` | 已进入 `fhb-dev` |
+| 9 | `7c03e0cb73` | 性能/MoE | B200 YOCO Triton MoE 配置 | 已进入 `fhb-dev` |
+| 10 | `8abfd6c6d0` | 性能/RoPE | YOCO BF16 rotary 单 kernel | 已进入 `fhb-dev` |
+| 11 | `26614af40f` | 文档/负结果 | 放弃 differential-attention CustomOp | 已进入 `fhb-dev` |
+| 12 | `9106abeb3a` | 合并/DP8 | 合入 YOCO B200 multigpu long-context | 已进入 `fhb-dev` |
 
 ---
 
@@ -2333,6 +2337,179 @@ guard、多配置维护和更多 compile/capture 组合；在没有真实线上 
 回滚本 docs commit 只删除记录，不改变任何运行行为。
 
 ---
+
+## 12. YOCO B200 multigpu long-context 合并
+
+### 提交信息
+
+```text
+commit: 9106abeb3ad6963b95083688538e53040500e9b8
+subject: Merge YOCO B200 multigpu long-context support
+first parent: 26614af40fa4e5edfc63143a492ec1777a6ff2ff (fhb-dev)
+second parent: 85f7d2ac1b (origin/shaohanh/yoco-b200-longctx-multigpu-20260804)
+author/committer: 方涵斌 <2190556589@qq.com>
+review branch: integration/fhb-dev-yoco-b200-longctx-multigpu-20260804
+```
+
+本次按最终部署方向直接合并 multigpu 分支；此前讨论的单 GPU
+`yoco-b200-longctx-0804` 不在合并范围内，也没有作为中间 parent。
+
+### 目的和合并边界
+
+`fhb-dev` 已包含 P/D 裁剪、KV-sharing 修复、Router 简化、fused add-RMSNorm、
+Shared/Routed MoE 并行、FP32 clamped-SwiGLU、UCX 1.21/NIXL 以及 BF16 RoPE 等
+独立提交。multigpu 分支补充的是 B200 长上下文部署和可复现测试工具。本 merge 的
+目标是同时保留两组能力，并使用 multigpu 分支自己的方法完成 DP8 验收。
+
+merge 引入或更新以下 12 个文件：
+
+```text
+benchmarks/multi_turn/benchmark_agent_trace.py
+docker/Dockerfile.b200.longctx
+long_context/README.md
+long_context/presentation_tables.md
+tools/yoco_serving/benchmark_long_context.sh
+tools/yoco_serving/launch_nested_docker.sh
+tools/yoco_serving/probe_moe_n1280.py
+tools/yoco_serving/serve_long_context.sh
+tools/yoco_serving/tune_moe_b200.sh
+tools/yoco_serving/warmup_long_context.sh
+vllm/model_executor/layers/fused_moe/configs/E=128,N=1280,device_name=NVIDIA_B200.json
+yoco.md
+```
+
+唯一文本冲突是 N1280 MoE JSON。最终完整采用 multigpu parent 的 hybrid 配置，
+并用 `git diff --exit-code 85f7d2ac1b -- <config>` 确认逐字节一致。这样 DP1 的
+小 M fallback 与大 M tuned 配置、该分支的表格及复现命令不会被冲突解决悄悄
+改变。除该选择外没有手工重写模型或 benchmark 逻辑。
+
+### 提交前静态和单元测试
+
+合并后通过：
+
+- 修改 Python 文件的 `py_compile`；
+- 9 个 shell 工具的 `bash -n`，以及 changed-shell 定向 `shellcheck`；
+- N1280 JSON parse/结构检查；
+- changed files 的 pre-commit；仓库级 shellcheck 仍会报告 `.buildkite/` 等
+  未修改历史脚本告警，不归因于本 merge；
+- `tests/model_executor/test_yoco_conversion.py`：`30 passed, 14 warnings`。
+
+仓库根目录存在历史坏链接 `agens_tokenizer_0622`，直接 pytest collection 会在
+收集阶段失败。本次在 `/tmp/yoco-pytest-9106abeb3a` 使用隔离 `pytest.ini`
+运行相同测试文件，避免把无关坏链接当作模型失败。
+
+### B200 镜像和运行环境
+
+```text
+Pod: assuring-owl-b200g4-dev-d5aab19e-master-0
+Node: slc01-cl02-hgx-0202
+GPU: 8 x NVIDIA B200
+Model: /data/models/yoco-0000-0800-hf
+Baseline image: buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-multigpu-20260804
+Candidate source: 9106abeb3ad6963b95083688538e53040500e9b8
+Candidate image id: sha256:dbef8b82896fc9257f1eb45acb6b90a2a79eafd440d629a37e162ca3b846738d
+Precision: BF16
+TP / DP: 1 / 8
+Attention / MoE: FlashInfer / Triton
+Scheduler / DP sync: async / Gloo
+max model len: 131072
+max batched prefill tokens: 32768
+CUDA Graph: FULL_AND_PIECEWISE
+```
+
+候选镜像从已验证 multigpu 镜像覆盖完整合并后 Python tree，并为 SM100 重编译
+`_C`。构建后显式验证 `torch.ops._C.silu_and_mul_with_clamp_fp32` 存在，避免
+“Python 是 fhb-dev、native 仍是旧镜像”的伪合并。
+
+该嵌套 Docker daemon 的 base 已接近最大父层深度；逐文件 overlay 在最终 commit
+layer 时触发 `max depth exceeded`。完整 `_C` 编译和导入检查已经在退出码 0 的
+中间容器内完成，因此把该容器 `docker export | docker import` 为单层验证镜像，
+并恢复 base 的环境、workdir 和 NVIDIA entrypoint。扁平化后再次导入 native op
+通过。最初直接构建 `Dockerfile.b200.pd` 则在拉取 GitHub 依赖前被嵌套 Docker
+DNS 阻断，未进入代码编译；不能记成代码失败。
+
+### 端点正确性
+
+baseline 和 candidate 各测试 8,192/65,536 token prompt，每种 shape 做两次
+greedy 生成，固定 256 output tokens，检查 `finish_reason=length`、token id 范围、
+同 shape repeat hash，以及 baseline/candidate hash。
+
+| Prompt | Baseline SHA256 | Candidate SHA256 | 结果 |
+| ---: | --- | --- | --- |
+| 8,192 | `9751294543df49838834be427e34887ff536c92c9b6b044d6d1011875fa8355a` | 同左 | 两次一致，跨镜像一致 |
+| 65,536 | `345b5a43f2d8ef3f7e208b3027430e96c24853657fc72df6f37796e65ce84983` | 同左 | 两次一致，跨镜像一致 |
+
+四个 candidate 请求和四个 baseline 请求均精确输出 256 token，无失败或提前 EOS。
+这比只比较文本或宽松 logit tolerance 更严格，但仍不是整个训练评测集的质量分数。
+
+### multigpu 原方法性能测试
+
+两边都先执行完整 8 轨迹、40 turns、130K final context warmup。candidate 随后按
+`tools/yoco_serving/benchmark_long_context.sh` 原样运行 DP8/batch8 的 W1/W2/W3；
+single-turn 请求使用独立 cache salt，W3 使用逐 trajectory 的
+`X-data-parallel-rank`。
+
+| Workload | 公开 multigpu 基线 | 合并版 | 变化 |
+| --- | ---: | ---: | ---: |
+| W1 wall time | 692.102 s | 717.54 s | +3.68% |
+| W1 output tok/s | 757.53 | 730.67 | -3.55% |
+| W1 mean TTFT | 0.533 s | 0.772 s | +44.8% |
+| W1 mean TPOT | 10.55 ms | 10.94 ms | +3.70% |
+| W2 wall time | 176.693 s | 185.94 s | +5.23% |
+| W2 output tok/s | 741.81 | 704.90 | -4.98% |
+| W2 mean TTFT | 2.751 s | 2.222 s | -19.2% |
+| W2 mean TPOT | 10.61 ms | 11.21 ms | +5.66% |
+| W3 wall time | 152.385 s | 138.432 s | -9.16% |
+| W3 output tok/s | 682.48 | 751.27 | +10.08% |
+| W3 mean TTFT | 0.331 s | 0.325 s | -1.71% |
+| W3 mean ITL | 10.73 ms | 9.624 ms | -10.31% |
+| W3 prefix-cache hit | 95.58% | 95.58% | 持平 |
+
+W1/W2 都是 8/8 请求成功、0 失败，但原 single-turn harness 不给每个请求设置 DP
+rank header。W1 实测只有 7 个 rank 活跃、一个 rank 同时处理 2 个请求；W2 只有
+6 个 rank 活跃、两个 rank 各处理 2 个请求。因此 W1/W2 的 `-3.55%/-4.98%`
+不能直接归因于代码，既不作为合并回退 gate，也不隐藏在报告之外。后续若要把
+single-turn 数字用于 commit 归因，脚本应为 8 个并发请求分别固定 rank。
+
+### 同节点、显式绑 rank 的 W3 A/B
+
+为排除公开基线的节点和时间差异，在同一个 Pod 上删除 candidate 服务、冷启动
+原 multigpu 镜像，重新执行完整 40-turn warmup，再以不同 cache salt 运行 W3。
+两边均固定 8 个 trajectory 到 8 个 DP rank：
+
+| 指标 | 同节点 baseline | 合并版 | 合并版变化 |
+| --- | ---: | ---: | ---: |
+| Wall time | 168.010 s | 138.432 s | -17.61% |
+| Output tok/s | 619.01 | 751.27 | +21.37% |
+| Mean TTFT | 0.245 s | 0.325 s | +32.80%（约 +80 ms） |
+| Mean ITL | 12.104 ms | 9.624 ms | -20.49% |
+| Prefix-cache hit | 95.58% | 95.58% | 持平 |
+| Mean GPU utilization | 91.98%-93.87% | 94.35%-95.41% | 更高且更均衡 |
+
+因此该 merge 的可归因结论是：长 session decode/agentic 吞吐明显提高，ITL 明显
+降低，没有出现性能回退；代价是该轮 mean TTFT 增加约 80 ms。不能用 W3 的
+`+21.37%` 外推所有 single-turn shape，也不能忽略 TTFT tradeoff。
+
+candidate 冷启动日志还确认 full CUDA Graph 已实际 capture，不是 eager 测试：
+engine init 约 160 s、compile 约 42 s、实际 graph pool 约 0.25 GiB；同节点 baseline
+约为 195 s、73 s、3.12 GiB。性能差异不是“candidate 没开 CUDA Graph”造成的。
+
+### 原始证据、限制和回滚
+
+原始 JSON、逐 turn JSONL、runtime samples、accuracy JSON 和两边 service log：
+
+```text
+/data/fhb-dev-multigpu-results-20260805
+```
+
+本轮验证的是单节点 DP8 长上下文 serving，不是 1P2D transport 验收；它不替代
+已有 UCX/NIXL P/D 测试，也不证明跨节点网络行为。DeepEP 在两边均因基础镜像
+NVSHMEM symbol 不匹配而不可导入，实际都按日志回退到
+AllGather+ReduceScatter，故不构成本次 A/B 的变量。
+
+回滚可对 merge commit 使用 `git revert -m 1 9106abeb3a`，这会移除 multigpu
+工具、报告和 hybrid N1280 配置，但保留 merge 第一 parent 上全部 `fhb-dev`
+优化。不要直接 reset 共享 `fhb-dev`。
 
 ## 本日志初始化
 

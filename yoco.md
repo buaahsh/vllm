@@ -1938,3 +1938,81 @@ kernel 对 24/v3 的 1/17 tokens 回退 `17.33%/28.14%`，4K/8K 仍回退
   fusion。
 
 本节是负结果记录，不改变模型行为、数值、CUDA Graph、UCX/NIXL 或 P/D serving。
+
+## `fhb-dev` 与 B200 multigpu long-context 合并验收
+
+最终合并 commit：
+
+```text
+9106abeb3ad6963b95083688538e53040500e9b8
+Merge YOCO B200 multigpu long-context support
+```
+
+目标分支为 `origin/shaohanh/yoco-b200-longctx-multigpu-20260804@85f7d2ac1b`；
+此前单 GPU long-context 分支不再参与。唯一冲突是 N1280 MoE JSON，最终完整保留
+multigpu 分支的 hybrid 表，并确认与 second parent 逐字节一致。
+
+### 检查和 B200 环境
+
+合并后通过 Python compile、shell syntax、JSON、changed-file pre-commit，以及
+YOCO conversion `30 passed, 14 warnings`。B200 端点使用：
+
+```text
+Pod / node: assuring-owl-b200g4-dev-d5aab19e-master-0 / slc01-cl02-hgx-0202
+GPU: 8 x NVIDIA B200
+Model: /data/models/yoco-0000-0800-hf
+TP / DP: 1 / 8
+BF16, FlashInfer, Triton MoE, async scheduling, Gloo DP sync
+max model len / prefill budget: 131072 / 32768
+CUDA Graph: FULL_AND_PIECEWISE
+```
+
+候选镜像覆盖完整合并后 Python tree，并为 SM100 重编译 `_C`；启动前验证
+`torch.ops._C.silu_and_mul_with_clamp_fp32`，避免 native 仍来自旧 base。嵌套
+Docker 的 base 已到父层深度上限，因此验证镜像在编译成功后扁平化为单层；该步骤
+只处理验证环境，不改变仓库源码。
+
+### 准确性
+
+8,192 和 65,536 prompt token 各做两次 greedy 256-token 生成。baseline/candidate
+都得到精确 256 tokens、`finish_reason=length`，同 shape repeat 一致，且跨镜像
+token SHA256 完全相同：
+
+```text
+8K:  9751294543df49838834be427e34887ff536c92c9b6b044d6d1011875fa8355a
+65K: 345b5a43f2d8ef3f7e208b3027430e96c24853657fc72df6f37796e65ce84983
+```
+
+### DP8/batch8 性能
+
+先按 multigpu 分支方法完成 8 trajectory、40-turn/130K warmup，再运行 W1/W2/W3：
+
+| Workload | 公开 multigpu 基线 tok/s | 合并版 tok/s | 变化 |
+| --- | ---: | ---: | ---: |
+| W1, 8K + 64K | 757.53 | 730.67 | -3.55% |
+| W2, 64K + 16K | 741.81 | 704.90 | -4.98% |
+| W3, 40 turns / 130K | 682.48 | 751.27 | +10.08% |
+
+W1/W2 分别只命中 7/6 个活跃 DP rank，因为原 single-turn harness 没有逐请求设置
+rank header；这两项保留为方法复现结果，但不作为代码回退归因。W3 明确使用
+`X-data-parallel-rank`，8 个轨迹固定到 8 个 rank。
+
+同节点冷启动、同 warmup、不同 cache salt 的严格 W3 A/B：
+
+| 指标 | Baseline | 合并版 | 变化 |
+| --- | ---: | ---: | ---: |
+| Wall time | 168.010 s | 138.432 s | -17.61% |
+| Output tok/s | 619.01 | 751.27 | +21.37% |
+| Mean TTFT | 0.245 s | 0.325 s | +32.80%（约 +80 ms） |
+| Mean ITL | 12.104 ms | 9.624 ms | -20.49% |
+| Prefix-cache hit | 95.58% | 95.58% | 持平 |
+
+结论：合并版的绑 rank 长 session 吞吐和 ITL 明显改善，准确性逐 token 一致；TTFT
+存在约 80 ms tradeoff，应继续观察。两边均实际 capture CUDA Graph。原始
+accuracy、benchmark、runtime、逐 turn 和 service log 位于：
+
+```text
+/data/fhb-dev-multigpu-results-20260805
+```
+
+本轮是 DP8 长上下文验收，不替代 1P2D 的 UCX/NIXL transport 测试。
