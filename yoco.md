@@ -1620,3 +1620,47 @@ rotary 专项测试和 30 项 YOCO conversion 回归。microbenchmark 只表示 
 RoPE、FP16/FP32 或其他 head size；这些情况保留 fallback。升级 PyTorch、Triton
 或 CUDA 后，应重新核对 Inductor 算术顺序和完整 A/B。回滚
 `8abfd6c6d0` 即恢复原 compiled fallback，不涉及 UCX、NIXL、Docker 或模型权重。
+
+## Differential-attention CustomOp 尝试（未采用）
+
+本轮复核了 `origin/shaohanh/yoco-0731` 中最后一个尚未拆出的
+`yoco_diff_attention` CustomOp。结论是不迁移该实现，生产代码保持不变。
+
+当前 `_yoco_diff_attention_v2/v3` 已使用 `@torch.compile`。在 PyTorch
+`2.11.0a0+eb65b36914.nv26.02`、Triton `3.7.1` 上检查 Inductor 输出后确认，
+sigmoid、两个乘法和最终减法已经生成单个 Triton kernel；slice/reshape 只是
+view，不产生额外 GPU launch。因此再加一个 CustomOp 并不会减少 kernel 数。
+
+实验实现覆盖 BF16、`head_dim=128`、24/32 head-pairs、diff-v2/v3。B200
+correctness matrix 使用 tokens `1/17/128`，12 组均与 compiled fallback
+`rtol=0, atol=0`，两个 CustomOp `opcheck` 也通过。旧 0731 测试只要求
+`rtol=1e-2, atol=1e-2`，本轮没有沿用宽松阈值。实验代码和测试随后全部撤回，
+没有进入提交。
+
+性能使用独立 CUDA Graph、warmup 10 次、每个 sample replay 200 次、7 轮交替
+顺序取中位数。旧版接近的 `2 pairs/block, 8 warps` 映射在 512–8192 tokens
+普遍回退：
+
+| Head-pairs / 版本 | 512 | 1,024 | 4,096 | 8,192 |
+| --- | ---: | ---: | ---: | ---: |
+| 24 / v2 | -24.88% | -16.64% | -26.35% | -37.21% |
+| 24 / v3 | -24.93% | -27.45% | -33.66% | -43.49% |
+| 32 / v2 | -25.08% | -42.81% | -53.73% | -59.57% |
+| 32 / v3 | -19.94% | -24.94% | -33.61% | -38.26% |
+
+继续测试 flat-256、pair-per-program 和 flat-1024。flat-1024 在部分大 shape
+确实有收益，例如 32/v3 的 512–8192 tokens 为 `+33.28%～+54.17%`，但同一
+kernel 对 24/v3 的 1/17 tokens 回退 `17.33%/28.14%`，4K/8K 仍回退
+`7.21%/7.75%`。收益强依赖 head layout、diff 版本和 token shape，不能作为
+无条件通用 fast path。
+
+最终决定：
+
+- 不提交 CustomOp、Triton kernel、shape guard 或新测试；
+- 不用少数正收益点掩盖其他生产 shape 的回退；
+- 保留现有 compiled 单 kernel，避免重复维护与额外 compile/dispatch 风险；
+- 若以后继续优化，应优先研究与 `lambda_proj` 或 `o_proj` 的跨算子融合，或基于
+  真实线上 shape histogram 做完整的多配置选择，而不是重复包装现有 pointwise
+  fusion。
+
+本节是负结果记录，不改变模型行为、数值、CUDA Graph、UCX/NIXL 或 P/D serving。

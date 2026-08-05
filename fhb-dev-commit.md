@@ -2171,6 +2171,167 @@ collective、scheduler 或 P/D transport，不能把该百分比直接当作 end
 - revert `8abfd6c6d0` 会恢复原 compiled fallback，不影响此前 Router、MoE、
   SwiGLU、UCX/NIXL 或 P/D 功能。
 
+## 11. Differential-attention CustomOp 负结果
+
+### 提交信息
+
+```text
+subject: docs(yoco): record rejected diff-attention fusion
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: 625ff8ea06fd0c609aee72580aff12e7ef2b6ea1
+branch: review/yoco-11-diff-attention-kernel
+functional code diff: none
+functional behavior change: none
+```
+
+本项按“先实现、正确性和性能验证、再决定是否提交”的流程执行。最终只提交本节
+和 `yoco.md` 的实验记录；所有候选 kernel、CustomOp 接入和临时测试均在提交前
+撤回。该 docs commit 不应被理解为上线了 differential-attention 新 kernel。
+
+### 复核对象
+
+旧 `origin/shaohanh/yoco-0731@70c9edb52b` 在一个 884 行混合 commit 中新增：
+
+```text
+_yoco_diff_attention_kernel
+_yoco_diff_attention_cuda / fake
+torch.ops.vllm.yoco_diff_attention
+self/cross _diff_attention_combine fast path
+```
+
+旧测试只覆盖 tokens `1/33/128`、24 head-pairs，并使用
+`rtol=1e-2, atol=1e-2`。旧提交没有提供单独的 CUDA Graph 全 shape A/B，不能
+直接凭“fused”命名迁移到当前 `fhb-dev`。
+
+### 为什么当前实现已经融合
+
+当前代码为：
+
+```text
+diff-v2: attn1 - sigmoid(gate) * attn2
+diff-v3: attn1 * sigmoid(gate1) - attn2 * sigmoid(gate2)
+```
+
+两个 helper 都有 `@torch.compile`。本轮使用隔离的 TorchInductor cache 和
+`TORCH_COMPILE_DEBUG=1` 检查生成代码，v2 的拓扑为：
+
+```text
+triton_poi_fused_mul_sigmoid_sub_unsqueeze
+```
+
+v3 为：
+
+```text
+triton_poi_fused_mul_sigmoid_slice_sub_unsqueeze
+```
+
+每个版本都只有一个 pointwise Triton kernel。生成 PTX 中 v2 使用负 sigmoid
+与 `attn2` 的 `fma.rn.f32`；v3 先计算第二项乘积，再用第一项乘法与最终减法的
+`fma.rn.f32`。`attn[:, 0::2]`、`attn[:, 1::2]` 和 reshape 是 view，不增加
+kernel launch。CUDA Graph 会 replay 这个单 kernel，因此不存在“打开 graph
+却仍有多个 combine launch”的问题。
+
+### 候选实现
+
+为避免只复测旧代码，本轮实现并比较过四类映射：
+
+1. 接近旧版的 flat output / `BLOCK_SIZE=256, num_warps=4`；
+2. `2 pairs/block, 8 warps`，尝试复用每个 head-pair 的 gate/sigmoid；
+3. `1 pair/program, 4 warps`，使一个 program 对应 128 维 head；
+4. flat output / `BLOCK_SIZE=1024, num_warps=4`，提高每个 CTA 的连续工作量。
+
+所有版本都直接读取交错的 `attn1/attn2`，支持实际 row/head stride，并输出连续
+`[tokens, head_pairs, 128]`。数值实现先对照 PTX 使用显式 rounded multiply/FMA，
+也测试了让 Triton 3.7 对与 Inductor 相同的表达式自行 contraction。后者同样能
+保持 bitwise，且性能更好。
+
+### B200 环境和正确性
+
+```text
+Volcano Job: lidong1-yoco-diff-attn-g1-0805
+Pod:         lidong1-yoco-diff-attn-g1-0805-master-0
+Node:        slc01-cl02-hgx-0206
+GPU:         NVIDIA B200
+PyTorch:     2.11.0a0+eb65b36914.nv26.02
+Triton:      3.7.1
+dtype:       BF16 attention/gate/output
+head_dim:    128
+```
+
+correctness matrix：
+
+```text
+diff version: v2, v3
+head-pairs:   24, 32
+tokens:       1, 17, 128
+comparison:   rtol=0, atol=0
+```
+
+12 组全部 bitwise；v2/v3 两组 `torch.library.opcheck` 通过，总计临时专项
+`14 passed`。这证明放弃原因不是精度做不对，而是无法提供无回退的通用性能。
+
+### 性能方法
+
+baseline 为当前 `@torch.compile` helper，candidate 为实验 CustomOp。每个 shape：
+
+1. 使用相同随机 BF16 attention 和 gate；
+2. 计时前 `torch.equal`；
+3. baseline/candidate 各自独立 CUDA Graph capture；
+4. graph replay warmup 10 次；
+5. 每个 sample replay 200 次；
+6. 共 7 轮，奇偶轮交换执行顺序；
+7. 报告 7 个 sample 的中位数。
+
+计时不包含 JIT、graph capture、随机输入或 correctness 检查。矩阵覆盖 tokens：
+
+```text
+1, 17, 128, 512, 1024, 4096, 8192
+```
+
+### 接近旧版映射的结果
+
+`2 pairs/block, 8 warps` 在小 shape 偶有约 0%–2% 波动，但从 512 tokens 起
+持续回退：
+
+| Head-pairs / 版本 | 512 | 1,024 | 4,096 | 8,192 |
+| --- | ---: | ---: | ---: | ---: |
+| 24 / v2 | -24.88% | -16.64% | -26.35% | -37.21% |
+| 24 / v3 | -24.93% | -27.45% | -33.66% | -43.49% |
+| 32 / v2 | -25.08% | -42.81% | -53.73% | -59.57% |
+| 32 / v3 | -19.94% | -24.94% | -33.61% | -38.26% |
+
+原因是 B200 Inductor baseline 已经是高效 flat pointwise kernel。按 head pair
+切分增加 CTA/layout 开销；所谓 gate 复用不足以抵消内存访问和并行度损失。
+
+### flat-1024 的收益和不能上线的原因
+
+增大 flat block 后，部分大 shape 明显改善：
+
+| Head-pairs / 版本 | 1 | 17 | 128 | 512 | 1,024 | 4,096 | 8,192 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 24 / v2 | -0.78% | -0.53% | -1.93% | +0.05% | +24.82% | +16.64% | +19.65% |
+| 24 / v3 | -17.33% | -28.14% | -0.15% | +0.04% | -0.05% | -7.21% | -7.75% |
+| 32 / v2 | +0.02% | -0.18% | +0.23% | +0.11% | +32.27% | +30.94% | +35.38% |
+| 32 / v3 | +2.34% | +38.74% | +0.10% | +33.28% | +49.84% | +53.13% | +54.17% |
+
+这是强烈的 shape/version-dependent tradeoff，不是通用收益。尤其 24/v3 同时
+覆盖真实 YOCO layout，不能因为 32/v3 最好点 `+54.17%` 就忽略它的
+`-28.14%` 和大 batch `-7%～-8%`。
+
+可以在 wrapper 中根据 token/head/version 选择 kernel，但这会引入动态 shape
+guard、多配置维护和更多 compile/capture 组合；在没有真实线上 shape histogram
+及 endpoint A/B 的情况下，不值得为 isolated 局部 best points 增加复杂度。
+
+### 最终决定和后续方向
+
+- 候选 `yoco.py`、测试和 benchmark 脚本均不进入 Git；
+- 现有 compiled single-kernel implementation 保持不变；
+- 本提交只有 `yoco.md` 与 `fhb-dev-commit.md`，用于避免以后重复做同一迁移；
+- 后续若继续，应研究把 combine 与 `lambda_proj` 或 `o_proj` 跨边界融合，或先
+  收集生产 token/head/version histogram，再设计经过 endpoint 验证的多配置方案。
+
+回滚本 docs commit 只删除记录，不改变任何运行行为。
+
 ---
 
 ## 本日志初始化
