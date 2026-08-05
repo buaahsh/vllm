@@ -1539,3 +1539,84 @@ vllm/v1/attention/backends/utils.py
 vllm/v1/worker/dp_utils.py
 vllm/v1/worker/gpu_model_runner.py
 ```
+
+## YOCO BF16 RoPE 单 kernel
+
+本轮从 `origin/shaohanh/yoco-0731` 独立迁移 RoPE 优化，没有带入该分支的旧
+Router、differential-attention、Dockerfile 或其他混合修改。功能 commit：
+
+```text
+8abfd6c6d0 perf(yoco): fuse BF16 rotary embedding
+```
+
+### 修改文件和适用范围
+
+- `vllm/model_executor/models/yoco.py`：新增 `torch.ops.vllm.yoco_rotary`
+  CustomOp 及 Triton kernel，并在 `YOCORotaryEmbedding` 中接入；
+- `tests/model_executor/test_yoco_conversion.py`：增加真实 packed-QKV stride、
+  两种 head layout、多个 token shape、bitwise 对比和 CustomOp `opcheck`。
+
+kernel 只接管 CUDA、BF16、`head_dim=128`、最后一维连续的 YOCO Q/K；其他
+dtype、head size 或设备继续走原 `_yoco_apply_rotary_emb` fallback。Q/K 可以来自
+packed QKV split，row stride 不要求连续；输出为连续 tensor。
+
+最终 kernel 按 64 个 rotary pair 维度扁平化，每个线程同时读取 `x1/x2`、查询
+FP32 cos/sin 并写回输出两半。`BLOCK_SIZE=256`、`num_warps=8`，Q/K 在同一次
+launch 中完成，避免旧 head-per-program 版本的大 batch 重复加载和过多 programs。
+
+### 数值语义和正确性
+
+旧 0731 kernel 不是当前 fallback 的 bitwise 等价实现：在非零 position 上观察到
+最多 `19 / 1,048,576` 个 BF16 元素不同，`max_abs=0.0078125`。本轮没有沿用旧
+测试的宽松 `atol=4e-3`。当前 Inductor PTX 的运算顺序为：
+
+```text
+second_product = mul.rn.f32(...)
+output = fma.rn.f32(first_input, first_factor, +/-second_product)
+```
+
+新 kernel 用显式 `_yoco_mul_rn` 和 `_yoco_fma_rn` 保持相同舍入与 FMA 顺序。
+B200 测试覆盖 `(query_heads,key_heads)=(48,4)/(64,8)`，tokens 为
+`1/17/128`，position 使用 `arange(tokens) * 3`；Q/K 均来自 packed QKV split。
+结果为 6 组全部 `rtol=0, atol=0`，CustomOp 的真实非连续输入 `opcheck` 通过。
+完整 `tests/model_executor/test_yoco_conversion.py` 为 `30 passed`。
+
+### B200 CUDA Graph 性能
+
+环境：NVIDIA B200、PyTorch `2.11.0a0+eb65b36914.nv26.02`、Triton `3.7.1`。
+baseline 是原 `index_select + chunk + torch.compile` RoPE，candidate 是新
+CustomOp；每个 shape 分别 capture CUDA Graph，warmup 10 次，每个 sample
+replay 200 次，7 轮交替执行顺序并取中位数。计时包含 cache position gather 和
+Q/K rotation，不包含 graph capture、JIT 或 tensor 初始化。
+
+| Q heads / KV heads | Tokens | Baseline us | Fused us | 提升 |
+| --- | ---: | ---: | ---: | ---: |
+| 48 / 4 | 1 | 6.1582 | 3.4142 | 80.37% |
+| 48 / 4 | 17 | 6.8115 | 3.4042 | 100.09% |
+| 48 / 4 | 128 | 8.2082 | 4.1144 | 99.50% |
+| 48 / 4 | 512 | 14.3458 | 10.2542 | 39.90% |
+| 48 / 4 | 1,024 | 20.5027 | 16.4058 | 24.97% |
+| 48 / 4 | 4,096 | 69.6250 | 59.4386 | 17.14% |
+| 48 / 4 | 8,192 | 131.0243 | 118.7507 | 10.34% |
+| 64 / 8 | 1 | 6.1562 | 3.3333 | 84.69% |
+| 64 / 8 | 17 | 8.2056 | 3.1910 | 157.15% |
+| 64 / 8 | 128 | 10.2571 | 6.1570 | 66.59% |
+| 64 / 8 | 512 | 18.4424 | 12.3091 | 49.83% |
+| 64 / 8 | 1,024 | 28.6798 | 22.5331 | 27.28% |
+| 64 / 8 | 4,096 | 96.2554 | 81.9664 | 17.43% |
+| 64 / 8 | 8,192 | 184.7998 | 163.7840 | 12.83% |
+
+全部 14 个点均为正收益，范围 `10.34%～157.15%`。早期 head-per-program
+kernel 在 8K tokens 约回退 40%，第一版 flat-output kernel 在 8K 仍回退
+`11.51%～12.42%`；最终 pair kernel 消除了这些大 batch 回退。
+
+### 检查、边界与回滚
+
+通过 `py_compile`、两个修改文件的完整 pre-commit、`git diff --check`、7 项
+rotary 专项测试和 30 项 YOCO conversion 回归。microbenchmark 只表示 RoPE
+局部延迟，不能直接外推为 endpoint tok/s。
+
+当前 kernel 固定 YOCO 已验证的 128 维 half-rotation 语义，不覆盖 interleaved
+RoPE、FP16/FP32 或其他 head size；这些情况保留 fallback。升级 PyTorch、Triton
+或 CUDA 后，应重新核对 Inductor 算术顺序和完整 A/B。回滚
+`8abfd6c6d0` 即恢复原 compiled fallback，不涉及 UCX、NIXL、Docker 或模型权重。

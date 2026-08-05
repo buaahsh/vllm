@@ -1967,6 +1967,210 @@ Docker dependency graph、configuration validation、attention docs 和 suggesti
 - revert `7c03e0cb73` 只删除该 JSON，运行时自动恢复 default config；无需重编
   `_C`、重建 UCX/NIXL，也不影响前八项功能。
 
+## 10. YOCO BF16 RoPE 单 kernel
+
+### 提交信息
+
+```text
+commit: 8abfd6c6d0
+subject: perf(yoco): fuse BF16 rotary embedding
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: 84906823de26ee012e2080e03f79e4dbbe4f2f0d
+branch: review/yoco-10-rotary-kernel
+diff: 2 files, 248 insertions, 5 deletions
+```
+
+该功能从旧 `origin/shaohanh/yoco-0731` 中单独重做，不 cherry-pick 混合 commit，
+也不迁移旧 Router、differential-attention、Dockerfile、UCX/NIXL 或 scheduler
+修改。功能和测试保持在两个文件内；本节与 `yoco.md` 由后续独立 docs commit
+追加。
+
+### 目的
+
+原 `YOCORotaryEmbedding` 每次先用 `index_select` 取 position 对应的 FP32
+cos/sin，再 `chunk`，随后调用 `torch.compile` 函数分别处理 Q 和 K。即使模型
+启用 CUDA Graph，这些 kernel 仍存在于 graph replay 内；CUDA Graph 只消除 CPU
+launch 提交开销，不会自动把多 kernel 数据流融合成一个 GPU kernel。
+
+本功能用一次 CustomOp launch 同时完成：
+
+1. 按 position 从共享 FP32 cos/sin cache 读取旋转因子；
+2. 从 packed-QKV split 的非连续 row stride 读取 Q/K；
+3. 以与当前 Inductor fallback 相同的 FP32 算术顺序计算 RoPE；
+4. 直接生成连续 BF16 Q/K 输出。
+
+### 修改文件及职责
+
+#### `vllm/model_executor/models/yoco.py`
+
+新增：
+
+- `_yoco_mul_rn`：显式 PTX `mul.rn.f32`；
+- `_yoco_fma_rn`：显式 PTX `fma.rn.f32`；
+- `_yoco_rotary_kernel`：Q/K 合并、rotary-pair 扁平化 Triton kernel；
+- `_yoco_rotary_cuda`：分配连续输出并以 `BLOCK_SIZE=256`、`num_warps=8` 启动；
+- `_yoco_rotary_fake`：为 compile/export 提供与真实输出相同的 shape、dtype、
+  device 和连续 stride；
+- `torch.ops.vllm.yoco_rotary`：通过 `direct_register_custom_op` 注册；
+- `YOCORotaryEmbedding.forward` 快速路径。
+
+快速路径条件为：
+
+```text
+HAS_TRITON
+CUDA platform and CUDA input
+query/key dtype == BF16
+query/key last-dimension stride == 1
+head_dim == 128
+```
+
+其他 dtype、head size、设备或 layout 继续使用原
+`_yoco_apply_rotary_emb`。本 commit 不改变 cos/sin cache 的生成方式、最大
+position、RoPE base 或 half-rotation 定义。
+
+kernel 允许 query/key row stride 和 head stride 不同，因而可直接消费：
+
+```text
+qkv:   [tokens, (Q + 2 * KV) * 128]
+query: stride = [packed_width, 128, 1]
+key:   stride = [packed_width, 128, 1]
+```
+
+输出使用各自 `[tokens, heads, 128]` contiguous layout，和原 `cat` 结果一致。
+
+#### `tests/model_executor/test_yoco_conversion.py`
+
+新增两个测试族：
+
+- `test_yoco_rotary_cuda_matches_compiled_fallback`：两套 head layout、3 套 token
+  数、真实 packed QKV split，要求 Q/K `rtol=0, atol=0`；
+- `test_yoco_rotary_custom_op_opcheck`：直接用 packed split 的非连续输入运行
+  `torch.library.opcheck`，验证 schema、fake/meta、autograd registration 和动态
+  compile-facing contract。
+
+### 数值问题和最终算术顺序
+
+旧 0731 kernel 在 position=0 时看起来一致，但 position>0 会出现少量 BF16
+mismatch。实测最大一组为：
+
+```text
+elements:   1,048,576
+mismatches: 19
+max_abs:    0.0078125
+```
+
+旧测试使用宽松 `atol=4e-3`；本轮不接受用 tolerance 掩盖一个可以保持的现有
+bitwise contract。检查当前 PyTorch 26.02 Inductor 输出 PTX 后确认，fallback
+不是把四个乘法结果都先 round 后再相加，而是：
+
+```text
+second_product = mul.rn.f32(second_input, second_factor)
+output = fma.rn.f32(first_input, first_factor, +/-second_product)
+```
+
+若直接写普通 Triton `x1 * cos - x2 * sin`，编译器的 contraction/rounding 选择
+不保证等同该顺序。最终 kernel 用 inline PTX 明确一个 rounded second product，
+再对 first product 与最终 add/sub 使用 rounded FMA，因此在当前 runtime 上逐元素
+bitwise 等价。
+
+### kernel 迭代和大 batch 回退处理
+
+没有只凭小 token 点决定保留。迭代过程如下：
+
+1. 旧 head-per-program 版本每个 program 处理一个 Q/K head，小 batch 提升约
+   `25%～112%`，但 tokens=512 已回退 `12%～18%`，8K 约回退 40%；
+2. 第一版 flat-output kernel 减少 program 粒度，tokens=512 转为
+   `+12.51%～+16.59%`，但 48/4 的 1K 和 8K 仍分别为 `-8.98%`、
+   `-12.42%`，64/8 的 8K 为 `-11.51%`；
+3. 最终按 64 个 rotary pair 扁平化。一个线程只加载一次 `x1/x2` 并同时写两半
+   输出，Q/K 合入同一一维 grid，program 数约为 head-per-program 版的四分之一。
+
+最终版本从 1 到 8192 tokens 的全部被测点均为正收益，因此没有在 Python wrapper
+中按动态 token shape 切换 kernel/fallback，也没有给 `torch.compile` 引入额外
+shape guard。
+
+### B200 正确性验证
+
+```text
+Volcano Job: lidong1-yoco-rotary-g1-0805
+Pod:         lidong1-yoco-rotary-g1-0805-master-0
+Node:        slc01-cl02-hgx-0297
+GPU:         NVIDIA B200
+PyTorch:     2.11.0a0+eb65b36914.nv26.02
+Triton:      3.7.1
+dtype:       BF16 Q/K, FP32 cos/sin cache, int64 positions
+head_dim:    128
+```
+
+correctness matrix：
+
+```text
+(query_heads, key_heads) = (48, 4), (64, 8)
+tokens                   = 1, 17, 128
+positions                = arange(tokens) * 3
+input                     = packed QKV split
+comparison                = rtol=0, atol=0
+```
+
+结果：6 组 Q/K 全部 bitwise，CustomOp packed-stride `opcheck` 通过；rotary
+专项 `7 passed, 23 deselected`。随后完整
+`tests/model_executor/test_yoco_conversion.py` 为 `30 passed`，覆盖本分支已有
+RMSClip、fused add-RMSNorm、Router、Shared Expert、fast prefill 和转换测试。
+
+### B200 CUDA Graph 性能
+
+baseline 为原 `cache.index_select -> chunk -> _yoco_apply_rotary_emb`，其中 apply
+已经是 `torch.compile`；candidate 为 `torch.ops.vllm.yoco_rotary`。两者使用相同
+input、cache 和 position，并在计时前再次 `torch.equal`。
+
+每个 path 独立 CUDA Graph capture；capture 后 replay warmup 10 次；每个 sample
+连续 replay 200 次；每个 shape 做 7 轮，奇偶轮交换 baseline/candidate 顺序，
+报告中位数。JIT、graph capture、随机输入和 output 检查不计时，cache position
+gather 与 Q/K rotation 均计时。
+
+| Q heads / KV heads | Tokens | Baseline us | Fused us | 提升 |
+| --- | ---: | ---: | ---: | ---: |
+| 48 / 4 | 1 | 6.1582 | 3.4142 | 80.37% |
+| 48 / 4 | 17 | 6.8115 | 3.4042 | 100.09% |
+| 48 / 4 | 128 | 8.2082 | 4.1144 | 99.50% |
+| 48 / 4 | 512 | 14.3458 | 10.2542 | 39.90% |
+| 48 / 4 | 1,024 | 20.5027 | 16.4058 | 24.97% |
+| 48 / 4 | 4,096 | 69.6250 | 59.4386 | 17.14% |
+| 48 / 4 | 8,192 | 131.0243 | 118.7507 | 10.34% |
+| 64 / 8 | 1 | 6.1562 | 3.3333 | 84.69% |
+| 64 / 8 | 17 | 8.2056 | 3.1910 | 157.15% |
+| 64 / 8 | 128 | 10.2571 | 6.1570 | 66.59% |
+| 64 / 8 | 512 | 18.4424 | 12.3091 | 49.83% |
+| 64 / 8 | 1,024 | 28.6798 | 22.5331 | 27.28% |
+| 64 / 8 | 4,096 | 96.2554 | 81.9664 | 17.43% |
+| 64 / 8 | 8,192 | 184.7998 | 163.7840 | 12.83% |
+
+`提升 = baseline / fused - 1`。14 个点全部提升，范围为
+`10.34%～157.15%`。这是 isolated RoPE latency，不包含完整 attention、MoE、
+collective、scheduler 或 P/D transport，不能把该百分比直接当作 endpoint tok/s。
+
+### 提交前检查
+
+通过：
+
+- `python -m py_compile vllm/model_executor/models/yoco.py`；
+- 两个修改文件的完整 `pre-commit run --files ...`；
+- `git diff --check`；
+- B200 rotary 专项 7 项；
+- B200 完整 YOCO conversion 30 项；
+- 两套 head layout、14 个 shape 的 CUDA Graph correctness/performance A/B。
+
+### 风险、观察点与回滚
+
+- inline PTX 刻意匹配当前 PyTorch 26.02 Inductor 的 contraction 顺序；升级
+  PyTorch/Triton/CUDA 后必须重新核对 PTX 和 bitwise matrix；
+- kernel 只覆盖 BF16、head_dim=128、YOCO half-rotation，不外推到 FP16、FP32、
+  interleaved RoPE 或其他模型；
+- position 必须在 cache 范围内，该约束与原 `index_select` path 相同；
+- CUDA Graph 已用于性能测试，结果证明优化不是依赖 eager launch latency；
+- revert `8abfd6c6d0` 会恢复原 compiled fallback，不影响此前 Router、MoE、
+  SwiGLU、UCX/NIXL 或 P/D 功能。
+
 ---
 
 ## 本日志初始化
