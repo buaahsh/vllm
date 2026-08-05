@@ -42,6 +42,7 @@
 | 4 | `ef60ee0255` | 性能/Norm | 融合 residual add 与 RMSNorm | 已进入 `fhb-dev` |
 | 5 | `9988ae737f` | 性能/MoE | Shared Expert 与 Routed MoE 并行 | 已进入 `fhb-dev` |
 | 6 | `8eae22948c` | 性能/Activation | FP32 clamped-SwiGLU 单 kernel | 已进入 `fhb-dev` |
+| 7 | `1c51cac0d7` | 正确性/PD | Streaming stop 保留 KV metadata | 已进入 `fhb-dev` |
 
 ---
 
@@ -1189,6 +1190,197 @@ SLA 承诺。原始数据：
 - 当前提速局限于 Shared Expert activation，不会减少 Routed MoE kernel；
 - revert `8eae22948c` 可恢复多算子 FP32 activation，其他五个
   `fhb-dev` 功能提交不受影响。
+
+---
+
+## 7. Streaming stop 保留 KV transfer metadata
+
+### 提交信息
+
+```text
+commit: 1c51cac0d7fc374475c97a932dd3d37b9ab9dfaf
+subject: fix(pd): preserve KV metadata on streamed stops
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: 4b0f7d3d4249b7d0629619188a2dcc16bda103d9
+branch: review/yoco-07-streamed-stop-kv-metadata
+source patch: c5a812bf889df2f686bfbb8ce65c5ae852bafacd
+diff: 14 files, 207 insertions, 25 deletions
+```
+
+该功能通过定向正确性测试后，由 `Snow2022jlu` 直接同步到
+`fhb-dev`，不创建 PR。
+
+### 问题根因
+
+vLLM stop 可在两个不同位置被检测：
+
+1. EngineCore/sampler 直接检测 token-id stop、EOS 或 length cap，core output 本身
+   已带 finish reason；
+2. frontend detokenizer 拼出文本后检测多 token stop string，此时 core 仍
+   认为请求 active。
+
+旧实现在第 2 种情况下会把 internal request id 加入 `reqs_to_abort`，然后
+AsyncLLM/LLMEngine 调用 abort API。abort 能停止计算和释放 block，但它语义是
+客户端取消，不会生成正常 final `EngineCoreOutput`。
+
+P/D connector 在 scheduler `_free_request()` 时可以返回以下 metadata：
+
+```text
+remote_engine_id
+remote_request_id
+remote_block_ids
+```
+
+但旧 abort call 丢弃 `_free_request()` 返回值，也没有 final core output 承载它。因此
+OpenAI streaming terminal chunk 的 `kv_transfer_params` 为空。Gateway 如果依赖该
+metadata 把 KV 交给 Decode，就无法正常继续 P/D 请求。
+
+### 修复后状态机
+
+```text
+normal token output
+  -> frontend detects stop string
+  -> RequestState.pending_stop_reason = matched string
+  -> no user-visible finished output yet
+  -> reqs_to_stop contains internal request id
+  -> sync/async client sends EngineCoreRequestType.STOP
+  -> scheduler marks FINISHED_STOPPED
+  -> connector free returns kv_transfer_params
+  -> EngineCore returns empty-token STOP output to the owning client index
+  -> OutputProcessor restores pending stop reason
+  -> RequestState finishes exactly once
+  -> final chat/completion stream chunk includes kv_transfer_params
+```
+
+客户端取消、engine failure 和其他真正 abort 仍走 `ABORT`/`FINISHED_ABORTED`，
+不会被误标记为 successful STOP。
+
+### 为什么需要 14 个文件
+
+这个 commit 的文件数高于算子优化，但它横跨的是一条原子 protocol，不是
+14 个不相关功能。如果拆分合入，任何中间 commit 都会存在以下至少一个问题：
+
+- STOP request 发不到 MP/DP engine；
+- scheduler 已经产生 metadata，但 core 丢弃；
+- core 已返回 metadata，但 frontend state 提前删除；
+- RequestOutput 有 metadata，但 OpenAI streaming schema 丢弃；
+- 用户看到两个 final chunk 或丢失 stop reason。
+
+因此本次保持一个可独立 revert 的 end-to-end correctness commit。
+
+### 修改文件及职责
+
+#### Scheduler
+
+- `vllm/v1/core/sched/interface.py`：新增带 metadata 返回值的 finish 接口。
+- `vllm/v1/core/sched/scheduler.py`：抽取 `_finish_requests()`；旧 API 仍返回
+  `(request_id, client_index)`，新 API 额外返回 `_free_request()` 生成的
+  `kv_transfer_params`。
+
+#### EngineCore 和 client transport
+
+- `vllm/v1/engine/__init__.py`：增加 `EngineCoreRequestType.STOP`，不复用
+  `ABORT`。
+- `vllm/v1/engine/core.py`：正常 finish request，按 `client_index` 分组，生成
+  空 token、`FinishReason.STOP` 且带 metadata 的 final output；MP core 把该 output
+  放入对应 output queue。
+- `vllm/v1/engine/core_client.py`：覆盖 Inproc、SyncMP、AsyncMP 和 DP-LB async
+  client。Inproc 直接返回 final output，MP 通过 queue 异步返回，DP-LB 按
+  `reqs_in_flight` 路由到原 engine。
+
+#### Frontend lifecycle
+
+- `vllm/v1/engine/output_processor.py`：把 `reqs_to_abort` 主字段改为
+  `reqs_to_stop`，保留 deprecated alias；在 first detection 阶段暂存 stop reason 而不
+  finish state；在 final empty output 上恢复 stop reason 并只 finish 一次。
+- `vllm/v1/engine/async_llm.py`：async 路径发送 STOP。
+- `vllm/v1/engine/llm_engine.py`：sync Inproc 路径立即处理返回的 final output；
+  MP 仍等 output queue。
+
+`output_processor.py` 还修正了 final empty-token delta logprobs：Python `x[-0:]`
+会返回全部列表，所以 token 列表为空时必须显式返回 `[]`，避免最终
+chunk 重复历史 logprobs。
+
+#### OpenAI streaming response
+
+- `vllm/entrypoints/openai/chat_completion/protocol.py`：为 chat stream schema 增加
+  optional metadata。
+- `vllm/entrypoints/openai/chat_completion/serving.py`：从 `RequestOutput` 传入该字段。
+- `vllm/entrypoints/openai/completion/protocol.py`：为 completion stream schema 增加
+  optional metadata。
+- `vllm/entrypoints/openai/completion/serving.py`：从 `RequestOutput` 传入该字段。
+
+`kv_transfer_params` 默认为 `None`，因此非 P/D 请求使用 `exclude_none`
+序列化时不会改变 OpenAI response shape。
+
+#### Tests
+
+- `tests/v1/engine/test_output_processor.py`：把 stop-string case 改为两阶段
+  STOP，模拟 final metadata output，验证 stop reason、finished 和 metadata。
+- `tests/entrypoints/openai/test_streaming_kv_transfer.py`：验证 chat/completion 两个
+  streaming schema 都会序列化非空 metadata。移植时按当前仓库规则补充
+  SPDX copyright header。
+
+### 正确性验证
+
+定向 pytest：
+
+```text
+6 passed, 30 deselected, 22 warnings in 8.03s
+```
+
+该结果包含：
+
+- 4 个 stop-string case：`num_sample_logprobs=None/5` 与
+  `include_stop_str_in_output=true/false`；
+- 2 个 schema case：chat/completion streaming response。
+
+当前机器无 Hugging Face gated `meta-llama/Llama-3.2-1B` 权限。首次完整
+`test_output_processor.py` 收集在 fixture 下载阶段得到 403，未进入测试逻辑。
+随后在不修改源码的情况下，于 pytest process 启动前把 fixture 的
+`TOKENIZER_NAME` 指向已缓存的 OPT-125M snapshot，动态重建 prompt/generation
+vectors。
+
+该完整文件运行得到 `27 passed, 2 skipped`；另有 7 个 `test_stop_token`
+case 因测试内部显式要求 tokenizer name 必须等于
+`meta-llama/Llama-3.2-1B` 而 fail，不是 output 数值或 stop 逻辑断言失败。
+最终门禁只选本 commit 直接修改的 stop-string/schema case，得到上述
+`6 passed`。
+
+独立 EngineCore 契约检查使用 fake scheduler，确认：
+
+```text
+request status:       FINISHED_STOPPED
+output client index:  3
+new token ids:        []
+finish reason:        STOP
+kv_transfer_params:   {"remote_block_ids": [[1, 2]]}
+result:               passed
+```
+
+功能文件的 pre-commit 全部通过，包括 ruff、mypy、typos、SPDX、
+lazy imports、forbidden imports、configuration validation 和 `git diff --check`。
+
+### 性能说明
+
+本 commit 是 correctness fix，预期 GPU kernel 数、常规 decode throughput 和显存峰值
+收益为零，因此没有申请 GPU 性能卡，也不复用任何 YOCO 算子数据。
+
+新 work 只在 frontend multi-token stop-string 的 terminal path 发生：一条 STOP
+control message，一次 scheduler finish，一个 empty-token final output。普通 token step
+不增加 work。终态可能比旧 abort 多一次 IPC/queue round trip，但这是返回
+connector metadata 的必要成本；性能优先不能覆盖 P/D 正确性。
+
+### 风险、观察点与回滚
+
+- 最高风险是 frontend state 提前删除或 finish 两次；两阶段 test 必须保留。
+- `pending_stop_reason` 不应与 streaming-input chunk lifecycle 混用；当前只在
+  `not req_state.streaming_input` 时进入等待路径。
+- MP 和 DP-LB 必须按 internal request id 路由 STOP；不能广播到其他 engine。
+- empty-token delta logprobs 必须为 `[]`，不能回归 `[-0:]`。
+- API 字段是 optional vLLM extension，只在 metadata 非空时出现。
+- revert `1c51cac0d7` 可恢复旧 abort path，但会恢复 P/D streaming stop
+  metadata 丢失问题；前六个 `fhb-dev` commit 不受影响。
 
 ---
 

@@ -654,6 +654,101 @@ c1/c4 在两个布局均为正收益；c8 分别为 `+2.36% / +0.08%`，因此
 - revert `8eae22948c` 可恢复 YOCO Shared Expert 的 FP32 多算子路径；
   前五个 `fhb-dev` 功能提交不受影响。
 
+## Streaming stop 保留 KV transfer metadata
+
+这是第七个独立功能，是 P/D streaming 正确性修复，不是算子性能
+优化：
+
+```text
+baseline branch:  fhb-dev
+baseline commit:  4b0f7d3d4249b7d0629619188a2dcc16bda103d9
+candidate branch: review/yoco-07-streamed-stop-kv-metadata
+candidate commit: 1c51cac0d7fc374475c97a932dd3d37b9ab9dfaf
+```
+
+之前，如果 stop string 由 frontend detokenizer 检测到，EngineCore 尚未标记请求
+finished，frontend 会把请求当作 abort 发回 core。abort 可以释放 KV block，但不会
+把 connector `_free_request()` 生成的 `kv_transfer_params` 送回 API 层。在 P/D
+路径中，这会让最终 streaming chunk 丢失远程 engine/block metadata。
+
+新路径把 frontend stop 从“abort”改为“正常 STOP”：
+
+```text
+frontend detects multi-token stop string
+  -> keep RequestState and pending stop reason
+  -> send EngineCoreRequestType.STOP
+  -> scheduler FINISHED_STOPPED + connector free
+  -> EngineCore emits final empty-token output with kv_transfer_params
+  -> OutputProcessor restores stop reason and finishes request
+  -> chat/completion final stream chunk serializes kv_transfer_params
+```
+
+abort 路径仍保留给客户端取消等真正 abort 场景。只有 frontend 因 stop
+string 成功结束请求时使用 STOP。
+
+### 修改范围
+
+功能 commit 修改 14 个文件，`207 insertions, 25 deletions`。文件数看似
+较多，但只实现一条原子链路：
+
+- scheduler interface/implementation：在 finish 时返回 connector metadata；
+- EngineCore request enum/core/client：新增 sync、async、MP 和 DP-LB STOP 传递；
+- output processor/AsyncLLM/LLMEngine：暂存 stop reason，等 core 终态后再
+  生成用户可见 final output；
+- chat/completion protocol/serving：只在 response 有 metadata 时序列化
+  `kv_transfer_params`；
+- 测试：覆盖 stop-string 两阶段终态和 chat/completion streaming schema。
+
+这些层不能拆成可独立合入的多个 commit：只加 API 字段没有 metadata
+来源，只加 core STOP 而不保留 frontend state 会丢 stop reason，只改 output
+processor 而不改 client 则 MP/DP 路径无法传递。
+
+### 正确性测试
+
+所有功能文件通过 ruff、mypy、SPDX、配置检查和 `git diff --check`。
+
+当前环境无权访问 gated `meta-llama/Llama-3.2-1B` fixture，所以使用本地
+OPT-125M tokenizer 重建相同 dummy output vectors，只运行本修复直接相关的
+case，不修改测试断言：
+
+```text
+6 passed, 30 deselected, 22 warnings in 8.03s
+```
+
+其中包括 4 个 stop-string case（有/无 logprobs，有/无 include stop string）和
+2 个 chat/completion streaming serialization case。stop-string case 会模拟 core 返回带
+metadata 的最终空 token output，并要求 final `RequestOutput` 保留 stop reason 和
+`kv_transfer_params`。
+
+另外直接用 fake scheduler 调用 `EngineCore.stop_requests()`，验证：
+
+- status 是 `FINISHED_STOPPED`，不是 `FINISHED_ABORTED`；
+- 输出路由到正确 `client_index`；
+- final output 为空 `new_token_ids`、`FinishReason.STOP`；
+- connector `remote_block_ids` metadata 不变地返回。
+
+### 性能说明
+
+这是 correctness commit，没有吞吐提升目标，不报告 GPU/tok/s 收益。普通
+token generation、token-id stop、length stop 和真正 abort 路径没有新的 steady-state
+work。
+
+只有 frontend multi-token stop-string 终态多一次 STOP control message 和一个空 token
+final output。这可能增加微小的 terminal latency，但是让 connector 在正常 finish
+时产生并返回 KV metadata 的必要正确性成本；不能用 abort 的较短路径换取
+错误响应。
+
+### 边界与回滚
+
+- `pending_stop_reason` 只用于非 streaming-input 的 frontend stop-string 等待阶段；
+  streaming output 与 streaming input 是两个不同概念。
+- final empty-token output 必须把 delta logprobs 设为空列表；否则 Python
+  `[-0:]` 会错误返回全部历史 logprobs。
+- streaming response 字段默认 `None`，普通 OpenAI-compatible response 在
+  `exclude_none` 时不增加额外字段。
+- revert `1c51cac0d7` 可恢复旧 abort 行为，但 P/D frontend stop-string 会再次
+  丢失 KV transfer metadata；六个 YOCO 优化 commit 不受影响。
+
 ## 验证模型
 
 YOCO-v2 agentic serving：
