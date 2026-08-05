@@ -48,6 +48,7 @@
 | 10 | `8abfd6c6d0` | 性能/RoPE | YOCO BF16 rotary 单 kernel | 已进入 `fhb-dev` |
 | 11 | `26614af40f` | 文档/负结果 | 放弃 differential-attention CustomOp | 已进入 `fhb-dev` |
 | 12 | `9106abeb3a` | 合并/DP8 | 合入 YOCO B200 multigpu long-context | 已进入 `fhb-dev` |
+| 13 | `4364a96501` | 性能/Router | 缓存 FP32 Router 归一化权重 | 已进入 `fhb-dev` |
 
 ---
 
@@ -2592,6 +2593,146 @@ inspect 和 service log 位于：
 
 本轮只验证单节点 DP serving，不替代 1P2D UCX/NIXL transport 验收。回滚不需要
 改 runtime；若只撤销本轮记录，revert 对应文档提交即可。
+
+## 13. 缓存 FP32 Router 归一化权重
+
+### 提交信息
+
+```text
+commit: 4364a965012e0cbe66b5f247c66f609914048b8c
+subject: perf(yoco): cache normalized router weights
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: 0223cd9099
+branch: review/yoco-12-router-weight-cache
+diff: 2 files, 102 insertions, 5 deletions
+```
+
+### 目的与旧路径开销
+
+当前 YOCO-v2 checkpoint 没有设置 `router_weights_normalized`，因此运行时按旧格式
+处理原始 FP32 gate weight。旧路径每次执行 `YOCOMoE.forward` 都先按 expert row
+计算 L2 norm、执行 `clamp_min(1e-6)` 并生成一份归一化权重，然后才计算 Router
+linear。
+
+模型有 20 个不同的 MoE module；其中 10 个 self layer 因
+`universal_loop=3` 各执行三次，另外 10 个 cross layer 各执行一次，因此每个完整
+model step 一共调用 Router 40 次。推理期间 gate weight 不变，旧路径却在每次
+调用中重复归一化同一组权重。本提交把这项与 token 无关的计算移到权重加载结束
+时，每个 MoE module 只计算并缓存一次。
+
+### 实现与行为边界
+
+`YOCOMoE` 新增 non-persistent buffer `_normalized_gate_weight`。当 checkpoint 的
+`router_weights_normalized=false` 或字段缺失时，缓存：
+
+```text
+gate.weight / gate.weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
+```
+
+forward 随后把缓存权重传给 `yoco_router_linear_tf32`，并关闭该次调用内部的重复
+归一化。CPU fallback 同样使用缓存后的权重，因此 CUDA 与 fallback 维持同一个
+契约。
+
+- 标准 `load_weights()` 完成后立即初始化全部本地 `YOCOMoE` 缓存；
+- 非标准 loader 若绕过 `load_weights()`，第一次 model forward 会兜底初始化；
+- 重复调用 `load_weights()` 会先清除初始化标志并重新生成缓存；
+- checkpoint 已声明 `router_weights_normalized=true` 时不分配缓存，继续直接使用
+  原 gate weight；
+- buffer 设置为 `persistent=False`，不会增加或改变 checkpoint/state_dict key；
+- 本优化依赖 serving 期间权重不可变。若未来支持运行时原地修改 Router weight，
+  修改方必须显式刷新缓存。
+
+每个 gate weight shape 为 `[128, 3072]`、dtype 为 FP32；20 份缓存额外占用
+`31,457,280 bytes`，即 `30 MiB` GPU 显存。它用固定的 30 MiB 换取每个 model
+step 的重复计算消除，不改变 CUDA Graph pool 或 checkpoint 大小；因为常驻模型
+内存增加，自动计算的 KV cache 显存预算可能相应减少约 30 MiB。
+
+### 修改文件及职责
+
+#### `vllm/model_executor/models/yoco.py`
+
+- 注册 non-persistent Router weight cache；
+- 增加单 module 初始化方法和 model 级一次性初始化管理；
+- 标准 load 完成后 eager 初始化，并为非标准 loader 保留 first-forward fallback；
+- CUDA CustomOp 与 CPU fallback 都根据缓存状态选择相同的已归一化权重。
+
+#### `tests/model_executor/test_yoco_conversion.py`
+
+- 验证缓存张量与旧 runtime normalization 逐位一致；
+- 验证缓存不进入 `state_dict()`；
+- 验证已归一化 checkpoint 不创建冗余缓存；
+- 在 CUDA 上覆盖 tokens=`1/8/128`，比较“原权重并在 op 内归一化”和“缓存权重且
+  op 内不归一化”，要求 Router logits `rtol=0, atol=0`。
+
+### 正确性和静态检查
+
+本地最终检查：
+
+```text
+tests/model_executor/test_yoco_conversion.py: 35 passed, 14 warnings
+changed-files pre-commit: passed
+  包含 ruff-check、ruff-format、mypy-local、SPDX 和配置检查
+git diff --check: passed
+```
+
+pytest 使用 `-p no:cacheprovider --confcutdir=tests/model_executor`，用于避开仓库根
+目录历史损坏挂载 `agens_tokenizer_0622`；它不跳过本测试文件中的测试。B200
+隔离 Job 上完整 YOCO 文件同样为 `35 passed`。
+
+B200 另外覆盖 Router weight `[128, 3072]` 和 tokens=`1/4/8/32/128/1024`。
+所有 shape 的 eager 输出和 CUDA Graph capture 输出均逐位一致，统一为：
+
+```text
+bitwise_exact: true
+max_abs_diff: 0
+```
+
+### B200 CUDA Graph 性能
+
+```text
+Node: slc01-cl02-hgx-0013
+GPU: NVIDIA B200
+image: buaahsh/pytorch@sha256:08a08f36ab8c6c80ee1c7f09b9e5f8b6ce0b91cc684455982b2e5e286c736f2b
+weight: FP32 [128, 3072]
+hidden states: FP32 [tokens, 3072]
+graph: 40 consecutive Router calls
+warmup: 100 graph replays
+sample: 200 replays per sample, 9 samples, report median
+```
+
+baseline graph 每个 Router call 都从原 weight 重新归一化；candidate graph 使用
+load-time cache。两条路径分别 capture CUDA Graph，cache 初始化、JIT 和 graph
+capture 均不计时。40 次调用对应当前 YOCO 一次完整 model step 的 Router 调用数。
+
+| Tokens | Baseline 40 calls | Cached 40 calls | 节省 | 加速 |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 608.57 us | 231.76 us | 376.82 us | 2.63x |
+| 4 | 767.87 us | 383.17 us | 384.70 us | 2.00x |
+| 8 | 636.24 us | 241.80 us | 394.44 us | 2.63x |
+| 32 | 771.76 us | 388.04 us | 383.72 us | 1.99x |
+| 128 | 774.90 us | 385.57 us | 389.34 us | 2.01x |
+| 1,024 | 777.30 us | 387.47 us | 389.82 us | 2.01x |
+
+被消除的 weight normalization 与 token 数无关，所以绝对节省稳定在约
+`0.38--0.39 ms/model step`；tokens 较少时 baseline/candidate 本身的波动会让
+比例表现为约 `2.0x--2.6x`。
+
+这是 Router linear 子图数据，只包含 40 次 Router 调用，不包含 attention、
+Top-K、routed/shared expert GEMM、collective、scheduler 或 P/D transport。本轮
+没有运行同节点完整 serving 的端到端 tok/s A/B，因此不能把表中的 `2.0x--2.6x`
+写成模型吞吐提升。上线观察应以端到端 ITL/tok/s 和固定增加的 30 MiB 显存共同
+评估。
+
+### 风险、观察点与回滚
+
+- 应在 checkpoint load 后确认 `_router_weight_caches_initialized=true`，避免非标准
+  loader 把首次初始化落到 graph capture 内；first-forward fallback 只用于兜底；
+- 权重加载后的原地 mutation 会使缓存过期，当前静态 inference weight 契约下不
+  会发生；
+- Router gate 在 TP rank 间复制，因此每个完整 YOCO model rank 固定增加 30 MiB；
+  当前 TP1 的 DP1、DP4、DP8 部署都应按每卡 30 MiB 预算；
+- revert `4364a96501` 会恢复每次 forward 的归一化，不影响此前 RoPE、MoE、
+  add-RMSNorm、SwiGLU、UCX/NIXL 或 multigpu 功能。
 
 ## 本日志初始化
 
