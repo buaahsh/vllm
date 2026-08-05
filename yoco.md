@@ -1,5 +1,279 @@
 # YOCO B200 最终验收报告
 
+## 2026-08-04 long-context BF16 serving extension
+
+This section is the current reference for the 131K YOCO-v2 workload. The
+original acceptance report remains below for historical comparison.
+
+### Artifacts and decision summary
+
+```text
+Git branch: shaohanh/yoco-b200-longctx-multigpu-20260804
+Docker image: buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-multigpu-20260804
+Model: /mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf
+Precision: BF16 only
+```
+
+The production decision is FlashInfer attention, Triton MoE, TP=1, DP=1/4/8,
+32K maximum batched prefill tokens, prefix caching, chunked prefill, YOCO
+KV-sharing fast prefill, and `FULL_AND_PIECEWISE` CUDA graphs. Async scheduling
+is enabled. The observed local fused-MoE width is N1280 at DP1, N320 at DP4,
+and N160 at DP8, so the multigpu modes must not be interpreted as isolated
+full-model replicas. In the final cold-start logs, the DP1 worker loads about
+60.62 GiB while each DP4 worker loads about 18.43 GiB. The optional DeepEP
+backend is not used.
+
+The three benchmark workloads are:
+
+| Workload | Shape | Notes |
+| --- | --- | --- |
+| W1 | 8,192 input + 65,536 output | Single turn, decode-heavy |
+| W2 | 65,536 input + 16,384 output | Single turn, prefill + decode |
+| W3 | 40 turns; 117K incremental input + 13K output | 130K final trajectory with prefix reuse |
+
+W3 uses 130K rather than 131K input plus 13K output because the latter would
+exceed the model's hard 131,072-token context limit.
+
+### Exact B200 MoE tuning evidence
+
+The base image did not contain a Triton MoE configuration for this model's
+exact `E=128, N=1280, K=3072, top-k=8` shape. The new image includes:
+
+```text
+vllm/model_executor/layers/fused_moe/configs/E=128,N=1280,device_name=NVIDIA_B200.json
+```
+
+The final JSON is hybrid: M=1/2/4/8 entries are byte-for-byte equivalent to
+vLLM's runtime fallback, while M=16 and larger retain measured tuned configs.
+The table uses `benchmark_moe_defaults.py` on the same B200. Lower kernel time
+is better; tiny decode batches are marked identical rather than presenting
+measurement-order noise as a speedup.
+
+| MoE token batch | Runtime fallback | Hybrid image | Speedup |
+| ---: | ---: | ---: | ---: |
+| 1 | same config | same config | neutral by construction |
+| 2 | same config | same config | neutral by construction |
+| 4 | same config | same config | neutral by construction |
+| 8 | same config | same config | neutral by construction |
+| 16 | 353.74 us | 340.50 us | 3.7% |
+| 32 | 475.67 us | 449.06 us | 5.6% |
+| 128 | 541.20 us | 503.55 us | 7.0% |
+| 1,024 | 683.01 us | 659.41 us | 3.5% |
+| 2,843 | 1,166.33 us | 938.16 us | 19.6% |
+| 3,899 | 1,373.41 us | 1,124.76 us | 18.1% |
+| 8,192 | 2,546.30 us | 2,066.41 us | 18.8% |
+| 32,768 | 8,669.71 us | 6,964.82 us | 19.7% |
+
+This targets DP1 prefill and mixed agentic steps without knowingly regressing
+the M=1-8 decode path. A separately generated DP8/N160 table improved isolated
+kernels but regressed two clean end-to-end runs, so it is deliberately not
+packaged. See `long_context/README.md` for that A/B.
+
+### New-node disk and nested Docker setup
+
+The final multigpu run used
+`assuring-owl-b200g4-dev-d5aab19e-master-0`. Verify the block device before
+mounting it; these commands intentionally keep Docker's large layers on the
+persistent `/data` disk.
+
+```bash
+apt-get update
+apt-get install -y sudo util-linux fdisk docker.io fuse-overlayfs
+mkdir -p /data
+findmnt /data || mount -t ext4 /dev/md1 /data
+mkdir -p /data/docker
+
+dockerd \
+  --data-root=/data/docker \
+  --storage-driver=fuse-overlayfs \
+  --iptables=false \
+  --bridge=none \
+  --pidfile=/data/dockerd.pid \
+  >/data/dockerd.log 2>&1 &
+```
+
+The commands below assume a standard host with NVIDIA Container Toolkit. The
+benchmark Kubernetes job used nested Docker and therefore also needed
+cluster-specific GPU device and NVML library mappings; those infrastructure
+details are intentionally kept out of the minimal inference commands.
+
+### Start inference
+
+Set the common paths once:
+
+```bash
+IMAGE=buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-multigpu-20260804
+MODEL=/mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf
+mkdir -p "$PWD/yoco-results"
+```
+
+One GPU:
+
+```bash
+docker run --rm --name yoco-long-dp1 --network host --ipc host \
+  --gpus '"device=0"' \
+  -v /mnt/msranlphot:/mnt/msranlphot:ro \
+  -v "$PWD/yoco-results:/results" \
+  "$IMAGE" vllm serve "$MODEL" \
+  --served-model-name yoco-v2-long --host 0.0.0.0 --port 8001 \
+  --trust-remote-code --dtype bfloat16 \
+  --attention-backend FLASHINFER --moe-backend triton \
+  --tensor-parallel-size 1 --data-parallel-size 1 \
+  --gpu-memory-utilization 0.85 --max-model-len 131072 \
+  --max-num-batched-tokens 32768 --max-num-seqs 128 \
+  --enable-prefix-caching --enable-chunked-prefill --kv-sharing-fast-prefill \
+  --enable-auto-tool-choice --tool-call-parser agens --reasoning-parser agens \
+  --async-scheduling \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+```
+
+Four GPUs:
+
+```bash
+docker run --rm --name yoco-long-dp4 --network host --ipc host \
+  --gpus '"device=0,1,2,3"' \
+  -v /mnt/msranlphot:/mnt/msranlphot:ro \
+  -v "$PWD/yoco-results:/results" \
+  "$IMAGE" vllm serve "$MODEL" \
+  --served-model-name yoco-v2-long --host 0.0.0.0 --port 8001 \
+  --trust-remote-code --dtype bfloat16 \
+  --attention-backend FLASHINFER --moe-backend triton \
+  --tensor-parallel-size 1 --data-parallel-size 4 \
+  --gpu-memory-utilization 0.85 --max-model-len 131072 \
+  --max-num-batched-tokens 32768 --max-num-seqs 128 \
+  --enable-prefix-caching --enable-chunked-prefill --kv-sharing-fast-prefill \
+  --enable-auto-tool-choice --tool-call-parser agens --reasoning-parser agens \
+  --async-scheduling \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+```
+
+One eight-GPU B200 node:
+
+```bash
+docker run --rm --name yoco-long-dp8 --network host --ipc host \
+  --gpus all \
+  -v /mnt/msranlphot:/mnt/msranlphot:ro \
+  -v "$PWD/yoco-results:/results" \
+  "$IMAGE" vllm serve "$MODEL" \
+  --served-model-name yoco-v2-long --host 0.0.0.0 --port 8001 \
+  --trust-remote-code --dtype bfloat16 \
+  --attention-backend FLASHINFER --moe-backend triton \
+  --tensor-parallel-size 1 --data-parallel-size 8 \
+  --gpu-memory-utilization 0.85 --max-model-len 131072 \
+  --max-num-batched-tokens 32768 --max-num-seqs 128 \
+  --enable-prefix-caching --enable-chunked-prefill --kv-sharing-fast-prefill \
+  --enable-auto-tool-choice --tool-call-parser agens --reasoning-parser agens \
+  --async-scheduling \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+```
+
+The service exposes the OpenAI-compatible API at `http://127.0.0.1:8001/v1`.
+Wait for `GET /health` to return HTTP 200 before warming or benchmarking.
+The commands explicitly select the validated `FLASHINFER` backend. Replace it
+with `FLASH_ATTN` only for a controlled FA4 comparison, keeping every other
+setting and the cache-salt namespace fixed. `--max-num-seqs` is a per-engine
+cap, not a deployment-wide cap. It is 128 for DP1, DP4, and DP8; for example, a
+DP8 batch of 192 is distributed to about 24 active requests per rank rather
+than requiring 192 slots on every rank. Change it only after checking both
+queue depth and KV-cache use in the exported vLLM metrics.
+
+With the documented 85% memory utilization, the final cold-start logs report
+space for 19.43 full 131,072-token sequences on DP1 and 26.69 per DP4 engine.
+Thus DP1 batch 24 is an intentional over-capacity saturation probe, while DP4
+batch 96 is still under the deployment's roughly 107-sequence full-context
+capacity. Shorter live contexts can sustain more requests than these
+worst-case figures.
+
+### Warm the full context range
+
+A short two-turn warmup misses kernels that first occur near the end of the
+trajectory. Run this once after each cold service start; set `DP_SIZE` and
+`GPU_INDICES` to match the running server.
+
+```bash
+docker exec \
+  -e TOKENIZER="$MODEL" \
+  -e DP_SIZE=1 \
+  -e GPU_INDICES=0 \
+  -e RESULT_DIR=/results/warmup-dp1 \
+  yoco-long-dp1 \
+  bash tools/yoco_serving/warmup_long_context.sh
+```
+
+Examples for the larger deployments are `DP_SIZE=4 GPU_INDICES=0,1,2,3` and
+`DP_SIZE=8 GPU_INDICES=0,1,2,3,4,5,6,7`.
+
+### Reproduce the speed report
+
+The runner forces exact output lengths, gives every measurement a unique
+server-side cache namespace, resumes complete JSON files, and emits detailed
+results. Recommended saturation sweeps are 1/2/4/8/12/16/24 for DP1,
+4/8/16/32/48/64/96 for DP4, and 8/16/32/64/96/128/192 for DP8. W1 is expensive
+because every request generates 65,536 tokens; use `WORKLOADS` to run the
+three shapes independently.
+
+```bash
+docker exec \
+  -e TOKENIZER="$MODEL" \
+  -e DP_SIZE=1 \
+  -e GPU_INDICES=0 \
+  -e WORKLOADS="1 2 3" \
+  -e BATCHES="1 2 4 8 12 16 24" \
+  -e RUN_ID=dp1-production-20260804 \
+  -e RESULT_DIR=/results/dp1 \
+  yoco-long-dp1 \
+  bash tools/yoco_serving/benchmark_long_context.sh
+```
+
+Use a fresh `RUN_ID` for an independent repeat. The default
+`SKIP_EXISTING=1` skips only nonempty, valid JSON results tagged with that same
+run identity, so an interrupted sweep can be resumed safely. Set
+`SKIP_EXISTING=0` only when intentionally replacing results.
+
+The single-turn JSON reports request throughput, input/output/total token
+throughput, mean/P95 TTFT, and mean TPOT. The W3 JSON additionally reports
+logical incremental prefill throughput, generation throughput, prefix-cache
+hit rate, queue depth, KV use, and GPU telemetry.
+
+### Scaled end-to-end results
+
+The tables in this subsection are generated from the detailed JSON described
+above. Total time is wall time for the whole batch, and throughput is aggregate
+across the selected GPU count.
+
+<!-- LONG_CONTEXT_RESULTS -->
+
+The full presentation tables are kept in `long_context/README.md` so this
+operational guide does not drift from the raw JSON. The measured batch knees
+are:
+
+| Deployment | W1 knee | W2 knee | W3 knee | Max-throughput probes |
+| --- | ---: | ---: | ---: | --- |
+| One B200 | 16 | 16 | 16 | W2/W3 batch 24 |
+| Four B200s | 64 | 64 | 64 | Batch 96 |
+| One eight-B200 node | 128 | 128 | 128 | Batch 192 |
+
+These are starting points, not hard request limits. Use the detailed TTFT and
+TPOT/ITL columns in the report to choose a lower batch for latency-sensitive
+traffic or the max-throughput probe when aggregate rate is the priority.
+
+<!-- LONG_CONTEXT_MORE_RESULTS -->
+
+The complete DP1, DP4, and DP8 tables, controlled scheduler/MoE A/B results,
+batch-knee decisions, and raw-evidence locations are maintained in
+[`long_context/README.md`](long_context/README.md). Every published scaled row
+was measured with only that deployment active on the node. Diagnostic rows
+from an accidentally co-located DP1/DP4 run are retained under
+`co-located-invalid/` for auditability and are excluded from the report.
+
+Use the same GPU count, `RUN_ID`, workload shape, and batch when comparing a
+change. Kernel microbenchmarks are supporting evidence only: the generated
+DP8/N160 MoE table improved isolated kernels but failed the clean end-to-end
+gate, so the final image intentionally keeps the runtime fallback.
+
+A compact, slide-ready reconstruction of the new-node probes is maintained in
+[`long_context/presentation_tables.md`](long_context/presentation_tables.md).
+
 本文只记录本次 YOCO-v2/v3 在 B200 上的最终配置、验收方法和结果，不包含
 旧镜像、旧分支或中间调试过程。
 
