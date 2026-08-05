@@ -9,3 +9,4 @@ from vllm.reasoning.deepseek_v3_reasoning_parser import (
 
 class AgensReasoningParser(DeepSeekV3ReasoningWithThinkingParser):
     reasoning_output_field = "reasoning_content"
+    additional_stop_strings = ("<|end|>",)

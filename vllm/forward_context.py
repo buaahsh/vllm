@@ -141,6 +141,7 @@ class ForwardContext:
     """
     # set dynamically for each forward pass
     dp_metadata: DPMetadata | None = None
+    fast_prefill_num_tokens_across_dp_cpu: torch.Tensor | None = None
     # determine the cudagraph style at runtime to be FULL, PIECEWISE, or NONE.
     # by default NONE, no cudagraph is used.
     cudagraph_runtime_mode: CUDAGraphMode = CUDAGraphMode.NONE
@@ -206,6 +207,7 @@ def create_forward_context(
     attn_metadata: Any,
     vllm_config: VllmConfig,
     dp_metadata: DPMetadata | None = None,
+    fast_prefill_num_tokens_across_dp_cpu: torch.Tensor | None = None,
     cudagraph_runtime_mode: CUDAGraphMode = CUDAGraphMode.NONE,
     batch_descriptor: BatchDescriptor | None = None,
     ubatch_slices: UBatchSlices | None = None,
@@ -224,6 +226,9 @@ def create_forward_context(
         attn_metadata=attn_metadata,
         slot_mapping=slot_mapping or {},
         dp_metadata=dp_metadata,
+        fast_prefill_num_tokens_across_dp_cpu=(
+            fast_prefill_num_tokens_across_dp_cpu
+        ),
         cudagraph_runtime_mode=cudagraph_runtime_mode,
         batch_descriptor=batch_descriptor,
         ubatch_slices=ubatch_slices,
@@ -253,6 +258,7 @@ def set_forward_context(
     vllm_config: VllmConfig,
     num_tokens: int | None = None,
     num_tokens_across_dp: torch.Tensor | None = None,
+    fast_prefill_num_tokens_across_dp_cpu: torch.Tensor | None = None,
     cudagraph_runtime_mode: CUDAGraphMode = CUDAGraphMode.NONE,
     batch_descriptor: BatchDescriptor | None = None,
     ubatch_slices: UBatchSlices | None = None,
@@ -280,7 +286,7 @@ def set_forward_context(
         if num_tokens_across_dp is None:
             assert ubatch_slices is None
             assert num_tokens is not None
-            _, num_tokens_across_dp, _ = coordinate_batch_across_dp(
+            _, num_tokens_across_dp, _, _ = coordinate_batch_across_dp(
                 num_tokens_unpadded=num_tokens,
                 parallel_config=vllm_config.parallel_config,
                 allow_microbatching=False,
@@ -311,6 +317,7 @@ def set_forward_context(
         attn_metadata,
         vllm_config,
         dp_metadata,
+        fast_prefill_num_tokens_across_dp_cpu,
         cudagraph_runtime_mode,
         batch_descriptor,
         ubatch_slices,

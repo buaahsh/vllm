@@ -1,7 +1,7 @@
 # Builds the validated YOCO runtime on top of the NVIDIA B200 environment.
 # Build example:
 #   docker build -f docker/Dockerfile.b200 \
-#     -t buaahsh/pytorch:26.02-b200-vllm-0716 .
+#     -t buaahsh/pytorch:26.02-b200-vllm-0725-mixedgraph .
 
 FROM donglixp/pytorch:26.02-b200@sha256:cdbdc71b773142a98a303d488816d2faf6b9d85d179a4639b92263fca6da4769
 
@@ -17,64 +17,59 @@ WORKDIR /workspace
 RUN git init /workspace/vllm \
     && cd /workspace/vllm \
     && git remote add origin https://github.com/buaahsh/vllm.git \
-    && git fetch --depth 1 origin d4eb9942f9dc81c773d82b737b27dffda40cd56d \
+    && git fetch --depth 1 origin f4964c907db7ce2d77c2b0ea39e263375b7eba4f \
     && git checkout --detach FETCH_HEAD \
-    && test "$(git rev-parse HEAD)" = "d4eb9942f9dc81c773d82b737b27dffda40cd56d"
+    && test "$(git rev-parse HEAD)" = "f4964c907db7ce2d77c2b0ea39e263375b7eba4f"
 
 WORKDIR /workspace/vllm
+
+# Match the FlashAttention 4 and CuTeDSL versions already installed in the
+# NVIDIA 26.02 image before building vLLM's vendored FA4 package.
+COPY cmake/external_projects/vllm_flash_attn.cmake \
+    /workspace/vllm/cmake/external_projects/vllm_flash_attn.cmake
+COPY requirements/cuda.txt /workspace/vllm/requirements/cuda.txt
 
 # Strip torch/torchvision/torchaudio requirements so the NVIDIA image torch is
 # preserved. This is the required first step before pip install.
 RUN python use_existing_torch.py
 
-# Compatibility patch for donglixp/pytorch:26.02-b200:
-# torch reports as 2.11 dev, but NVIDIA's build does not provide
-# torch._opaque_base. Fall back to plain object when the module is absent.
-RUN python - <<'PY'
-from pathlib import Path
-
-path = Path("vllm/utils/torch_utils.py")
-text = path.read_text()
-old = '''HAS_OPAQUE_TYPE = is_torch_equal_or_newer("2.11.0.dev")
-
-# Allow toggling LayerName usage via environment variable.
-# Defaults to True on torch >= 2.11, False otherwise.
-# Set VLLM_USE_LAYERNAME=0 to disable even on torch >= 2.11.
-_USE_LAYERNAME = HAS_OPAQUE_TYPE and envs.VLLM_USE_LAYERNAME
-
-if HAS_OPAQUE_TYPE:
-    from torch._opaque_base import OpaqueBase
-else:
-    OpaqueBase = object  # type: ignore[misc, assignment]
-'''
-new = '''HAS_OPAQUE_TYPE = is_torch_equal_or_newer("2.11.0.dev")
-
-if HAS_OPAQUE_TYPE:
-    try:
-        from torch._opaque_base import OpaqueBase
-    except ModuleNotFoundError:
-        HAS_OPAQUE_TYPE = False
-        OpaqueBase = object  # type: ignore[misc, assignment]
-else:
-    OpaqueBase = object  # type: ignore[misc, assignment]
-
-# Allow toggling LayerName usage via environment variable.
-# Defaults to True on torch >= 2.11, False otherwise.
-# Set VLLM_USE_LAYERNAME=0 to disable even on torch >= 2.11.
-_USE_LAYERNAME = HAS_OPAQUE_TYPE and envs.VLLM_USE_LAYERNAME
-'''
-if old not in text:
-    raise SystemExit("expected OpaqueBase block not found")
-path.write_text(text.replace(old, new))
-PY
-
-RUN python -m pip install --no-cache-dir "setuptools-scm==10.2.0" \
+RUN python -m pip install --no-cache-dir \
+        "packaging==25.0" "setuptools-scm==10.2.0" \
     && python -m pip install --no-cache-dir -e . --no-build-isolation \
     && python -m pip check \
     && python -c "import vllm.version; print(vllm.version.__version__)" \
     && rm -rf /tmp/tmp*.build-temp /tmp/tmp*.build-lib /tmp/pip-* \
         /root/.cache/pip /opt/vllm-venv \
     && (find /tmp -maxdepth 1 -name 'tmpxft_*' -delete 2>/dev/null || true)
+
+# PT 26.02 already contains FlashAttention 4.0.0b13. The beta13 repository is
+# Python/CuTeDSL-only, so keep the CMake-backed FA2/FA3 source above and overlay
+# the validated FA4 package into vLLM's namespace after the native build.
+RUN python - <<'PY'
+from pathlib import Path
+import importlib.metadata
+import shutil
+
+import flash_attn
+
+expected = {
+    "flash-attn-4": "4.0.0b13",
+    "nvidia-cutlass-dsl": "4.5.1",
+    "quack-kernels": "0.4.1",
+}
+for package, version in expected.items():
+    actual = importlib.metadata.version(package)
+    if actual != version:
+        raise SystemExit(f"{package}={actual}, expected {version}")
+
+source = Path(flash_attn.__file__).resolve().parent / "cute"
+target = Path("/workspace/vllm/vllm/vllm_flash_attn/cute")
+shutil.rmtree(target, ignore_errors=True)
+shutil.copytree(source, target)
+for path in target.rglob("*.py"):
+    text = path.read_text()
+    path.write_text(text.replace("flash_attn.cute", "vllm.vllm_flash_attn.cute"))
+PY
 
 # The editable install resolves Python modules from /workspace/vllm, so these
 # source overlays apply the local YOCO alignment implementation without
@@ -87,12 +82,28 @@ COPY vllm/model_executor/models/deepseek_v2_utils.py \
     /workspace/vllm/vllm/model_executor/models/deepseek_v2_utils.py
 COPY vllm/model_executor/models/yoco.py \
     /workspace/vllm/vllm/model_executor/models/yoco.py
+COPY vllm/forward_context.py \
+    /workspace/vllm/vllm/forward_context.py
 COPY vllm/model_executor/layers/fused_moe/deep_gemm_utils.py \
     /workspace/vllm/vllm/model_executor/layers/fused_moe/deep_gemm_utils.py
 COPY vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py \
     /workspace/vllm/vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
+COPY vllm/model_executor/layers/fused_moe/configs/E=128,N=320,device_name=NVIDIA_B200.json \
+    /workspace/vllm/vllm/model_executor/layers/fused_moe/configs/E=128,N=320,device_name=NVIDIA_B200.json
+COPY vllm/v1/attention/backend.py \
+    /workspace/vllm/vllm/v1/attention/backend.py
+COPY vllm/v1/attention/backends/utils.py \
+    /workspace/vllm/vllm/v1/attention/backends/utils.py
 COPY vllm/v1/attention/backends/flash_attn.py \
     /workspace/vllm/vllm/v1/attention/backends/flash_attn.py
+COPY vllm/v1/spec_decode/extract_hidden_states.py \
+    /workspace/vllm/vllm/v1/spec_decode/extract_hidden_states.py
+COPY vllm/v1/spec_decode/llm_base_proposer.py \
+    /workspace/vllm/vllm/v1/spec_decode/llm_base_proposer.py
+COPY vllm/v1/worker/dp_utils.py \
+    /workspace/vllm/vllm/v1/worker/dp_utils.py
+COPY vllm/v1/worker/gpu_model_runner.py \
+    /workspace/vllm/vllm/v1/worker/gpu_model_runner.py
 COPY vllm/entrypoints/openai/chat_completion/protocol.py \
     /workspace/vllm/vllm/entrypoints/openai/chat_completion/protocol.py
 COPY vllm/entrypoints/openai/chat_completion/batch_serving.py \
@@ -115,4 +126,6 @@ COPY vllm/tool_parsers/agens_tool_parser.py \
     /workspace/vllm/vllm/tool_parsers/agens_tool_parser.py
 COPY tools/yoco_alignment/logprob_kl.py \
     /workspace/vllm/tools/yoco_alignment/logprob_kl.py
+COPY tools/yoco_alignment/rl_rollout.py \
+    /workspace/vllm/tools/yoco_alignment/rl_rollout.py
 COPY yoco.md /workspace/vllm/yoco.md

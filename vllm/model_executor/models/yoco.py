@@ -24,9 +24,9 @@ Architecture summary (matches the HF checkpoint shipped in ``hf-weights``):
     11..19 use ``kv_sharing_target_layer_name`` to read from it without
     creating new caches.
 * All layers use *diff-attention*: ``q_proj`` outputs ``2 * head * head_dim``
-  values; attention is computed once with ``2*head`` Q-heads; the output is
-  split alternate-head into ``attn1`` / ``attn2`` and combined as
-  ``attn1 - sigmoid(lambda_proj(x)).unsqueeze(-1) * attn2`` before ``o_proj``.
+  values; attention is computed once with ``2*head`` Q-heads.  Diff-v2 uses
+  ``attn1 - sigmoid(gate) * attn2`` while diff-v3 gates both alternating
+  heads independently before subtraction.
 * All layers run an MoE (128 routed experts, top-k=8, softmax routing with
   post-top-k renormalization) plus a gated shared expert.
 
@@ -56,12 +56,12 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from vllm.compilation.decorators import support_torch_compile
-from vllm.config import CacheConfig, VllmConfig
+from vllm.config import CUDAGraphMode, CacheConfig, VllmConfig
 from vllm.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
 )
-from vllm.forward_context import get_forward_context
+from vllm.forward_context import DPMetadata, get_forward_context
 from vllm.model_executor.layers.activation import SiluAndMul
 from vllm.model_executor.layers.attention.attention import Attention, AttentionType
 from vllm.model_executor.layers.fused_moe import FusedMoE
@@ -296,6 +296,43 @@ def _yoco_rms_norm_fake(
     return torch.empty_like(x, dtype=torch.bfloat16)
 
 
+def _yoco_router_linear_tf32_cuda(
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+    normalize_weight: bool,
+) -> torch.Tensor:
+    previous_allow_tf32 = torch.backends.cuda.matmul.allow_tf32
+    previous_matmul_precision = torch.get_float32_matmul_precision()
+    previous_cuda_precision = torch.backends.cuda.matmul.fp32_precision
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.set_float32_matmul_precision("high")
+    torch.backends.cuda.matmul.fp32_precision = "tf32"
+    try:
+        if normalize_weight:
+            weight = weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
+        return F.linear(hidden_states, weight)
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = previous_allow_tf32
+        torch.set_float32_matmul_precision(previous_matmul_precision)
+        torch.backends.cuda.matmul.fp32_precision = previous_cuda_precision
+
+
+def _yoco_router_linear_tf32_fake(
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+    normalize_weight: bool,
+) -> torch.Tensor:
+    del normalize_weight
+    return hidden_states.new_empty((*hidden_states.shape[:-1], weight.shape[0]))
+
+
+if current_platform.is_cuda():
+    direct_register_custom_op(
+        op_name="yoco_router_linear_tf32",
+        op_func=_yoco_router_linear_tf32_cuda,
+        fake_impl=_yoco_router_linear_tf32_fake,
+    )
+
 if HAS_TRITON and current_platform.is_cuda():
     direct_register_custom_op(
         op_name="yoco_rms_clip",
@@ -414,20 +451,28 @@ def _yoco_topk_routing(
 
 
 class RMSClip(nn.Module):
-    """Weight-free RMS-based clipping for YOCO ``qk_rms_clip`` models.
+    """RMS-based clipping for YOCO ``qk_rms_clip`` models.
 
     Scales each ``head_dim`` slice by ``clamp(limit / rms, max=1.0)`` where
-    ``rms = sqrt(mean(x**2, -1) + eps)``.  Unlike :class:`RMSNorm` it has **no**
-    learnable weight and is the identity for vectors whose RMS is already below
-    ``limit`` — it only damps outliers.  This mirrors training's ``RMSClip``
-    (``llm/arch/rms_norm.py``) exactly.
+    ``rms = sqrt(mean(x**2, -1) + eps)``.  The optional affine weight is
+    controlled by ``qk_rms_gamma``, matching training's ``RMSClip``.
     """
 
-    def __init__(self, dim: int, eps: float = 1e-6, limit: float = 3.0) -> None:
+    def __init__(
+        self,
+        dim: int,
+        eps: float = 1e-6,
+        limit: float = 3.0,
+        has_weight: bool = False,
+    ) -> None:
         super().__init__()
         self.dim = dim
         self.eps = eps
         self.limit = limit
+        if has_weight:
+            self.weight = nn.Parameter(torch.ones(dim))
+        else:
+            self.register_parameter("weight", None)
 
     def extra_repr(self) -> str:
         return f"dim={self.dim}, eps={self.eps}, limit={self.limit}"
@@ -439,14 +484,17 @@ class RMSClip(nn.Module):
             and x.dtype == torch.bfloat16
             and x.shape[-1] == 128
             and current_platform.is_cuda()
+            and self.weight is None
         ):
             return torch.ops.vllm.yoco_rms_clip(x, self.eps, self.limit)
         orig_dtype = x.dtype
         x = x.to(torch.float32)
         variance = x.pow(2).mean(dim=-1, keepdim=True)
         clip_coef = (self.limit * torch.rsqrt(variance + self.eps)).clamp(max=1.0)
-        x = x * clip_coef
-        return x.to(orig_dtype)
+        x = (x * clip_coef).to(orig_dtype)
+        if self.weight is not None:
+            x = x * self.weight.to(orig_dtype)
+        return x
 
 
 class RMSNorm(nn.Module):
@@ -513,12 +561,26 @@ def _yoco_apply_rotary_emb(
 
 
 @torch.compile
-def _yoco_diff_attention(
+def _yoco_diff_attention_v2(
     attn1: torch.Tensor,
     attn2: torch.Tensor,
-    lam: torch.Tensor,
+    gate: torch.Tensor,
 ) -> torch.Tensor:
-    return attn1 - torch.sigmoid(lam).unsqueeze(-1) * attn2
+    return attn1 - torch.sigmoid(gate).unsqueeze(-1) * attn2
+
+
+@torch.compile
+def _yoco_diff_attention_v3(
+    attn1: torch.Tensor,
+    attn2: torch.Tensor,
+    gate: torch.Tensor,
+) -> torch.Tensor:
+    gate1 = gate[:, 0::2]
+    gate2 = gate[:, 1::2]
+    return (
+        attn1 * torch.sigmoid(gate1).unsqueeze(-1)
+        - attn2 * torch.sigmoid(gate2).unsqueeze(-1)
+    )
 
 
 def _yoco_normalized_router_linear(
@@ -595,18 +657,17 @@ def _build_qk_norm(config: PretrainedConfig, head_dim: int, rms_eps: float):
     """Build the per-head Q/K normalization module for YOCO attention.
 
     Three mutually exclusive modes, matching training (``llm/arch/attention.py``):
-    * ``qk_rms_clip=True``  -> :class:`RMSClip` (weight-free, clips outliers).
-    * ``qk_norm=True``      -> weight-free :class:`RMSNorm`.
+    * ``qk_rms_clip=True``  -> :class:`RMSClip` (clips outliers).
+    * ``qk_norm=True``      -> :class:`RMSNorm`.
     * otherwise             -> ``None`` (no Q/K norm).
-
-    Returns ``None`` when no normalization should be applied so callers can skip
-    creating unused parameters.
     """
+    # Older exported YOCO-v2 configs omitted this field and were weight-free.
+    has_weight = bool(getattr(config, "qk_rms_gamma", False))
     if bool(getattr(config, "qk_rms_clip", False)):
         limit = float(getattr(config, "qk_rms_limit", 3.0))
-        return RMSClip(head_dim, eps=rms_eps, limit=limit)
+        return RMSClip(head_dim, eps=rms_eps, limit=limit, has_weight=has_weight)
     if bool(getattr(config, "qk_norm", False)):
-        return RMSNorm(head_dim, eps=rms_eps, has_weight=False)
+        return RMSNorm(head_dim, eps=rms_eps, has_weight=has_weight)
     return None
 
 
@@ -660,6 +721,7 @@ class YOCOSelfAttention(nn.Module):
         self.total_num_heads = _cfg_int(config, "num_attention_heads", "head")
         self.total_num_kv_heads = _cfg_int(config, "num_key_value_heads", "kv_head")
         self.head_dim = _cfg_int(config, "head_dim")
+        self.diff_v3 = bool(getattr(config, "diff_v3", False))
         self.layer_idx = layer_idx
         self.universal_loop = universal_loop
         self.num_hidden_layers = num_hidden_layers
@@ -670,6 +732,10 @@ class YOCOSelfAttention(nn.Module):
         rope_theta = float(getattr(config, "rope_theta", 10000.0))
 
         tp_size = get_tensor_model_parallel_world_size()
+        assert self.total_num_heads % tp_size == 0, (
+            f"num_attention_heads={self.total_num_heads} must be divisible "
+            f"by TP size {tp_size} so diff-attention head pairs stay local"
+        )
         # ``2 * head`` Q-heads because of diff-attention.
         q_heads = 2 * self.total_num_heads
         assert q_heads % tp_size == 0, (
@@ -684,13 +750,13 @@ class YOCOSelfAttention(nn.Module):
         )
         self.num_heads = q_heads // tp_size
         self.num_kv_heads = max(1, self.total_num_kv_heads // tp_size)
-        # Number of lambda heads per TP rank: lambda_proj has ``head`` outputs
-        # total (one per *pair* of diff-attention heads); shard contiguously.
-        assert self.total_num_heads % tp_size == 0, (
-            f"head={self.total_num_heads} (lambda heads) must be divisible "
+        gate_heads = (2 if self.diff_v3 else 1) * self.total_num_heads
+        assert gate_heads % tp_size == 0, (
+            f"gate_heads={gate_heads} must be divisible "
             f"by TP size {tp_size}"
         )
         self.num_lambda_heads = self.total_num_heads // tp_size
+        self.num_gate_heads = gate_heads // tp_size
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_kv_heads * self.head_dim
         self.scaling = self.head_dim**-0.5
@@ -711,10 +777,11 @@ class YOCOSelfAttention(nn.Module):
             quant_config=quant_config,
             prefix=f"{prefix}.o_proj",
         )
-        # lambda_proj: maps hidden → ``head`` lambdas (one per diff-pair).
+        # Keep the legacy HF name ``lambda_proj`` for checkpoint compatibility.
+        # Diff-v2 has one gate per head pair; diff-v3 has one per attention head.
         self.lambda_proj = ColumnParallelLinear(
             input_size=self.hidden_size,
-            output_size=self.total_num_heads,
+            output_size=gate_heads,
             bias=False,
             gather_output=False,
             # llm-train constructs lambda_proj with default MixPrecisionLinear,
@@ -771,7 +838,7 @@ class YOCOSelfAttention(nn.Module):
     def _diff_attention_combine(
         self,
         attn_out: torch.Tensor,
-        lam: torch.Tensor,
+        gate: torch.Tensor,
         num_heads_per_pair: int,
     ) -> torch.Tensor:
         """Combine the 2*head attention output via the diff-attention rule.
@@ -783,7 +850,10 @@ class YOCOSelfAttention(nn.Module):
         attn_view = attn_out.view(-1, 2 * num_heads_per_pair, self.head_dim)
         attn1 = attn_view[:, 0::2, :]
         attn2 = attn_view[:, 1::2, :]
-        out = _yoco_diff_attention(attn1, attn2, lam)
+        if self.diff_v3:
+            out = _yoco_diff_attention_v3(attn1, attn2, gate)
+        else:
+            out = _yoco_diff_attention_v2(attn1, attn2, gate)
         return out.reshape(-1, num_heads_per_pair * self.head_dim)
 
     # ------------------------------------------------------------------ #
@@ -807,8 +877,8 @@ class YOCOSelfAttention(nn.Module):
         q, k = self.rotary_emb(positions, q, k)
         attn_out = self.attn[loop_idx](q, k, v)
 
-        lam, _ = self.lambda_proj(hidden_states)
-        out = self._diff_attention_combine(attn_out, lam, self.num_lambda_heads)
+        gate, _ = self.lambda_proj(hidden_states)
+        out = self._diff_attention_combine(attn_out, gate, self.num_lambda_heads)
         out, _ = self.o_proj(out)
         return out
 
@@ -848,6 +918,7 @@ class YOCOCrossAttention(nn.Module):
             config, "cross_kv_head", "num_key_value_heads", "kv_head"
         )
         self.head_dim = _cfg_int(config, "head_dim")
+        self.diff_v3 = bool(getattr(config, "diff_v3", False))
         self.layer_idx = layer_idx
         self.first_cross_layer_idx = first_cross_layer_idx
 
@@ -858,6 +929,9 @@ class YOCOCrossAttention(nn.Module):
         self.num_heads = q_heads // tp_size
         self.num_kv_heads = max(1, self.total_num_kv_heads // tp_size)
         self.num_lambda_heads = self.total_num_heads // tp_size
+        gate_heads = (2 if self.diff_v3 else 1) * self.total_num_heads
+        assert gate_heads % tp_size == 0
+        self.num_gate_heads = gate_heads // tp_size
         self.scaling = self.head_dim**-0.5
 
         # NoPE on cross layers — the checkpoint has ``rope_dim = 0``.
@@ -878,7 +952,7 @@ class YOCOCrossAttention(nn.Module):
         )
         self.lambda_proj = ColumnParallelLinear(
             input_size=self.hidden_size,
-            output_size=self.total_num_heads,
+            output_size=gate_heads,
             bias=False,
             gather_output=False,
             # llm-train leaves lambda_proj at default BF16 precision.
@@ -916,12 +990,15 @@ class YOCOCrossAttention(nn.Module):
         )
 
     def _diff_attention_combine(
-        self, attn_out: torch.Tensor, lam: torch.Tensor
+        self, attn_out: torch.Tensor, gate: torch.Tensor
     ) -> torch.Tensor:
         attn_view = attn_out.view(-1, 2 * self.num_lambda_heads, self.head_dim)
         attn1 = attn_view[:, 0::2, :]
         attn2 = attn_view[:, 1::2, :]
-        out = _yoco_diff_attention(attn1, attn2, lam)
+        if self.diff_v3:
+            out = _yoco_diff_attention_v3(attn1, attn2, gate)
+        else:
+            out = _yoco_diff_attention_v2(attn1, attn2, gate)
         return out.reshape(-1, self.num_lambda_heads * self.head_dim)
 
     def forward(
@@ -934,8 +1011,8 @@ class YOCOCrossAttention(nn.Module):
         if self.q_norm is not None:
             q = _apply_per_head_norm(q, self.num_heads, self.head_dim, self.q_norm)
         attn_out = self.attn(q, yoco_key, yoco_value)
-        lam, _ = self.lambda_proj(hidden_states)
-        out = self._diff_attention_combine(attn_out, lam)
+        gate, _ = self.lambda_proj(hidden_states)
+        out = self._diff_attention_combine(attn_out, gate)
         out, _ = self.o_proj(out)
         return out
 
@@ -1016,6 +1093,8 @@ class YOCOMoE(nn.Module):
         self.moe_intermediate_size = _cfg_int(
             config, "moe_intermediate_size", "moe_ffn_dim"
         )
+        self.moe_latent_dim = _cfg_int(config, "moe_latent_dim", default=0)
+        self.moe_latent_norm = bool(getattr(config, "moe_latent_norm", False))
         self.shared_intermediate_size = _cfg_int(
             config, "shared_expert_intermediate_size", "d_shared_expert"
         )
@@ -1056,6 +1135,43 @@ class YOCOMoE(nn.Module):
             prefix=f"{prefix}.shared_gate",
         )
 
+        expert_hidden_size = self.moe_latent_dim or self.hidden_size
+        if self.moe_latent_dim:
+            rms_eps = float(
+                getattr(config, "rms_norm_eps", getattr(config, "norm_eps", 1e-6))
+            )
+            self.fc1_latent_proj = ReplicatedLinear(
+                input_size=self.hidden_size,
+                output_size=self.moe_latent_dim,
+                bias=False,
+                quant_config=quant_config,
+                prefix=f"{prefix}.fc1_latent_proj",
+                return_bias=False,
+            )
+            self.fc2_latent_proj = ReplicatedLinear(
+                input_size=self.moe_latent_dim,
+                output_size=self.hidden_size,
+                bias=False,
+                quant_config=quant_config,
+                prefix=f"{prefix}.fc2_latent_proj",
+                return_bias=False,
+            )
+            self.fc1_latent_norm = (
+                RMSNorm(self.moe_latent_dim, eps=rms_eps)
+                if self.moe_latent_norm
+                else nn.Identity()
+            )
+            self.fc2_latent_norm = (
+                RMSNorm(self.moe_latent_dim, eps=rms_eps)
+                if self.moe_latent_norm
+                else nn.Identity()
+            )
+        else:
+            self.fc1_latent_proj = None
+            self.fc2_latent_proj = None
+            self.fc1_latent_norm = None
+            self.fc2_latent_norm = None
+
         # NOTE(swiglu_limit): Both the shared expert (above, via
         # ``YOCOClampedSwiGLU``) and the ROUTED experts (below) apply the
         # training ``swiglu_limit`` clamp (clamp-before-silu), for exact
@@ -1072,7 +1188,7 @@ class YOCOMoE(nn.Module):
         self.experts = FusedMoE(
             num_experts=self.num_experts,
             top_k=self.top_k,
-            hidden_size=self.hidden_size,
+            hidden_size=expert_hidden_size,
             intermediate_size=self.moe_intermediate_size,
             renormalize=True,
             quant_config=quant_config,
@@ -1096,26 +1212,30 @@ class YOCOMoE(nn.Module):
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        previous_allow_tf32 = torch.backends.cuda.matmul.allow_tf32
-        previous_matmul_precision = torch.get_float32_matmul_precision()
-        previous_cuda_precision = torch.backends.cuda.matmul.fp32_precision
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.set_float32_matmul_precision("high")
-        torch.backends.cuda.matmul.fp32_precision = "tf32"
-        try:
+        if hidden_states.is_cuda and current_platform.is_cuda():
+            router_logits = torch.ops.vllm.yoco_router_linear_tf32(
+                hidden_states.float(),
+                self.gate.weight,
+                not self.router_weights_normalized,
+            )
+        else:
             if self.router_weights_normalized:
                 router_logits = F.linear(hidden_states.float(), self.gate.weight)
             else:
                 router_logits = _yoco_normalized_router_linear(
                     hidden_states.float(), self.gate.weight
                 )
-        finally:
-            torch.backends.cuda.matmul.allow_tf32 = previous_allow_tf32
-            torch.set_float32_matmul_precision(previous_matmul_precision)
-            torch.backends.cuda.matmul.fp32_precision = previous_cuda_precision
+        if self.fc1_latent_proj is not None:
+            assert self.fc1_latent_norm is not None
+            expert_input = self.fc1_latent_norm(self.fc1_latent_proj(hidden_states))
+        else:
+            expert_input = hidden_states
         routed_out = self.experts(
-            hidden_states=hidden_states, router_logits=router_logits
+            hidden_states=expert_input, router_logits=router_logits
         )
+        if self.fc2_latent_proj is not None:
+            assert self.fc2_latent_norm is not None
+            routed_out = self.fc2_latent_proj(self.fc2_latent_norm(routed_out))
 
         # YOCO-specific scalar sigmoid gate on the shared expert path.
         # ``shared_gate`` is replicated, so ``scale`` is identical on every TP
@@ -1357,7 +1477,6 @@ class YOCOSelfBlock(nn.Module):
         "intermediate_tensors": 0,
         "inputs_embeds": 0,
     },
-    enable_if=lambda vllm_config: not vllm_config.cache_config.kv_sharing_fast_prefill,
 )
 class YOCOModel(nn.Module):
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = "") -> None:
@@ -1477,6 +1596,7 @@ class YOCOModel(nn.Module):
                     cross_layers=kv_sharing_cross_layers,
                     first_cross_layer_idx=self.first_cross_layer_idx + 1,
                 )
+            self.full_model_warmed = False
 
             # Static input buffers for the cross block's CUDA graph.  vLLM runs
             # with cudagraph_copy_inputs=False, so cross-block inputs must have
@@ -1501,6 +1621,7 @@ class YOCOModel(nn.Module):
         else:
             self.self_block = None
             self.cross_block = None
+            self.full_model_warmed = True
 
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states"], self.hidden_size
@@ -1606,6 +1727,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         self.make_empty_intermediate_tensors = (
             self.model.make_empty_intermediate_tensors
         )
+        self._rotary_caches_initialized = False
 
     # ------------------------------------------------------------------ #
     # standard forward / compute_logits API                              #
@@ -1616,6 +1738,30 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
 
+    def _initialize_rotary_caches(self) -> None:
+        if self._rotary_caches_initialized:
+            return
+        device = self.model.embed_tokens.weight.device
+        if device.type != "cuda":
+            return
+
+        rotary_caches: dict[tuple[int, int, float], torch.Tensor] = {}
+        for module in self.modules():
+            if not isinstance(module, YOCORotaryEmbedding):
+                continue
+            cache_key = (
+                module.head_size,
+                module.max_position_embeddings,
+                module.base,
+            )
+            cache = rotary_caches.get(cache_key)
+            if cache is None:
+                cache = module._get_cos_sin_cache(device)
+                rotary_caches[cache_key] = cache
+            else:
+                module.cos_sin_cache = cache
+        self._rotary_caches_initialized = True
+
     def forward(
         self,
         input_ids: torch.Tensor | None,
@@ -1623,6 +1769,9 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        # Default loading initializes this eagerly. This fallback covers
+        # loaders that assign tensors without calling this model's load_weights.
+        self._initialize_rotary_caches()
         if not self.fast_prefill_enabled:
             return self.model(
                 input_ids=input_ids,
@@ -1649,10 +1798,10 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
 
         The self portion and the cross portion run as two separately-compiled
         ``@support_torch_compile`` units (``self_block`` / ``cross_block``).
-        The cross block is *always* executed — during cudagraph warmup and
-        dummy/profile runs (when no fast-prefill metadata is available) it
-        falls back to ALL tokens — so its CUDA graph is captured during warmup
-        instead of (illegally) capturing at inference time."""
+        The first eager profile run compiles the ordinary full model before
+        CUDA graph capture, then piecewise profiling compiles both split
+        blocks. Uniform FULL decode reuses the ordinary model path; prefill
+        uses the split blocks."""
         model = self.model
 
         # No dedicated fast-prefill blocks (e.g. a single cross layer): fall
@@ -1665,6 +1814,51 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
                 inputs_embeds=inputs_embeds,
             )
 
+        # Decode-token indices. Piecewise profile/warmup runs without fast
+        # metadata fall back to all tokens so both split blocks are compiled.
+        (
+            logits_indices_padded,
+            num_logits_indices,
+            fast_prefill_num_tokens_across_dp_cpu,
+        ) = self._get_fast_prefill_indices()
+        fwd_ctx = get_forward_context()
+        global_fast_prefill = logits_indices_padded is not None
+        if (
+            not global_fast_prefill
+            and fwd_ctx.dp_metadata is not None
+            and fast_prefill_num_tokens_across_dp_cpu is not None
+        ):
+            global_fast_prefill = not torch.equal(
+                fast_prefill_num_tokens_across_dp_cpu,
+                fwd_ctx.dp_metadata.num_tokens_across_dp_cpu,
+            )
+
+        if (
+            not global_fast_prefill
+            and fwd_ctx.cudagraph_runtime_mode == CUDAGraphMode.NONE
+            and not model.full_model_warmed
+        ):
+            model(
+                input_ids=input_ids,
+                positions=positions,
+                inputs_embeds=inputs_embeds,
+            )
+            model.full_model_warmed = True
+
+        if (
+            not global_fast_prefill
+            and fwd_ctx.cudagraph_runtime_mode == CUDAGraphMode.FULL
+        ):
+            assert model.full_model_warmed, (
+                "YOCO full model must be compiled during eager profiling "
+                "before CUDA graph capture."
+            )
+            return model(
+                input_ids=input_ids,
+                positions=positions,
+                inputs_embeds=inputs_embeds,
+            )
+
         # Self portion on ALL tokens (separate piecewise CUDA graph).  Also
         # produces the shared KV (yoco_key / yoco_value) and writes layer
         # ``first_cross_layer_idx``'s shared KV cache.
@@ -1674,10 +1868,6 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
             inputs_embeds,
         )
 
-        # Decode-token indices.  When no fast-prefill metadata is available
-        # (cudagraph capture / dummy / profile runs) fall back to ALL tokens so
-        # the cross block is always invoked (and thus captured during warmup).
-        logits_indices_padded, num_logits_indices = self._get_fast_prefill_indices()
         if logits_indices_padded is None:
             logits_indices_padded = torch.arange(
                 positions.size(0),
@@ -1697,12 +1887,23 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
         model.fp_yoco_key[:n].copy_(yoco_key[logits_indices_padded])
         model.fp_yoco_value[:n].copy_(yoco_value[logits_indices_padded])
 
-        decode_hidden = model.cross_block(
-            model.fp_positions[:n],
-            model.fp_hidden_states[:n],
-            model.fp_yoco_key[:n],
-            model.fp_yoco_value[:n],
-        )
+        original_dp_metadata = fwd_ctx.dp_metadata
+        if (
+            original_dp_metadata is not None
+            and fast_prefill_num_tokens_across_dp_cpu is not None
+        ):
+            fwd_ctx.dp_metadata = DPMetadata(
+                fast_prefill_num_tokens_across_dp_cpu
+            )
+        try:
+            decode_hidden = model.cross_block(
+                model.fp_positions[:n],
+                model.fp_hidden_states[:n],
+                model.fp_yoco_key[:n],
+                model.fp_yoco_value[:n],
+            )
+        finally:
+            fwd_ctx.dp_metadata = original_dp_metadata
 
         # Merge cross-decoder outputs back into the full hidden states.
         if num_logits_indices is not None:
@@ -1716,24 +1917,31 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
 
     def _get_fast_prefill_indices(
         self,
-    ) -> tuple[torch.Tensor | None, int | None]:
+    ) -> tuple[torch.Tensor | None, int | None, torch.Tensor | None]:
         """Retrieve logits_indices from forward context attention metadata."""
         fwd_ctx = get_forward_context()
         attn_metadata = fwd_ctx.attn_metadata
+        fast_prefill_num_tokens_across_dp_cpu = (
+            fwd_ctx.fast_prefill_num_tokens_across_dp_cpu
+        )
         if attn_metadata is None:
-            return None, None
+            return None, None, fast_prefill_num_tokens_across_dp_cpu
         if not isinstance(attn_metadata, dict):
-            return None, None
+            return None, None, fast_prefill_num_tokens_across_dp_cpu
         # Find a KV-sharing layer's metadata to get logits_indices.
         # Use the last layer's attention (which is a fast prefill layer).
         last_layer = self.model.layers[-1]
         layer_name = last_layer.self_attn.attn.layer_name
         layer_meta = attn_metadata.get(layer_name)
         if layer_meta is None:
-            return None, None
+            return None, None, fast_prefill_num_tokens_across_dp_cpu
         if isinstance(layer_meta, KVSharingFastPrefillMetadata):
-            return layer_meta.logits_indices_padded, layer_meta.num_logits_indices
-        return None, None
+            return (
+                layer_meta.logits_indices_padded,
+                layer_meta.num_logits_indices,
+                fast_prefill_num_tokens_across_dp_cpu,
+            )
+        return None, None, fast_prefill_num_tokens_across_dp_cpu
 
     def compute_logits(
         self,
@@ -1907,5 +2115,9 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
                 # back to the default one.
                 default_weight_loader(param, loaded_weight)
             loaded_names.add(name)
+
+        # Piecewise compilation cannot trace a forward that mutates module
+        # buffers, so initialize caches before profile/warmup forwards begin.
+        self._initialize_rotary_caches()
 
         return loaded_names

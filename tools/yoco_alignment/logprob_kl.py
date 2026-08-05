@@ -113,6 +113,52 @@ CHUNK4K_PROMPTS = [
 ]
 
 
+def _normalize_native_checkpoint_modelargs(
+    checkpoint_modelargs: dict[str, Any],
+) -> dict[str, Any]:
+    normalized = dict(checkpoint_modelargs)
+    if "qk_rms_gamma" not in normalized:
+        normalized["qk_rms_gamma"] = False
+    if normalized.get("diff_attention") and not (
+        normalized.get("diff_v2") or normalized.get("diff_v3")
+    ):
+        normalized["diff_v3" if normalized.get("diff_both_lamb") else "diff_v2"] = True
+    return normalized
+
+
+def _normalize_native_checkpoint_state(
+    state: dict[str, torch.Tensor],
+    checkpoint_modelargs: dict[str, Any],
+) -> dict[str, torch.Tensor]:
+    normalized = {
+        key: value for key, value in state.items() if not key.startswith("moe_loss.")
+    }
+    legacy_diff_v3 = bool(
+        checkpoint_modelargs.get("diff_attention")
+        and checkpoint_modelargs.get("diff_both_lamb")
+    )
+    for key in list(normalized):
+        if ".lambda_proj." not in key:
+            continue
+        new_key = key.replace(".lambda_proj.", ".gate_proj.")
+        if new_key in normalized:
+            raise ValueError(
+                f"Checkpoint contains both legacy key {key} and current key {new_key}"
+            )
+        value = normalized.pop(key)
+        if legacy_diff_v3:
+            if value.shape[0] % 2:
+                raise ValueError(
+                    f"Legacy diff_both_lamb weight {key} has odd output size "
+                    f"{value.shape[0]}"
+                )
+            heads = value.shape[0] // 2
+            value = value.reshape(2, heads, *value.shape[1:])
+            value = value.transpose(0, 1).reshape(-1, *value.shape[2:])
+        normalized[new_key] = value
+    return normalized
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Full-vocab next-token KL alignment probe"
@@ -450,28 +496,64 @@ def run_native(args: argparse.Namespace) -> None:
     sys.path.insert(0, str(llm_dir))
     from arch.model import Model, ModelArgs, create_kv_cache
 
+    cute_call_count = [0]
     if args.native_prefill_chunk_size is not None:
         import arch.attention as native_attention
 
         native_flash_attn_with_kvcache = native_attention.flash_attn_with_kvcache
+        if args.native_use_cute:
+            from flash_attn.cute import flash_attn_varlen_func as native_cute_varlen
 
         def flash_attn_with_chunked_kvcache(
             query: torch.Tensor,
-            *flash_args,
-            **flash_kwargs,
+            k_cache: torch.Tensor,
+            v_cache: torch.Tensor,
+            *,
+            cache_seqlens: torch.Tensor,
+            softmax_scale: float | None = None,
+            causal: bool = False,
+            window_size: tuple[int, int] = (-1, -1),
+            **unsupported_kwargs,
         ) -> torch.Tensor:
-            if query.shape[1] == 1 and query.shape[0] > 1:
-                output = native_flash_attn_with_kvcache(
-                    query.transpose(0, 1),
-                    *flash_args,
-                    **flash_kwargs,
+            if unsupported_kwargs:
+                raise TypeError(
+                    "Unsupported chunked KV-cache attention arguments: "
+                    f"{sorted(unsupported_kwargs)}"
                 )
-                return output.transpose(0, 1)
-            return native_flash_attn_with_kvcache(
-                query,
-                *flash_args,
-                **flash_kwargs,
-            )
+            transpose_query = query.shape[0] > 1 and query.shape[1] == 1
+            if transpose_query:
+                if k_cache.shape[0] != 1:
+                    raise ValueError(
+                        "Chunked Native prefill supports only a single request"
+                    )
+                query = query.transpose(0, 1)
+            if args.native_use_cute:
+                cute_call_count[0] += 1
+                output = native_cute_varlen(
+                    query,
+                    k_cache,
+                    v_cache,
+                    seqused_k=cache_seqlens,
+                    softmax_scale=softmax_scale,
+                    causal=causal,
+                    window_size=tuple(
+                        None if size == -1 else size for size in window_size
+                    ),
+                    num_splits=1,
+                )
+                if isinstance(output, tuple):
+                    output = output[0]
+            else:
+                output = native_flash_attn_with_kvcache(
+                    query,
+                    k_cache,
+                    v_cache,
+                    cache_seqlens=cache_seqlens,
+                    softmax_scale=softmax_scale,
+                    causal=causal,
+                    window_size=window_size,
+                )
+            return output.transpose(0, 1) if transpose_query else output
 
         native_attention.flash_attn_with_kvcache = flash_attn_with_chunked_kvcache
 
@@ -495,8 +577,9 @@ def run_native(args: argparse.Namespace) -> None:
     metadata_path = Path(args.native_checkpoint) / "metadata.json"
     with metadata_path.open(encoding="utf-8") as reader:
         metadata = json.load(reader)
+    checkpoint_modelargs = _normalize_native_checkpoint_modelargs(metadata["modelargs"])
     modelargs = ModelArgs()
-    for key, value in metadata["modelargs"].items():
+    for key, value in checkpoint_modelargs.items():
         setattr(modelargs, key, value)
     if args.native_quant_mode is not None:
         modelargs.quant_mode = args.native_quant_mode
@@ -505,6 +588,7 @@ def run_native(args: argparse.Namespace) -> None:
     modelargs.use_cute = args.native_use_cute
     if args.native_no_kv_cache:
         modelargs.moe_fwd_bwd_overlap = False
+    modelargs.validate()
 
     init_device_mesh("cuda", mesh_shape=(world_size,), mesh_dim_names=["dp"])
     default_device = torch.get_default_device()
@@ -521,9 +605,7 @@ def run_native(args: argparse.Namespace) -> None:
         map_location=_device_mapping(-1),
         mmap=True,
     )
-    state = {
-        key: value for key, value in state.items() if not key.startswith("moe_loss.")
-    }
+    state = _normalize_native_checkpoint_state(state, checkpoint_modelargs)
     model.load_state_dict(state)
     print(
         f"[native-kl] model loaded use_cute={modelargs.use_cute} "
@@ -660,9 +742,9 @@ def run_native(args: argparse.Namespace) -> None:
                         trace_rope_hook(attn_prefix)
                     )
                 )
-            if layer.self_attn.lambda_proj is not None:
+            if layer.self_attn.gate_proj is not None:
                 trace_handles.append(
-                    layer.self_attn.lambda_proj.register_forward_hook(
+                    layer.self_attn.gate_proj.register_forward_hook(
                         trace_hook(f"{attn_prefix}.lambda")
                     )
                 )
@@ -830,7 +912,6 @@ def run_native(args: argparse.Namespace) -> None:
             ]
         )
 
-    cute_call_count = [0]
     patched_cute_funcs = []
     if args.native_use_cute:
         for module_name in (
@@ -845,8 +926,57 @@ def run_native(args: argparse.Namespace) -> None:
                 cute_call_count[0] += 1
                 return _original(*call_args, **call_kwargs)
 
-            patched_cute_funcs.append((module, original))
+            patched_cute_funcs.append((module, "flash_attn_cute_varlen_func", original))
             module.flash_attn_cute_varlen_func = counted_cute
+
+        native_attention = importlib.import_module("arch.attention")
+        native_varlen_original = native_attention.flash_attn_varlen_func
+        from flash_attn.cute import flash_attn_varlen_func as native_cute_varlen
+
+        def counted_native_cute(
+            q,
+            k,
+            v,
+            cu_seqlens_q,
+            cu_seqlens_k,
+            max_seqlen_q,
+            max_seqlen_k,
+            dropout_p=0.0,
+            softmax_scale=None,
+            causal=False,
+            window_size=(-1, -1),
+            alibi_slopes=None,
+            deterministic=False,
+            return_attn_probs=False,
+        ):
+            if dropout_p:
+                raise ValueError("Native FA4 reference requires dropout_p=0")
+            if alibi_slopes is not None:
+                raise ValueError("Native FA4 reference does not support ALiBi")
+            cute_call_count[0] += 1
+            result = native_cute_varlen(
+                q,
+                k,
+                v,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_q,
+                max_seqlen_k=max_seqlen_k,
+                softmax_scale=softmax_scale,
+                causal=causal,
+                window_size=tuple(None if size == -1 else size for size in window_size),
+                deterministic=deterministic,
+                return_lse=return_attn_probs,
+            )
+            if return_attn_probs:
+                output, lse = result
+                return output, lse, None
+            return result[0] if isinstance(result, tuple) else result
+
+        patched_cute_funcs.append(
+            (native_attention, "flash_attn_varlen_func", native_varlen_original)
+        )
+        native_attention.flash_attn_varlen_func = counted_native_cute
 
     tokenizer, records = _prompt_records(
         args.model,
@@ -1074,8 +1204,8 @@ def run_native(args: argparse.Namespace) -> None:
     print(f"[native-kl] saved {args.out}", flush=True)
     if args.native_use_cute:
         print(f"[native-kl] flash_attn.cute calls={cute_call_count[0]}", flush=True)
-        for module, original in patched_cute_funcs:
-            module.flash_attn_cute_varlen_func = original
+        for module, attribute, original in patched_cute_funcs:
+            setattr(module, attribute, original)
 
     if dist.is_initialized():
         dist.destroy_process_group()

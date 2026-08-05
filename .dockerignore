@@ -1,7 +1,10 @@
 /.venv
+/.deps
+/.git
 /build
 dist
 vllm/*.so
+/vllm/vllm_flash_attn
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

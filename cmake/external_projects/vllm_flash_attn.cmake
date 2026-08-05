@@ -39,6 +39,8 @@ else()
   FetchContent_Declare(
           vllm-flash-attn
           GIT_REPOSITORY https://github.com/vllm-project/flash-attention.git
+          # This revision provides the FA2/FA3 CMake extension targets.
+          # FA4 beta13 is Python/CuTeDSL-only and is overlaid separately.
           GIT_TAG bce29425653ec0fbc579d329883030e832d15ada
           GIT_PROGRESS TRUE
           # Don't share the vllm-flash-attn build between build types

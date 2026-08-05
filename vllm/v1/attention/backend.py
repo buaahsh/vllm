@@ -383,6 +383,7 @@ class CommonAttentionMetadata:
     # Needed by FastPrefillAttentionBuilder
     logits_indices_padded: torch.Tensor | None = None
     num_logits_indices: int | None = None
+    fast_prefill_num_tokens_across_dp_cpu: torch.Tensor | None = None
 
     # Needed by CrossAttentionBuilder
     encoder_seq_lens: torch.Tensor | None = None
@@ -485,6 +486,9 @@ class CommonAttentionMetadata:
             causal=self.causal,
             logits_indices_padded=self.logits_indices_padded,
             num_logits_indices=self.num_logits_indices,
+            fast_prefill_num_tokens_across_dp_cpu=(
+                self.fast_prefill_num_tokens_across_dp_cpu
+            ),
             encoder_seq_lens=maybe_slice_reqs(self.encoder_seq_lens),
             encoder_seq_lens_cpu=maybe_slice_reqs(self.encoder_seq_lens_cpu),
             dcp_local_seq_lens=maybe_slice_reqs(self.dcp_local_seq_lens),
