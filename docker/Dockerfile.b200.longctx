@@ -1,6 +1,6 @@
 # Lightweight long-context runtime layer over the validated YOCO B200 image.
 # Build from the repository root after generating the E=128,N=1280 config.
-FROM buaahsh/pytorch:26.02-b200-vllm-yoco-v2-v3-0729-final
+FROM registry.hub.docker.com/buaahsh/pytorch@sha256:08a08f36ab8c6c80ee1c7f09b9e5f8b6ce0b91cc684455982b2e5e286c736f2b
 
 WORKDIR /workspace/vllm
 
@@ -14,7 +14,22 @@ COPY long_context/README.md /workspace/vllm/long_context/README.md
 COPY long_context/presentation_tables.md \
     /workspace/vllm/long_context/presentation_tables.md
 
-RUN python -m py_compile \
+RUN deep_ep_so="$(python -c 'import importlib.util; print(importlib.util.find_spec("deep_ep_cpp").origin)')" \
+    && resolved_nvshmem="$(ldd "${deep_ep_so}" | awk '$1 == "libnvshmem_host.so.3" {print $3}')" \
+    && case "${resolved_nvshmem}" in \
+         */site-packages/nvidia/nvshmem/lib/libnvshmem_host.so.3) ;; \
+         */dist-packages/nvidia/nvshmem/lib/libnvshmem_host.so.3) ;; \
+         *) echo "DeepEP resolves incompatible NVSHMEM: ${resolved_nvshmem:-not found}" >&2; exit 1 ;; \
+       esac \
+    && objdump -T "${resolved_nvshmem}" \
+         | grep -Fq 'nvshmem_selected_device_transport' \
+    && mkdir -p /tmp/cuda-stubs \
+    && ln -s /usr/local/cuda/lib64/stubs/libcuda.so \
+         /tmp/cuda-stubs/libcuda.so.1 \
+    && LD_LIBRARY_PATH="/tmp/cuda-stubs:${LD_LIBRARY_PATH}" python -c \
+         'import deep_ep; print(deep_ep.__file__)' \
+    && rm -rf /tmp/cuda-stubs \
+    && python -m py_compile \
       benchmarks/multi_turn/benchmark_agent_trace.py \
       tools/yoco_serving/probe_moe_n1280.py \
     && chmod 755 \
@@ -26,4 +41,4 @@ RUN python -m py_compile \
       tools/yoco_serving/probe_moe_n1280.py
 
 LABEL org.opencontainers.image.title="YOCO B200 long-context runtime" \
-      org.opencontainers.image.description="BF16 FlashInfer runtime with validated DP1 Triton MoE and multigpu long-context tooling"
+      org.opencontainers.image.description="BF16 FlashInfer runtime with guarded DeepEP/NVSHMEM and multigpu long-context tooling"
