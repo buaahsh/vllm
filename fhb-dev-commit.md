@@ -1715,6 +1715,260 @@ build 本身为 SM100 `_C` 编译 57 个 object；这是离线 image build 成�
 
 ---
 
+## 9. B200 YOCO BF16 Triton MoE 调优配置
+
+### 提交信息
+
+```text
+commit: 7c03e0cb730bb11a960eb82a30e73185a743508a
+subject: perf(moe): add tuned B200 YOCO config
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: 66a87747fafb725f2c3c317adb5acc46e6b928ab
+branch: review/yoco-09-b200-moe-config
+diff: 1 file, 131 insertions
+```
+
+该功能在独立 B200 Pod 完成 correctness/performance A/B 后，由 `Snow2022jlu`
+同步到 `fhb-dev`。功能 commit 只有配置文件；本节和 `yoco.md` 的说明由后续
+独立 docs commit 追加，不把文档 diff 混入性能功能。
+
+### 目的
+
+YOCO 的一类 BF16 routed MoE 使用 128 experts，单次选择 Top-8，expert
+intermediate partition 为 1280。vLLM 没有该精确 B200 shape 的 checked-in
+配置时会调用通用 `get_default_config`。默认 tile 要覆盖多种 GPU/shape，无法在
+每个 batch-token 点都针对 B200 SM100 的并行度、L2 locality 和 pipeline stage
+取最优值。
+
+旧分支 `origin/shaohanh/yoco-0731@70c9edb52b` 已包含一个同名 JSON，但它和
+Router、RoPE、differential-attention、benchmark、Dockerfile 以及大段
+`yoco.py` 修改混在一个 `884 insertions/deletions` 规模的 commit 中，不能作为
+单功能提交审核。本次没有 cherry-pick 旧 commit；只提取配置作为候选，并在
+当前 `fhb-dev` runtime 上重新验证。
+
+### 修改文件及职责
+
+#### `vllm/model_executor/layers/fused_moe/configs/E=128,N=1280,device_name=NVIDIA_B200.json`
+
+这是唯一功能文件。它提供 16 个 irregular batch grid point：
+
+```text
+1, 2, 4, 8, 16, 24, 32, 48,
+64, 80, 84, 96, 128, 256, 512, 1024
+```
+
+每个 key 记录：
+
+```text
+BLOCK_SIZE_M
+BLOCK_SIZE_N
+BLOCK_SIZE_K
+GROUP_SIZE_M
+num_warps
+num_stages
+```
+
+provenance 字段为 `triton_version=3.7.1`。测试容器实际版本也是 3.7.1；不是
+拿其他 Triton 版本生成的配置直接宣称可用。
+
+vLLM 的命中文件名来自：
+
+```text
+get_config_file_name(E=128, N=1280, dtype=None, block_shape=None)
+-> E=128,N=1280,device_name=NVIDIA_B200.json
+```
+
+其中 `N=w2.shape[2]`，是 tensor-parallel partition 的 post-SwiGLU expert
+intermediate dimension。限制条件如下：
+
+- 设备名必须规范化为 `NVIDIA_B200`；
+- local/global expert layout 传入 loader 后必须得到 `E=128`；
+- `N` 必须为 1280；
+- BF16/FP16 unquantized path 的 dtype selector 为空；
+- FP8、INT8、INT4 或 block-quantized path 会生成不同文件名，不命中本文件；
+- batch token 不等于已有 key 时选择绝对距离最近的 key。
+
+该 commit 不修改 FusedMoE kernel、Router、YOCO model、scheduler、NIXL、UCX、
+Dockerfile 或 API。
+
+### 为什么没有原样复制旧 JSON
+
+第一次 A/B 使用旧文件逐字节内容，SHA256 为：
+
+```text
+3ada46e4a55a501f84f1879d4b9e5b52b9d62696c668722edb5da586363cac9b
+```
+
+旧 token=1 tile：
+
+```text
+BLOCK_SIZE_M=16
+BLOCK_SIZE_N=64
+BLOCK_SIZE_K=64
+GROUP_SIZE_M=1
+num_warps=4
+num_stages=5
+```
+
+在当前 runtime 上，5 轮交替 A/B 中位数为 baseline `65.83 us`、candidate
+`66.17 us`，回退 `0.52%`。decode 小 batch 是重要路径，因此没有用其他 batch
+点的收益掩盖这个回退。
+
+最终 token=1 改用当前默认 tile：
+
+```text
+BLOCK_SIZE_M=16
+BLOCK_SIZE_N=64
+BLOCK_SIZE_K=128
+GROUP_SIZE_M=1
+num_warps=4
+num_stages=4
+```
+
+修订后 baseline/candidate kernel 配置相同。独立 7 轮中位数为
+`65.84/65.92 us`，表面差异 `-0.13%`，属于相同配置的 clock/执行顺序噪声。
+其余 15 个旧 grid point 均为稳定正收益或持平，保留原调优值。
+
+### B200 环境和被测内容
+
+```text
+Volcano Job: lidong1-yoco-moe-config-g1-0805
+Pod:         lidong1-yoco-moe-config-g1-0805-master-0
+Node:        slc01-cl02-hgx-0380
+GPU:         NVIDIA B200
+capability:  10.0
+base image:  registry.hub.docker.com/buaahsh/pytorch@
+             sha256:08a08f36ab8c6c80ee1c7f09b9e5f8b6ce0b91cc684455982b2e5e286c736f2b
+PyTorch:     2.11.0a0+eb65b36914.nv26.02
+Triton:      3.7.1
+shape:       E=128, N=1280, K=3072, Top-K=8
+dtype:       BF16 weights/input/output, FP32 router logits
+```
+
+固定镜像提供 SM100 native extensions 和实际部署依赖；测试前覆盖当前
+`fhb-dev` Python tree。loader 输出：
+
+```text
+Using configuration from /workspace/vllm/vllm/model_executor/layers/
+fused_moe/configs/E=128,N=1280,device_name=NVIDIA_B200.json for MoE layer.
+```
+
+这条日志同时证明 device-name normalization、dtype selector、`E/N` 和文件路径
+均真实命中，不是只把 JSON 直接传给一个脱离 runtime loader 的 microbenchmark。
+
+### 正确性方法和结果
+
+每个 shape 固定 random seed，baseline/candidate 复用相同：
+
+- BF16 hidden states；
+- BF16 `w1=[128,2560,3072]`；
+- BF16 `w2=[128,3072,1280]`；
+- FP32 router logits；
+- `fused_topk(..., topk=8, renormalize=True)` 产生的 weights/ids。
+
+baseline 配置来自当前 `get_default_config`；candidate 来自正常
+`get_moe_configs` 文件加载。两者分别通过 `override_config` 运行同一个
+`fused_experts` 实现，只改变 Triton tile/meta parameters。
+
+最终修订版结果：
+
+| Tokens | Output shape | Elements | Result |
+| ---: | --- | ---: | --- |
+| 1 | `[1,3072]` | 3,072 | bitwise |
+| 8 | `[8,3072]` | 24,576 | bitwise |
+| 32 | `[32,3072]` | 98,304 | bitwise |
+| 128 | `[128,3072]` | 393,216 | bitwise |
+| 512 | `[512,3072]` | 1,572,864 | bitwise |
+| 1024 | `[1024,3072]` | 3,145,728 | bitwise |
+
+总计 `5,237,760` 个元素，`mismatches=0`，每组 `max_abs=0`、`mean_abs=0`。
+测试使用 `torch.equal`，没有用 BF16 宽容差掩盖 tile 改变可能带来的数值差异。
+
+### 性能方法
+
+使用当前 `benchmarks/kernels/benchmark_moe.py::benchmark_config`，其计时路径：
+
+1. 构造完整 routed expert weights、input 和 100 组 router logits；
+2. 对每个 candidate 做 Triton JIT 和一次同步；
+3. capture 一个包含 10 次完整 `fused_topk + fused_experts` 的 CUDA Graph；
+4. graph replay warmup 5 次；
+5. 每个 sample replay 100 次，即计时覆盖 1,000 次完整 path；
+6. baseline/candidate 每轮使用同一 seed，奇偶轮交换先后顺序；
+7. 全 16 个 grid point 各 5 轮取中位数；
+8. 修订后的 token=1 再做 7 轮独立复测。
+
+计时不包含随机 tensor 初始化、JIT 或 graph capture。它包含 routed FusedMoE
+kernel path，但不包含完整 YOCO attention、Shared Expert、跨层 universal loop、
+网络请求或 P/D 通信。
+
+### 性能结果
+
+| Tokens | Default median us | Tuned median us | 提升 |
+| ---: | ---: | ---: | ---: |
+| 1 | 65.84 | 65.92 | -0.13%（同配置噪声） |
+| 2 | 100.10 | 95.30 | 5.03% |
+| 4 | 152.13 | 142.73 | 6.58% |
+| 8 | 226.38 | 220.06 | 2.87% |
+| 16 | 331.77 | 326.06 | 1.75% |
+| 24 | 398.91 | 393.70 | 1.32% |
+| 32 | 437.48 | 432.03 | 1.26% |
+| 48 | 512.25 | 468.02 | 9.45% |
+| 64 | 532.17 | 483.84 | 9.99% |
+| 80 | 556.01 | 488.58 | 13.80% |
+| 84 | 557.09 | 490.96 | 13.47% |
+| 96 | 560.50 | 493.19 | 13.65% |
+| 128 | 550.70 | 498.51 | 10.47% |
+| 256 | 566.21 | 554.66 | 2.08% |
+| 512 | 587.74 | 587.49 | 0.04% |
+| 1024 | 735.99 | 689.78 | 6.70% |
+
+最明显收益集中在 48 到 128 tokens，80/84/96 达到约 13.5% 到 13.8%。
+token=512 的 tuned/default tile 实际相同，0.04% 是噪声；它保留为显式 grid key，
+避免临近选择落到 256 或 1024 的不同 tile。
+
+### 为什么不报告 endpoint tok/s
+
+测试 Pod 的 PVC 中有 YOCO-v3/L3 checkpoint，但其 TP1 配置为
+`moe_ffn_dim=3840`，不会命中 `N=1280` 文件；旧 0731 报告所用的
+`E=128,N=1280` checkpoint 位于未挂载的 `/mnt/msranlphot`。用 N=3840 模型跑
+endpoint 再把结果归因到本配置是错误的，因此本 commit 只报告真实命中的
+isolated CUDA Graph A/B。
+
+上线后必须从启动日志确认该文件命中，再依据实际 batch-token histogram 评估
+endpoint 收益。不能把 13.8% kernel best point 直接当成 tok/s 提升；完整服务还
+包含 attention、Router、Shared Expert、projection、scheduler 和 P/D transfer。
+
+### 提交前检查
+
+通过：
+
+- `jq empty` JSON 解析；
+- B200 loader 命中和 Triton 3.7.1 版本核对；
+- 全 16 个 grid point 编译、CUDA Graph capture 和执行；
+- 最终配置 tokens `1/8/32/128/512/1024` bitwise correctness；
+- token=1 修正后独立 7 轮复测；
+- `pre-commit run --files <config>` 的全部适用 hook；
+- `git diff --check`。
+
+pre-commit 对该 JSON 没有 Python/C++ formatter work；typos、filename spaces、
+Docker dependency graph、configuration validation、attention docs 和 suggestion
+均通过。
+
+### 风险、观察点与回滚
+
+- JSON 的 `triton_version` 是 provenance，不是 loader enforcement；升级
+  PyTorch/Triton/CUDA 后必须重新调优或至少完整 A/B。
+- device name、dtype、`E/N` 任一不匹配都会回退 default config；应监控启动日志。
+- irregular grid 使用最近 key，线上 batch 分布可能落在两个 key 中间；需结合
+  scheduler 的实际 batched-token histogram 观察。
+- 本表只覆盖 BF16 unquantized YOCO shape；不能外推到 FP8、EP local-expert
+  shape 或其他 GPU。
+- token=1 已主动回退当前默认 tile，避免 decode 最小 batch 付出已知代价。
+- revert `7c03e0cb73` 只删除该 JSON，运行时自动恢复 default config；无需重编
+  `_C`、重建 UCX/NIXL，也不影响前八项功能。
+
+---
+
 ## 本日志初始化
 
 ```text

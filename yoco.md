@@ -900,6 +900,154 @@ activation 的历史性能重复归因到本 commit，所以不报告 tok/s 提�
 - revert `2765c22a1b` 只移除新 image recipe 和校验脚本，不影响前七个
   `fhb-dev` 功能；已构建镜像也不会被 Git revert 自动删除。
 
+## B200 YOCO BF16 Triton MoE 调优配置
+
+这是第九个独立功能，只为 B200 上形状为 `E=128,N=1280` 的非量化 Triton
+FusedMoE 增加经过复测的 tile 配置：
+
+```text
+baseline branch:  fhb-dev
+baseline commit:  66a87747fafb725f2c3c317adb5acc46e6b928ab
+candidate branch: review/yoco-09-b200-moe-config
+candidate commit: 7c03e0cb730bb11a960eb82a30e73185a743508a
+```
+
+### 修改文件和命中范围
+
+功能 commit 只新增一个文件，`131 insertions`：
+
+```text
+vllm/model_executor/layers/fused_moe/configs/
+  E=128,N=1280,device_name=NVIDIA_B200.json
+```
+
+文件记录 16 个 batch-token 配置点和生成配置时使用的 Triton 版本：
+
+```text
+triton_version: 3.7.1
+tokens: 1, 2, 4, 8, 16, 24, 32, 48, 64, 80, 84, 96, 128, 256, 512, 1024
+```
+
+这里的 `N` 是每个 tensor-parallel partition 的 expert intermediate dimension，
+即 `w2.shape[2]`。vLLM 只有在运行设备名规范化为 `NVIDIA_B200`、expert 数为
+128、`N=1280` 且 dtype selector 为空时才会加载该文件；FP8、INT8/INT4、其他
+GPU、其他 expert 数和其他 intermediate size 不会命中。batch token 不在表中时，
+loader 使用最近的配置点。
+
+旧 `shaohanh/yoco-0731` commit 把该 JSON 与 Router、RoPE、differential
+attention、benchmark 和 Dockerfile 混在一个 884-line commit 中。本次没有
+cherry-pick 该 commit，也没有迁移它的 Router 或 Dockerfile；只把 MoE 配置
+作为单一、可回滚的功能重新验证。
+
+### 旧配置复核和 token=1 修正
+
+旧 JSON 标注 Triton 3.7.1；独立 B200 runtime 实测也是 Triton 3.7.1，因此没有
+跨版本直接复用。首先逐字移植旧文件并覆盖全部 16 个配置点。结果只有 token=1
+稳定回退：当前默认配置中位数 `65.83 us`，旧 tile `66.17 us`，回退约
+`0.52%`。
+
+因此最终文件没有原样保留旧 token=1 参数，而是改用当前默认 tile：
+
+```text
+BLOCK_SIZE_M=16
+BLOCK_SIZE_N=64
+BLOCK_SIZE_K=128
+GROUP_SIZE_M=1
+num_warps=4
+num_stages=4
+```
+
+修正后 token=1 的 baseline/candidate 配置相同；7 轮中位数为
+`65.84/65.92 us`，差异 `-0.13%`，属于同一 kernel 配置的测量噪声。其余 15 个
+旧配置点全部为正收益或持平，因此保留。
+
+### B200 正确性
+
+独立资源：
+
+```text
+pod:     lidong1-yoco-moe-config-g1-0805-master-0
+node:    slc01-cl02-hgx-0380
+GPU:     NVIDIA B200, compute capability 10.0
+PyTorch: 2.11.0a0+eb65b36914.nv26.02
+Triton:  3.7.1
+shape:   E=128, N=1280, K=3072, Top-K=8, BF16
+```
+
+Pod 使用固定 base image digest
+`sha256:08a08f36ab8c6c80ee1c7f09b9e5f8b6ce0b91cc684455982b2e5e286c736f2b`，
+覆盖当前 `fhb-dev` Python tree；candidate 加载日志明确指向新增 JSON。baseline
+通过当前 `get_default_config` 生成，candidate 通过正常 `get_moe_configs` 文件
+查找和最近 batch-key 选择生成。两者复用完全相同的 input、expert weights、
+router logits、Top-K ids 和 Top-K weights。
+
+最终修正版覆盖 tokens `1/8/32/128/512/1024`：
+
+| Tokens | Output elements | Mismatches | Max abs diff |
+| ---: | ---: | ---: | ---: |
+| 1 | 3,072 | 0 | 0 |
+| 8 | 24,576 | 0 | 0 |
+| 32 | 98,304 | 0 | 0 |
+| 128 | 393,216 | 0 | 0 |
+| 512 | 1,572,864 | 0 | 0 |
+| 1024 | 3,145,728 | 0 | 0 |
+
+总计 `5,237,760` 个 BF16 output element 全部 bitwise exact；不是只用宽松
+`rtol/atol` 判定。
+
+### B200 CUDA Graph kernel 性能
+
+性能口径为当前 `benchmarks/kernels/benchmark_moe.py::benchmark_config`：
+
+- 每个配置先 JIT 并完成独立 warmup；
+- CUDA Graph 每次 replay 包含 10 次完整 routed FusedMoE 调用；
+- 每个 sample 做 100 次 graph replay，即 1,000 次 kernel path；
+- baseline/candidate 每轮使用同一随机 seed，轮间交替执行顺序；
+- 全 16 点各 5 轮取中位数；修正后的 token=1 另做 7 轮复测。
+
+| Tokens | Baseline us | Candidate us | 提升 |
+| ---: | ---: | ---: | ---: |
+| 1 | 65.84 | 65.92 | -0.13%（同配置噪声） |
+| 2 | 100.10 | 95.30 | 5.03% |
+| 4 | 152.13 | 142.73 | 6.58% |
+| 8 | 226.38 | 220.06 | 2.87% |
+| 16 | 331.77 | 326.06 | 1.75% |
+| 24 | 398.91 | 393.70 | 1.32% |
+| 32 | 437.48 | 432.03 | 1.26% |
+| 48 | 512.25 | 468.02 | 9.45% |
+| 64 | 532.17 | 483.84 | 9.99% |
+| 80 | 556.01 | 488.58 | 13.80% |
+| 84 | 557.09 | 490.96 | 13.47% |
+| 96 | 560.50 | 493.19 | 13.65% |
+| 128 | 550.70 | 498.51 | 10.47% |
+| 256 | 566.21 | 554.66 | 2.08% |
+| 512 | 587.74 | 587.49 | 0.04% |
+| 1024 | 735.99 | 689.78 | 6.70% |
+
+这些数字是 isolated routed-MoE CUDA Graph latency，不是 endpoint tok/s，也不把
+Router、Shared Expert overlap、activation 或通信收益归因到本 commit。该 Pod
+没有挂载 `E=128,N=1280` 的完整 YOCO checkpoint，因此本次不报告模型端到端
+吞吐；真实收益还取决于线上 batch-token 分布以及该 MoE 形状是否实际命中。
+
+### 静态检查、边界与回滚
+
+通过：
+
+- JSON `jq empty`；
+- B200 正常 loader 命中和全部 16 个 key 执行；
+- 修正版六种 token 数 bitwise correctness；
+- pre-commit 的 typos、filename、Docker dependency graph、configuration
+  validation、attention docs 和 suggestion 等所有适用 hook；
+- `git diff --check`。
+
+部署观察点：启动日志应出现新增文件的完整路径；如果出现 default MoE config
+warning，说明 device name、`E/N` 或 dtype selector 不匹配，不能把本表性能当作
+实际收益。`triton_version` 当前只是 provenance，loader 不会据此拒绝不同版本；
+升级 Triton/PyTorch 后必须重新 A/B，不能仅凭 JSON 仍可加载就认为性能有效。
+
+revert `7c03e0cb73` 可完全删除该配置并恢复运行时 default config，不影响前八个
+`fhb-dev` 功能，也不需要重编译 `_C` 或重做 UCX/NIXL runtime。
+
 ## 验证模型
 
 YOCO-v2 agentic serving：
