@@ -40,6 +40,7 @@
 | 2 | `ea4f80d1b4` | 正确性/NIXL | 去重 KV-sharing alias 注册 | 已进入 `fhb-dev` |
 | 3 | `d11cc022bd` | 性能/Router | 删除 dense routing materialization | 已进入 `fhb-dev` |
 | 4 | `ef60ee0255` | 性能/Norm | 融合 residual add 与 RMSNorm | 已进入 `fhb-dev` |
+| 5 | `9988ae737f` | 性能/MoE | Shared Expert 与 Routed MoE 并行 | 已进入 `fhb-dev` |
 
 ---
 
@@ -741,6 +742,200 @@ node 和 FP32 tensor 读写仍然有效。
 - custom op 是 inference-only；本提交没有注册 autograd kernel，也不应用于训练。
 - revert `ef60ee0255` 可恢复顺序 residual add + RMSNorm；Router、PD 和 NIXL 提交
   不受影响，模型功能仍正确但恢复额外 kernel/显存读取。
+
+---
+
+## 5. Shared Expert 与 Routed MoE 并行
+
+### 提交信息
+
+```text
+commit: 9988ae737fc717a9ba1846867667e6ecf441299d
+subject: perf(yoco): overlap shared and routed experts
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: cd1e22c7ff18883dc2b45b7878c70c370c84cbac
+branch: review/yoco-05-shared-expert-overlap
+diff: 4 files, 223 insertions, 39 deletions
+```
+
+该功能完成本地和 B200 验证后，由 `Snow2022jlu` 直接同步到
+`fhb-dev`，不创建 PR，避免小功能提交反复触发邮件。
+
+### 目的与旧路径瓶颈
+
+YOCO-v3 每次 decoder block execution 同时使用 routed experts 和一个 gated
+shared expert。旧实现的时间线是：
+
+```text
+router
+  -> routed latent projection/norm
+  -> routed dispatch + expert compute + TP reduction
+  -> routed latent norm/projection
+  -> shared expert GEMMs + TP reduction
+  -> shared sigmoid gate
+  -> sum
+```
+
+routed 路径运行时，shared expert 所需的本地 GEMM 没有开始；它只能在
+routed 路径完全结束后串行执行。vLLM `FusedMoE` 已有一条用于
+shared experts 的 auxiliary CUDA stream，但 YOCO 原本在 `FusedMoE` 外部
+直接调用 shared module，因而没有利用该 overlap 能力。
+
+本提交的目标是复用现有 stream，让 shared expert GEMM 与 routed
+dispatch/expert compute 并行，同时完整保留 YOCO 的 latent transform、
+collective 和 shared gate 数值边界。
+
+### 非目标
+
+- 不融合 routed 和 shared 的 TP all-reduce；
+- 不修改 Router Top-K、routed scaling 或 expert 权重布局；
+- 不增加新 CUDA kernel，也不替换 Triton MoE backend；
+- 不改变未显式启用新选项的其他 `FusedMoE` 模型；
+- 不把 TP1 端到端数据解读为已完成 TP>1 实机 collective 验收。
+
+### 实现和数值顺序
+
+新时间线是：
+
+```text
+routed latent input projection + norm
+  -> routed expert compute -------------------+
+shared expert compute on auxiliary stream ----+--- synchronize
+  -> routed TP reduction
+  -> shared TP reduction
+  -> routed latent output norm + projection
+  -> sigmoid(shared_gate(hidden_states)) * reduced_shared
+  -> routed + shared
+```
+
+YOCO shared expert 的 row-parallel down projection 改为返回 TP-local output，使
+`FusedMoE` 可以在 auxiliary stream 上执行完整本地 shared GEMM。stream
+同步后，runner 先 reduction routed output，再 reduction shared output。
+
+两次 collective 不能先求和再做一次 all-reduce。两条路径的 dtype、latent
+projection 和舍入点不同，合并 reduction 会改变参考路径的数值顺序。
+`reduce_shared_experts_separately=True` 因此是一个显式的 model-specific
+contract，而不是默认修改所有 MoE。
+
+routed 输入的 latent down projection + norm 和 routed 输出的 norm + up
+projection 被包装为 `FusedMoE` transform hooks。shared 路径继续直接接收原始
+hidden states，不会错用 routed latent tensor。
+
+`shared_gate` 是 replicated linear weight，所有 TP rank 的 scale 相同。新路径在
+shared reduction 完成后计算 `sigmoid(shared_gate(hidden_states))` 并乘到
+reduced shared output，然后才与 routed output 相加。这保持原数学含义，且
+避免 gate 在 auxiliary stream 上引入新依赖。
+
+### 修改文件及职责
+
+#### `vllm/model_executor/layers/fused_moe/layer.py`
+
+- 为 `FusedMoE` 构造器增加 `shared_output_transform`；
+- 增加 `reduce_shared_experts_separately`，并传递给 runner；
+- 开启 separate reduction 但没有 `shared_experts` 时 fail closed，避免在
+  serving 中静默跳过必要 collective。
+
+#### `vllm/model_executor/layers/fused_moe/runner/moe_runner.py`
+
+- 复用已有 shared expert auxiliary CUDA stream，不新建每 layer stream；
+- stream 同步后依次执行 routed reduction 和 shared reduction；
+- separate mode 不走原有 late combined reduction，避免重复 all-reduce；
+- reduction 后调用 `shared_output_transform`，再与 routed output 相加；
+- sequence-parallel 或无 TP/EP reduction 的情况保持对应 fast path。
+
+#### `vllm/model_executor/models/yoco.py`
+
+- 增加 `YOCOLatentInputTransform`，保持 projection -> norm 顺序；
+- 增加 `YOCOLatentOutputTransform`，保持 norm -> projection 顺序；
+- 增加 `YOCOSharedOutputTransform`，在 reduced shared output 上应用 sigmoid
+  gate；
+- shared expert 从内部 all-reduce 改为 TP-local output；
+- 把 shared experts 和三个 transform 传入 `FusedMoE`，删除外部串行
+  shared call 和重复的手工求和。
+
+#### `tests/model_executor/test_yoco_conversion.py`
+
+- 用 BF16 小 tensor exact-match 验证 latent input/output transform 顺序；
+- 验证 shared sigmoid gate 接收的是 reduced shared output；
+- mock TP2 all-reduce，确认调用顺序是 routed 在前、shared 在后，且
+  两个输出没有交换。
+
+### 正确性验证
+
+本地 NVIDIA RTX A6000：
+
+```text
+23 passed, 14 warnings in 12.75s
+```
+
+独立 B200 Job：
+
+```text
+experiment: fhb-moe7-0804
+job:        b200
+pod:        fhb-moe7-0804-b200-564c6e49-master-0
+commit:     9988ae737f
+baseline:   cd1e22c7ff
+```
+
+B200 相关回归：
+
+```text
+68 passed, 24 warnings in 88.70s
+```
+
+baseline 和 candidate 的服务都使用 YOCO-v3 BF16、TP1/DP1、FlashInfer
+attention、Triton MoE、prefix caching、chunked prefill 和 KV-sharing fast
+prefill。两边均为非 eager，启动日志显示 `FULL_AND_PIECEWISE` CUDA Graph。
+
+正确性 A/B 覆盖 1,360、4,096 和 7,000 token target prompt，每次固定
+生成 16 tokens，`temperature=0`。两边的生成文本、usage、finish reason、
+token id、token logprob 和每步 top-5 logprob 全部 exact match。日志中无
+CUDA/NCCL 错误、collective mismatch 或 traceback。
+
+本次端到端实机验收是 TP1，因此真实 multi-TP collective 不在已证明范围。
+TP2 顺序由 mock collective 单元测试拦截；若将 YOCO 部署到 TP>1，仍需
+补一轮真实多卡 exact-match 和 hang 回归。
+
+所有适用 pre-commit hooks 通过，包括 ruff-check、ruff-format、mypy、
+SPDX header、配置检查以及 `git diff --check`。
+
+### 独立端到端性能
+
+baseline 固定为 `cd1e22c7ff`，candidate 固定为 `9988ae737f`，只切换本功能
+commit。性能输入为同一 random prompt，实际分词 1,299 input tokens，固定
+生成 128 tokens。
+
+| 并发 | 请求数 | baseline tok/s | candidate tok/s | 变化 |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 4 | `136.20` | `141.99` | `+4.25%` |
+| 4 | 16 | `375.26` | `381.04` | `+1.54%` |
+| 8 | 32 | `720.69` | `718.50` | `-0.30%` |
+
+每个并发档位执行 3 轮，表中是三轮整体 output throughput 的中位数。
+并发 1 改善 `+4.25%`，并发 4 改善 `+1.54%`；并发 8 为 `-0.30%`，
+在本次三轮测量的噪声范围内。因此结论是低、中并发存在可重复收益，
+高并发暂未证明收益，不宣称全 shape 提速。
+
+原始结果：
+
+```text
+/mnt/pvc/lidong1/vllm_pd/shared-expert-overlap-fhb-dev-0804/
+fhb-moe7-0804-b200-564c6e49-master-0
+```
+
+### 风险、观察点与回滚
+
+- `shared_output_transform` 在 shared reduction 后执行；如果以后引入需要
+  TP-local 数据的 transform，必须增加新的明确契约，不能复用本 hook。
+- separate mode 保留两次 collective，所以收益只来自本地 shared/routed
+  compute overlap，不包含通信次数优化。
+- 需继续观察大 batch 下 auxiliary stream 对 routed kernels 的 SM/显存带宽
+  竞争；并发 8 已表明 overlap 不是所有 shape 都必然获益。
+- 优化了 stream 时间线但没有减少 CUDA Graph 内的 kernel node 数；后续若继续
+  开发单 kernel 融合，必须与本 overlap 分开测量。
+- revert `9988ae737f` 可完整恢复串行 shared expert 路径，其他四个
+  `fhb-dev` 功能提交不受影响。
 
 ---
 

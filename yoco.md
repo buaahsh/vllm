@@ -384,6 +384,138 @@ replay 固定开销重复算 40 次，第二个口径在同一 graph 中放置 4
 以上是 fused add-RMSNorm 单功能数据。旧分支 Router + Norm 的端到端吞吐变化没有
 作为本提交收益复用；整模型收益仍需由后续独立 A/B 判断。
 
+## Shared Expert 与 Routed MoE 并行
+
+这是 fused add-RMSNorm 之后的第五个独立功能，只调整 YOCO MoE 内部的
+shared/routed 调度，不改变 Router、expert 权重、Top-K 或数学顺序：
+
+```text
+baseline branch:  fhb-dev
+baseline commit:  cd1e22c7ff18883dc2b45b7878c70c370c84cbac
+candidate branch: review/yoco-05-shared-expert-overlap
+candidate commit: 9988ae737fc717a9ba1846867667e6ecf441299d
+```
+
+原路径先在当前 CUDA stream 完整执行 routed experts，再串行调用
+shared expert。本次把 YOCO shared expert 作为 `FusedMoE` 的 shared path，
+复用现有 auxiliary CUDA stream，使 shared expert GEMM 与 routed dispatch/expert
+compute 重叠。
+
+为了保持已验证的 YOCO-v3 语义，并行只改变计算时间线，不合并两条
+TP reduction：
+
+```text
+routed latent input projection + norm
+  -> routed expert compute -------------------+
+shared expert compute on auxiliary stream ----+--- synchronize
+  -> routed TP reduction
+  -> shared TP reduction
+  -> routed latent output norm + projection
+  -> sigmoid(shared_gate(hidden_states)) * reduced_shared
+  -> routed + shared
+```
+
+shared sigmoid gate 在 shared TP reduction 后执行。`shared_gate` 是 replicated
+weight，因此这与原路径数学等价，同时不会把 gate 加入 auxiliary stream 的
+跨 stream 依赖。
+
+### 修改文件
+
+- `vllm/model_executor/layers/fused_moe/layer.py`：为 `FusedMoE` 增加
+  `shared_output_transform` 和 `reduce_shared_experts_separately`；要求独立
+  shared reduction 时却未配置 shared experts 会立即报错。
+- `vllm/model_executor/layers/fused_moe/runner/moe_runner.py`：在现有 auxiliary
+  CUDA stream 上执行 shared expert GEMM；为 YOCO 保留 routed-first、
+  shared-second collective 顺序，并在 reduction 后执行模型专用 shared
+  output transform。未启用新选项的其他模型仍走原有合并路径。
+- `vllm/model_executor/models/yoco.py`：shared expert down projection 保留
+  TP-local output；把 routed latent projection/norm 包装成 `FusedMoE` transform；
+  在 shared reduction 后应用 YOCO sigmoid gate。
+- `tests/model_executor/test_yoco_conversion.py`：增加 latent transform 顺序、
+  shared gate 位置和 routed/shared collective 顺序测试。
+
+功能 commit 只修改上述 4 个文件，总计 `223 insertions, 39 deletions`。
+
+### 正确性验证
+
+本地 NVIDIA RTX A6000 回归：
+
+```text
+23 passed, 14 warnings in 12.75s
+```
+
+独立 B200 Job：
+
+```text
+experiment: fhb-moe7-0804
+job:        b200
+pod:        fhb-moe7-0804-b200-564c6e49-master-0
+commit:     9988ae737f
+baseline:   cd1e22c7ff
+```
+
+B200 回归结果：
+
+```text
+68 passed, 24 warnings in 88.70s
+```
+
+baseline 和 candidate 都成功加载 YOCO-v3 BF16，使用 TP1/DP1、
+FlashInfer attention、Triton MoE、prefix caching、chunked prefill 和 KV-sharing
+fast prefill。两边均未使用 eager，启动日志确认为 `FULL_AND_PIECEWISE`
+CUDA Graph。
+
+端到端正确性输入的 target prompt 长度为 1,360、4,096 和 7,000
+tokens；每个请求使用 `temperature=0`、固定生成 16 tokens。baseline 与
+candidate 的以下字段全部 exact match：
+
+- 生成文本、finish reason 和 usage；
+- 每个 token id 与 token logprob；
+- 每步 top-5 token 和 top-5 logprob。
+
+服务日志无 CUDA、NCCL、collective mismatch 或 Python traceback。本次实机
+端到端是 TP1；TP>1 的 routed-then-shared collective 顺序由单元测试覆盖，
+后续扩大 TP 部署前仍应做一次真实多卡回归。
+
+功能文件还通过全部适用的 pre-commit hooks，包括 ruff、mypy、
+SPDX header、配置检查和 `git diff --check`。
+
+### B200 独立性能 A/B
+
+性能请求使用同一个 random input，分词后实际为 1,299 input tokens，
+固定生成 128 tokens。并发 1/4/8 分别发送 4/16/32 个请求；每个档位
+执行 3 轮，报告三轮整体 output throughput 的中位数。每轮输入、
+输出长度、服务参数和 B200 硬件保持一致。
+
+| 并发 | baseline tok/s | candidate tok/s | 变化 |
+| ---: | ---: | ---: | ---: |
+| 1 | `136.20` | `141.99` | `+4.25%` |
+| 4 | `375.26` | `381.04` | `+1.54%` |
+| 8 | `720.69` | `718.50` | `-0.30%` |
+
+收益集中在低、中并发；并发 8 的 `-0.30%` 在本次三轮测量的噪声范围内，
+不应解读为高并发收益。这组 endpoint 数据只切换 commit
+`cd1e22c7ff -> 9988ae737f`，没有复用之前 Router 或 Norm 的数据。
+
+原始 B200 产物保存于：
+
+```text
+/mnt/pvc/lidong1/vllm_pd/shared-expert-overlap-fhb-dev-0804/
+fhb-moe7-0804-b200-564c6e49-master-0
+```
+
+### 边界、风险与回滚
+
+- 新选项默认关闭，只有 YOCO 显式请求 separate reduction，其他
+  `FusedMoE` 调用者不改变。
+- 正确性边界是“并行本地 GEMM，串行 routed/shared collective”；不应
+  为进一步 overlap 而合并两次 all-reduce，否则会改变 FP32/BF16 reduction
+  舍入边界。
+- shared gate 必须在 shared output reduction 后、最终求和前执行；位置
+  变化要求重做 token/logprob exact-match。
+- revert `9988ae737f` 可恢复原先的串行 YOCO MoE；Router、
+  fused add-RMSNorm、PD 和 NIXL 提交不受影响。
+
 ## 验证模型
 
 YOCO-v2 agentic serving：
