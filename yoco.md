@@ -2107,3 +2107,100 @@ log 保存在：
 ```text
 /mnt/pvc/lidong1/vllm_test_artifacts/fhb-dev-dp14-20260805/results
 ```
+
+## DeepEP / NVSHMEM 运行时修复与 DP4 取舍（2026-08-05）
+
+本轮基于 `fhb-dev@a9cd5c2072`，功能提交为 `81df1f21e8`，只修改长上下文
+Dockerfile 和两个 serving launcher。目标是消除 DeepEP import/ABI 偶然性、让
+nested Docker 真正看到 RDMA device，并把 DeepEP LL 的宿主条件错误从异步 CUDA
+崩溃提前为可读的启动错误。
+
+### 根因和修复
+
+基础镜像同时带有 CUDA toolkit NVSHMEM 与 pip `nvidia-nvshmem-cu13`。旧 launcher
+覆盖 `LD_LIBRARY_PATH`，使 `deep_ep_cpp` 可能解析到不匹配的 host library。修复后
+保留镜像自己的 library 顺序，并在 build 和显式启用 DeepEP 时都检查：
+
+```text
+DeepEP:  1.2.1+567632d
+NVSHMEM: 3.6.5
+resolved libnvshmem_host.so.3:
+  /usr/local/lib/python3.12/dist-packages/nvidia/nvshmem/lib/libnvshmem_host.so.3
+required symbol: nvshmem_selected_device_transport
+```
+
+build 使用固定 base digest
+`sha256:08a08f36ab8c6c80ee1c7f09b9e5f8b6ce0b91cc684455982b2e5e286c736f2b`，
+通过 CUDA driver stub 执行 `import deep_ep`。功能 commit 的验证镜像为：
+
+```text
+tag: yoco-pr13-deepep-nvshmem-81df1f21e8
+id:  sha256:f3920f514a8a164529a7116660dae7f4ee355c14d56fa5e0c21bc4784277d124
+```
+
+nested Docker 现在逐个映射外层 Pod 实际可见的 `/dev/infiniband/*` character
+device，并设置 `memlock=-1`；NVML 改挂到镜像已有搜索路径
+`/usr/local/nvidia/lib64`，不再通过覆盖 `LD_LIBRARY_PATH` 找它。
+
+DeepEP LL 另外增加三层启动保护：
+
+1. 32K token budget 会产生约 97.5 GiB RDMA buffer，超过 DeepEP int32 index
+   上限；LL 的 `auto` budget 因此使用 8192，其他 backend 保持 32768；
+2. `NVSHMEM_QP_DEPTH` 按 `(max_tokens + 1) * 2` 计算，并向上取二次幂；8192
+   tokens 自动得到 32768，launcher sentinel `auto` 不会泄漏给 NVSHMEM；
+3. 启动前要求可见 `uverbs`，并要求 NVIDIA `EnableStreamMemOPs=1` 或
+   `/dev/gdrdrv`。条件不满足时返回 code 2，不再运行会触发 device assert 的 LL
+   kernel。
+
+当前 B200 节点虽然已加载 `nvidia_peermem`，但
+`/proc/driver/nvidia/params` 明确为 `EnableStreamMemOPs: 0`，也没有 `gdrdrv`。
+旧路径实际先报告 `init failed for transport: IBGDA`，随后在
+`internode_ll.cu:285` 触发 `num_rc_per_pe >= num_local_experts`，最后表现成四卡
+`CUDA error: unspecified launch failure`。新路径对同一节点稳定提前失败，提示需改
+driver 参数并 reboot，或加载 gdrdrv；本提交没有假装在容器内修复宿主 IBGDA。
+
+### DeepEP HT 正确性
+
+在 `slc01-cl02-hgx-0201` 的物理 GPU 4--7 上，DP4 服务成功进入：
+
+```text
+Using DeepEPHTAll2AllManager
+Using DeepEPHTPrepareAndFinalize
+```
+
+8K/65K prompt 各执行两次 greedy 256-token 生成，四个请求都为
+`finish_reason=length`，重复一致且与既有 baseline 逐 token hash 相同：
+
+```text
+8K:  9751294543df49838834be427e34887ff536c92c9b6b044d6d1011875fa8355a
+65K: 345b5a43f2d8ef3f7e208b3027430e96c24853657fc72df6f37796e65ce84983
+```
+
+### 纯 Prefill 同节点 A/B
+
+性能口径针对 pure-P node：同一候选镜像、同一节点和四张 B200，DP4/EP4，20 个
+65,536-input + 1-output 请求，并发 4，固定 seed；每边先由 harness 执行一个
+不计时 warmup 请求。两边均 20/20 成功，实际输入均为 1,310,720 tokens。
+
+| 指标 | AllGather+ReduceScatter | DeepEP HT | DeepEP 变化 |
+| --- | ---: | ---: | ---: |
+| benchmark wall | 11.33 s | 16.79 s | +48.19% |
+| total token throughput | 115,676.90 tok/s | 78,058.63 tok/s | -32.52% |
+| mean TTFT | 2.124 s | 3.215 s | +51.35% |
+| median TTFT | 1.920 s | 3.006 s | +56.59% |
+
+DeepEP HT 会按 vLLM 设计关闭 CUDA Graph；AllGather+ReduceScatter 实际 capture
+`FULL_AND_PIECEWISE`。因此本轮保留 DeepEP HT 作为显式实验选项，但默认 backend
+设为 `allgather_reducescatter`，避免把已测得的回退带入 pure-P 服务。DP>1 默认
+启用 EP，DP1 保持不启用；可用 `ENABLE_EXPERT_PARALLEL=0` 回滚到非 EP 路径。
+
+原始 accuracy JSON、两边 benchmark detailed JSON、service log、container inspect
+和三轮 LL 失败日志位于：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pr13-deepep-nvshmem-20260805
+```
+
+该结果只证明单节点 DP4/EP4。跨节点 DeepEP、完成宿主 IBGDA 配置后的 LL、以及
+Decode node 小 batch CUDA Graph 性能仍需单独验证；UCX 1.21 与 DeepEP 的
+NVSHMEM/IBGDA 是两条独立 transport 栈，本提交没有重做 UCX 镜像。
