@@ -36,7 +36,7 @@ hard 131,072-token context limit.
 | DP4 long-prefill batch | W2 batch 96 added 9.6% output tok/s over 64 while TPOT rose 36.7% | Use batch 64 as the DP4 W2 knee |
 | DP4 agentic batch | Batch 96 added 9.6% output tok/s over 64, while mean ITL rose 36.7% | Use batch 64 as the W3 knee; 96 is max-throughput only |
 | DP8 MoE N160 tuning | Isolated kernels improved by up to 23.3%, but two clean W2 batch-8 runs fell to 652.13 and 661.85 output tok/s from 741.81 | Reject the generated N160 table; keep the runtime fallback |
-| DP1 MoE N1280 tuning | Same-GPU kernels improved by up to 28.5%, including the important 8K/32K prefill sizes | Retain the validated N1280 table for one-GPU serving |
+| DP1 MoE N1280 tuning | The hybrid table makes M=1-8 identical to fallback and improves M=16-32K by up to 19.7% | Retain the hybrid N1280 table for one-GPU serving |
 | Nested Docker startup | Triton failed with `undefined symbol: cuModuleGetFunction` because the CUDA compatibility driver was not globally visible | Map the GPU/NVML devices and preload the image's CUDA compatibility `libcuda.so.1` |
 | Warmup | Cold, late long-shape compilation created latency outliers | Warm the complete 130K trajectory before production traffic |
 
@@ -75,6 +75,29 @@ The generated N160 table looked promising in isolation:
 
 This mismatch is why kernel-only results are not used as the production gate.
 
+## DP1 hybrid N1280 MoE microbenchmark
+
+The final DP1 table restores vLLM's runtime fallback configs verbatim for
+M=1/2/4/8 and keeps tuned configs for M=16 and larger. The structural equality
+check is part of `tools/yoco_serving/probe_moe_n1280.py`; therefore tiny-batch
+results are neutral by construction rather than inferred from noisy timing
+order. Fresh same-B200 results for the entries that differ are:
+
+| MoE token batch | Runtime fallback | Hybrid image | Kernel improvement |
+| ---: | ---: | ---: | ---: |
+| 16 | 353.74 us | 340.50 us | 3.7% |
+| 32 | 475.67 us | 449.06 us | 5.6% |
+| 128 | 541.20 us | 503.55 us | 7.0% |
+| 1,024 | 683.01 us | 659.41 us | 3.5% |
+| 2,843 | 1,166.33 us | 938.16 us | 19.6% |
+| 3,899 | 1,373.41 us | 1,124.76 us | 18.1% |
+| 8,192 | 2,546.30 us | 2,066.41 us | 18.8% |
+| 32,768 | 8,669.71 us | 6,964.82 us | 19.7% |
+
+On the final warmed batch-1 end-to-end gate, the hybrid raised W1 output rate
+from 121.57 to 122.21 tok/s, W2 from 118.15 to 118.74 tok/s, and W3 from
+112.64 to 114.77 tok/s versus the all-tuned N1280 table.
+
 ## Scaled end-to-end results
 
 Total time is batch wall time. Throughput is aggregate across the selected
@@ -93,21 +116,22 @@ W1 - 8K input, 64K output:
 
 | Mode | GPUs | Batch | Total time (s) | Req/s | Input tok/s | Output tok/s | Total tok/s | Mean TTFT (s) | P95 TTFT (s) | Mean TPOT (ms) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| BF16 | 1 | 1 | 533.969 | 0.0019 | 15.34 | 122.73 | 138.08 | 0.182 | 0.182 | 8.15 |
+| BF16 | 1 | 1 | 536.267 | 0.0019 | 15.28 | 122.21 | 137.48 | 0.182 | 0.182 | 8.18 |
 | BF16 | 1 | 2 | 585.329 | 0.0034 | 27.99 | 223.93 | 251.92 | 0.317 | 0.337 | 8.93 |
 | BF16 | 1 | 4 | 754.467 | 0.0053 | 43.43 | 347.46 | 390.89 | 0.663 | 0.705 | 11.50 |
 | BF16 | 1 | 8 | 876.785 | 0.0091 | 74.75 | 597.97 | 672.71 | 0.969 | 1.145 | 13.36 |
 | BF16 | 1 | 12 | 1,160.621 | 0.0103 | 84.70 | 677.60 | 762.30 | 1.320 | 1.624 | 17.69 |
 | BF16 | 1 | 16 | 1,160.444 | 0.0138 | 112.95 | 903.60 | 1,016.55 | 1.653 | 2.125 | 17.68 |
 
-The batch-1/2 rows are prior-allocation references; batches 4-16 are dedicated
-new-node measurements. Batch 16 is the W1 knee and maximum tested fresh batch.
+Batch 1 is the final warmed hybrid-image gate, batch 2 is a prior-allocation
+reference, and batches 4-16 are dedicated new-node scaled measurements. Batch
+16 is the W1 knee and maximum tested fresh batch.
 
 W2 - 64K input, 16K output:
 
 | Mode | GPUs | Batch | Total time (s) | Req/s | Input tok/s | Output tok/s | Total tok/s | Mean TTFT (s) | P95 TTFT (s) | Mean TPOT (ms) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| BF16 | 1 | 1 | 139.610 | 0.0072 | 469.42 | 117.36 | 586.78 | 1.182 | 1.182 | 8.45 |
+| BF16 | 1 | 1 | 137.978 | 0.0072 | 474.98 | 118.74 | 593.72 | 1.227 | 1.227 | 8.35 |
 | BF16 | 1 | 2 | 165.135 | 0.0121 | 793.73 | 198.43 | 992.16 | 2.154 | 2.386 | 9.95 |
 | BF16 | 1 | 4 | 202.558 | 0.0197 | 1,294.17 | 323.54 | 1,617.71 | 2.971 | 3.916 | 12.18 |
 | BF16 | 1 | 8 | 245.674 | 0.0326 | 2,134.08 | 533.52 | 2,667.60 | 5.197 | 8.261 | 14.67 |
@@ -123,7 +147,7 @@ incremental tokens, not repeatedly submitted cached prefixes.
 
 | Mode | GPUs | Batch | Total time (s) | Traj/s | Input tok/s | Output tok/s | Total tok/s | Mean TTFT (s) | P95 TTFT (s) | Mean ITL (ms) | Cache hit |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| BF16 | 1 | 1 | 114.660 | 0.0087 | 1,020.41 | 113.38 | 1,133.79 | 0.168 | 0.227 | 8.32 | 95.58% |
+| BF16 | 1 | 1 | 113.266 | 0.0088 | 1,032.96 | 114.77 | 1,147.74 | 0.166 | 0.224 | 8.22 | 95.58% |
 | BF16 | 1 | 2 | 137.597 | 0.0145 | 1,700.62 | 188.96 | 1,889.58 | 0.285 | 0.376 | 9.73 | 95.58% |
 | BF16 | 1 | 4 | 171.704 | 0.0233 | 2,725.62 | 302.85 | 3,028.46 | 0.406 | 0.574 | 11.99 | 95.58% |
 | BF16 | 1 | 8 | 231.395 | 0.0346 | 4,045.04 | 449.45 | 4,494.49 | 0.770 | 1.196 | 15.42 | 95.58% |

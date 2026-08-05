@@ -8,6 +8,7 @@ port="${PORT:-8001}"
 dp_size="${DP_SIZE:-1}"
 max_num_seqs="${MAX_NUM_SEQS:-128}"
 async_scheduling="${ASYNC_SCHEDULING:-1}"
+attention_backend="${ATTENTION_BACKEND:-FLASHINFER}"
 
 if [[ ! "${dp_size}" =~ ^[1-9][0-9]*$ ]] \
   || [[ ! "${max_num_seqs}" =~ ^[1-9][0-9]*$ ]]; then
@@ -30,7 +31,7 @@ exec vllm serve "${model}" \
   --port "${port}" \
   --trust-remote-code \
   --dtype bfloat16 \
-  --attention-backend FLASHINFER \
+  --attention-backend "${attention_backend}" \
   --moe-backend triton \
   --tensor-parallel-size 1 \
   --data-parallel-size "${dp_size}" \

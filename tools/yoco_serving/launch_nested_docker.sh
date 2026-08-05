@@ -79,6 +79,7 @@ docker run -d \
   -e MODEL_NAME=yoco-v2-long \
   -e DP_SIZE="${dp_size}" \
   -e PORT="${port}" \
+  -e ATTENTION_BACKEND="${ATTENTION_BACKEND:-FLASHINFER}" \
   -e ASYNC_SCHEDULING="${ASYNC_SCHEDULING:-1}" \
   -e GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.85}" \
   -e MAX_MODEL_LEN="${MAX_MODEL_LEN:-131072}" \

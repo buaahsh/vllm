@@ -43,28 +43,31 @@ exact `E=128, N=1280, K=3072, top-k=8` shape. The new image includes:
 vllm/model_executor/layers/fused_moe/configs/E=128,N=1280,device_name=NVIDIA_B200.json
 ```
 
-Both columns below use vLLM's `benchmarks/kernels/benchmark_moe.py` on the same
-B200 and checkpoint. Lower kernel time is better.
+The final JSON is hybrid: M=1/2/4/8 entries are byte-for-byte equivalent to
+vLLM's runtime fallback, while M=16 and larger retain measured tuned configs.
+The table uses `benchmark_moe_defaults.py` on the same B200. Lower kernel time
+is better; tiny decode batches are marked identical rather than presenting
+measurement-order noise as a speedup.
 
-| MoE token batch | Base image | Tuned image | Speedup |
+| MoE token batch | Runtime fallback | Hybrid image | Speedup |
 | ---: | ---: | ---: | ---: |
-| 1 | 61.62 us | 61.63 us | neutral |
-| 2 | 95.63 us | 90.05 us | 5.8% |
-| 4 | 147.40 us | 137.80 us | 6.5% |
-| 8 | 225.97 us | 218.67 us | 3.2% |
-| 16 | 326.96 us | 319.60 us | 2.3% |
-| 32 | 425.87 us | 421.80 us | 1.0% |
-| 128 | 519.57 us | 482.30 us | 7.2% |
-| 1,024 | 699.49 us | 666.80 us | 4.7% |
-| 2,843 | 1,235.96 us | 997.15 us | 19.3% |
-| 3,899 | 1,394.78 us | 1,185.36 us | 15.0% |
-| 8,192 | 3,107.94 us | 2,221.93 us | 28.5% |
-| 32,768 | 9,071.07 us | 7,354.35 us | 18.9% |
+| 1 | same config | same config | neutral by construction |
+| 2 | same config | same config | neutral by construction |
+| 4 | same config | same config | neutral by construction |
+| 8 | same config | same config | neutral by construction |
+| 16 | 353.74 us | 340.50 us | 3.7% |
+| 32 | 475.67 us | 449.06 us | 5.6% |
+| 128 | 541.20 us | 503.55 us | 7.0% |
+| 1,024 | 683.01 us | 659.41 us | 3.5% |
+| 2,843 | 1,166.33 us | 938.16 us | 19.6% |
+| 3,899 | 1,373.41 us | 1,124.76 us | 18.1% |
+| 8,192 | 2,546.30 us | 2,066.41 us | 18.8% |
+| 32,768 | 8,669.71 us | 6,964.82 us | 19.7% |
 
-This optimization targets DP1 prefill and mixed agentic steps. It should not
-be described as a batch-1 decode speedup. A separately generated DP8/N160
-table improved isolated kernels but regressed two clean end-to-end runs, so it
-is deliberately not packaged. See `long_context/README.md` for that A/B.
+This targets DP1 prefill and mixed agentic steps without knowingly regressing
+the M=1-8 decode path. A separately generated DP8/N160 table improved isolated
+kernels but regressed two clean end-to-end runs, so it is deliberately not
+packaged. See `long_context/README.md` for that A/B.
 
 ### New-node disk and nested Docker setup
 
@@ -147,6 +150,9 @@ docker run --rm --name yoco-long-dp8 --network host --ipc host \
 
 The service exposes the OpenAI-compatible API at `http://127.0.0.1:8001/v1`.
 Wait for `GET /health` to return HTTP 200 before warming or benchmarking.
+`ATTENTION_BACKEND` defaults to the validated `FLASHINFER`; set it to
+`FLASH_ATTN` only for a controlled FA4 comparison. Keep every other launch
+setting and the cache-salt namespace fixed when running that A/B.
 `MAX_NUM_SEQS` is a per-engine cap, not a deployment-wide cap. The supplied
 launcher defaults it to 128 for DP1, DP4, and DP8; for example, a DP8 batch of
 192 is distributed to about 24 active requests per rank rather than requiring
@@ -246,6 +252,9 @@ Use the same GPU count, `RUN_ID`, workload shape, and batch when comparing a
 change. Kernel microbenchmarks are supporting evidence only: the generated
 DP8/N160 MoE table improved isolated kernels but failed the clean end-to-end
 gate, so the final image intentionally keeps the runtime fallback.
+
+A compact, slide-ready reconstruction of the new-node probes is maintained in
+[`long_context/presentation_tables.md`](long_context/presentation_tables.md).
 
 本文只记录本次 YOCO-v2/v3 在 B200 上的最终配置、验收方法和结果，不包含
 旧镜像、旧分支或中间调试过程。

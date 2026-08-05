@@ -11,15 +11,19 @@ COPY benchmarks/multi_turn/benchmark_agent_trace.py \
 COPY tools/yoco_serving /workspace/vllm/tools/yoco_serving
 COPY yoco.md /workspace/vllm/yoco.md
 COPY long_context/README.md /workspace/vllm/long_context/README.md
+COPY long_context/presentation_tables.md \
+    /workspace/vllm/long_context/presentation_tables.md
 
 RUN python -m py_compile \
       benchmarks/multi_turn/benchmark_agent_trace.py \
+      tools/yoco_serving/probe_moe_n1280.py \
     && chmod 755 \
       tools/yoco_serving/serve_long_context.sh \
       tools/yoco_serving/warmup_long_context.sh \
       tools/yoco_serving/benchmark_long_context.sh \
       tools/yoco_serving/launch_nested_docker.sh \
-      tools/yoco_serving/tune_moe_b200.sh
+      tools/yoco_serving/tune_moe_b200.sh \
+      tools/yoco_serving/probe_moe_n1280.py
 
 LABEL org.opencontainers.image.title="YOCO B200 long-context runtime" \
       org.opencontainers.image.description="BF16 FlashInfer runtime with validated DP1 Triton MoE and multigpu long-context tooling"
