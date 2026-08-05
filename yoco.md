@@ -2016,3 +2016,94 @@ accuracy、benchmark、runtime、逐 turn 和 service log 位于：
 ```
 
 本轮是 DP8 长上下文验收，不替代 1P2D 的 UCX/NIXL transport 测试。
+
+### DP1 / DP4 同配置重测（2026-08-05）
+
+为补齐合并版的单卡和四卡数据，本轮重新冷启动同一个 candidate image，并分别按
+multigpu 分支原方法执行 DP1/batch1 和 DP4/batch4。两组都先做 8K/65K greedy
+正确性，再执行完整 40-turn/130K warmup，最后按 W1、W2、W3 顺序测试；没有复用
+旧结果或跳过 warmup。
+
+```text
+Candidate runtime source: 9106abeb3ad6963b95083688538e53040500e9b8
+Candidate image id: sha256:dbef8b82896fc9257f1eb45acb6b90a2a79eafd440d629a37e162ca3b846738d
+Pod / node: lidong1-yoco-fhb-dev-dp14-g4-0805-master-0 / slc01-cl02-hgx-0346
+Model: /data/models/yoco-0000-0800-hf
+GPU: NVIDIA B200; DP1=physical GPU 2, DP4=physical GPUs 2,3,4,5
+TP: 1
+BF16, FlashInfer, Triton MoE, async scheduling
+max model len / prefill budget: 131072 / 32768
+CUDA Graph: FULL_AND_PIECEWISE
+```
+
+该节点是 4 卡共租节点；GPU 0、1、6、7 在测试期间由另一作业使用。被测 GPU
+2--5 没有重叠进程，测试结束后均回到 `0 MiB / 0%`。因此软件、模型、GPU 型号和
+workload 与公开基线一致，但不是同节点同时间 A/B；下表变化可用于回归检查，不能
+全部归因给某一个 kernel commit。
+
+#### 正确性
+
+DP1 和 DP4 都对 8,192/65,536 prompt tokens 各做两次 greedy 256-token 生成。
+8 个请求全部得到 `finish_reason=length`，同 shape 重复一致，并与此前 baseline
+逐 token 哈希一致：
+
+| 部署 | 8K SHA256 | 65K SHA256 | 结果 |
+| --- | --- | --- | --- |
+| DP1 | `9751294543df49838834be427e34887ff536c92c9b6b044d6d1011875fa8355a` | `345b5a43f2d8ef3f7e208b3027430e96c24853657fc72df6f37796e65ce84983` | 两次一致 |
+| DP4 | 同上 | 同上 | 两次一致 |
+
+#### DP1 / batch1 性能
+
+| Workload / 指标 | 公开基线 | 本轮合并版 | 变化 |
+| --- | ---: | ---: | ---: |
+| W1 wall | 536.267 s | 471.895 s | -12.00% |
+| W1 output tok/s | 122.21 | 138.88 | +13.64% |
+| W1 mean TTFT | 182 ms | 177.6 ms | -2.40% |
+| W1 mean TPOT | 8.18 ms | 7.198 ms | -12.01% |
+| W2 wall | 137.978 s | 121.820 s | -11.71% |
+| W2 output tok/s | 118.74 | 134.49 | +13.27% |
+| W2 mean TTFT | 1.227 s | 1.159 s | -5.51% |
+| W2 mean TPOT | 8.35 ms | 7.365 ms | -11.80% |
+| W3 wall | 113.266 s | 100.582 s | -11.20% |
+| W3 generation tok/s | 114.77 | 129.25 | +12.61% |
+| W3 mean TTFT | 166 ms | 163.9 ms | -1.26% |
+| W3 mean ITL | 8.22 ms | 7.249 ms | -11.81% |
+| W3 prefix-cache hit | 95.58% | 95.58% | 持平 |
+
+DP1 三个请求均成功。W3 的 GPU 2 平均利用率为 `95.99%`，waiting 为 0。
+
+#### DP4 / batch4 性能
+
+| Workload / 指标 | 公开基线 | 本轮合并版 | 变化 |
+| --- | ---: | ---: | ---: |
+| W1 wall | 679.565 s | 578.962 s | -14.80% |
+| W1 output tok/s | 385.75 | 452.78 | +17.38% |
+| W1 mean TTFT | 454 ms | 267.9 ms | -41.00% |
+| W1 mean TPOT | 10.36 ms | 8.830 ms | -14.77% |
+| W2 wall | 155.801 s | 148.746 s | -4.53% |
+| W2 output tok/s | 420.64 | 440.59 | +4.74% |
+| W2 mean TTFT | 1.801 s | 1.631 s | -9.46% |
+| W2 mean TPOT | 9.40 ms | 8.979 ms | -4.48% |
+| W3 wall | 131.706 s | 126.314 s | -4.09% |
+| W3 generation tok/s | 394.82 | 411.67 | +4.27% |
+| W3 mean TTFT | 267 ms | 247.4 ms | -7.35% |
+| W3 mean ITL | 9.33 ms | 8.975 ms | -3.80% |
+| W3 prefix-cache hit | 95.58% | 95.58% | 持平 |
+
+DP4 的 W1/W2 各 4/4 成功。虽然原 single-turn harness 没有显式 rank header，
+本轮 Prometheus 指标确认 engine 0--3 各有一个 running request、waiting 全为 0，
+四个 engine 的 generation-token 计数等量推进；因此没有复现 DP8 旧轮次的 rank
+分配不均。W3 按 trajectory 显式绑 rank，四卡平均利用率为
+`94.83%--95.99%`，waiting 为 0。
+
+服务日志确认两种部署都实际执行 FULL_AND_PIECEWISE graph capture，并在完整
+warmup 中覆盖后段 YOCO RMSNorm、fused add-RMSNorm、Router renorm 和 MoE Triton
+JIT。DeepEP 仍因基础镜像 NVSHMEM symbol 不匹配不可导入；DP4 与公开方法一样使用
+AllGather+ReduceScatter，所以这不是本轮变量。
+
+accuracy、benchmark JSON、逐 turn JSONL、runtime、container inspect 和 service
+log 保存在：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/fhb-dev-dp14-20260805/results
+```

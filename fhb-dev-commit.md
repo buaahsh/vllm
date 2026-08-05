@@ -2511,6 +2511,88 @@ AllGather+ReduceScatter，故不构成本次 A/B 的变量。
 工具、报告和 hybrid N1280 配置，但保留 merge 第一 parent 上全部 `fhb-dev`
 优化。不要直接 reset 共享 `fhb-dev`。
 
+### DP1 / DP4 补充验收（2026-08-05）
+
+本轮是 commit 12 合并版的补充实机验证，不增加新的功能 commit，也不改变 Python、
+CUDA、Triton、Dockerfile、UCX/NIXL 或 serving 参数。文档提交只修改
+`yoco.md` 和 `fhb-dev-commit.md`；按维护规则不把文档提交自身递归加入提交索引。
+
+#### 目的和口径
+
+此前合并后只有 DP8/batch8 的完整数据。本轮用同一个已校验 candidate image
+`sha256:dbef8b82896fc9257f1eb45acb6b90a2a79eafd440d629a37e162ca3b846738d`
+补测 DP1/batch1 与 DP4/batch4。每种部署都冷启动，先对 8K/65K prompt 各做两次
+greedy 256-token 正确性，再执行完整 40-turn/130K warmup，最后依次跑 W1/W2/W3。
+
+```text
+runtime source: 9106abeb3ad6963b95083688538e53040500e9b8
+Pod: lidong1-yoco-fhb-dev-dp14-g4-0805-master-0
+Node: slc01-cl02-hgx-0346
+GPU: NVIDIA B200; physical 2 for DP1, physical 2,3,4,5 for DP4
+Model: /data/models/yoco-0000-0800-hf
+TP: 1
+BF16 / FlashInfer / Triton MoE / async scheduling
+max model len / max batched tokens: 131072 / 32768
+CUDA Graph: FULL_AND_PIECEWISE
+```
+
+节点另外四张 GPU 0、1、6、7 被同租作业使用，但被测卡没有进程重叠，结束后
+GPU 2--5 均为 `0 MiB / 0%`。这使本轮适合作为同配置回归，不是严格的同节点同时
+A/B，性能变化不能单独归因给 commit 12 中任一优化。
+
+#### 正确性
+
+DP1 和 DP4 的 8 个请求全部生成精确 256 tokens、`finish_reason=length`，同 shape
+重复一致，并与公开 baseline 哈希相同：
+
+```text
+8K:  9751294543df49838834be427e34887ff536c92c9b6b044d6d1011875fa8355a
+65K: 345b5a43f2d8ef3f7e208b3027430e96c24853657fc72df6f37796e65ce84983
+```
+
+#### 性能结果
+
+| 部署 | Workload | 公开基线 tok/s | 本轮 tok/s | 变化 | 本轮 wall |
+| --- | --- | ---: | ---: | ---: | ---: |
+| DP1/b1 | W1 | 122.21 | 138.88 | +13.64% | 471.895 s |
+| DP1/b1 | W2 | 118.74 | 134.49 | +13.27% | 121.820 s |
+| DP1/b1 | W3 | 114.77 | 129.25 | +12.61% | 100.582 s |
+| DP4/b4 | W1 | 385.75 | 452.78 | +17.38% | 578.962 s |
+| DP4/b4 | W2 | 420.64 | 440.59 | +4.74% | 148.746 s |
+| DP4/b4 | W3 | 394.82 | 411.67 | +4.27% | 126.314 s |
+
+延迟与 cache：
+
+| 部署 | Workload | Mean TTFT | Mean TPOT / ITL | Cache hit |
+| --- | --- | ---: | ---: | ---: |
+| DP1/b1 | W1 | 177.6 ms | TPOT 7.198 ms | N/A |
+| DP1/b1 | W2 | 1.159 s | TPOT 7.365 ms | N/A |
+| DP1/b1 | W3 | 163.9 ms | ITL 7.249 ms | 95.58% |
+| DP4/b4 | W1 | 267.9 ms | TPOT 8.830 ms | N/A |
+| DP4/b4 | W2 | 1.631 s | TPOT 8.979 ms | N/A |
+| DP4/b4 | W3 | 247.4 ms | ITL 8.975 ms | 95.58% |
+
+所有 W1/W2 请求成功。DP4 single-turn 虽未显式绑 rank，但采样期间 engine 0--3
+各有一个 running request、waiting 为 0，generation-token 计数等量推进，没有旧
+DP8 测试的负载不均。W3 显式绑 rank；DP1 平均 GPU 利用率 `95.99%`，DP4 四卡
+为 `94.83%--95.99%`，两边 waiting 均为 0。
+
+#### 证据和边界
+
+完整 warmup 日志确认覆盖后段 YOCO RMSNorm、fused add-RMSNorm、Router renorm 与
+MoE JIT；service log 确认实际 capture CUDA Graph。DeepEP 仍因基础镜像 NVSHMEM
+symbol 不匹配回退 AllGather+ReduceScatter，与公开 multigpu 方法一致。
+
+原始 accuracy、W1/W2/W3 detailed JSON、逐 turn JSONL、runtime samples、container
+inspect 和 service log 位于：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/fhb-dev-dp14-20260805/results
+```
+
+本轮只验证单节点 DP serving，不替代 1P2D UCX/NIXL transport 验收。回滚不需要
+改 runtime；若只撤销本轮记录，revert 对应文档提交即可。
+
 ## 本日志初始化
 
 ```text
