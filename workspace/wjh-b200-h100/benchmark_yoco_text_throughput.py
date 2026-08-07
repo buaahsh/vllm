@@ -1,10 +1,5 @@
 #!/usr/bin/env python
-"""Benchmark high-batch YOCO-VL throughput on one GPU.
-
-This is a local diagnostic script. It deliberately creates a unique image
-hash for every request so vLLM cannot reuse one vision-encoder result across
-the repeated dog images in the synthetic batch.
-"""
+"""Benchmark pure-text YOCO throughput on one GPU."""
 
 from __future__ import annotations
 
@@ -19,44 +14,24 @@ import time
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
 from transformers import AutoTokenizer
 
 
-MODEL = Path(
-    "/mnt/pvc/zhiliang/vl/exp/agens-vl/"
-    "30A3B-v2-VL-mix0.5-bsz20m-10G8-mxfp8-10kstep/updates_3000-hf-vl"
-)
-TOKENIZER = Path("/mnt/pvc/lidong1/hf_cache/agens_tokenizer_0622")
-IMAGE_PATHS = (
-    Path("/home/wangjiahao/workspace/llm-train/workspace/dog1.jpeg"),
-    Path("/home/wangjiahao/workspace/llm-train/workspace/dog2.jpeg"),
-    Path("/home/wangjiahao/workspace/llm-train/workspace/dog3.jpeg"),
-)
+MODEL = Path("/data/wjh/0000-6000-hf-gpu")
 PROMPTS = (
-    "Describe every visible detail in this image as thoroughly as possible, "
-    "including the dog, its appearance, pose, expression, surroundings, "
-    "objects, colors, lighting, composition, and background.",
-    "Provide a comprehensive description of all observable details in the "
-    "image. Cover the dog from head to tail, what it is doing, its expression, "
-    "and every relevant foreground and background element.",
-    "Examine the entire image carefully and describe all visible details, "
-    "including fine-grained features of the dog, spatial relationships, "
-    "textures, colors, lighting, setting, and anything else you can observe.",
+    "Explain how large language model inference works in comprehensive detail.",
+    "Write a detailed technical overview of mixture-of-experts transformer models.",
+    "Describe the major considerations when deploying an AI model in production.",
 )
-SYSTEM_PROMPT = "You are a helpful and friendly AI assistant."
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=("bf16", "fp8"), required=True)
-    parser.add_argument("--gpu", type=int, default=6)
-    parser.add_argument("--batches", type=int, nargs="+", default=(32, 64))
+    parser.add_argument("--gpu", type=int, default=2)
+    parser.add_argument("--batches", type=int, nargs="+", default=(32, 64, 128, 192))
     parser.add_argument("--output-tokens", type=int, default=256)
     parser.add_argument("--repeats", type=int, default=2)
-    parser.add_argument("--max-num-batched-tokens", type=int, default=32768)
     parser.add_argument("--output-json", type=Path, required=True)
-    parser.add_argument("--enforce-eager", action="store_true")
     return parser.parse_args()
 
 
@@ -110,20 +85,24 @@ class GPUMonitor:
                 line = subprocess.check_output(
                     command, text=True, stderr=subprocess.DEVNULL, timeout=2
                 ).strip()
-                memory, utilization, power = (
-                    float(value.strip()) for value in line.split(",")
-                )
+                values = tuple(float(value.strip()) for value in line.split(","))
                 with self._lock:
-                    self.samples.append((memory, utilization, power))
+                    self.samples.append(values)
             except (OSError, subprocess.SubprocessError, ValueError):
                 pass
             self._stop.wait(self.interval)
 
 
-def render_prompt(tokenizer, prompt: str) -> str:
+def render_prompt(tokenizer, prompt: str, unique_id: int) -> str:
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"<image>\n{prompt}"},
+        {
+            "role": "system",
+            "content": (
+                f"Request ID {unique_id}. You are a helpful and knowledgeable "
+                "AI assistant."
+            ),
+        },
+        {"role": "user", "content": prompt},
     ]
     rendered = tokenizer.apply_chat_template(
         messages,
@@ -135,42 +114,15 @@ def render_prompt(tokenizer, prompt: str) -> str:
     return rendered.replace("<|assistant|><think></think>", "<|assistant|></think>")
 
 
-def make_unique_image(base: Image.Image, unique_id: int) -> Image.Image:
-    array = np.asarray(base, dtype=np.uint8).copy()
-    # Encode a unique ID in two corner pixels. This preserves image dimensions
-    # and workload shape while avoiding multimodal hash/encoder-cache reuse.
-    array[0, 0] = (
-        unique_id & 0xFF,
-        (unique_id >> 8) & 0xFF,
-        (unique_id >> 16) & 0xFF,
-    )
-    array[0, 1] = (
-        (unique_id * 17) & 0xFF,
-        (unique_id * 31) & 0xFF,
-        (unique_id * 47) & 0xFF,
-    )
-    return Image.fromarray(array, mode="RGB")
-
-
-def build_requests(
-    base_images: tuple[Image.Image, ...],
-    rendered_prompts: tuple[str, ...],
-    batch_size: int,
-    run_id: int,
-) -> list[dict[str, object]]:
-    requests = []
-    for index in range(batch_size):
-        pattern = index % len(base_images)
-        unique_id = run_id * 1000 + index + 1
-        requests.append(
-            {
-                "prompt": rendered_prompts[pattern],
-                "multi_modal_data": {
-                    "image": make_unique_image(base_images[pattern], unique_id)
-                },
-            }
+def build_requests(tokenizer, batch_size: int, run_id: int) -> list[str]:
+    return [
+        render_prompt(
+            tokenizer,
+            PROMPTS[index % len(PROMPTS)],
+            unique_id=run_id * 1000 + index,
         )
-    return requests
+        for index in range(batch_size)
+    ]
 
 
 def percentile(values: list[float], q: float) -> float:
@@ -196,13 +148,12 @@ def summarize_run(outputs, elapsed: float, monitor: GPUMonitor) -> dict[str, obj
                 float(metrics.last_token_ts - metrics.first_token_ts)
                 / (num_tokens - 1)
             )
-    batch_size = len(outputs)
     return {
-        "batch_size": batch_size,
+        "batch_size": len(outputs),
         "elapsed_seconds": elapsed,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
-        "requests_per_second": batch_size / elapsed,
+        "requests_per_second": len(outputs) / elapsed,
         "input_tokens_per_second": input_tokens / elapsed,
         "output_tokens_per_second": output_tokens / elapsed,
         "total_tokens_per_second": (input_tokens + output_tokens) / elapsed,
@@ -233,36 +184,24 @@ def main() -> int:
     import vllm
     from vllm import LLM, SamplingParams
 
-    tokenizer = AutoTokenizer.from_pretrained(str(TOKENIZER), trust_remote_code=True)
-    rendered_prompts = tuple(render_prompt(tokenizer, prompt) for prompt in PROMPTS)
-    base_images_list = []
-    for path in IMAGE_PATHS:
-        with Image.open(path) as image:
-            base_images_list.append(image.convert("RGB"))
-    base_images = tuple(base_images_list)
-
-    max_batch = max(args.batches)
-    max_num_batched_tokens = args.max_num_batched_tokens
-    quantization = "fp8_per_block" if args.mode == "fp8" else None
-    moe_backend = "deep_gemm" if args.mode == "fp8" else "triton"
+    tokenizer = AutoTokenizer.from_pretrained(str(MODEL), trust_remote_code=True)
     llm_kwargs = {
         "model": str(MODEL),
-        "tokenizer": str(TOKENIZER),
+        "tokenizer": str(MODEL),
         "trust_remote_code": True,
         "dtype": "bfloat16",
         "tensor_parallel_size": 1,
-        "max_model_len": 4096,
-        "max_num_seqs": max_batch,
-        "max_num_batched_tokens": max_num_batched_tokens,
-        "gpu_memory_utilization": 0.90,
-        "quantization": quantization,
-        "moe_backend": moe_backend,
-        "enforce_eager": args.enforce_eager,
+        "data_parallel_size": 1,
+        "max_model_len": 8192,
+        "max_num_seqs": 192,
+        "max_num_batched_tokens": 8192,
+        "gpu_memory_utilization": 0.85,
+        "quantization": None,
+        "moe_backend": "triton",
+        "enforce_eager": False,
         "enable_chunked_prefill": True,
         "enable_prefix_caching": True,
         "kv_sharing_fast_prefill": True,
-        "mm_processor_cache_gb": 0,
-        "limit_mm_per_prompt": {"image": 1},
         "attention_config": {"flash_attn_version": 4},
         "disable_log_stats": False,
         "seed": 1,
@@ -287,32 +226,21 @@ def main() -> int:
     try:
         llm = LLM(**llm_kwargs)
         load_seconds = time.perf_counter() - load_start
-        print(f"MODEL_READY mode={args.mode} load_seconds={load_seconds:.3f}", flush=True)
+        print(f"MODEL_READY load_seconds={load_seconds:.3f}", flush=True)
 
-        # Small functional warmup before exercising high-batch shapes.
-        llm.generate(
-            build_requests(base_images, rendered_prompts, 4, run_id=1),
-            warmup_sampling,
-            use_tqdm=False,
-        )
-
-        all_results = []
+        llm.generate(build_requests(tokenizer, 4, run_id=1), warmup_sampling, use_tqdm=False)
+        results = []
         next_run_id = 10
         for batch_size in args.batches:
-            print(f"SHAPE_WARMUP mode={args.mode} batch={batch_size}", flush=True)
+            print(f"SHAPE_WARMUP batch={batch_size}", flush=True)
             llm.generate(
-                build_requests(
-                    base_images, rendered_prompts, batch_size, run_id=next_run_id
-                ),
+                build_requests(tokenizer, batch_size, run_id=next_run_id),
                 warmup_sampling,
                 use_tqdm=False,
             )
             next_run_id += 1
-
             for repeat in range(args.repeats):
-                requests = build_requests(
-                    base_images, rendered_prompts, batch_size, run_id=next_run_id
-                )
+                requests = build_requests(tokenizer, batch_size, run_id=next_run_id)
                 next_run_id += 1
                 monitor.reset()
                 start = time.perf_counter()
@@ -320,43 +248,43 @@ def main() -> int:
                 elapsed = time.perf_counter() - start
                 result = summarize_run(outputs, elapsed, monitor)
                 result["repeat"] = repeat + 1
-                all_results.append(result)
+                results.append(result)
                 print(
                     "RESULT "
-                    f"mode={args.mode} batch={batch_size} repeat={repeat + 1} "
+                    f"batch={batch_size} repeat={repeat + 1} "
                     f"seconds={elapsed:.3f} "
-                    f"req_s={result['requests_per_second']:.3f} "
                     f"out_tok_s={result['output_tokens_per_second']:.3f}",
                     flush=True,
                 )
 
         payload = {
             "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "mode": args.mode,
-            "quantization": quantization,
-            "moe_backend": moe_backend,
+            "model": str(MODEL),
+            "architecture": "YOCOForCausalLM",
             "dtype": "bfloat16",
-            "vision_dtype": "bfloat16",
-            "projector_dtype": "float32",
+            "quantization": None,
             "flash_attn_version": 4,
+            "moe_backend": "triton",
+            "tensor_parallel_size": 1,
+            "data_parallel_size": 1,
+            "gpu_memory_utilization": 0.85,
+            "max_model_len": 8192,
+            "max_num_batched_tokens": 8192,
+            "max_num_seqs": 192,
             "enable_prefix_caching": True,
+            "enable_chunked_prefill": True,
             "kv_sharing_fast_prefill": True,
+            "enforce_eager": False,
+            "cudagraph_mode": "FULL_AND_PIECEWISE",
             "gpu_physical_index": args.gpu,
             "gpu_name": torch.cuda.get_device_name(0),
             "vllm_version": vllm.__version__,
-            "model": str(MODEL),
-            "tokenizer": str(TOKENIZER),
             "batches": list(args.batches),
             "output_tokens_per_request": args.output_tokens,
             "repeats": args.repeats,
-            "enforce_eager": args.enforce_eager,
-            "max_model_len": 4096,
-            "max_num_seqs": max_batch,
-            "max_num_batched_tokens": max_num_batched_tokens,
-            "gpu_memory_utilization": 0.90,
-            "unique_image_hash_per_request": True,
+            "unique_request_id": True,
             "model_load_seconds": load_seconds,
-            "runs": all_results,
+            "runs": results,
         }
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
         args.output_json.write_text(
