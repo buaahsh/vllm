@@ -27,6 +27,42 @@ class AgensParser(DelegatingParser):
         super().__init__(tokenizer, *args, **kwargs)
         self._reasoning_parser = AgensReasoningParser(tokenizer, *args, **kwargs)
         self._tool_parser = AgensToolParser(tokenizer, tools)
+        self._pending_reasoning_end_text: str | None = None
+
+    def _strip_delayed_reasoning_end_text(self, delta_text: str) -> str:
+        pending_text = getattr(self, "_pending_reasoning_end_text", None)
+        if pending_text is None:
+            return delta_text
+
+        matching_chars = 0
+        for actual, expected in zip(delta_text, pending_text):
+            if actual != expected:
+                break
+            matching_chars += 1
+
+        if matching_chars == len(pending_text):
+            self._pending_reasoning_end_text = None
+            return delta_text[matching_chars:]
+        if matching_chars == len(delta_text):
+            self._pending_reasoning_end_text = pending_text[matching_chars:]
+            return ""
+
+        self._pending_reasoning_end_text = None
+        return delta_text
+
+    def _split_delayed_reasoning_end(
+        self, delta_text: str
+    ) -> tuple[str, str] | None:
+        end_text = self._reasoning_parser.reasoning_end_str
+        if end_text is None or end_text in delta_text:
+            return None
+
+        max_prefix_length = min(len(delta_text), len(end_text) - 1)
+        for prefix_length in range(max_prefix_length, 0, -1):
+            if delta_text.endswith(end_text[:prefix_length]):
+                self._pending_reasoning_end_text = end_text[prefix_length:]
+                return delta_text[:-prefix_length], end_text
+        return None
 
     def parse_delta(
         self,
@@ -35,6 +71,7 @@ class AgensParser(DelegatingParser):
         request: ChatCompletionRequest | ResponsesRequest,
         prompt_token_ids: list[int] | None = None,
     ) -> DeltaMessage | None:
+        delta_text = self._strip_delayed_reasoning_end_text(delta_text)
         state = self._stream_state
         if not state.prompt_reasoning_checked and prompt_token_ids is not None:
             state.prompt_reasoning_checked = True
@@ -43,17 +80,21 @@ class AgensParser(DelegatingParser):
 
         reasoning_delta = None
         if self._in_reasoning_phase(state) and self.is_reasoning_end(delta_token_ids):
-            message = self.extract_reasoning_streaming(
-                previous_text=state.previous_text,
-                current_text=state.previous_text + delta_text,
-                delta_text=delta_text,
-                previous_token_ids=state.previous_token_ids,
-                current_token_ids=state.previous_token_ids + delta_token_ids,
-                delta_token_ids=delta_token_ids,
-            )
-            reasoning_delta = message.reasoning if message else ""
-            if reasoning_delta is None:
-                reasoning_delta = ""
+            delayed_end = self._split_delayed_reasoning_end(delta_text)
+            if delayed_end is not None:
+                reasoning_delta, delta_text = delayed_end
+            else:
+                message = self.extract_reasoning_streaming(
+                    previous_text=state.previous_text,
+                    current_text=state.previous_text + delta_text,
+                    delta_text=delta_text,
+                    previous_token_ids=state.previous_token_ids,
+                    current_token_ids=state.previous_token_ids + delta_token_ids,
+                    delta_token_ids=delta_token_ids,
+                )
+                reasoning_delta = message.reasoning if message else ""
+                if reasoning_delta is None:
+                    reasoning_delta = ""
 
         message = super().parse_delta(
             delta_text,
