@@ -398,6 +398,47 @@ def test_yoco_cached_router_linear_is_bitwise_exact(num_tokens: int) -> None:
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("num_tokens", [1, 12, 127])
+def test_yoco_router_linear_pads_small_batches_consistently(
+    num_tokens: int,
+) -> None:
+    generator = torch.Generator(device="cuda").manual_seed(20260809)
+    hidden_states = torch.randn(
+        num_tokens,
+        3072,
+        dtype=torch.float32,
+        device="cuda",
+        generator=generator,
+    )
+    weight = torch.randn(
+        128,
+        3072,
+        dtype=torch.float32,
+        device="cuda",
+        generator=generator,
+    )
+
+    previous_allow_tf32 = torch.backends.cuda.matmul.allow_tf32
+    previous_matmul_precision = torch.get_float32_matmul_precision()
+    previous_cuda_precision = torch.backends.cuda.matmul.fp32_precision
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.set_float32_matmul_precision("high")
+    torch.backends.cuda.matmul.fp32_precision = "tf32"
+    try:
+        expected = torch.nn.functional.linear(
+            torch.nn.functional.pad(hidden_states, (0, 0, 0, 128 - num_tokens)),
+            weight,
+        )[:num_tokens]
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = previous_allow_tf32
+        torch.set_float32_matmul_precision(previous_matmul_precision)
+        torch.backends.cuda.matmul.fp32_precision = previous_cuda_precision
+    actual = torch.ops.vllm.yoco_router_linear_tf32(hidden_states, weight, False)
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
 def test_fast_prefill_runs_all_cross_layers_on_compact_tokens() -> None:
     calls = []
 

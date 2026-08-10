@@ -488,6 +488,7 @@ def make_kv_cache_config(
 def make_nixl_scheduler(
     has_mamba: bool = False,
     is_hma_required: bool = False,
+    use_yoco_final_prompt_block_split: bool = False,
     heartbeat: bool = False,
     kv_lease_duration: int = 30,
 ):
@@ -503,6 +504,8 @@ def make_nixl_scheduler(
     sched = object.__new__(NixlConnectorScheduler)
     sched._has_mamba = has_mamba
     sched._is_hma_required = is_hma_required
+    sched._use_yoco_final_prompt_block_split = use_yoco_final_prompt_block_split
+    sched.block_size = 16
 
     if heartbeat:
         sched._heartbeat_by_engine = {}

@@ -570,6 +570,15 @@ def _yoco_router_linear_tf32_cuda(
     weight: torch.Tensor,
     normalize_weight: bool,
 ) -> torch.Tensor:
+    if normalize_weight:
+        weight = weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
+    # cuBLASLt can select a different TF32 reduction tree for prefill and
+    # prefix-cache/PD decode token counts. Router logits are FP32, so those
+    # differences survive and can change top-k experts. Pad only sub-128-row
+    # batches to the first stable cuBLAS shape while retaining the checkpoint's
+    # TF32 inference semantics and the original large-prefill fast path.
+    assert hidden_states.ndim == 2
+    chunk_rows = 128
     previous_allow_tf32 = torch.backends.cuda.matmul.allow_tf32
     previous_matmul_precision = torch.get_float32_matmul_precision()
     previous_cuda_precision = torch.backends.cuda.matmul.fp32_precision
@@ -577,8 +586,10 @@ def _yoco_router_linear_tf32_cuda(
     torch.set_float32_matmul_precision("high")
     torch.backends.cuda.matmul.fp32_precision = "tf32"
     try:
-        if normalize_weight:
-            weight = weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
+        num_rows = hidden_states.shape[0]
+        if num_rows < chunk_rows:
+            padded = F.pad(hidden_states, (0, 0, 0, chunk_rows - num_rows))
+            return F.linear(padded, weight)[:num_rows]
         return F.linear(hidden_states, weight)
     finally:
         torch.backends.cuda.matmul.allow_tf32 = previous_allow_tf32

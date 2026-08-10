@@ -613,7 +613,7 @@ def test_nixl_metadata_hybrid_ssm_block_ids():
     assert len(req_meta.remote.block_ids[0]) != len(req_meta.remote.block_ids[1])
 
 
-# ── Mamba N-1 prefill tests ──────────────────────────────────────────────
+# ── Model-specific remote prefill truncation tests ───────────────────────
 
 
 @pytest.mark.cpu_test
@@ -669,6 +669,59 @@ def test_mamba_n1_p_side_truncation():
 
     fa_sched.get_num_new_matched_tokens(fa_req, num_computed_tokens=0)
     assert len(fa_req.prompt_token_ids) == fa_original
+
+
+@pytest.mark.cpu_test
+def test_yoco_final_block_d_side():
+    """D-side: YOCO transfers only through the final full block boundary."""
+    sched = make_nixl_scheduler(use_yoco_final_prompt_block_split=True)
+    req = create_request(num_tokens=44, do_remote_prefill=True)
+
+    count, is_async = sched.get_num_new_matched_tokens(req, num_computed_tokens=0)
+
+    assert count == 32
+    assert is_async is True
+
+
+@pytest.mark.cpu_test
+def test_yoco_final_block_p_side_truncation():
+    """P-side: YOCO publishes the same block-aligned prefix D expects."""
+    sched = make_nixl_scheduler(use_yoco_final_prompt_block_split=True)
+    req = create_request(num_tokens=44, do_remote_decode=True)
+    original_token_ids = req.prompt_token_ids.copy()
+
+    count, is_async = sched.get_num_new_matched_tokens(req, num_computed_tokens=0)
+
+    assert count == 0
+    assert is_async is False
+    assert req.num_prompt_tokens == 32
+    assert req.prompt_token_ids == original_token_ids[:32]
+    assert req.max_tokens == 1
+    assert req.kv_transfer_params["_p_side_truncated"] is True
+
+    sched.get_num_new_matched_tokens(req, num_computed_tokens=0)
+    assert req.num_prompt_tokens == 32
+
+
+@pytest.mark.cpu_test
+def test_yoco_sub_block_prompt_stays_valid_and_recomputes_on_d():
+    """A sub-block prompt has no transferable prefix but must remain valid on P."""
+    sched = make_nixl_scheduler(use_yoco_final_prompt_block_split=True)
+    p_req = create_request(num_tokens=12, do_remote_decode=True)
+    original_token_ids = p_req.prompt_token_ids.copy()
+
+    count, is_async = sched.get_num_new_matched_tokens(p_req, num_computed_tokens=0)
+
+    assert count == 0
+    assert is_async is False
+    assert p_req.num_prompt_tokens == 12
+    assert p_req.prompt_token_ids == original_token_ids
+    assert "_p_side_truncated" not in p_req.kv_transfer_params
+
+    d_req = create_request(num_tokens=12, do_remote_prefill=True)
+    count, is_async = sched.get_num_new_matched_tokens(d_req, num_computed_tokens=0)
+    assert count == 0
+    assert is_async is False
 
 
 @pytest.mark.cpu_test
