@@ -50,6 +50,9 @@
 | 12 | `9106abeb3a` | 合并/DP8 | 合入 YOCO B200 multigpu long-context | 已进入 `fhb-dev` |
 | 13 | `4364a96501` | 性能/Router | 缓存 FP32 Router 归一化权重 | 已进入 `fhb-dev` |
 | 14 | `81df1f21e8` | 正确性/DeepEP | NVSHMEM ABI、RDMA 与 IBGDA 启动保护 | 已推送功能分支 |
+| 15 | `03a0479b67` | 正确性/PD | 对齐 standalone、local cache 与 NIXL PD shape | 已进入 `fhb-dev` |
+| 16 | `fa8e4eac6a` | 文档/PD | 当前 PD 部署策略独立报告 | 已进入 `fhb-dev` |
+| 17 | 本次文档提交 | 测试/PD | TP2/DP1 batch 容量、吞吐和 forward 曲线 | 随本提交进入 `fhb-dev` |
 
 ---
 
@@ -3136,3 +3139,80 @@ PD 约束整理为独立报告，便于部署、Gateway 和审核人员使用。
 
 该提交不修改模型、scheduler、NIXL、Docker、launcher 或请求协议，不增加新的
 性能归因。回滚本提交只删除独立报告及本条记录，不影响已合入的 PD 功能。
+
+## 17. TP2/DP1 batch 容量、吞吐与 forward 延迟曲线
+
+```text
+subject: docs(yoco): record PD batch capacity and throughput
+scope: YOCO-PD-BATCH-CURVE-20260810.md, fhb-dev-commit.md
+functional behavior change: none
+runtime under test: fhb-dev@fa8e4eac6a
+```
+
+### 目的与修改文件
+
+本提交把 `fhb-dev@fa8e4eac6a` 的 4 x B200 NIXL PD 容量扫描固化为独立、可审核
+报告，回答“当前正确性覆盖到哪里、吞吐是多少、最大 batch 能否运行、为什么
+batch 48 性能突然下降”四个问题。只修改两个文档文件：
+
+- `YOCO-PD-BATCH-CURVE-20260810.md`：记录测试口径、正确性、batch 1--256
+  吞吐表、Prefill/Decode GPU 同步前向延迟和 PVC 证据；
+- `fhb-dev-commit.md`：增加本条提交记录和索引，不修改生产实现。
+
+没有提交 harness、截图、HTML、运行时只读挂载文件或原始大日志；完整证据继续保留
+在 PVC，避免扩大 review diff。
+
+### 正确性结果与边界
+
+拓扑为 `P=TP2/DP1, D=TP2/DP1`。同配置 standalone -> PD 覆盖 1,356-token
+自然停止、1,356-token 强制 256 decode、7,999-token 和 65,809-token 四档，均为
+逐 token 和文本 exact。7,999-token prompt 使用不同 cache salt 执行
+concurrency=4、8 requests，8 个请求收敛为一个 token trace。
+
+该结论不能扩大为所有并行方式均正确：先前复核的 DP2 + CUDA Graph 并发仍会在
+不同 rank 出现多 trace；PCP/DCP 也未在本轮 4 卡拓扑覆盖。batch 1--256 性能扫描
+都返回预期 completion token 数，但没有逐 batch 再运行 standalone -> PD
+token-exact 矩阵，报告中对此明确区分。
+
+### 容量、吞吐与性能拐点
+
+服务配置为 `max_num_seqs=256`、`max_num_batched_tokens=8192`，完整 CUDA Graph
+只 capture decode batch 1--32。本轮确认短上下文 decode batch 256 和 Prefill
+token batch 8192 均可运行，但推荐的综合点是 batch 32：
+
+```text
+D service:      1,139.27 output tok/s
+PD end-to-end:  1,078.67 output tok/s
+PD request QPS: 4.21 req/s
+```
+
+GPU 同步 model-forward median 在 actual decode batch 32 为 `8.08 ms`，到 48
+变为 `68.88 ms`，增加约 `8.5x`。对应 D 吞吐从 `1,139.27` 降到
+`477.06 output tok/s`。batch 256 虽重新达到 `1,079.91 output tok/s`，端到端仅
+`1,005.90 output tok/s`，仍低于 batch 32，并且端到端请求 p50 已到
+`64.66 s`。因此 256 是已验证的 scheduler 配置上限，不是默认生产目标。
+
+Prefill 在 concurrency 48 达到本轮峰值 `77.85K input tok/s`，但系统端到端受
+Decode 限制。Prefill 单 forward 在 token batch 128--4096 约 `52.79--53.24 ms`，
+8192 为 `82.85 ms`。
+
+### 测试和证据
+
+```text
+Job:       bonete01/lidong1-yoco-pd-diagnose-g4-0810
+Node:      slc01-cl02-hgx-0297
+GPU:       4 x NVIDIA B200
+Transport: NIXL
+```
+
+吞吐和 forward 客户端、correctness harness 与 forward stats parser 返回码均为 0。
+前向延迟来自 vLLM `Batchsize forward time stats` 的 GPU 同步中位数，不把 HTTP
+wall time 当作 model forward。完整结果位于：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/
+  pd-batch-curve-fa8e4eac6a-20260810/
+```
+
+测试完成后已删除 Volcano Job，并确认 Job/Pod 均为 `NotFound`。本提交只同步已有
+GPU 实测文档，不产生性能行为变化；回滚只需删除独立报告并移除本条记录。
