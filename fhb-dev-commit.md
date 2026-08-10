@@ -1,4 +1,4 @@
-# `fhb-dev` 功能提交记录
+# `fhb-dev` 逐提交工程记录
 
 本文是 `fhb-dev` 的逐提交工程日志，用于在不依赖 Pull Request 邮件和网页上下文
 的情况下，回答以下问题：
@@ -29,10 +29,14 @@
    `方涵斌 <2190556589@qq.com>`。AI 辅助通过 commit trailer 明示。
 6. 默认将经过本地检查和 GPU 验证的 commit 直接同步到 `fhb-dev`，避免每个小功能
    都创建 PR 触发邮件；确实需要跨团队网页审阅时再单独创建 PR。
-7. 本文只逐条记录功能 commit。仅用于补充本日志的文档提交不递归记录自身 hash；
-   文档历史可通过 `git log -- fhb-dev-commit.md` 审计。
+7. 从基线到审计水位的每一个可达 commit 都必须出现在“完整 Git 提交审计”中。
+   功能、正确性、性能、构建、测试和设计结果展开为正文；只补充已有记录的
+   docs-only commit 只进入完整索引，不递归增加一篇重复正文。
+8. Git commit 无法在自身内容中预先写入自己的 hash，因此每次日志维护提交审计到
+   它的 parent，并在下一次提交中回填真实 hash。当前水位为 `5d296b3958`：相对基线
+   共 `40/40` 个可达提交，其中主线 `33/33` 个、合并支线 `7/7` 个，均已列出。
 
-## 提交索引
+## 功能与工程结果索引
 
 | 序号 | Commit | 类型 | 功能 | 状态 |
 | ---: | --- | --- | --- | --- |
@@ -49,12 +53,72 @@
 | 11 | `26614af40f` | 文档/负结果 | 放弃 differential-attention CustomOp | 已进入 `fhb-dev` |
 | 12 | `9106abeb3a` | 合并/DP8 | 合入 YOCO B200 multigpu long-context | 已进入 `fhb-dev` |
 | 13 | `4364a96501` | 性能/Router | 缓存 FP32 Router 归一化权重 | 已进入 `fhb-dev` |
-| 14 | `81df1f21e8` | 正确性/DeepEP | NVSHMEM ABI、RDMA 与 IBGDA 启动保护 | 已推送功能分支 |
+| 14 | `81df1f21e8` | 正确性/DeepEP | NVSHMEM ABI、RDMA 与 IBGDA 启动保护 | 已进入 `fhb-dev` |
 | 15 | `03a0479b67` | 正确性/PD | 对齐 standalone、local cache 与 NIXL PD shape | 已进入 `fhb-dev` |
 | 16 | `fa8e4eac6a` | 文档/PD | 当前 PD 部署策略独立报告 | 已进入 `fhb-dev` |
-| 17 | 本次文档提交 | 测试/PD | TP2/DP1 batch 容量、吞吐和 forward 曲线 | 随本提交进入 `fhb-dev` |
-| 18 | 本次文档提交 | 设计/Cache | LMCache 三级缓存与 Dynamo 适配方案 | 随本提交进入 `fhb-dev` |
-| 19 | 本次功能提交 | 构建/Cache | 固定 LMCache 0.5.3 的 CUDA 13/SM100 runtime | 本地验证通过，待推送 |
+| 17 | `f54af87aec` | 测试/PD | TP2/DP1 batch 容量、吞吐和 forward 曲线 | 已进入 `fhb-dev` |
+| 18 | `75d26710b9` | 设计/Cache | LMCache 三级缓存与 Dynamo 适配方案 | 已进入 `fhb-dev` |
+| 19 | `e081d38f5a` | 构建/Cache | 固定 LMCache 0.5.3 的 CUDA 13/SM100 runtime | 已进入 `fhb-dev` |
+| 20 | `5d296b3958` | 正确性/Cache | LMCache 适配 YOCO 31 份物理 KV | 已进入 `fhb-dev` |
+
+## 完整 Git 提交审计
+
+审计区间为
+`c27db1e189973cea3164ba66b1d00359d4122088..5d296b3958c0db1a664dd74dff78e28a4419b588`。
+基线本身不计入增量提交数。以下两张表覆盖这个区间内全部 `40` 个可达提交，避免把
+docs-only、验证补充或 merge 引入的支线提交藏在正文之外。
+
+### First-parent 主线：33/33
+
+| 序号 | Commit | Subject | 对应记录 |
+| ---: | --- | --- | --- |
+| 1 | `85eab7b56e` | `perf(yoco): skip cross layers for KV-only producer prefill (#3)` | 第 1 节 |
+| 2 | `ea4f80d1b4` | `fix(yoco): deduplicate NIXL KV-sharing aliases (#4)` | 第 2 节 |
+| 3 | `d11cc022bd` | `perf(yoco): remove redundant router materialization` | 第 3 节 |
+| 4 | `d77fed9d2a` | `docs(yoco): add fhb-dev commit ledger` | 初始化并补记第 1--3 节 |
+| 5 | `ef60ee0255` | `perf(yoco): fuse residual add with RMSNorm` | 第 4 节 |
+| 6 | `cd1e22c7ff` | `docs(yoco): record fused add-RMSNorm commit` | 补记第 4 节 |
+| 7 | `9988ae737f` | `perf(yoco): overlap shared and routed experts` | 第 5 节 |
+| 8 | `2e1b8ecc53` | `docs(yoco): record shared expert overlap` | 补记第 5 节 |
+| 9 | `8eae22948c` | `perf(yoco): fuse FP32 clamped SwiGLU` | 第 6 节 |
+| 10 | `4b0f7d3d42` | `docs(yoco): record FP32 clamped SwiGLU fusion` | 补记第 6 节 |
+| 11 | `1c51cac0d7` | `fix(pd): preserve KV metadata on streamed stops` | 第 7 节 |
+| 12 | `0f8c9d95b5` | `docs(pd): record streamed-stop KV metadata fix` | 补记第 7 节 |
+| 13 | `2765c22a1b` | `build(pd): unify runtime on UCX 1.21` | 第 8 节 |
+| 14 | `66a87747fa` | `docs(pd): record UCX 1.21 runtime validation` | 补记第 8 节 |
+| 15 | `7c03e0cb73` | `perf(moe): add tuned B200 YOCO config` | 第 9 节 |
+| 16 | `84906823de` | `docs(yoco): record B200 MoE tuning results` | 补记第 9 节 |
+| 17 | `8abfd6c6d0` | `perf(yoco): fuse BF16 rotary embedding` | 第 10 节 |
+| 18 | `625ff8ea06` | `docs(yoco): record BF16 rotary fusion` | 补记第 10 节 |
+| 19 | `26614af40f` | `docs(yoco): record rejected diff-attention fusion` | 第 11 节 |
+| 20 | `9106abeb3a` | `Merge YOCO B200 multigpu long-context support` | 第 12 节 |
+| 21 | `fd6baffea2` | `docs(yoco): record multigpu merge validation` | 第 12 节补充验证 |
+| 22 | `0223cd9099` | `docs(yoco): record DP1 and DP4 validation` | 第 12 节补充验证 |
+| 23 | `4364a96501` | `perf(yoco): cache normalized router weights` | 第 13 节 |
+| 24 | `a9cd5c2072` | `docs(yoco): record Router weight cache results` | 补记第 13 节 |
+| 25 | `81df1f21e8` | `fix(yoco): guard DeepEP NVSHMEM runtime` | 第 14 节 |
+| 26 | `4a39087d27` | `docs(yoco): record DeepEP NVSHMEM validation` | 补记第 14 节 |
+| 27 | `03a0479b67` | `fix(yoco): align fast-prefill shapes across PD` | 第 15 节 |
+| 28 | `b63e04909b` | `docs(yoco): record PD shape consistency fix` | 补记第 15 节 |
+| 29 | `fa8e4eac6a` | `docs(yoco): add standalone PD strategy report` | 第 16 节 |
+| 30 | `f54af87aec` | `docs(yoco): record PD batch capacity and throughput` | 第 17 节 |
+| 31 | `75d26710b9` | `docs(yoco): plan LMCache and Dynamo adaptation` | 第 18 节 |
+| 32 | `e081d38f5a` | `build(yoco): add pinned LMCache CUDA 13 runtime` | 第 19 节 |
+| 33 | `5d296b3958` | `fix(yoco): adapt LMCache to physical KV layout` | 第 20 节 |
+
+### Merge 引入支线：7/7
+
+以下提交由 `9106abeb3a` 引入，都是第 12 节 multigpu long-context 合并的一部分。
+
+| 序号 | Commit | Subject |
+| ---: | --- | --- |
+| 1 | `6c0b7a35ee` | `perf: tune YOCO B200 long-context serving` |
+| 2 | `4a6f4400d4` | `Improve YOCO long-context serving tooling` |
+| 3 | `2304668e15` | `Correct YOCO per-engine sequence limits` |
+| 4 | `e3974c1c97` | `Document YOCO multigpu long-context results` |
+| 5 | `bbd96cacb0` | `Rebuild YOCO B200 presentation probes` |
+| 6 | `34f4044acb` | `docs: show direct vllm long-context launches` |
+| 7 | `85f7d2ac1b` | `docs: add max-throughput rates to summary` |
 
 ---
 
@@ -3123,6 +3187,7 @@ ConfigMap:   yoco-pd-rms-shape-candidate
 ## 16. 当前 YOCO PD 策略独立报告
 
 ```text
+commit: fa8e4eac6a30aa14ccd7b0ff8aa5e4ee9309f107
 subject: docs(yoco): add standalone PD strategy report
 scope: YOCO-PD-STRATEGY.md, fhb-dev-commit.md
 functional behavior change: none
@@ -3145,6 +3210,7 @@ PD 约束整理为独立报告，便于部署、Gateway 和审核人员使用。
 ## 17. TP2/DP1 batch 容量、吞吐与 forward 延迟曲线
 
 ```text
+commit: f54af87aecf78e2db92c15cfa5062fadff1d9509
 subject: docs(yoco): record PD batch capacity and throughput
 scope: YOCO-PD-BATCH-CURVE-20260810.md, fhb-dev-commit.md
 functional behavior change: none
@@ -3222,6 +3288,7 @@ GPU 实测文档，不产生性能行为变化；回滚只需删除独立报告�
 ## 18. LMCache 三级缓存与 Dynamo 适配方案
 
 ```text
+commit: 75d26710b9b0ea3d548d607f2de73557394927ec
 subject: docs(yoco): plan LMCache and Dynamo adaptation
 scope: YOCO-LMCACHE-DYNAMO-PLAN.md, fhb-dev-commit.md
 functional behavior change: none
@@ -3293,6 +3360,7 @@ NIXL-only PD 服务。后续实现继续拆成镜像、shared-KV 单测、adapte
 ## 19. 固定 LMCache 0.5.3 的 CUDA 13/SM100 runtime
 
 ```text
+commit: e081d38f5aeb9976d9aba8d3fa00d9bf5d3ab7d2
 subject: build(yoco): add pinned LMCache CUDA 13 runtime
 scope: docker/Dockerfile.b200.pd, fhb-dev-commit.md
 functional behavior change: PD 镜像新增 LMCache runtime；默认 NIXL-only 服务行为不变
@@ -3387,6 +3455,7 @@ NIXL-only 已发布镜像不受影响。
 ## 20. YOCO universal-loop-aware LMCache 物理 KV 适配
 
 ```text
+commit: 5d296b3958c0db1a664dd74dff78e28a4419b588
 subject: fix(yoco): adapt LMCache to physical KV layout
 scope: lmcache_connector.py, test_lmcache_connector.py,
        YOCO-LMCACHE-DYNAMO-PLAN.md, fhb-dev-commit.md
