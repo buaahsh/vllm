@@ -2931,3 +2931,186 @@ functional behavior change: none
 
 本日志初始化只增加可审计文档，不改变模型、worker、NIXL 或 kernel 行为。其目的
 是用单一文件替代分散的 PR 邮件上下文；后续功能 commit 继续按上面的模板追加。
+
+## 15. YOCO fast-prefill 的 standalone、prefix cache 与 NIXL PD shape 对齐
+
+### 提交信息
+
+```text
+commit: 03a0479b67
+subject: fix(yoco): align fast-prefill shapes across PD
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: 4a39087d27
+branch: review/yoco-14-pd-rms-shape-consistency
+diff: 7 files, 273 insertions, 18 deletions
+```
+
+### 问题、根因与修复目标
+
+现有 YOCO fast-prefill 在 1.3K 短请求上出现稳定而可复现的输出分叉，JIT 预热后
+仍然存在。相同 prompt 的 standalone fresh、本地 prefix-cache hit 和 NIXL 1P1D
+remote-KV hit 可能分别得到不同 key；8K 或 65K 某些候选还会改变停止位置。UCX
+传输、RMSNorm、attention backend 和 Triton MoE 都曾被逐项排查，但决定性变量是
+模型实际 forward 的 token rows：
+
+- fresh standalone 可能一次执行完整 prompt；
+- 本地 prefix cache 只重算最后一个 KV block 的尾段；
+- 默认 NIXL remote full hit 只回退并重算最后 1 token；
+- PD producer 和 standalone 若又被 scheduler 分成不同 chunk，即使传输 block
+  内容完整，P 端产生 KV 的数值路径仍不同。
+
+YOCO Router 使用归一化后的 FP32 weight 和 TF32 GEMM。B200 探针中，12 行与
+1,356 行 Router 的 1,536 个 logits 有 1,533 个不同，未归一化权重的最大绝对差
+为 `0.0014801`。这些差异足以改变接近边界的 top-k expert，并经 routed MoE 放大
+为可见 token 分叉。因此最终修复目标不是强制所有模型使用严格 FP32，而是只在
+YOCO fast-prefill 范围内让 fresh/local/remote 三条路径使用相同有效 shape。
+
+最终语义如下：
+
+1. FP32 TF32 Router 的 token rows 小于 128 时补零到 128，再裁回原行数；权重
+   normalization 仍只使用原 FP32 weight，大 prefill 继续走原始 GEMM；
+2. standalone 和本地 prefix-cache 请求在最后一个 KV block 起点拆分 prompt，
+   使两者用相同尾段 shape；
+3. NIXL P 节点把 prompt 截到同一 block 边界，只计算并发布完整 prefix block；
+4. NIXL D 节点使用同一个公式计算 external token count，只接收该 prefix，尾段
+   从未进入 D 的 remote block table，再由 D 本地计算；
+5. `_p_side_truncated` 防止通用 scheduler 把已对齐的 P prefix 再拆一次；
+6. 少于或等于一个 block 的 YOCO prompt 没有可发布的完整 prefix：P 不被截成
+   空 prompt，D 返回 0 external tokens 并完整本地重算；
+7. Mamba 检查优先于 YOCO 分支，原有 N−1 producer truncation 和 D receive count
+   不变。普通模型及关闭 `kv_sharing_fast_prefill` 的 YOCO 不启用该逻辑。
+
+### 修改文件及职责
+
+#### `vllm/model_executor/models/yoco.py`
+
+- 在 `_yoco_router_linear_tf32_cuda` 中保留 checkpoint 的 TF32 inference 语义；
+- 将 `<128` token rows 补零到 128 行后执行 `F.linear`，再裁回有效行；
+- 保留并恢复调用前的 CUDA TF32 和 matmul precision 全局状态。
+
+#### `vllm/v1/core/sched/scheduler.py`
+
+- 仅为 `model_type == "yoco"` 且启用 fast-prefill 的配置建立
+  `need_yoco_final_prompt_block_split`；
+- 在 WAITING 和 RUNNING 两条调度路径用同一个最后 block 起点公式拆分尾段；
+- 识别 NIXL 已截断的 P 请求，避免 producer prefix 被二次拆分。
+
+#### `vllm/distributed/kv_transfer/kv_connector/v1/nixl/scheduler.py`
+
+- 将原 Mamba 专用 token-count/truncation helper 泛化，但保留 Mamba 优先语义；
+- YOCO P/D 两端共享 block-boundary token-count 公式，消除 remote/local group
+  block 数不一致；
+- P 端同时更新 prompt token/embedding、`_all_token_ids`、prompt length 和
+  `max_tokens`，并通过 `_p_side_truncated` 保证 preemption 后幂等；
+- 对 sub-block YOCO prompt 返回安全的 0-transfer 语义，不构造空 prompt。
+
+#### `tests/model_executor/test_yoco_conversion.py`
+
+- 新增 CUDA 参数化测试，覆盖 1/12/127 token rows；
+- 逐位验证 CustomOp 输出等于显式 128-row padding 的 TF32 reference。
+
+#### `tests/v1/core/test_scheduler.py`
+
+- 覆盖 YOCO/非 YOCO、fast-prefill 开关、block 边界、已截断 P 请求和实际两步
+  schedule；
+- 验证 44-token prompt 首步为 32、第二步为 12，而非只修改计数。
+
+#### `tests/v1/kv_connector/unit/test_nixl_connector_hma.py`
+
+- 保留并复跑 Mamba N−1 的 P/D 行为与幂等性；
+- 新增 YOCO 44-token P/D 对称 count/truncation case；
+- 新增 12-token sub-block case，确认 P 请求有效且 D 不异步拉取 partial block。
+
+#### `tests/v1/kv_connector/unit/utils.py`
+
+- 测试构造器增加 YOCO shape-alignment 开关和固定 block size，不改变生产逻辑。
+
+### run17--run25 排查记录
+
+| Run | 候选 | 关键结果 | 结论 |
+| --- | --- | --- | --- |
+| 17 | 只做 Router `<128 -> 128` padding | 1.3K standalone=`00340`、PD=`00663`；8K exact；65K 停止不一致 | Router 是放大器，但单独修不完整 |
+| 18 | D full remote hit 后只把计算计数回退到 block 起点 | 1.3K exact；8K `04165` 对 `00395`；65K 仍错 | 单边改 D shape 会破坏其他长度 |
+| 19 | Router padding + fresh prompt 最后 1 token 独立调度 | 1.3K/8K/65K PD 全 exact；1.3K fresh=`00663`、local hit=`00340` | PD 可对齐，但本地 cache 仍不稳定 |
+| 20 | 去掉 Router padding，只保留 final-token split | 1.3K/65K exact，8K 不一致 | Router 固定小 batch shape 仍是必要条件 |
+| 21 | fresh/local/remote 都按 block-tail 回退计数 | standalone fresh/local exact；PD 1.3K/65K exact，8K 为 `04165` 对 `02346` | remote 尾块已进 block table，计数回退是伪重算 |
+| 22 | P producer 真正截断到 block boundary | standalone fresh/两次 local hit exact；PD 首请求 HTTP 500 | P 发布 84 blocks，D 仍按原 prompt 分配 85 blocks |
+| 23 | NIXL per-group block-count 诊断 | 定位 full-attention 第 30 组 `D=85/P=84` | 必须让 NIXL P/D 共享 token-count 公式 |
+| 24 | P/D 对称 block prefix transfer | block 传输成功但 1.3K 数值仍不一致 | P 的 1,344 又被 scheduler 拆成 `1,328 + 16` |
+| 25 | 加 `_p_side_truncated` shape guard | standalone fresh/local 与 1P1D 三档全部 exact | 最终采用 |
+
+run17--run24 都保留为诊断证据，没有把失败候选或 worker 临时诊断改动带入提交。
+尤其没有采用 run21 的“先接收完整 remote block、再只回退
+`num_computed_tokens`”方案。
+
+### B200 正确性与时延
+
+最终 run25 的 standalone 首先对 1,356-token prompt 执行 fresh 和两次相同
+cache salt 的重复请求。三次文本均为 `" 00663\n"`，本地 cache 命中 1,344
+tokens，首 token 及其 logprob 逐位一致。随后串行执行 P 请求、等待 KV ready、再
+执行 D 请求；三档均 `all_exact_match: true`：
+
+| Case | Prompt tokens | SHA256 | P time | D time | Total |
+| --- | ---: | --- | ---: | ---: | ---: |
+| 1.3K warmup | 1,356 | `fde361c254896b017d5496f6e8cd4a128d7e258544675fab97574d01c973c033` | 0.0692 s | 0.2609 s | 0.3301 s |
+| 8K | 7,999 | `8b676d6658af7e5d789c559690a8c763683c433e8e857b4146df5054dfa71c01` | 0.1549 s | 0.4190 s | 0.5739 s |
+| 65K | 65,809 | `82e7da1423e3c6e149b622b75a9674c5508bf91c1a06099b46e75a22033bfe53` | 1.1278 s | 1.1470 s | 2.2748 s |
+
+上述 Total 是 correctness harness 中串行相加的 wall time，不是在线并发吞吐，也
+不能与 standalone 直接解释为性能提升。Router microbenchmark 以未 padding 的
+直接 GEMM 为对照，1/12/127 rows 分别约 `+185%/+150%/+160%`，128 rows 约
+`+3%`；小 shape 的绝对增加约 `44--50 us/router call`。本提交首先解决
+correctness，端到端 QPS、ITL 和高并发 P/D 性能需另做固定并发 A/B。
+
+### 单元、静态与环境测试
+
+最终验证包括：
+
+```text
+YOCO conversion/CUDA file: 38 passed
+NIXL/Mamba/YOCO focused:   7 passed, 26 deselected
+scheduler + NIXL/HMA:      137 passed, 1 external-access failure
+ruff check:                passed
+ruff format:               passed
+git diff --check:          passed
+```
+
+唯一未通过项为：
+
+```text
+test_fewer_blocks_with_hma[google/gemma-3-1b-it-512]
+```
+
+它在加载 HuggingFace `google/gemma-3-1b-it/config.json` 时返回 gated repo HTTP
+403；失败发生在模型配置下载阶段，未进入本提交修改的 NIXL scheduler。开发循环
+中相关定向集合另有一轮 `145 passed`，最终 B200 端到端不是用 mock connector。
+
+原始 evidence：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-current-4a39087d27-20260805/run25-yoco-nixl-shape-aligned-pd-20260809
+```
+
+测试结束后已恢复 Pod 内 PID 7，并释放：
+
+```text
+Volcano Job: lidong1-yoco-pd-rms-shape-g2-0809-r2
+ConfigMap:   yoco-pd-rms-shape-candidate
+```
+
+### 风险、限制与回滚
+
+- 当前只证明 B200 单节点 1P1D、文本 token、三种长度的 greedy exact match；未
+  覆盖多 P/D、DP>1、TP>1、高并发、preemption 实压或 prompt embeddings；
+- P/D 仍需使用相同 KV block size 和兼容 NIXL metadata；这是既有 connector
+  契约，不由本提交增加动态协商；
+- 小 batch Router 固定 shape 有明确微基准开销，应在真实 decode 并发下继续观察
+  ITL/QPS；大于等于 128 rows 的 prefill 路径不 padding；
+- sub-block prompt 会让 P 做一次最终不被 D 使用的短 prefill，换取不构造空请求
+  和 D 端完整本地 correctness；该长度应由 router 策略进一步考虑直接走 D；
+- Mamba N−1 路径有单测保护，但本轮 B200 服务模型是 YOCO，不是 Mamba；
+- 本提交没有修改 CUDA Graph 开关、Docker、UCX 1.21、DeepEP/NVSHMEM、Router
+  服务或负载均衡策略；
+- `git revert 03a0479b67` 可完整回滚功能提交，不影响此前 DeepEP、Router weight
+  cache、RoPE、SwiGLU、add-RMSNorm 或 multigpu merge，但会恢复已知的
+  fresh/local/remote shape 分叉。

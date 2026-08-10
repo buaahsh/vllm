@@ -2204,3 +2204,43 @@ DeepEP HT 会按 vLLM 设计关闭 CUDA Graph；AllGather+ReduceScatter 实际 c
 该结果只证明单节点 DP4/EP4。跨节点 DeepEP、完成宿主 IBGDA 配置后的 LL、以及
 Decode node 小 batch CUDA Graph 性能仍需单独验证；UCX 1.21 与 DeepEP 的
 NVSHMEM/IBGDA 是两条独立 transport 栈，本提交没有重做 UCX 镜像。
+
+## YOCO fast-prefill 的本地缓存与 PD 数值一致性（2026-08-09）
+
+功能提交 `03a0479b67` 修复了 YOCO fast-prefill 在 standalone fresh、本地
+prefix-cache hit 和 NIXL remote-KV hit 三条路径上输出不一致的问题。根因不是
+UCX 传输损坏，而是三条路径用不同 token row 数执行 FP32 TF32 Router 和 prompt
+尾段，shape 相关的归约差异会改变接近边界的 top-k expert，随后被 MoE 放大。
+
+修复同时统一算子和调度 shape：小于 128 行的 Router 输入补零到 128 行；普通
+standalone/本地缓存请求在最后一个 KV block 边界拆开 prompt 尾段；NIXL P 端只
+发布到相同边界，D 端只接收这部分 KV 并本地重算尾段。P 端已截断请求跳过二次
+边界拆分，避免 `1344` 又变为 `1328 + 16`。不满一个 block 的短 prompt 不会被
+截成空请求：P 保持有效请求，D 不拉取 partial block 并完整本地重算。Mamba 原有
+N−1 远端 prefill 语义保持不变。
+
+B200 真实 1P1D 对 1,356、7,999、65,809 prompt tokens 的串行 correctness
+harness 全部与 standalone exact match；1.3K fresh 和两次本地缓存命中也都输出
+`" 00663\n"`，缓存命中 1,344 tokens，首 token logprob 逐位一致：
+
+| Prompt tokens | SHA256 | P time | D time | 串行总时延 |
+| ---: | --- | ---: | ---: | ---: |
+| 1,356 | `fde361c254896b017d5496f6e8cd4a128d7e258544675fab97574d01c973c033` | 0.0692 s | 0.2609 s | 0.3301 s |
+| 7,999 | `8b676d6658af7e5d789c559690a8c763683c433e8e857b4146df5054dfa71c01` | 0.1549 s | 0.4190 s | 0.5739 s |
+| 65,809 | `82e7da1423e3c6e149b622b75a9674c5508bf91c1a06099b46e75a22033bfe53` | 1.1278 s | 1.1470 s | 2.2748 s |
+
+这些时间来自先 P 后 D 的正确性脚本，不是并发吞吐或加速数据。Router padding
+微基准显示 `<128` 行单次调用增加约 `44--50 us`，1/12/127 行相对直接 GEMM
+分别约 `+185%/+150%/+160%`，128 行约 `+3%`；端到端吞吐仍需独立并发 A/B。
+
+最终本地回归为 YOCO 文件 `38 passed`；scheduler 与 NIXL/HMA 为
+`137 passed`，另有一个 `google/gemma-3-1b-it` 用例因 gated HuggingFace 权限
+返回 HTTP 403。ruff check、ruff format 和 `git diff --check` 均通过。原始服务
+日志、JSON、hash 和时延位于：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-current-4a39087d27-20260805/run25-yoco-nixl-shape-aligned-pd-20260809
+```
+
+本轮只验证 B200 1P1D、文本 token 请求，不代表多 P/D、高并发或 prompt-embeds
+覆盖；未修改 Docker、UCX 1.21、DeepEP/NVSHMEM 或 launcher。
