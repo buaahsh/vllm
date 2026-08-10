@@ -3114,3 +3114,25 @@ ConfigMap:   yoco-pd-rms-shape-candidate
 - `git revert 03a0479b67` 可完整回滚功能提交，不影响此前 DeepEP、Router weight
   cache、RoPE、SwiGLU、add-RMSNorm 或 multigpu merge，但会恢复已知的
   fresh/local/remote shape 分叉。
+
+## 16. 当前 YOCO PD 策略独立报告
+
+```text
+subject: docs(yoco): add standalone PD strategy report
+scope: YOCO-PD-STRATEGY.md, fhb-dev-commit.md
+functional behavior change: none
+```
+
+本提交将散落在 `yoco.md`、功能提交记录、NIXL 文档和实际 run25 harness 中的
+PD 约束整理为独立报告，便于部署、Gateway 和审核人员使用。报告明确：
+
+- 推荐 pure `kv_producer` P + independent `kv_consumer` D；
+- pure-P 的 DP 不限制为 1，但 DP>1 不应使用混合流量的 `kv_both`；
+- P token 必须丢弃，D 负责所有用户可见 token；
+- YOCO block-tail、Router fixed-shape 和 NIXL P/D 对称 token count；
+- NIXL 1.3.2 + UCX 1.21、side-channel、RDMA HCA 和 single-UCX 契约；
+- Gateway 状态机、租约、失败策略、可观测性和上线检查表；
+- run25 只证明同节点 1P1D correctness，不能写成跨节点 RDMA 或并发吞吐。
+
+该提交不修改模型、scheduler、NIXL、Docker、launcher 或请求协议，不增加新的
+性能归因。回滚本提交只删除独立报告及本条记录，不影响已合入的 PD 功能。
