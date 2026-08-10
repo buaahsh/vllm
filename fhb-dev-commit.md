@@ -54,6 +54,7 @@
 | 16 | `fa8e4eac6a` | 文档/PD | 当前 PD 部署策略独立报告 | 已进入 `fhb-dev` |
 | 17 | 本次文档提交 | 测试/PD | TP2/DP1 batch 容量、吞吐和 forward 曲线 | 随本提交进入 `fhb-dev` |
 | 18 | 本次文档提交 | 设计/Cache | LMCache 三级缓存与 Dynamo 适配方案 | 随本提交进入 `fhb-dev` |
+| 19 | 本次功能提交 | 构建/Cache | 固定 LMCache 0.5.3 的 CUDA 13/SM100 runtime | 本地验证通过，待推送 |
 
 ---
 
@@ -3288,3 +3289,96 @@ standalone -> LMCache -> NIXL PD 必须逐 token exact。设计稿不能作为�
 Gateway 或 Kubernetes profile。回滚只需删除方案文件并移除本条记录，不影响当前
 NIXL-only PD 服务。后续实现继续拆成镜像、shared-KV 单测、adapter、P/D 串联、
 持久层和 Dynamo 六类独立提交。
+
+## 19. 固定 LMCache 0.5.3 的 CUDA 13/SM100 runtime
+
+```text
+subject: build(yoco): add pinned LMCache CUDA 13 runtime
+scope: docker/Dockerfile.b200.pd, fhb-dev-commit.md
+functional behavior change: PD 镜像新增 LMCache runtime；默认 NIXL-only 服务行为不变
+runtime base: fhb-dev@75d26710b9
+```
+
+### 目的与版本契约
+
+本提交只解决“后续 YOCO LMCache adapter 在哪个可复现 runtime 上开发和测试”，
+不提前修改 connector、scheduler 或线上启动参数。镜像新增并固定：
+
+```text
+LMCache: v0.5.3@140819c9d57a975dbc5678a6459a218e544cb58b
+NIXL:    1.3.2@de8115ca97d3f8fb63a4988e9b4d4a038b2e0f72
+UCX:     1.21.0@b6a9d47fccce849c28111f05a7fa8f1c930ff17d
+CUDA:    13.1 / SM100
+torch:   基础镜像自带 2.11.0a0，CXX11 ABI=1
+```
+
+LMCache 同时按 tag 和 commit 校验。仅 shallow fetch commit 会让
+`setuptools-scm` 看不到 tag 并产出错误的 `0.1.dev1` wheel；现在拉取
+`refs/tags/v0.5.3` 后再断言 `HEAD` 等于固定 commit，既保留正确的 `0.5.3`
+包版本，也防止 tag 移动后静默改变镜像内容。
+
+### 修改文件
+
+- `docker/Dockerfile.b200.pd`
+  - 在 native builder 中使用基础镜像的 torch、CUDA 13.1 和 CXX11 ABI=1 从源码
+    构建 LMCache wheel，`TORCH_CUDA_ARCH_LIST=10.0`，不混入 CUDA 12 runtime；
+  - runtime 安装固定 wheel 和 `wheel==0.47.0`，后者补齐基础镜像中
+    `astunparse` 的既有依赖缺项；
+  - 保持 vLLM P 到 D 的传输仍由 NIXL 1.3.2 + UCX 1.21 承担，安装 LMCache 不会
+    自动改变 connector；
+  - 构建阶段导入 `lmcache.c_ops`，检查 LMCache/NIXL 版本、禁用 `nixl_ep` shim、
+    验证唯一 UCX、编译 Python tree，并把 `uv pip check --system` 设为硬门禁；
+  - OCI labels 新增 LMCache version/revision，镜像说明明确三组件版本。
+- `fhb-dev-commit.md`
+  - 记录构建原因、文件范围、验证证据、依赖变化和回退边界。
+
+### 构建与测试结果
+
+完整构建命令：
+
+```text
+docker build --progress=plain \
+  -f docker/Dockerfile.b200.pd \
+  -t vllm-yoco-pd:lmcache053-local .
+```
+
+结果：
+
+```text
+image:  vllm-yoco-pd:lmcache053-local
+digest: sha256:5d96d8cef49b873c615f91fa7176f71e15b1baa16571aa74fce534563ad61e04
+status: build exit 0
+```
+
+镜像内和成品镜像外分别执行了以下检查：
+
+```text
+LMCache package:          0.5.3
+LMCache CUDA c_ops:       import passed
+LMCache vLLM adapter:     import passed
+NIXL packages:            nixl==nixl-cu13==1.3.2
+single-UCX verification:  UCX 1.21.0 passed
+torch CXX11 ABI:          true
+numpy:                    2.1.0（保持基础镜像版本）
+transformers:             5.8.1（保持基础镜像版本）
+OpenTelemetry:            1.40.0（LMCache 0.5.3 的兼容上限）
+uv pip check --system:    all installed packages are compatible
+Python compileall:        passed
+LMCache c_ops ldd:        no missing shared libraries
+git diff --check:         passed
+```
+
+依赖解析将基础镜像的 OpenTelemetry 1.44 统一降到 LMCache 约束允许的 1.40，
+没有改变 torch、numpy 或 transformers。构建前基础镜像的 `uv pip check` 有 16 个
+缺项；LMCache 安装并显式补充 wheel 后，成品镜像为零冲突。
+
+### 性能、限制与回滚
+
+本提交没有启动 LMCache connector，也没有申请 GPU，因此没有可归因的 TTFT、
+吞吐或命中率收益。它只提供后续单卡 CPU cold/warm、1P1D LMCache -> NIXL 和三级
+缓存测试所需的 runtime；不能把“wheel 可导入”写成 KV 保存/恢复正确。
+
+YOCO 当前仍有 20 个逻辑 attention layer 对应 11 份物理 KV tensor。这个提交尚未
+做 physical-layer view，直接启用通用 LMCache adapter 仍可能重复保存 shared cross
+KV；必须等待下一独立 adapter 提交及逐 token GPU 验证。回滚本提交只需恢复
+`docker/Dockerfile.b200.pd` 并重建镜像，现有 NIXL-only 已发布镜像不受影响。

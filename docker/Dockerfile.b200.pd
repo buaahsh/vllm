@@ -11,6 +11,7 @@ FROM ${BASE_IMAGE} AS native-builder
 
 ARG UCX_COMMIT=b6a9d47fccce849c28111f05a7fa8f1c930ff17d
 ARG NIXL_COMMIT=de8115ca97d3f8fb63a4988e9b4d4a038b2e0f72
+ARG LMCACHE_COMMIT=140819c9d57a975dbc5678a6459a218e544cb58b
 ARG MAX_JOBS=16
 
 ENV UCX_HOME=/opt/hpcx/ucx \
@@ -111,6 +112,39 @@ RUN git init /tmp/nixl \
         /tmp/nixl-wheels/ \
     && find /tmp/nixl-wheels -maxdepth 1 -type f -name '*.whl' -print
 
+ARG LMCACHE_TAG=v0.5.3
+
+# Build LMCache against the base image's CUDA 13 torch and C++ ABI.  The
+# source revision is pinned independently of the package version so a moved or
+# republished tag cannot silently change the image.  LMCache does not own the
+# PD transport in this image; the existing vLLM NIXL connector remains the
+# only P-to-D data path.
+RUN git init /tmp/lmcache \
+    && cd /tmp/lmcache \
+    && git remote add origin https://github.com/LMCache/LMCache.git \
+    && git fetch --depth 1 origin \
+        "refs/tags/${LMCACHE_TAG}:refs/tags/${LMCACHE_TAG}" \
+    && git checkout --detach "refs/tags/${LMCACHE_TAG}" \
+    && test "$(git rev-parse HEAD)" = "${LMCACHE_COMMIT}" \
+    && uv venv --system-site-packages /tmp/lmcache-build-venv \
+    && uv pip install --python /tmp/lmcache-build-venv/bin/python \
+        -r requirements/build.txt \
+    && test "$(/tmp/lmcache-build-venv/bin/python -c \
+        'import torch; print(int(torch.compiled_with_cxx11_abi()))')" = "1" \
+    && mkdir -p /tmp/lmcache-wheels \
+    && MAX_JOBS="${MAX_JOBS}" \
+        TORCH_CUDA_ARCH_LIST=10.0 \
+        LMCACHE_CUDA_MAJOR=13 \
+        ENABLE_CXX11_ABI=1 \
+        uv build --python /tmp/lmcache-build-venv/bin/python \
+            --no-build-isolation --wheel \
+            --out-dir /tmp/lmcache-wheels /tmp/lmcache \
+    && test "$(find /tmp/lmcache-wheels -maxdepth 1 -type f \
+        -name 'lmcache-0.5.3-*.whl' | wc -l)" = "1" \
+    && find /tmp/lmcache-wheels -maxdepth 1 -type f \
+        -name 'lmcache-0.5.3-*.whl' -print \
+    && rm -rf /tmp/lmcache /tmp/lmcache-build-venv
+
 # The pinned base image contains the complete vLLM source and populated
 # FetchContent dependencies at VLLM_NATIVE_BASE_REVISION. Only these three
 # native files differ in this branch, so overlay them and rebuild the _C target
@@ -160,6 +194,7 @@ ENV PATH=/opt/hpcx/ucx/bin:${PATH} \
 RUN rm -rf /opt/hpcx/ucx
 COPY --from=native-builder /opt/hpcx/ucx/ /opt/hpcx/ucx/
 COPY --from=native-builder /tmp/nixl-wheels/ /tmp/nixl-wheels/
+COPY --from=native-builder /tmp/lmcache-wheels/ /tmp/lmcache-wheels/
 
 # The metadata wheel still installs the optional nixl_ep import shim even
 # when the native EP extension is disabled. Hide that shim so vLLM does not
@@ -176,7 +211,9 @@ RUN uv pip uninstall --system --break-system-packages \
     && if test -n "${nixl_ep_dir}"; then \
         mv "${nixl_ep_dir}" "${nixl_ep_dir}.disabled"; \
     fi \
-    && rm -rf /tmp/nixl-wheels /root/.cache/uv
+    && uv pip install --system --break-system-packages \
+        wheel==0.47.0 /tmp/lmcache-wheels/lmcache-0.5.3-*.whl \
+    && rm -rf /tmp/nixl-wheels /tmp/lmcache-wheels /root/.cache/uv
 
 WORKDIR /workspace/vllm
 
@@ -197,15 +234,19 @@ RUN chmod 0755 /usr/local/bin/verify-single-ucx \
     && rm -rf /tmp/cuda-stubs \
     && uv venv --system-site-packages /tmp/image-check-venv \
     && /tmp/image-check-venv/bin/python -c \
-        "import importlib.metadata as m; import nixl; from vllm.utils.import_utils import has_nixl_ep; assert m.version('nixl') == m.version('nixl-cu13') == '1.3.2'; assert not has_nixl_ep(); print(nixl.__name__)" \
+        "import importlib.metadata as m; import lmcache, lmcache.c_ops, nixl; from vllm.utils.import_utils import has_nixl_ep; assert m.version('lmcache') == '0.5.3'; assert m.version('nixl') == m.version('nixl-cu13') == '1.3.2'; assert not has_nixl_ep(); print(lmcache.__name__, nixl.__name__)" \
     && /tmp/image-check-venv/bin/python -m compileall -q /workspace/vllm/vllm \
     && rm -rf /tmp/image-check-venv \
-    && uv pip list --system | grep -E '^nixl(-cu13)?[[:space:]]+1\.3\.2'
+    && uv pip check --system \
+    && uv pip list --system \
+        | grep -E '^(lmcache[[:space:]]+0\.5\.3|nixl(-cu13)?[[:space:]]+1\.3\.2)'
 
-LABEL org.opencontainers.image.description="YOCO vLLM PD runtime with one source-built UCX 1.21/NIXL 1.3.2 stack" \
+LABEL org.opencontainers.image.description="YOCO vLLM PD runtime with LMCache 0.5.3 and one source-built UCX 1.21/NIXL 1.3.2 stack" \
       org.opencontainers.image.ucx.version="1.21.0" \
       org.opencontainers.image.ucx.revision="b6a9d47fccce849c28111f05a7fa8f1c930ff17d" \
       org.opencontainers.image.nixl.version="1.3.2" \
       org.opencontainers.image.nixl.revision="de8115ca97d3f8fb63a4988e9b4d4a038b2e0f72" \
+      org.opencontainers.image.lmcache.version="0.5.3" \
+      org.opencontainers.image.lmcache.revision="140819c9d57a975dbc5678a6459a218e544cb58b" \
       org.opencontainers.image.vllm.native-base.revision="f4964c907db7ce2d77c2b0ea39e263375b7eba4f" \
       org.opencontainers.image.vllm.cuda.architecture="10.0"
