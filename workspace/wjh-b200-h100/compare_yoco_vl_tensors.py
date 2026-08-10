@@ -324,7 +324,7 @@ def _run_reference_language_prefill(
     projected: torch.Tensor,
     max_new_tokens: int,
     device: torch.device,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, list[dict[str, Any]]]:
     from arch.model import create_kv_cache
 
     prompt_length = int(input_ids.numel())
@@ -367,19 +367,226 @@ def _run_reference_language_prefill(
         "slot_mapping": positions,
         "layer_index": 0,
     }
-    final_hidden, _, _ = language_model(
-        input_ids_device,
-        context=prefill_context,
-        last_hidden_only=True,
-        image_features=image_features,
-        image_input_mask=image_mask_device,
-    )
+    layer_last_hidden: list[dict[str, Any]] = []
+    input_norm_last_outputs: list[dict[str, Any]] = []
+    q_projection_last_outputs: list[dict[str, Any]] = []
+    k_projection_last_outputs: list[dict[str, Any]] = []
+    v_projection_last_outputs: list[dict[str, Any]] = []
+    q_norm_last_outputs: list[dict[str, Any]] = []
+    k_norm_last_outputs: list[dict[str, Any]] = []
+    rope_q_last_outputs: list[dict[str, Any]] = []
+    rope_k_last_outputs: list[dict[str, Any]] = []
+    lambda_projection_last_outputs: list[dict[str, Any]] = []
+    attention_last_outputs: list[dict[str, Any]] = []
+    mlp_last_inputs: list[dict[str, Any]] = []
+    mlp_last_outputs: list[dict[str, Any]] = []
+    hook_handles = []
+
+    def capture_layer_output(layer_idx: int):
+        def hook(_module, _inputs, output):
+            hidden_states = output[0] if isinstance(output, tuple) else output
+            item = {
+                "layer_idx": layer_idx,
+                "last_hidden": hidden_states[-1].float().cpu().clone(),
+            }
+            call_idx = len(layer_last_hidden)
+            if call_idx < len(input_norm_last_outputs):
+                item["input_norm_last_hidden"] = input_norm_last_outputs[call_idx][
+                    "last_hidden"
+                ]
+            if call_idx < len(attention_last_outputs):
+                item["attention_output_last_hidden"] = attention_last_outputs[
+                    call_idx
+                ]["last_hidden"]
+            for key, values in (
+                ("q_projection_last_hidden", q_projection_last_outputs),
+                ("k_projection_last_hidden", k_projection_last_outputs),
+                ("v_projection_last_hidden", v_projection_last_outputs),
+                ("q_norm_last_hidden", q_norm_last_outputs),
+                ("k_norm_last_hidden", k_norm_last_outputs),
+                ("rope_q_last_hidden", rope_q_last_outputs),
+                ("rope_k_last_hidden", rope_k_last_outputs),
+                ("lambda_projection_last_hidden", lambda_projection_last_outputs),
+            ):
+                if call_idx < len(values):
+                    item[key] = values[call_idx]["last_hidden"]
+            if call_idx < len(mlp_last_inputs):
+                item["mlp_input_last_hidden"] = mlp_last_inputs[call_idx][
+                    "last_hidden"
+                ]
+            if call_idx < len(mlp_last_outputs):
+                item["mlp_output_last_hidden"] = mlp_last_outputs[call_idx][
+                    "last_hidden"
+                ]
+            if isinstance(output, tuple) and len(output) >= 3:
+                routing_map, gate_scores = output[1], output[2]
+                if routing_map is not None and gate_scores is not None:
+                    top_scores, top_ids = torch.topk(gate_scores[-1], k=9)
+                    item.update(
+                        {
+                            "router_top8_ids": sorted(
+                                int(x)
+                                for x in routing_map[-1]
+                                .nonzero(as_tuple=False)
+                                .flatten()
+                                .tolist()
+                            ),
+                            "router_top9_ids_by_score": [
+                                int(x) for x in top_ids.tolist()
+                            ],
+                            "router_top8_margin": float(
+                                (top_scores[7] - top_scores[8]).item()
+                            ),
+                        }
+                    )
+            layer_last_hidden.append(item)
+
+        return hook
+
+    def capture_last_output(destination: list[dict[str, Any]], layer_idx: int):
+        def hook(_module, _inputs, output):
+            hidden_states = output[0] if isinstance(output, tuple) else output
+            destination.append(
+                {
+                    "layer_idx": layer_idx,
+                    "last_hidden": hidden_states[-1].float().cpu().clone(),
+                }
+            )
+
+        return hook
+
+    def capture_flat_last_output(
+        destination: list[dict[str, Any]], layer_idx: int
+    ):
+        def hook(_module, _inputs, output):
+            hidden_states = output[0] if isinstance(output, tuple) else output
+            destination.append(
+                {
+                    "layer_idx": layer_idx,
+                    "last_hidden": hidden_states[-1]
+                    .reshape(-1)
+                    .float()
+                    .cpu()
+                    .clone(),
+                }
+            )
+
+        return hook
+
+    def capture_rope_output(layer_idx: int):
+        def hook(_module, _inputs, output):
+            q, k = output
+            rope_q_last_outputs.append(
+                {
+                    "layer_idx": layer_idx,
+                    "last_hidden": q[-1].reshape(-1).float().cpu().clone(),
+                }
+            )
+            rope_k_last_outputs.append(
+                {
+                    "layer_idx": layer_idx,
+                    "last_hidden": k[-1].reshape(-1).float().cpu().clone(),
+                }
+            )
+
+        return hook
+
+    def capture_mlp_input(layer_idx: int):
+        def hook(_module, inputs):
+            mlp_last_inputs.append(
+                {
+                    "layer_idx": layer_idx,
+                    "last_hidden": inputs[0][-1].float().cpu().clone(),
+                }
+            )
+
+        return hook
+
+    hooked_rope_module_ids: set[int] = set()
+    for layer_idx, layer in enumerate(language_model.layers):
+        hook_handles.append(
+            layer.register_forward_hook(capture_layer_output(layer_idx))
+        )
+        hook_handles.append(
+            layer.input_layernorm.register_forward_hook(
+                capture_last_output(input_norm_last_outputs, layer_idx)
+            )
+        )
+        hook_handles.append(
+            layer.self_attn.register_forward_hook(
+                capture_last_output(attention_last_outputs, layer_idx)
+            )
+        )
+        hook_handles.append(
+            layer.self_attn.q_proj.register_forward_hook(
+                capture_flat_last_output(q_projection_last_outputs, layer_idx)
+            )
+        )
+        hook_handles.append(
+            layer.self_attn.q_norm.register_forward_hook(
+                capture_flat_last_output(q_norm_last_outputs, layer_idx)
+            )
+        )
+        if hasattr(layer.self_attn, "k_proj"):
+            hook_handles.append(
+                layer.self_attn.k_proj.register_forward_hook(
+                    capture_flat_last_output(k_projection_last_outputs, layer_idx)
+                )
+            )
+            hook_handles.append(
+                layer.self_attn.v_proj.register_forward_hook(
+                    capture_flat_last_output(v_projection_last_outputs, layer_idx)
+                )
+            )
+            hook_handles.append(
+                layer.self_attn.k_norm.register_forward_hook(
+                    capture_flat_last_output(k_norm_last_outputs, layer_idx)
+                )
+            )
+            # llm-train's get_rope() is lru-cached, so all self-attention
+            # layers share one RotaryEmbedding module. Registering a hook via
+            # every layer would append each invocation ten times.
+            rope_module_id = id(layer.self_attn.rope)
+            if rope_module_id not in hooked_rope_module_ids:
+                hooked_rope_module_ids.add(rope_module_id)
+                hook_handles.append(
+                    layer.self_attn.rope.register_forward_hook(
+                        capture_rope_output(layer_idx)
+                    )
+                )
+        if layer.self_attn.lambda_proj is not None:
+            hook_handles.append(
+                layer.self_attn.lambda_proj.register_forward_hook(
+                    capture_flat_last_output(
+                        lambda_projection_last_outputs, layer_idx
+                    )
+                )
+            )
+        hook_handles.append(
+            layer.mlp.register_forward_pre_hook(capture_mlp_input(layer_idx))
+        )
+        hook_handles.append(
+            layer.mlp.register_forward_hook(
+                capture_last_output(mlp_last_outputs, layer_idx)
+            )
+        )
+    try:
+        final_hidden, _, _ = language_model(
+            input_ids_device,
+            context=prefill_context,
+            last_hidden_only=True,
+            image_features=image_features,
+            image_input_mask=image_mask_device,
+        )
+    finally:
+        for handle in hook_handles:
+            handle.remove()
     next_token_logits = language_model.output(final_hidden[-1:]).float().cpu().clone()
     final_hidden = final_hidden.float().cpu().clone()
     del kv_cache, input_ids_device, image_mask_device
     del projected_device, image_features, positions, prefill_context
     torch.cuda.empty_cache()
-    return final_hidden, next_token_logits
+    return final_hidden, next_token_logits, layer_last_hidden
 
 
 @torch.inference_mode()
@@ -507,8 +714,19 @@ def _collect_reference_tensors(
     )
     if len(raw_list) != 1:
         raise RuntimeError(f"Expected one reference image tensor, got {len(raw_list)}")
-    vision_raw = raw_list[0].float().cpu().clone()
-    projected = projector.forward_flat(raw_list[0].float()).float().cpu().clone()
+    vision_raw_device = raw_list[0].float()
+    projector_pre_norm = projector.pre_norm(vision_raw_device)
+    projector_flat = projector_pre_norm.reshape(
+        projector_pre_norm.shape[0], -1
+    )
+    projector_linear_0 = projector.proj[0](projector_flat)
+    projector_activation = projector.proj[1](projector_linear_0)
+    projector_linear_2 = projector.proj[2](projector_activation)
+    projector_pre_norm_weight = projector.pre_norm.weight.float().cpu().clone()
+    projector_pre_norm_bias = projector.pre_norm.bias.float().cpu().clone()
+
+    vision_raw = vision_raw_device.cpu().clone()
+    projected = projector_linear_2.float().cpu().clone()
     combined = token_embeddings.clone()
     combined[image_mask] = projected
     vision_patch_embed_cpu = vision_patch_embed.float().cpu().clone()
@@ -520,7 +738,21 @@ def _collect_reference_tensors(
     vision_block0_out_cpu = reference_block0_out.float().cpu().clone()
     vision_encoder_cpu = vision_encoder.float().cpu().clone()
 
+    projector_tensors = {
+        "projector_pre_norm_weight": projector_pre_norm_weight,
+        "projector_pre_norm_bias": projector_pre_norm_bias,
+        "projector_pre_norm": projector_pre_norm.float().cpu().clone(),
+        "projector_flat": projector_flat.float().cpu().clone(),
+        "projector_linear_0": projector_linear_0.float().cpu().clone(),
+        "projector_activation": projector_activation.float().cpu().clone(),
+        "projector_linear_2": projector_linear_2.float().cpu().clone(),
+        "projector_input_stride": list(vision_raw_device.stride()),
+    }
+
     del projector, tower, raw_list
+    del vision_raw_device, projector_pre_norm, projector_flat
+    del projector_linear_0, projector_activation, projector_linear_2
+    del projector_pre_norm_weight, projector_pre_norm_bias
     del vision_patch_embed, vision_encoder, reference_rope, reference_block0
     del reference_block0_norm0, reference_block0_attn, reference_block0_after_attn
     del reference_block0_norm1, reference_block0_mlp, reference_block0_out
@@ -541,19 +773,22 @@ def _collect_reference_tensors(
     language_model.load_state_dict(language_state, strict=True)
     language_model.eval().requires_grad_(False)
 
-    final_hidden, next_token_logits = _run_reference_language_prefill(
-        language_model=language_model,
-        model_args=model_args,
-        input_ids=input_ids,
-        image_mask=image_mask,
-        projected=projected,
-        max_new_tokens=max_new_tokens,
-        device=device,
+    final_hidden, next_token_logits, layer_last_hidden = (
+        _run_reference_language_prefill(
+            language_model=language_model,
+            model_args=model_args,
+            input_ids=input_ids,
+            image_mask=image_mask,
+            projected=projected,
+            max_new_tokens=max_new_tokens,
+            device=device,
+        )
     )
     final_hidden_no_bos = None
     next_token_logits_no_bos = None
+    layer_last_hidden_no_bos = None
     if input_ids.numel() > 1 and int(input_ids[0].item()) == int(tokenizer.bos_id):
-        final_hidden_no_bos, next_token_logits_no_bos = (
+        final_hidden_no_bos, next_token_logits_no_bos, layer_last_hidden_no_bos = (
             _run_reference_language_prefill(
                 language_model=language_model,
                 model_args=model_args,
@@ -592,11 +827,14 @@ def _collect_reference_tensors(
         "vision_encoder": vision_encoder_cpu,
         "vision_raw": vision_raw,
         "projected_image_features": projected,
+        **projector_tensors,
         "combined_input_embeddings": combined,
         "final_hidden_matrix": final_hidden,
         "next_token_logits": next_token_logits,
+        "layer_last_hidden": layer_last_hidden,
         "final_hidden_matrix_no_bos": final_hidden_no_bos,
         "next_token_logits_no_bos": next_token_logits_no_bos,
+        "layer_last_hidden_no_bos": layer_last_hidden_no_bos,
     }
 
 
@@ -667,7 +905,15 @@ def _collect_vllm_model_tensors(
                 f"{type(raw_features).__name__}"
             )
         vision_raw = raw_features[0].float()
-        projected = model.vision_projector(vision_raw).float()
+        projector_input = vision_raw.to(model.vision_projector.pre_norm.weight.dtype)
+        projector_pre_norm = model.vision_projector.pre_norm(projector_input)
+        projector_flat = projector_pre_norm.reshape(
+            projector_pre_norm.shape[0], -1
+        )
+        projector_linear_0 = model.vision_projector.proj[0](projector_flat)
+        projector_activation = model.vision_projector.proj[1](projector_linear_0)
+        projector_linear_2 = model.vision_projector.proj[2](projector_activation)
+        projected = projector_linear_2.float()
         token_embeddings = model.language_model.get_input_embeddings(input_ids).float()
         combined = token_embeddings.clone()
         combined[image_mask] = projected
@@ -684,8 +930,51 @@ def _collect_vllm_model_tensors(
         "vision_encoder": vision_encoder.float().cpu().clone(),
         "vision_raw": vision_raw.cpu().clone(),
         "projected_image_features": projected.cpu().clone(),
+        "projector_pre_norm": projector_pre_norm.float().cpu().clone(),
+        "projector_pre_norm_weight": (
+            model.vision_projector.pre_norm.weight.float().cpu().clone()
+        ),
+        "projector_pre_norm_bias": (
+            model.vision_projector.pre_norm.bias.float().cpu().clone()
+        ),
+        "projector_flat": projector_flat.float().cpu().clone(),
+        "projector_linear_0": projector_linear_0.float().cpu().clone(),
+        "projector_activation": projector_activation.float().cpu().clone(),
+        "projector_linear_2": projector_linear_2.float().cpu().clone(),
+        "projector_dtype": str(model.vision_projector.pre_norm.weight.dtype),
+        "projector_input_stride": list(projector_input.stride()),
         "combined_input_embeddings": combined.cpu().clone(),
     }
+
+
+def _set_vllm_language_flash_attn_version(
+    model: torch.nn.Module,
+    *,
+    version: int,
+) -> dict[str, Any]:
+    updated = []
+    for layer_idx, layer in enumerate(model.language_model.model.layers):
+        attention = layer.self_attn.attn
+        attention_modules = (
+            list(attention) if isinstance(attention, torch.nn.ModuleList) else [attention]
+        )
+        for attention_idx, attention_module in enumerate(attention_modules):
+            impl = attention_module.impl
+            if not hasattr(impl, "vllm_flash_attn_version"):
+                continue
+            previous = int(impl.vllm_flash_attn_version)
+            impl.vllm_flash_attn_version = version
+            if hasattr(impl, "force_single_split"):
+                impl.force_single_split = version == 4
+            updated.append(
+                {
+                    "layer_idx": layer_idx,
+                    "attention_idx": attention_idx,
+                    "previous": previous,
+                    "current": version,
+                }
+            )
+    return {"updated_attention_impls": updated}
 
 
 def _install_vllm_final_capture(
@@ -694,6 +983,7 @@ def _install_vllm_final_capture(
     prompt_len: int,
     ref_final_hidden_cpu: torch.Tensor,
     ref_next_token_logits_cpu: torch.Tensor,
+    ref_layer_last_hidden_cpu: list[dict[str, Any]],
 ) -> dict[str, Any]:
     import types
 
@@ -703,12 +993,342 @@ def _install_vllm_final_capture(
     model._yoco_capture_logits_calls = []
     model._yoco_ref_final_hidden = ref_final_hidden_cpu.to(device=device)
     model._yoco_ref_next_token_logits = ref_next_token_logits_cpu.to(device=device)
+    model._yoco_ref_layer_last_hidden = [
+        {
+            "layer_idx": int(item["layer_idx"]),
+            "last_hidden": item["last_hidden"].to(device=device),
+            "input_norm_last_hidden": item["input_norm_last_hidden"].to(
+                device=device
+            ),
+            "attention_output_last_hidden": item[
+                "attention_output_last_hidden"
+            ].to(device=device),
+            "mlp_input_last_hidden": item["mlp_input_last_hidden"].to(
+                device=device
+            ),
+            "mlp_output_last_hidden": item["mlp_output_last_hidden"].to(
+                device=device
+            ),
+            **{
+                key: item[key].to(device=device)
+                for key in (
+                    "q_projection_last_hidden",
+                    "k_projection_last_hidden",
+                    "v_projection_last_hidden",
+                    "q_norm_last_hidden",
+                    "k_norm_last_hidden",
+                    "rope_q_last_hidden",
+                    "rope_k_last_hidden",
+                    "lambda_projection_last_hidden",
+                )
+                if key in item
+            },
+            "router_top8_ids": item.get("router_top8_ids"),
+            "router_top9_ids_by_score": item.get("router_top9_ids_by_score"),
+            "router_top8_margin": item.get("router_top8_margin"),
+        }
+        for item in ref_layer_last_hidden_cpu
+    ]
+    model._yoco_layer_last_hidden_stats = []
+    model._yoco_input_norm_last_token = []
+    model._yoco_q_projection_last_token = []
+    model._yoco_k_projection_last_token = []
+    model._yoco_v_projection_last_token = []
+    model._yoco_q_norm_last_token = []
+    model._yoco_k_norm_last_token = []
+    model._yoco_rope_q_last_token = []
+    model._yoco_rope_k_last_token = []
+    model._yoco_lambda_projection_last_token = []
+    model._yoco_attention_last_token = []
+    model._yoco_router_last_token = []
+    model._yoco_mlp_last_token = []
     model._yoco_final_hidden_stats = None
     model._yoco_next_token_hidden_stats = None
     model._yoco_next_token_logits_stats = None
     model._yoco_final_hidden_divergence = None
     model._yoco_next_token_logits_matrix_divergence = None
     model._yoco_next_token_logits_distribution = None
+
+    def capture_layer_output(layer_idx: int):
+        def hook(_module, _inputs, output):
+            call_idx = len(model._yoco_layer_last_hidden_stats)
+            if call_idx >= len(model._yoco_ref_layer_last_hidden):
+                return
+            hidden_states = output[0] if isinstance(output, tuple) else output
+            reference = model._yoco_ref_layer_last_hidden[call_idx]
+            stats = asdict(
+                _tensor_stats(
+                    f"language_layer_call_{call_idx}_last_hidden",
+                    reference["last_hidden"],
+                    hidden_states[-1].float(),
+                )
+            )
+            stats.update(
+                {
+                    "call_idx": call_idx,
+                    "layer_idx": layer_idx,
+                    "reference_layer_idx": reference["layer_idx"],
+                }
+            )
+            stage_outputs = (
+                (
+                    "input_norm_last_hidden_diff",
+                    "input_norm_last_hidden",
+                    model._yoco_input_norm_last_token,
+                ),
+                (
+                    "attention_output_last_hidden_diff",
+                    "attention_output_last_hidden",
+                    model._yoco_attention_last_token,
+                ),
+                (
+                    "mlp_output_last_hidden_diff",
+                    "mlp_output_last_hidden",
+                    model._yoco_mlp_last_token,
+                ),
+            )
+            for stats_key, reference_key, candidate_values in stage_outputs:
+                if call_idx < len(candidate_values):
+                    stats[stats_key] = asdict(
+                        _tensor_stats(
+                            f"language_layer_call_{call_idx}_{reference_key}",
+                            reference[reference_key],
+                            candidate_values[call_idx],
+                        )
+                    )
+            projection_outputs = (
+                (
+                    "q_projection_last_hidden_diff",
+                    "q_projection_last_hidden",
+                    model._yoco_q_projection_last_token,
+                ),
+                (
+                    "k_projection_last_hidden_diff",
+                    "k_projection_last_hidden",
+                    model._yoco_k_projection_last_token,
+                ),
+                (
+                    "v_projection_last_hidden_diff",
+                    "v_projection_last_hidden",
+                    model._yoco_v_projection_last_token,
+                ),
+                (
+                    "q_norm_last_hidden_diff",
+                    "q_norm_last_hidden",
+                    model._yoco_q_norm_last_token,
+                ),
+                (
+                    "k_norm_last_hidden_diff",
+                    "k_norm_last_hidden",
+                    model._yoco_k_norm_last_token,
+                ),
+                (
+                    "rope_q_last_hidden_diff",
+                    "rope_q_last_hidden",
+                    model._yoco_rope_q_last_token,
+                ),
+                (
+                    "rope_k_last_hidden_diff",
+                    "rope_k_last_hidden",
+                    model._yoco_rope_k_last_token,
+                ),
+                (
+                    "lambda_projection_last_hidden_diff",
+                    "lambda_projection_last_hidden",
+                    model._yoco_lambda_projection_last_token,
+                ),
+            )
+            for stats_key, reference_key, candidate_values in projection_outputs:
+                if reference_key in reference and call_idx < len(candidate_values):
+                    stats[stats_key] = asdict(
+                        _tensor_stats(
+                            f"language_layer_call_{call_idx}_{reference_key}",
+                            reference[reference_key],
+                            candidate_values[call_idx],
+                        )
+                    )
+            if call_idx < len(model._yoco_router_last_token):
+                candidate_router = model._yoco_router_last_token[call_idx]
+                reference_ids = reference.get("router_top8_ids")
+                candidate_ids = candidate_router.get("router_top8_ids")
+                candidate_mlp_input = candidate_router["mlp_input_last_hidden"]
+                mlp_input_stats = asdict(
+                    _tensor_stats(
+                        f"language_layer_call_{call_idx}_mlp_input_last_hidden",
+                        reference["mlp_input_last_hidden"],
+                        candidate_mlp_input,
+                    )
+                )
+                stats["mlp_input_last_hidden_diff"] = mlp_input_stats
+                stats.update(
+                    {
+                        key: value
+                        for key, value in candidate_router.items()
+                        if key != "mlp_input_last_hidden"
+                    }
+                )
+                stats.update(
+                    {
+                        "reference_router_top8_ids": reference_ids,
+                        "reference_router_top9_ids_by_score": reference.get(
+                            "router_top9_ids_by_score"
+                        ),
+                        "reference_router_top8_margin": reference.get(
+                            "router_top8_margin"
+                        ),
+                        "router_top8_overlap": (
+                            len(set(reference_ids) & set(candidate_ids))
+                            if reference_ids is not None and candidate_ids is not None
+                            else None
+                        ),
+                    }
+                )
+            model._yoco_layer_last_hidden_stats.append(stats)
+
+        return hook
+
+    def capture_last_output(destination: list[torch.Tensor]):
+        def hook(_module, _inputs, output):
+            hidden_states = output[0] if isinstance(output, tuple) else output
+            destination.append(hidden_states[-1].float().clone())
+
+        return hook
+
+    def capture_flat_last_output(destination: list[torch.Tensor]):
+        def hook(_module, _inputs, output):
+            hidden_states = output[0] if isinstance(output, tuple) else output
+            destination.append(hidden_states[-1].reshape(-1).float().clone())
+
+        return hook
+
+    def capture_packed_qkv(self_attn: torch.nn.Module):
+        def hook(_module, _inputs, output):
+            qkv = output[0] if isinstance(output, tuple) else output
+            q, k, v = qkv.split(
+                [self_attn.q_size, self_attn.kv_size, self_attn.kv_size], dim=-1
+            )
+            model._yoco_q_projection_last_token.append(
+                q[-1].reshape(-1).float().clone()
+            )
+            model._yoco_k_projection_last_token.append(
+                k[-1].reshape(-1).float().clone()
+            )
+            model._yoco_v_projection_last_token.append(
+                v[-1].reshape(-1).float().clone()
+            )
+
+        return hook
+
+    def capture_rope_output(_module, _inputs, output):
+        q, k = output
+        model._yoco_rope_q_last_token.append(q[-1].reshape(-1).float().clone())
+        model._yoco_rope_k_last_token.append(k[-1].reshape(-1).float().clone())
+
+    def capture_mlp_input(layer_idx: int):
+        def hook(module, inputs):
+            from vllm.model_executor.models.yoco import _yoco_topk_routing_impl
+
+            hidden_states = inputs[0]
+            router_logits = torch.ops.vllm.yoco_router_linear_tf32(
+                hidden_states.float(),
+                module.gate.weight,
+                not module.router_weights_normalized,
+            )
+            _, routing_map, gate_scores = _yoco_topk_routing_impl(
+                router_logits, module.top_k
+            )
+            top_scores, top_ids = torch.topk(gate_scores[-1], k=9)
+            model._yoco_router_last_token.append(
+                {
+                    "router_layer_idx": layer_idx,
+                    "mlp_input_last_hidden": hidden_states[-1].float().clone(),
+                    "router_top8_ids": sorted(
+                        int(x)
+                        for x in routing_map[-1]
+                        .nonzero(as_tuple=False)
+                        .flatten()
+                        .tolist()
+                    ),
+                    "router_top9_ids_by_score": [
+                        int(x) for x in top_ids.tolist()
+                    ],
+                    "router_top8_margin": float(
+                        (top_scores[7] - top_scores[8]).item()
+                    ),
+                }
+            )
+
+        return hook
+
+    if not hasattr(model, "_yoco_layer_capture_handles"):
+        model._yoco_layer_capture_handles = []
+        language_layers = model.language_model.model.layers
+        for layer_idx, layer in enumerate(language_layers):
+            model._yoco_layer_capture_handles.append(
+                layer.register_forward_hook(capture_layer_output(layer_idx))
+            )
+            model._yoco_layer_capture_handles.append(
+                layer.input_layernorm.register_forward_hook(
+                    capture_last_output(model._yoco_input_norm_last_token)
+                )
+            )
+            model._yoco_layer_capture_handles.append(
+                layer.self_attn.register_forward_hook(
+                    capture_last_output(model._yoco_attention_last_token)
+                )
+            )
+            if hasattr(layer.self_attn, "qkv_proj"):
+                model._yoco_layer_capture_handles.append(
+                    layer.self_attn.qkv_proj.register_forward_hook(
+                        capture_packed_qkv(layer.self_attn)
+                    )
+                )
+                model._yoco_layer_capture_handles.append(
+                    layer.self_attn.q_norm.register_forward_hook(
+                        capture_flat_last_output(model._yoco_q_norm_last_token)
+                    )
+                )
+                model._yoco_layer_capture_handles.append(
+                    layer.self_attn.k_norm.register_forward_hook(
+                        capture_flat_last_output(model._yoco_k_norm_last_token)
+                    )
+                )
+                model._yoco_layer_capture_handles.append(
+                    layer.self_attn.rotary_emb.register_forward_hook(
+                        capture_rope_output
+                    )
+                )
+            else:
+                model._yoco_layer_capture_handles.append(
+                    layer.self_attn.q_proj.register_forward_hook(
+                        capture_flat_last_output(
+                            model._yoco_q_projection_last_token
+                        )
+                    )
+                )
+                if layer.self_attn.q_norm is not None:
+                    model._yoco_layer_capture_handles.append(
+                        layer.self_attn.q_norm.register_forward_hook(
+                            capture_flat_last_output(
+                                model._yoco_q_norm_last_token
+                            )
+                        )
+                    )
+            model._yoco_layer_capture_handles.append(
+                layer.self_attn.lambda_proj.register_forward_hook(
+                    capture_flat_last_output(
+                        model._yoco_lambda_projection_last_token
+                    )
+                )
+            )
+            model._yoco_layer_capture_handles.append(
+                layer.mlp.register_forward_pre_hook(capture_mlp_input(layer_idx))
+            )
+            model._yoco_layer_capture_handles.append(
+                layer.mlp.register_forward_hook(
+                    capture_last_output(model._yoco_mlp_last_token)
+                )
+            )
 
     if not hasattr(model, "_yoco_orig_forward"):
         model._yoco_orig_forward = model.forward
@@ -799,7 +1419,11 @@ def _install_vllm_final_capture(
 
         model.compute_logits = types.MethodType(wrapped_compute_logits, model)
 
-    return {"capture_installed": True, "prompt_len": int(prompt_len)}
+    return {
+        "capture_installed": True,
+        "prompt_len": int(prompt_len),
+        "reference_layer_calls": len(ref_layer_last_hidden_cpu),
+    }
 
 
 def _get_vllm_final_capture(model: torch.nn.Module) -> dict[str, Any]:
@@ -815,6 +1439,13 @@ def _get_vllm_final_capture(model: torch.nn.Module) -> dict[str, Any]:
         raise RuntimeError(
             "vLLM next-token logits stats were not captured; "
             f"logits_calls={getattr(model, '_yoco_capture_logits_calls', None)}"
+        )
+    layer_last_hidden_stats = getattr(model, "_yoco_layer_last_hidden_stats", [])
+    reference_layer_calls = len(getattr(model, "_yoco_ref_layer_last_hidden", []))
+    if len(layer_last_hidden_stats) != reference_layer_calls:
+        raise RuntimeError(
+            "vLLM language layer outputs were not fully captured; "
+            f"captured={len(layer_last_hidden_stats)} expected={reference_layer_calls}"
         )
     return {
         "final_tensor_diffs": [
@@ -835,6 +1466,7 @@ def _get_vllm_final_capture(model: torch.nn.Module) -> dict[str, Any]:
         },
         "vllm_forward_calls": getattr(model, "_yoco_capture_forward_calls", []),
         "vllm_logits_calls": getattr(model, "_yoco_capture_logits_calls", []),
+        "language_layer_last_hidden_diffs": layer_last_hidden_stats,
     }
 
 
@@ -849,6 +1481,7 @@ def _collect_vllm_tensors(
     capture_prompt_len: int,
     ref_final_hidden: torch.Tensor,
     ref_next_token_logits: torch.Tensor,
+    ref_layer_last_hidden: list[dict[str, Any]],
     ref_image_mask: torch.Tensor,
     max_model_len: int,
     vllm_pixel_values: torch.Tensor,
@@ -856,6 +1489,7 @@ def _collect_vllm_tensors(
     seed: int,
     gpu_memory_utilization: float,
     flash_attn_version: int | None,
+    language_flash_attn_version: int | None,
 ) -> dict[str, Any]:
     from vllm import LLM, SamplingParams
 
@@ -884,6 +1518,14 @@ def _collect_vllm_tensors(
                 "flash_attn_version": flash_attn_version,
             }
         llm = LLM(**_supported_kwargs(LLM, llm_kwargs))
+        language_flash_attn_override = None
+        if language_flash_attn_version is not None:
+            language_flash_attn_override = llm.apply_model(
+                partial(
+                    _set_vllm_language_flash_attn_version,
+                    version=language_flash_attn_version,
+                )
+            )[0]
         fn = partial(
             _collect_vllm_model_tensors,
             input_ids_cpu=ref_input_ids,
@@ -898,6 +1540,7 @@ def _collect_vllm_tensors(
                 prompt_len=int(capture_prompt_len),
                 ref_final_hidden_cpu=ref_final_hidden,
                 ref_next_token_logits_cpu=ref_next_token_logits,
+                ref_layer_last_hidden_cpu=ref_layer_last_hidden,
             )
         )
         sampling = SamplingParams(
@@ -920,6 +1563,7 @@ def _collect_vllm_tensors(
             "generation_prompt": generation_prompt,
             "generated_ids": list(completion.token_ids),
             "generated_text": completion.text,
+            "language_flash_attn_override": language_flash_attn_override,
             **tensors,
             **final_tensors,
         }
@@ -1111,6 +1755,13 @@ def parse_args() -> argparse.Namespace:
         choices=(2, 3, 4),
         default=None,
     )
+    parser.add_argument(
+        "--vllm_language_flash_attn_version",
+        type=int,
+        choices=(2, 4),
+        default=None,
+        help="Diagnostic override for YOCO language attention only.",
+    )
     parser.add_argument("--output_json", default=None)
     return parser.parse_args()
 
@@ -1188,10 +1839,14 @@ def main() -> int:
     final_reference_variant = "with_bos"
     final_reference_hidden = reference["final_hidden_matrix"]
     final_reference_logits = reference["next_token_logits"]
+    final_reference_layer_last_hidden = reference["layer_last_hidden"]
     if reference["final_hidden_matrix_no_bos"] is not None:
         final_reference_variant = "no_bos_matches_vllm_string_prefill"
         final_reference_hidden = reference["final_hidden_matrix_no_bos"]
         final_reference_logits = reference["next_token_logits_no_bos"]
+        final_reference_layer_last_hidden = reference[
+            "layer_last_hidden_no_bos"
+        ]
     max_model_len = int(reference["input_ids"].numel()) + args.max_new_tokens
     vllm_capture_prompt_len = int(final_reference_hidden.shape[0])
     print("Loading vLLM tensors...")
@@ -1204,6 +1859,7 @@ def main() -> int:
         capture_prompt_len=vllm_capture_prompt_len,
         ref_final_hidden=final_reference_hidden,
         ref_next_token_logits=final_reference_logits,
+        ref_layer_last_hidden=final_reference_layer_last_hidden,
         ref_image_mask=reference["image_mask"],
         max_model_len=max_model_len,
         vllm_pixel_values=vllm_pixel_values,
@@ -1211,6 +1867,7 @@ def main() -> int:
         seed=args.seed,
         gpu_memory_utilization=args.gpu_memory_utilization,
         flash_attn_version=args.vllm_flash_attn_version,
+        language_flash_attn_version=args.vllm_language_flash_attn_version,
     )
 
     stats = [
@@ -1262,6 +1919,36 @@ def main() -> int:
         ),
         _tensor_stats("vision_raw", reference["vision_raw"], vllm_tensors["vision_raw"]),
         _tensor_stats(
+            "projector_pre_norm_weight",
+            reference["projector_pre_norm_weight"],
+            vllm_tensors["projector_pre_norm_weight"],
+        ),
+        _tensor_stats(
+            "projector_pre_norm_bias",
+            reference["projector_pre_norm_bias"],
+            vllm_tensors["projector_pre_norm_bias"],
+        ),
+        _tensor_stats(
+            "projector_pre_norm",
+            reference["projector_pre_norm"],
+            vllm_tensors["projector_pre_norm"],
+        ),
+        _tensor_stats(
+            "projector_linear_0",
+            reference["projector_linear_0"],
+            vllm_tensors["projector_linear_0"],
+        ),
+        _tensor_stats(
+            "projector_activation",
+            reference["projector_activation"],
+            vllm_tensors["projector_activation"],
+        ),
+        _tensor_stats(
+            "projector_linear_2",
+            reference["projector_linear_2"],
+            vllm_tensors["projector_linear_2"],
+        ),
+        _tensor_stats(
             "projected_image_features",
             reference["projected_image_features"],
             vllm_tensors["projected_image_features"],
@@ -1292,10 +1979,23 @@ def main() -> int:
             "quant_mode": args.quant_mode,
             "reference_vision_attn": reference["resolved_vision_attn"],
             "vllm_dtype": "bfloat16",
+            "vllm_projector_dtype": vllm_tensors["projector_dtype"],
+            "reference_projector_input_stride": reference[
+                "projector_input_stride"
+            ],
+            "vllm_projector_input_stride": vllm_tensors[
+                "projector_input_stride"
+            ],
             "vllm_quantization": None,
             "vllm_moe_backend": "triton",
             "vllm_enable_prefix_caching": False,
             "vllm_flash_attn_version": args.vllm_flash_attn_version,
+            "vllm_language_flash_attn_version": (
+                args.vllm_language_flash_attn_version
+            ),
+            "vllm_language_flash_attn_override": vllm_tensors[
+                "language_flash_attn_override"
+            ],
             "vllm_generation_prompt": vllm_tensors["generation_prompt"],
             "vllm_capture_forward_calls": vllm_tensors["vllm_forward_calls"],
             "vllm_capture_logits_calls": vllm_tensors["vllm_logits_calls"],
@@ -1305,6 +2005,9 @@ def main() -> int:
         "checks": checks,
         "tensor_diffs": [asdict(item) for item in stats],
         "divergence": divergence,
+        "language_layer_last_hidden_diffs": vllm_tensors[
+            "language_layer_last_hidden_diffs"
+        ],
     }
 
     print("\nCHECKS")

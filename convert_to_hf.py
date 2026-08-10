@@ -504,7 +504,12 @@ def copy_tokenizer_files(output_dir: str) -> None:
 def keep_fp32_in_export(key: str) -> bool:
     # Keep the native checkpoint's FP32 router gate master weights. shared_gate
     # uses llm-train's default MixPrecisionLinear dtype and is exported as BF16.
-    return key.endswith(".mlp.gate.weight")
+    # YOCO-VL also deliberately trains and runs its vision projector in FP32,
+    # including the incoming ViT features. Casting these weights to BF16 during
+    # export introduces the first measurable native-vLLM tensor divergence.
+    return key.endswith(".mlp.gate.weight") or key.startswith(
+        "vision_projector."
+    )
 
 
 def save_sharded(

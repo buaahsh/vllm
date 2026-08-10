@@ -503,11 +503,15 @@ def _run_vllm_capture(
     max_model_len: int,
     max_num_batched_tokens: int,
     max_num_seqs: int,
+    enforce_eager: bool,
     enable_chunked_prefill: bool,
+    enable_prefix_caching: bool,
+    kv_sharing_fast_prefill: bool,
     seed: int,
     gpu_memory_utilization: float,
     flash_attn_version: int | None,
     quantization: str | None,
+    dtype: str,
 ) -> dict[str, Any]:
     from vllm import LLM, SamplingParams
 
@@ -523,7 +527,7 @@ def _run_vllm_capture(
             "model": str(model_path),
             "tokenizer": str(tokenizer_path),
             "trust_remote_code": True,
-            "dtype": "bfloat16",
+            "dtype": dtype,
             "seed": seed,
             "tensor_parallel_size": 1,
             "max_model_len": max_model_len,
@@ -532,9 +536,10 @@ def _run_vllm_capture(
             "gpu_memory_utilization": gpu_memory_utilization,
             "quantization": quantization,
             "moe_backend": moe_backend,
-            "enforce_eager": True,
+            "enforce_eager": enforce_eager,
             "enable_chunked_prefill": enable_chunked_prefill,
-            "enable_prefix_caching": False,
+            "enable_prefix_caching": enable_prefix_caching,
+            "kv_sharing_fast_prefill": kv_sharing_fast_prefill,
             "limit_mm_per_prompt": {"image": 1},
         }
         if flash_attn_version is not None:
@@ -589,6 +594,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--gpu_memory_utilization", type=float, default=0.90)
     parser.add_argument(
+        "--vllm_max_model_len",
+        type=int,
+        default=0,
+        help="Defaults to the longest reference prompt plus max_new_tokens.",
+    )
+    parser.add_argument(
         "--vllm_max_num_seqs",
         type=int,
         default=0,
@@ -609,6 +620,22 @@ def parse_args() -> argparse.Namespace:
         help="Allow vLLM to split a logical request batch into bounded prefill chunks.",
     )
     parser.add_argument(
+        "--enable_prefix_caching",
+        action="store_true",
+        help="Enable vLLM prefix caching for runtime-configuration comparisons.",
+    )
+    parser.add_argument(
+        "--kv_sharing_fast_prefill",
+        action="store_true",
+        help="Enable vLLM KV-sharing fast prefill for runtime-configuration comparisons.",
+    )
+    parser.add_argument(
+        "--vllm_execution_mode",
+        choices=("eager", "cuda_graph"),
+        default="eager",
+        help="Use eager execution or FULL_AND_PIECEWISE CUDA graphs.",
+    )
+    parser.add_argument(
         "--reference_prompt_variant",
         choices=("with_bos", "no_bos"),
         default="no_bos",
@@ -626,6 +653,11 @@ def parse_args() -> argparse.Namespace:
         "--vllm_quantization",
         choices=("none", "mxfp8", "fp8_per_block"),
         default="none",
+    )
+    parser.add_argument(
+        "--vllm_dtype",
+        choices=("bfloat16", "float16"),
+        default="bfloat16",
     )
     parser.add_argument(
         "--reference_llm_flash_attn_version",
@@ -780,7 +812,13 @@ def main() -> int:
     torch.cuda.empty_cache()
 
     max_prompt_tokens = max(int(ids.numel()) for ids in reference_prompt_ids)
-    max_model_len = max_prompt_tokens + args.max_new_tokens
+    required_max_model_len = max_prompt_tokens + args.max_new_tokens
+    max_model_len = args.vllm_max_model_len or required_max_model_len
+    if max_model_len < required_max_model_len:
+        raise ValueError(
+            "--vllm_max_model_len must be at least the longest prompt plus "
+            f"max_new_tokens ({required_max_model_len}); got {max_model_len}"
+        )
     full_batch_tokens = (
         sum(int(ids.numel()) for ids in reference_prompt_ids)
         + len(samples) * args.max_new_tokens
@@ -801,13 +839,17 @@ def main() -> int:
         max_model_len=max_model_len,
         max_num_batched_tokens=max_num_batched_tokens,
         max_num_seqs=max_num_seqs,
+        enforce_eager=args.vllm_execution_mode == "eager",
         enable_chunked_prefill=args.enable_chunked_prefill,
+        enable_prefix_caching=args.enable_prefix_caching,
+        kv_sharing_fast_prefill=args.kv_sharing_fast_prefill,
         seed=args.seed,
         gpu_memory_utilization=args.gpu_memory_utilization,
         flash_attn_version=args.vllm_flash_attn_version,
         quantization=(
             None if args.vllm_quantization == "none" else args.vllm_quantization
         ),
+        dtype=args.vllm_dtype,
     )
 
     result = {
@@ -833,7 +875,10 @@ def main() -> int:
             "max_num_batched_tokens": max_num_batched_tokens,
             "full_batch_tokens": full_batch_tokens,
             "vllm_max_num_seqs": max_num_seqs,
+            "vllm_execution_mode": args.vllm_execution_mode,
             "vllm_enable_chunked_prefill": args.enable_chunked_prefill,
+            "vllm_enable_prefix_caching": args.enable_prefix_caching,
+            "vllm_kv_sharing_fast_prefill": args.kv_sharing_fast_prefill,
             "reference_quant_mode": model_args.quant_mode,
             "reference_llm_attn": (
                 "flash_attention_cute"
@@ -841,7 +886,7 @@ def main() -> int:
                 else "flash_attention_2"
             ),
             "reference_vision_attn": vision_attn_implementation,
-            "vllm_dtype": "bfloat16",
+            "vllm_dtype": args.vllm_dtype,
             "reference_projector_parameter_dtypes": (
                 reference_projector_parameter_dtypes
             ),
@@ -854,7 +899,6 @@ def main() -> int:
                 else args.vllm_quantization
             ),
             "vllm_moe_backend": vllm_result["vllm_moe_backend"],
-            "vllm_enable_prefix_caching": False,
             "vllm_flash_attn_version": args.vllm_flash_attn_version,
             "vision_seconds": vision_seconds,
             "vllm_logits_calls": vllm_result["vllm_logits_calls"],
