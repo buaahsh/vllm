@@ -53,6 +53,7 @@
 | 15 | `03a0479b67` | 正确性/PD | 对齐 standalone、local cache 与 NIXL PD shape | 已进入 `fhb-dev` |
 | 16 | `fa8e4eac6a` | 文档/PD | 当前 PD 部署策略独立报告 | 已进入 `fhb-dev` |
 | 17 | 本次文档提交 | 测试/PD | TP2/DP1 batch 容量、吞吐和 forward 曲线 | 随本提交进入 `fhb-dev` |
+| 18 | 本次文档提交 | 设计/Cache | LMCache 三级缓存与 Dynamo 适配方案 | 随本提交进入 `fhb-dev` |
 
 ---
 
@@ -3216,3 +3217,74 @@ wall time 当作 model forward。完整结果位于：
 
 测试完成后已删除 Volcano Job，并确认 Job/Pod 均为 `NotFound`。本提交只同步已有
 GPU 实测文档，不产生性能行为变化；回滚只需删除独立报告并移除本条记录。
+
+## 18. LMCache 三级缓存与 Dynamo 适配方案
+
+```text
+subject: docs(yoco): plan LMCache and Dynamo adaptation
+scope: YOCO-LMCACHE-DYNAMO-PLAN.md, fhb-dev-commit.md
+functional behavior change: none
+runtime under review: fhb-dev@f54af87aecf78e2db92c15cfa5062fadff1d9509
+```
+
+### 目的与结论
+
+本提交在修改镜像和运行逻辑前，先固定 YOCO 接入 LMCache、GPU/CPU/持久后端三级
+KV 缓存和 NVIDIA Dynamo 的实施边界。推荐的第一阶段组合为：
+
+- Prefill 使用 vLLM GPU prefix cache、LMCache 跨请求缓存和 NIXL producer；
+- Decode 保持 NIXL consumer，不在第一阶段写 LMCache；
+- P 到 D 的实时数据面继续使用已经验证的 NIXL 1.3.2 + UCX 1.21；
+- Dynamo 先承担 Frontend、KV-aware 路由和 P/D 编排，不替换 NIXL 数据面；
+- LMCache 第一阶段关闭 layerwise、异步加载和 MP sidecar，保持完整 CUDA Graph。
+
+这样可以分别归因 LMCache lookup/load、三级存储、NIXL P/D 和 Dynamo Router 的
+正确性及性能，不把多个高风险变化合并为一个不可诊断的上线步骤。
+
+### 修改文件
+
+- `YOCO-LMCACHE-DYNAMO-PLAN.md`：记录架构、固定版本、YOCO 兼容风险、connector
+  组合、三级缓存、Dynamo shared-indexer 缺口、测试矩阵、性能口径和回退顺序；
+- `fhb-dev-commit.md`：增加本条设计记录及提交索引。
+
+### 源码审阅发现
+
+本轮对当前 vLLM connector、LMCache `v0.5.3@140819c9d57a` 和 Dynamo
+`v1.3.1@a49702e4432e` 做了只读审阅，确认：
+
+1. 当前 `docker/Dockerfile.b200.pd` 没有安装 LMCache；LMCache 0.5.3 已有 CUDA 13
+   wheel，但仍应从固定提交源码构建，使扩展与镜像内 torch C++ ABI、CUDA 13 和
+   SM100 精确对齐；
+2. YOCO 后 10 个 cross layers 是 10 个逻辑名字指向同一个物理 KV tensor，而
+   LMCache adapter 当前按普通逐层列表构造 KV shape，必须建立 20 logical -> 11
+   physical 的稳定映射；
+3. LMCache chunk 和 YOCO/NIXL block-tail 是两层对齐规则。第一阶段固定
+   `chunk_size=256`、`save_unfull_chunk=false`、`discard_partial_chunks=true`，不能
+   让 LMCache 恢复 D 应本地重算的最后 prompt block；
+4. vLLM `MultiConnector` 是“第一个命中负责 load、所有 child 参与 save”，但
+   LMCache hit -> P 计算 miss -> NIXL send 的串联语义仍需真实端到端证明；
+5. Dynamo 1.3.1 可按 host/disk cache event 给路由打分，但其
+   `shared_cache_type` 只有 `none/hicache`，LMCache 共享持久层需要后续独立
+   shared-indexer adapter。
+
+### 测试与性能
+
+本提交是设计文档，不修改运行行为，因此没有 GPU 性能收益，也没有申请资源。
+执行的检查为：
+
+```text
+git diff --check: passed
+repository state before edit: fhb-dev == snow2022jlu/fhb-dev
+```
+
+方案明确要求后续报告 cold、CPU warm、persistent warm 和 Dynamo routing 四组相对
+当前 NIXL-only baseline 的 TTFT、ITL、吞吐、load/store 带宽与各层 hit rate，且
+standalone -> LMCache -> NIXL PD 必须逐 token exact。设计稿不能作为兼容性或性能
+已经通过的证据。
+
+### 风险与回滚
+
+该提交不修改模型、scheduler、connector、Docker、CUDA Graph、UCX、NIXL、
+Gateway 或 Kubernetes profile。回滚只需删除方案文件并移除本条记录，不影响当前
+NIXL-only PD 服务。后续实现继续拆成镜像、shared-KV 单测、adapter、P/D 串联、
+持久层和 Dynamo 六类独立提交。
