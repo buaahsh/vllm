@@ -81,25 +81,28 @@ MP sidecar 可以在进程内模式正确后单独做一个功能提交和 A/B�
 
 ### 1. 共享 cross KV 不能按 10 个普通层保存
 
-YOCO 有 10 个 self layers 和 10 个 cross layers。后 10 层在 vLLM 中表现为 10 个
-逻辑 layer name，但它们指向同一个物理 KV tensor。当前 LMCache adapter 直接把
-`kv_caches.values()` 转为逐层列表，同时按模型逻辑层数构造 LMCache KV shape。
+YOCO 配置有 10 个 self layers 和 10 个 cross layers，但当前 checkpoint 还设置了
+`universal_loop=3`。三个 self-attention pass 各自拥有 10 份 KV，后 10 个 cross
+layer name 则指向同一个 owner tensor。当前 LMCache adapter 直接把
+`kv_caches.values()` 转为逐层列表，同时按模型基础逻辑层数构造 LMCache KV shape。
 
-直接启用会产生两个风险：
+直接启用会产生三个风险：
 
 - 同一份 cross KV 被重复存储 10 次；
-- LMCache 的逻辑层号、物理 tensor 数和恢复位置不一致。
+- 第二、三轮 self-attention KV 被遗漏；
+- LMCache 的基础逻辑层数、展开后的物理 tensor 数和恢复位置不一致。
 
 适配时应在 LMCache connector 边界建立稳定的 physical-layer view：
 
 ```text
-logical layers:  self 0..9 + cross 10..19  = 20
-physical caches: self 0..9 + cross owner 10 = 11
+base logical layers:  self 0..9 + cross 10..19 = 20
+physical caches:      0..10, 20..29, 40..49    = 31
+cross aliases:        11..19 -> owner 10
 ```
 
 具体约束：
 
-- scheduler 根据 `KVCacheConfig` 的共享关系计算稳定物理顺序；
+- connector 同时读取 `KVCacheConfig` 和 `universal_loop`，计算稳定物理顺序；
 - worker 按同一顺序只向 LMCache 注册唯一 tensor；
 - worker 额外断言 cross 11..19 与 owner 的 device、地址、shape、stride、dtype 一致；
 - load 只恢复 owner tensor，其他 cross layer 继续通过 vLLM alias 读取；
@@ -120,24 +123,23 @@ tail_tokens   = N - remote_tokens
 LMCache 命中不能把原 prompt 的最后一个 block 偷渡进 NIXL transfer。首版使用：
 
 ```yaml
-chunk_size: 256
+chunk_size: 16
 save_unfull_chunk: false
 use_layerwise: false
 enable_async_loading: false
 ```
 
 并为 LMCache connector 设置 `discard_partial_chunks=true`。当前 vLLM block size 为
-16，256 是 16 的整数倍。以 1,356-token prompt 为例，P 的 NIXL prefix 是 1,344
-tokens；LMCache 最多命中 1,280，P 计算剩余 64 后仍只通过 NIXL 发布 1,344，D
-计算最后 12。LMCache chunk 边界和 NIXL block-tail 是两层不同的对齐规则。
-
-后续只有在 256-token 粒度造成明显命中损失时，才单独 A/B 128 或更小 chunk。
+16；B200 单卡验证表明 `chunk_size=16` 可与原生 prefix cache 使用完全相同的恢复
+边界，并实现 text、token IDs 和逐 token logprob exact。较大的 64/128/256 chunk
+仍可作为纯性能 A/B，但不能把不同恢复边界与全量重算之间的数值差异归因给
+connector。
 
 ### 3. 首版不启用 layerwise
 
 LMCache layerwise load/store 需要 PIECEWISE CUDA Graph，而且每个 attention layer 都会
-推进一次保存/加载状态。YOCO 的 10 个 cross layer 共享一个物理 cache，直接套用
-逐层状态机不安全，也会改变当前 decode batch 1--32 的完整 graph 性能。
+推进一次保存/加载状态。YOCO 展开后有 31 份物理 KV，另有 9 个 cross alias，直接
+套用基础 20 层状态机不安全，也会改变当前 decode batch 1--32 的完整 graph 性能。
 
 因此第一轮固定 `use_layerwise=false`。如果非 layerwise 已证明收益，再单独研究
 YOCO physical-layer-aware layerwise，而不把它混入基础兼容提交。

@@ -3256,9 +3256,9 @@ KV 缓存和 NVIDIA Dynamo 的实施边界。推荐的第一阶段组合为：
 1. 当前 `docker/Dockerfile.b200.pd` 没有安装 LMCache；LMCache 0.5.3 已有 CUDA 13
    wheel，但仍应从固定提交源码构建，使扩展与镜像内 torch C++ ABI、CUDA 13 和
    SM100 精确对齐；
-2. YOCO 后 10 个 cross layers 是 10 个逻辑名字指向同一个物理 KV tensor，而
-   LMCache adapter 当前按普通逐层列表构造 KV shape，必须建立 20 logical -> 11
-   physical 的稳定映射；
+2. YOCO 后 10 个 cross layers 是 10 个逻辑名字指向同一个物理 KV tensor；当时据此
+   推测需要 20 logical -> 11 physical。第 20 节的真实 B200 启动验证进一步发现
+   `universal_loop=3`，并将该结论更正为 20 个基础逻辑层 -> 31 份物理 KV；
 3. LMCache chunk 和 YOCO/NIXL block-tail 是两层对齐规则。第一阶段固定
    `chunk_size=256`、`save_unfull_chunk=false`、`discard_partial_chunks=true`，不能
    让 LMCache 恢复 D 应本地重算的最后 prompt block；
@@ -3320,17 +3320,17 @@ LMCache 同时按 tag 和 commit 校验。仅 shallow fetch commit 会让
 ### 修改文件
 
 - `docker/Dockerfile.b200.pd`
-  - 在 native builder 中使用基础镜像的 torch、CUDA 13.1 和 CXX11 ABI=1 从源码
+    - 在 native builder 中使用基础镜像的 torch、CUDA 13.1 和 CXX11 ABI=1 从源码
     构建 LMCache wheel，`TORCH_CUDA_ARCH_LIST=10.0`，不混入 CUDA 12 runtime；
-  - runtime 安装固定 wheel 和 `wheel==0.47.0`，后者补齐基础镜像中
+    - runtime 安装固定 wheel 和 `wheel==0.47.0`，后者补齐基础镜像中
     `astunparse` 的既有依赖缺项；
-  - 保持 vLLM P 到 D 的传输仍由 NIXL 1.3.2 + UCX 1.21 承担，安装 LMCache 不会
+    - 保持 vLLM P 到 D 的传输仍由 NIXL 1.3.2 + UCX 1.21 承担，安装 LMCache 不会
     自动改变 connector；
-  - 构建阶段导入 `lmcache.c_ops`，检查 LMCache/NIXL 版本、禁用 `nixl_ep` shim、
+    - 构建阶段导入 `lmcache.c_ops`，检查 LMCache/NIXL 版本、禁用 `nixl_ep` shim、
     验证唯一 UCX、编译 Python tree，并把 `uv pip check --system` 设为硬门禁；
-  - OCI labels 新增 LMCache version/revision，镜像说明明确三组件版本。
+    - OCI labels 新增 LMCache version/revision，镜像说明明确三组件版本。
 - `fhb-dev-commit.md`
-  - 记录构建原因、文件范围、验证证据、依赖变化和回退边界。
+    - 记录构建原因、文件范围、验证证据、依赖变化和回退边界。
 
 ### 构建与测试结果
 
@@ -3378,7 +3378,131 @@ git diff --check:         passed
 吞吐或命中率收益。它只提供后续单卡 CPU cold/warm、1P1D LMCache -> NIXL 和三级
 缓存测试所需的 runtime；不能把“wheel 可导入”写成 KV 保存/恢复正确。
 
-YOCO 当前仍有 20 个逻辑 attention layer 对应 11 份物理 KV tensor。这个提交尚未
-做 physical-layer view，直接启用通用 LMCache adapter 仍可能重复保存 shared cross
-KV；必须等待下一独立 adapter 提交及逐 token GPU 验证。回滚本提交只需恢复
-`docker/Dockerfile.b200.pd` 并重建镜像，现有 NIXL-only 已发布镜像不受影响。
+本节构建时曾按 20 个逻辑 attention layer 对应 11 份物理 KV tensor 估算。第 20 节
+通过真实 checkpoint 和 B200 启动把它更正为 `0..10, 20..29, 40..49` 共 31 份；
+11--19 仍是 owner 10 的 alias。镜像提交本身尚未启用 connector，因此该估算不影响
+镜像行为。回滚本提交只需恢复 `docker/Dockerfile.b200.pd` 并重建镜像，现有
+NIXL-only 已发布镜像不受影响。
+
+## 20. YOCO universal-loop-aware LMCache 物理 KV 适配
+
+```text
+subject: fix(yoco): adapt LMCache to physical KV layout
+scope: lmcache_connector.py, test_lmcache_connector.py,
+       YOCO-LMCACHE-DYNAMO-PLAN.md, fhb-dev-commit.md
+functional behavior change: YOCO 可安全注册 31 份物理 KV 到 LMCache；
+                            非 YOCO connector 行为不变
+runtime base: fhb-dev@e081d38f5a
+```
+
+### 目的、真实布局与修改文件
+
+第一次 B200 启动使原先的 20 -> 11 假设 fail closed，并暴露 checkpoint 的真实配置：
+
+```text
+num_hidden_layers=20
+yoco_cross_layers=10
+universal_loop=3
+physical KV indices=0..10, 20..29, 40..49
+```
+
+也就是说，三轮 self-attention 各有 10 份 KV，cross owner 为 layer 10，共 31 份
+物理 tensor；逻辑 cross layers 11--19 继续 alias owner 10。本提交围绕这个单一功能
+修改四个文件：
+
+- `vllm/distributed/kv_transfer/kv_connector/v1/lmcache_connector.py`
+    - 从 HF config 读取 `universal_loop`，按基础逻辑层号偏移构造物理顺序；
+    - 初始化 LMCache 时临时暴露 31 层 metadata 和隔离 namespace，初始化后恢复
+    vLLM 原始 20 层配置；
+    - 注册前要求物理层集合完整，并严格断言 11--19 与 owner 10 是同一个 tensor
+    对象、地址、offset、shape、stride 和 dtype；
+    - 只把 31 份唯一物理 tensor 传给 LMCache，避免重复保存 cross alias；
+    - YOCO 首版强制非 layerwise、非 async-load、非 blending 和 GPU connector v3，
+    不支持的组合直接失败，不静默降级。
+- `tests/v1/kv_connector/unit/test_lmcache_connector.py`
+    - 覆盖三轮 31 份布局、单轮 11 份布局、alias clone、缺失 alias、31 层 metadata/
+    engine 和实际注册集合。
+- `YOCO-LMCACHE-DYNAMO-PLAN.md`
+    - 把设计阶段的 11 份估算更正为实测 31 份，并把首轮功能配置改为与 vLLM block
+    对齐的 16-token chunk。
+- `fhb-dev-commit.md`
+    - 更正第 18、19 节的历史假设，并记录本次实现和测试证据。
+
+### CPU、镜像与静态检查
+
+本地和目标 LMCache 0.5.3/CUDA 13 镜像内执行同一测试文件：
+
+```text
+local pytest:       29 passed
+image pytest:       29 passed
+ruff check/format:  passed
+mypy hook:          passed
+all pre-commit:     passed
+git diff --check:   passed
+```
+
+B200 运行时从 PVC 只读挂载经过测试的 connector，源码 SHA256 为
+`6da5612848b13be15e5e199cbc352b00f9d48e816cb82f48d84c9a0a3ccc8b6d`。
+节点 Docker 的既有候选镜像已达到最大 layer depth，无法再 `docker commit`；这只影响
+临时测试镜像的再封层，不影响第 19 节从干净基础镜像构建的 pinned Dockerfile。
+
+### B200 正确性
+
+```text
+Volcano Job: bonete01/lidong1-yoco-lmcache-g1-0810
+Pod:         lidong1-yoco-lmcache-g1-0810-master-0
+Node:        slc01-cl02-hgx-0297
+GPU:         1 x NVIDIA B200
+LMCache:     0.5.3-g140819c, LocalCPUBackend, GPU connector v3
+Model:       BF16, FlashInfer, Triton MoE, FULL_AND_PIECEWISE CUDA Graph
+```
+
+服务日志确认 LMCache 的 `num_layer=31`、`kv_shape=(31, 2, 16, 8, 128)`，以及
+`20 logical layers -> 31 physical KV tensors`。对 2,125-token prompt，LMCache cold
+保存 2,112 token，warm 和 partial 各真实命中并恢复 2,112 token。
+
+严格门禁分两层：
+
+1. cold LMCache 与无缓存全量重算的 text、token IDs、逐 token logprob 全部 exact；
+2. warm/partial 与相同 2,112-token 恢复边界的 vLLM 原生 prefix cache 全部 exact。
+
+原先用 `chunk_size=256` 只恢复 2,048 token，而原生 prefix cache 恢复 2,112 token；
+两种路径都成功返回，但与全量重算不逐 token exact。随后证明即使完全不经过
+LMCache，vLLM 原生 prefix cache 相对全量重算也有同类差异。因此不能把不同恢复
+边界和 prefill kernel 路径的 BF16 数值差异误判为 LMCache 层映射错误；同边界 exact
+才是本 connector 的有效正确性证据。
+
+### 性能结果
+
+公平对照先用第一条请求完成 JIT，再比较相同 2,125-token 请求。单次结果如下：
+
+| 场景 | 无 prefix 全量重算 | 原生 GPU prefix | LMCache CPU warm | LMCache / 重算 |
+| --- | ---: | ---: | ---: | ---: |
+| 相同 prompt | 273.88 ms | 223.96 ms | 239.63 ms | 1.143x |
+| 共享前缀、不同尾部 | 277.19 ms | 223.10 ms | 238.03 ms | 1.165x |
+
+LMCache 相对全量重算降低约 12.5%--14.1% 延迟，但比 GPU 原生 prefix cache 慢
+约 6.7%--7.0%，符合 CPU tier 需要搬运数据的预期。每次恢复 0.2498 GB，实测读取
+26.62--26.74 ms、9.34--9.38 GB/s；cold 保存 56.43 ms、4.43 GB/s。该结果是单卡
+短样本功能基准，不外推为并发吞吐或跨节点 persistent tier 收益。
+
+### 已知限制、后续与回滚
+
+LMCache 0.5.3 在 warm retrieve 后打印 `Double unpin` 并把负 pin count 归零。三组结果
+仍与原生 prefix cache exact，但这个上游生命周期告警必须在长稳测试前解决，当前
+不能把本提交描述为 production ready。以下项目尚未由本提交证明：
+
+- LMCache -> NIXL producer -> independent Decode 的 1P1D 串联；
+- local NVMe、共享持久层和跨 Pod cache reuse；
+- Dynamo KV-aware 路由、shared indexer、故障回退和并发吞吐；
+- TP/DP/EP/PCP 下的 LMCache rank namespace 和缓存一致性。
+
+完整 B200 原始结果位于 PVC：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/lmcache-physical-kv-20260810/results/
+```
+
+回滚只需移除 YOCO 专用 physical view；非 YOCO 的 LMCache 和当前 NIXL-only PD
+路径没有行为变化。生产 profile 在 double-unpin、P/D 串联和持久层测试完成前继续
+默认关闭 LMCache。

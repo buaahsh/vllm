@@ -1,15 +1,155 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+import torch
 
 from vllm.distributed.kv_events import BlockStored
 from vllm.distributed.kv_transfer.kv_connector.v1.lmcache_connector import (
+    YOCO_LMCACHE_LAYOUT_VERSION,
     LMCacheConnectorV1,
     LMCacheKVEvents,
+    _use_yoco_lmcache_physical_model_config,
+    _validate_yoco_lmcache_impl,
+    _YocoLMCachePhysicalKVLayout,
 )
 from vllm.v1.outputs import KVConnectorOutput
+
+
+def _yoco_layer_name(layer_index: int) -> str:
+    return f"model.layers.{layer_index}.self_attn"
+
+
+@pytest.fixture
+def yoco_lmcache_layout():
+    physical_indices = [*range(11), *range(20, 30), *range(40, 50)]
+    physical_layer_names = [_yoco_layer_name(i) for i in physical_indices]
+    kv_cache_config = SimpleNamespace(
+        kv_cache_groups=[SimpleNamespace(layer_names=physical_layer_names)]
+    )
+    return _YocoLMCachePhysicalKVLayout.from_kv_cache_config(
+        kv_cache_config,
+        logical_num_layers=20,
+        num_cross_layers=10,
+        universal_loop=3,
+    )
+
+
+@pytest.fixture
+def yoco_logical_kv_caches(yoco_lmcache_layout):
+    kv_caches = {
+        name: torch.empty(2, 3) for name in yoco_lmcache_layout.physical_layer_names
+    }
+    owner = kv_caches[_yoco_layer_name(10)]
+    kv_caches.update({_yoco_layer_name(i): owner for i in range(11, 20)})
+    return kv_caches
+
+
+class TestYocoLMCachePhysicalKVLayout:
+    def test_maps_three_universal_loops_to_31_physical_tensors(
+        self, yoco_lmcache_layout, yoco_logical_kv_caches
+    ):
+        physical_view = yoco_lmcache_layout.physical_view(yoco_logical_kv_caches)
+
+        assert yoco_lmcache_layout.logical_num_layers == 20
+        assert yoco_lmcache_layout.first_cross_layer == 10
+        assert yoco_lmcache_layout.universal_loop == 3
+        assert yoco_lmcache_layout.physical_num_layers == 31
+        assert list(physical_view) == [
+            _yoco_layer_name(i) for i in [*range(11), *range(20, 30), *range(40, 50)]
+        ]
+        assert all(
+            yoco_logical_kv_caches[_yoco_layer_name(i)]
+            is yoco_logical_kv_caches[_yoco_layer_name(10)]
+            for i in range(11, 20)
+        )
+
+    def test_single_universal_loop_has_11_physical_tensors(self):
+        physical_layer_names = [_yoco_layer_name(i) for i in range(11)]
+        kv_cache_config = SimpleNamespace(
+            kv_cache_groups=[SimpleNamespace(layer_names=physical_layer_names)]
+        )
+
+        layout = _YocoLMCachePhysicalKVLayout.from_kv_cache_config(
+            kv_cache_config,
+            logical_num_layers=20,
+            num_cross_layers=10,
+            universal_loop=1,
+        )
+
+        assert layout.physical_num_layers == 11
+        assert layout.physical_layer_names == tuple(physical_layer_names)
+
+    def test_rejects_cross_layer_clone(
+        self, yoco_lmcache_layout, yoco_logical_kv_caches
+    ):
+        yoco_logical_kv_caches[_yoco_layer_name(11)] = yoco_logical_kv_caches[
+            _yoco_layer_name(10)
+        ].clone()
+
+        with pytest.raises(ValueError, match="must alias owner layer 10 exactly"):
+            yoco_lmcache_layout.physical_view(yoco_logical_kv_caches)
+
+    def test_rejects_missing_logical_layer(
+        self, yoco_lmcache_layout, yoco_logical_kv_caches
+    ):
+        del yoco_logical_kv_caches[_yoco_layer_name(19)]
+
+        with pytest.raises(ValueError, match="shared cross alias"):
+            yoco_lmcache_layout.physical_view(yoco_logical_kv_caches)
+
+    def test_lmcache_initializes_with_physical_metadata(self, yoco_lmcache_layout):
+        model_config = SimpleNamespace(
+            model="/models/yoco",
+            model_arch_config=SimpleNamespace(total_num_hidden_layers=20),
+        )
+        vllm_config = SimpleNamespace(model_config=model_config)
+
+        with _use_yoco_lmcache_physical_model_config(vllm_config, yoco_lmcache_layout):
+            assert model_config.model_arch_config.total_num_hidden_layers == 31
+            assert model_config.model.endswith(f"::{YOCO_LMCACHE_LAYOUT_VERSION}")
+
+        assert model_config.model_arch_config.total_num_hidden_layers == 20
+        assert model_config.model == "/models/yoco"
+
+        metadata = SimpleNamespace(
+            model_name=f"/models/yoco::{YOCO_LMCACHE_LAYOUT_VERSION}",
+            kv_shape=(31, 2, 256, 8, 128),
+        )
+        engine = SimpleNamespace(
+            num_layers=31,
+            metadata=metadata,
+        )
+        impl = SimpleNamespace(
+            config=SimpleNamespace(
+                use_layerwise=False,
+                enable_async_loading=False,
+                enable_blending=False,
+                use_gpu_connector_v3=True,
+            ),
+            lmcache_engine_metadata=metadata,
+            lmcache_engine=engine,
+            num_layers=31,
+        )
+
+        _validate_yoco_lmcache_impl(impl, yoco_lmcache_layout)
+
+    def test_registers_only_physical_tensors(
+        self, yoco_lmcache_layout, yoco_logical_kv_caches
+    ):
+        connector = MagicMock(spec=LMCacheConnectorV1)
+        connector._yoco_physical_kv_layout = yoco_lmcache_layout
+        connector._lmcache_engine = MagicMock()
+
+        LMCacheConnectorV1.register_kv_caches(connector, yoco_logical_kv_caches)
+
+        registered = connector._lmcache_engine.register_kv_caches.call_args.args[0]
+        assert list(registered) == [
+            _yoco_layer_name(i) for i in [*range(11), *range(20, 30), *range(40, 50)]
+        ]
+        assert len(registered) == 31
 
 
 @pytest.fixture
