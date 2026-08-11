@@ -3681,3 +3681,87 @@ exact 门禁，不能恢复已否决的最后一块重算候选。
 /mnt/pvc/lidong1/vllm_test_artifacts/pd-nixl-hma-p-cache-bypass-53f58e5426-20260810/
 /mnt/pvc/lidong1/vllm_test_artifacts/pd-lmcache-nixl-stable-hash-53f58e5426-20260810/
 ```
+
+## 22. PD 极限吞吐与 W1/W2/W3 HMA A/B 报告
+
+```text
+commit: e5524539f1
+subject: docs(yoco): record PD saturation and HMA workload results
+scope: YOCO-PD-BATCH-CURVE-20260810.md, YOCO-PD-STRATEGY.md,
+       YOCO-PD-W123-HMA-AB-20260810.md
+functional behavior change: none; this is a measurement and documentation commit
+runtime base: fhb-dev@9b9a945c06
+```
+
+### 目的
+
+本提交补齐两组此前已经在 4 x B200 上完成、但尚未进入远端提交历史的 PD 实测：
+
+1. 在 `P=TP2/DP1, D=TP2/DP1` 下扩大 P token budget，并把 D CUDA Graph capture
+   扩到 batch 256，给出 P、D 和端到端 PD 的 batch--吞吐--延迟曲线；
+2. 对 W1、W2、W3 workload 比较当前 HMA/SWA window 传输与 full-context baseline，
+   分离 TTFT、总吞吐和 NIXL 流量收益，并如实记录异步 W3/batch-4 的精度边界。
+
+本提交只记录测试证据，没有修改运行时代码、默认参数或服务行为。
+
+### 修改文件
+
+- `YOCO-PD-BATCH-CURVE-20260810.md`
+    - 追加 P 侧 batch 1--256、D 侧 graph-128/graph-256 和端到端 batch 16--128 扫描；
+    - 记录 1.3K、强制 256 decode、8K、65K 的 standalone 对 PD exact 门禁；
+    - 给出在线 admission 与 CUDA Graph capture 的配置建议。
+- `YOCO-PD-W123-HMA-AB-20260810.md`
+    - 新增完整 W1/W2/W3 HMA 对 full-context 的环境、方法、逐点性能和流量报告；
+    - 记录 W3 双向 `D -> P -> D` metadata 复用；
+    - 记录 W3/batch-4 主测 hash 差异及三次短复现，避免把并发非确定性写成全量 exact。
+- `YOCO-PD-STRATEGY.md`
+    - 汇总极限吞吐、推荐 batch、W1/W2/W3 收益和正确性边界；
+    - 链接完整报告及 PVC 原始证据。
+
+### 测试环境与结果
+
+两组测试均使用 4 x NVIDIA B200、BF16、FlashInfer、Triton MoE、NIXL 1.3.2 +
+UCX 1.21，同节点 `lo`/CUDA IPC，拓扑为 P=TP2、D=TP2。极限吞吐补测的观测峰值：
+
+| 侧 | 负载与峰值点 | 峰值吞吐 |
+| --- | --- | ---: |
+| P | 8,192 effective input，batch 64 | 84,055 input tok/s |
+| D | 1,345 context + 512 output，batch 256 | 2,284 output tok/s |
+| PD | 1,345 input + 256 output，batch 96 | 1,128 output tok/s / 4.407 req/s |
+
+D graph capture 从 128 扩到 256 后，batch 192/256 不再跌回 eager；新增图只多约
+0.10 GiB/卡，并使 KV capacity 下降约 0.15%。在线建议 P admission 48--64、D
+admission 64--96，但 D graph 保留到 256 以覆盖突发。
+
+HMA 对 full-context 的聚合吞吐变化为：
+
+| Workload | batch 1 | batch 4 | NIXL 流量缩减 |
+| --- | ---: | ---: | ---: |
+| W1 | -3.14% | -2.49% | 10.77x |
+| W2 | +12.79% | +43.37% | 25.11x |
+| W3 | +553.02% | +1033.70% | 21.16x |
+
+W3/batch-4 wall time 从 3,182.82 s 降至 280.75 s。W1 长 decode 淹没传输收益，
+因此只宣称 TTFT、流量和容量改善，不宣称总吞吐提升。
+
+### 正确性、静态检查与限制
+
+- 极限吞吐 profile 的 1.3K、强制 256 decode、8K、65K 均与 TP2 standalone
+  逐 token exact，8K concurrency-4 的八个请求只有一个 token trace；
+- W1/W2 batch 1/4 与 W3 batch 1 主测逐 token exact；
+- 异步 W3/batch-4 主测 hash 不同。短复现证明 HMA 与 full-context 存在逐 turn exact
+  的共同路径，但 HMA 会随实际 batching 组合产生不同 greedy trace，因此本提交没有
+  把它描述为“任意异步 batching 全量 exact”；
+- 六个 W1/W2/W3 性能点的 NIXL failed transfer/notification 均为 0，且无 CUDA OOM；
+- `git diff --check` 与 Markdown lint 通过，测试辅助 Python/Shell 脚本语法检查通过；
+- 结果只覆盖同节点 CUDA IPC，不能外推为跨节点 UCX RDMA、多 P/D 或 Gateway 稳态性能。
+
+原始证据：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-saturation-9b9a945c06-20260810/
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-w123-hma-ab-9b9a945c06-20260810/
+```
+
+本轮 Volcano Job `lidong1-yoco-pd-w123-g4-0810` 已释放，并确认对应 Job/Pod
+`NotFound`，没有继续占用 B200 资源。
