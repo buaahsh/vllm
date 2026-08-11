@@ -325,6 +325,29 @@ Gateway 固化为本报告的一部分。Gateway 至少需要：
 standalone exact match，并证明纯 `kv_producer` 不需要限制 DP1。但这不替代
 当前 commit 在多 P/D 或 DP D 端的重新验收。
 
+### TP2 + TP2 极限吞吐补测
+
+`fhb-dev@9b9a945c06` 在同节点 4 x B200 上把 P token budget 提到 32K，并分别把
+D CUDA Graph 捕获到 batch 128 和 256。1.3K、强制 256 decode、8K、65K 均与
+TP2 standalone 逐 token exact；当前观测峰值为：
+
+| 口径 | 峰值 | 并发 | 备注 |
+| --- | ---: | ---: | --- |
+| P，8,192 effective input | 84,055 input tok/s | 64 | 96 后回落 |
+| D，1,345 context + 512 output | 2,284 output tok/s | 256 | p50 57.11 s |
+| PD，1,345 input + 256 output | 1,128 output tok/s / 4.407 req/s | 96 | p50 21.68 s |
+
+在线建议 P admission target 为 48--64、D 为 64--96；D graph 仍 capture 到 256，
+避免突发超过 32 后落回 eager。batch 256 是吞吐极限点而非延迟推荐点。完整参数、
+曲线和边界见 `YOCO-PD-BATCH-CURVE-20260810.md`；原始证据位于：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-saturation-9b9a945c06-20260810/
+```
+
+本轮是同节点 `lo/cuda_ipc`，未覆盖跨节点 UCX RDMA；固定波次也不替代生产 Gateway
+的开环 arrival-rate、TTFT/ITL SLO 和多 P/D 负载均衡验收。
+
 ## SWA window 传输补充与 B200 实测
 
 YOCO checkpoint 的真实物理 KV 布局不是一个 SWA group，而是：
@@ -380,6 +403,29 @@ transfer，SWA metadata 分别为 `30x33+84`、`30x33+499`、`30x33+4113`，NIXL
 只传一个 512-token SWA 窗口，cross-owner 仍传完整上下文。该优化已经实现并在
 1.3K--65K 上得到正确性和流量收益验证；它依赖 HMA，任何不支持 HMA 的 child
 connector 都会使 MultiConnector 回退到 full-context 布局。
+
+### W1/W2/W3 HMA 对 full-context 实测
+
+在同节点 4 x B200、`P=TP2/DP1`、`D=TP2/DP1` 上进一步执行完整 W1/W2/W3
+A/B。HMA 与 `--disable-hybrid-kv-cache-manager` 的主要结果为：
+
+| Workload | Batch | 吞吐变化 | TTFT 缩短 | 流量缩减 |
+| --- | ---: | ---: | ---: | ---: |
+| W1 | 1 / 4 | -3.14% / -2.49% | 84.59% / 89.92% | 10.77x |
+| W2 | 1 / 4 | +12.79% / +43.37% | 91.56% / 94.94% | 25.11x |
+| W3 | 1 / 4 | +553.02% / +1033.70% | 93.87% / 94.34% | 21.16x |
+
+W3 batch 4 从 `3182.82 s / 16.34 tok/s` 改善到
+`280.75 s / 185.22 tok/s`。W1 的 65K 长 decode 淹没了起始传输收益，所以应表述为
+TTFT/容量优化，而不是吞吐优化。
+
+W1/W2 batch 1/4 与 W3 batch 1 主测逐 token exact。异步 W3 batch 4 的主测最终
+hash 不同；追加三次短复现显示 HMA 自身会随实际 batching 组合产生不同 greedy
+trace，而 full-context 的三次 trace 与 HMA 前两次逐 turn exact。因此没有证据表明
+窗口传输损坏 KV，但“任意异步 batching 都逐 token exact”的严格门禁仍未通过。
+
+完整环境、逐点 wall/tok/s/bytes、首次分叉轮次和复现矩阵见
+[`YOCO-PD-W123-HMA-AB-20260810.md`](YOCO-PD-W123-HMA-AB-20260810.md)。
 
 ## 上线前检查表
 
