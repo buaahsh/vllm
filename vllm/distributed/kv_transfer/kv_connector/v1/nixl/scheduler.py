@@ -177,8 +177,26 @@ class NixlConnectorScheduler:
             self._nixl_handshake_listener_t = None
 
     def on_new_request(self, request: "Request") -> None:
-        """Track a request that may need heartbeats."""
+        """Prepare P-side requests before cache lookup and track heartbeats.
+
+        YOCO P-side truncation has to happen here, before the scheduler queries
+        its local prefix cache. Its producer requests also bypass that cache:
+        recomputing only the final cached block changes the Router/MoE row
+        shape and can change the KV sent to the decode node. Computing the
+        complete truncated prefix preserves the established fresh-P numerical
+        path. Other model-specific truncation remains in the normal connector
+        query path.
+        """
         params = request.kv_transfer_params
+        if (
+            self._use_yoco_final_prompt_block_split
+            and params is not None
+            and params.get("do_remote_decode")
+        ):
+            self._truncate_request_for_remote_prefill(request)
+            if params.get("_p_side_truncated"):
+                request.skip_reading_prefix_cache = True
+
         # NOTE (NickLucche) This excludes request meant for P, ie heartbeats are
         # effectively disabled for Bidirectional KV transfer.
         if params is None or not params.get("do_remote_prefill"):

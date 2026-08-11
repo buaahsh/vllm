@@ -149,6 +149,13 @@ NIXL 截断后的 P 请求带 `_p_side_truncated` 标记，通用 scheduler 不�
 P prefix 二次拆分。例如 1,344-token P prefix 必须保持一次 1,344-row forward，
 不能变成 `1,328 + 16`。
 
+pure-P 请求即使服务全局开启 prefix caching，也会在 `on_new_request` 阶段先截到
+上述边界并设置 `skip_reading_prefix_cache=true`。这是 correctness 约束：实测若让
+1,344-token P prefix 命中 1,328 tokens、只重算最后 16 tokens，再把结果传给一个
+关闭本地 cache 的独立 D，1.3K 和 65K 都不再逐 token exact。保守实现因此放弃 P
+请求级 GPU prefix 复用，保证 fresh 和重复 P 请求都保持同一个完整 prefix shape；
+D 的 prefix cache 不受影响。
+
 YOCO FP32 TF32 Router 对 token rows 敏感。当前实现把小于 128 行的 Router
 输入补零到 128 行再裁回，使小 batch 使用固定 GEMM shape。该规则有明确的小
 shape 开销，因此属于 correctness 约束，不应宣称为 kernel 性能优化。
@@ -177,6 +184,8 @@ shape 开销，因此属于 correctness 约束，不应宣称为 kernel 性能�
 
 - 必须开启 `--kv-sharing-fast-prefill`；
 - 每个 P 请求必须是 `max_tokens=1`、`do_remote_decode=true`；
+- 服务可以全局开启 prefix caching，但 YOCO pure-P 请求会在 connector 内按请求
+  跳过本地 prefix 读取，避免重复请求改变 producer forward shape；
 - P 服务只接收 P 请求，不提供普通 completions/chat decode；
 - DP 可以大于 1。空闲 DP rank 会执行 KV-only dummy forward，保持 MoE
   collective 次数一致；
@@ -315,6 +324,62 @@ Gateway 固化为本报告的一部分。Gateway 至少需要：
 较早的 DP4 pure-P 验证覆盖 1,356、12,096、43,704 prompt tokens，D 输出均与
 standalone exact match，并证明纯 `kv_producer` 不需要限制 DP1。但这不替代
 当前 commit 在多 P/D 或 DP D 端的重新验收。
+
+## SWA window 传输补充与 B200 实测
+
+YOCO checkpoint 的真实物理 KV 布局不是一个 SWA group，而是：
+
+```text
+30 x physical self-attention SWA groups: window=512, block_size=16
+ 1 x shared cross-attention owner group: full attention, owner layer=10
+```
+
+NIXL scheduler 对每个 SWA group 在 metadata 中保守保留
+`ceil(512 / 16) + 1 = 33` blocks，以覆盖 block 边界重叠；worker 在已对齐的实际
+payload 中发送 32 blocks/group。最后一个 cross-owner group 仍发送完整 prefix，
+不能裁成窗口。65,809-token 请求因此是：
+
+```text
+scheduler metadata: 30 x 33 + 4,113 = 5,103 blocks
+actual payload:      30 x 32 + 4,113 = 5,073 blocks
+bytes/block:         65,536 bytes（全局 8 KV heads，BF16 K+V）
+actual bytes:        332,464,128
+```
+
+在 `bonete01/lidong1-yoco-pd-diagnose-g4-0810` 的 4 x B200、P/D 各 TP2 上，
+HMA window 与 `--disable-hybrid-kv-cache-manager` full-context baseline 各执行三轮。
+18 个计入样本全部 text 和逐 token trace exact，NIXL failed transfer/notification
+均为 0：
+
+| Prompt | HMA bytes | Full-context bytes | 流量缩减 | HMA D time | Full-context D time |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,356 | 68,419,584 | 170,655,744 | 2.49x | 0.212 s | 0.436 s |
+| 7,999 | 95,617,024 | 1,013,776,384 | 10.60x | 0.380 s | 2.429 s |
+| 65,809 | 332,464,128 | 8,356,036,608 | 25.13x | 0.909 s | 18.835 s |
+
+随后又做了更严格的重复请求隔离门禁：P 服务全局开启 prefix cache，D 关闭；每档
+复用相同 cache salt 两次，强制第二次请求仍真实经过 NIXL。connector 的请求级
+bypass 生效后，1.3K/8K/65K 共 6/6 样本逐 token exact；每次仍发生 2 个 TP rank
+transfer，SWA metadata 分别为 `30x33+84`、`30x33+499`、`30x33+4113`，NIXL
+错误为 0。代表性第二轮结果为：
+
+| Prompt | P time | D time | 串行总时延 | NIXL bytes |
+| ---: | ---: | ---: | ---: | ---: |
+| 1,356 | 0.0710 s | 0.2134 s | 0.2844 s | 68,419,584 |
+| 7,999 | 0.1277 s | 0.3798 s | 0.5076 s | 95,617,024 |
+| 65,809 | 0.8772 s | 0.9032 s | 1.7807 s | 332,464,128 |
+
+原始证据目录：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-swa-transfer-53f58e5426-20260810/
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-nixl-hma-p-cache-bypass-53f58e5426-20260810/
+```
+
+结论是“最后一层”需要更精确地表述为“唯一 full cross-owner group”：30 个 self-KV
+只传一个 512-token SWA 窗口，cross-owner 仍传完整上下文。该优化已经实现并在
+1.3K--65K 上得到正确性和流量收益验证；它依赖 HMA，任何不支持 HMA 的 child
+connector 都会使 MultiConnector 回退到 full-context 布局。
 
 ## 上线前检查表
 
