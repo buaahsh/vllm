@@ -1,6 +1,7 @@
 # YOCO、LMCache 三级 KV 缓存与 Dynamo 适配方案
 
-状态：设计评审稿，尚未修改运行逻辑、构建镜像或执行 GPU 测试。
+状态：设计、单卡 adapter 和首轮 4 x B200 串联实测已完成；LMCache 串联仍未通过
+正确性门禁，生产 feature gate 保持关闭。
 
 基线：`fhb-dev@f54af87aecf78e2db92c15cfa5062fadff1d9509`。
 
@@ -378,3 +379,58 @@ NIXL-only baseline，不能原地覆盖唯一可工作的运行 profile。
 镜像，并增加 shared-KV layout 单测。此时仍不申请大规模资源；本地检查通过后申请
 2 张 B200 做单卡 CPU tier 和 1P1D correctness。只有 exact 通过，才扩展到 4 张卡、
 持久层和 Dynamo。
+
+## 4 x B200 LMCache + NIXL 串联实测（2026-08-10）
+
+测试拓扑为 P/D 各 TP2，共 4 x B200，LMCache 0.5.3 LocalCPU 位于 P，NIXL 1.3.2
+负责 P 到 D，block/chunk 均为 16。结果目录：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-lmcache-nixl-multi-53f58e5426-20260810/
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-lmcache-nixl-stable-hash-53f58e5426-20260810/
+```
+
+### 已通过的部分
+
+首次 cold-only 的 1,356、7,999、65,809-token 请求均与 standalone reference
+逐 token exact，NIXL 失败计数为 0，说明“LMCache child 存在但未命中”不会破坏
+基础 P/D correctness。LMCache 日志也确认 31 份物理 KV 可以写入 LocalCPU；例如
+每 TP rank 的 1,344-token store 为 0.0795GB，7,984-token store 为 0.4721GB。
+
+### HMA 限制
+
+LMCache 0.5.3 仍只支持一个 KVCacheGroup，也没有实现 `SupportsHMA`。因此标准
+`MultiConnector(LMCache, NIXL)` 必须使用 `--disable-hybrid-kv-cache-manager`，31 个
+物理 group 被折成一个 full-context group：65K 仍传 8,356,036,608 bytes，而纯
+NIXL HMA 只传 332,464,128 bytes。不能为了保留 HMA 直接给 LMCache connector
+声明 `SupportsHMA`；它当前的单 group slot mapping 会恢复到错误位置。
+
+### 两个实际阻塞问题
+
+1. 未固定 `PYTHONHASHSEED` 时，各 TP worker 的 builtin/NONE hash 不一致。KV 虽然
+   成功 store，scheduler 的 warm lookup 始终为 0。这不是可接受的 cold fallback，
+   因为会持续支付 store 成本却没有复用；部署至少必须固定稳定 hash seed/算法。
+2. 固定 `PYTHONHASHSEED=0` 后，LMCache 开始真实命中：短请求命中 1,344 tokens，
+   8K warm 命中 7,984，65K warm 命中 65,808。但 `cache_salt` 没有进入 LMCache
+   key：探针 warmup 与后续请求即使使用不同 salt，仍发生 full/partial hit。更重要的
+   是，LMCache 的 full hit 会回退最后 1 token（例如 1,344 hit 后 load 1,343），
+   与 YOCO 要求的完整 final-block shape 不一致。真实 LMCache -> NIXL -> 独立 D
+   中，1.3K、8K、65K 均出现 text/token-trace 不 exact。
+
+这也解释了为什么“只看 HTTP 成功或 cold exact”不够：错误 KV 可以正常传输，NIXL
+metrics 仍显示零失败，但模型输出已经分叉。当前结论是保留第 20 节的单卡 physical
+layout adapter，标准 MultiConnector 串联继续默认关闭，不报告性能收益。
+
+### 下一版必须同时解决
+
+- cache key/namespace 显式包含 `cache_salt`、模型 revision、TP rank 和 physical-layout
+  version，并使用跨进程稳定 hash；
+- YOCO external hit 必须遵守与 standalone/NIXL 相同的 final-block boundary，不能沿用
+  LMCache 通用的“full hit 回退 1 token”；
+- LMCache 必须原生理解 30 个 SWA physical groups 和 1 个 full cross-owner group，
+  通过真实 HMA slot mapping 测试后才能实现 `SupportsHMA`；
+- 重跑 P/D 各 TP2 的 1.3K/8K/65K cold、partial、full hit，要求逐 token exact，随后
+  才能进入持久层、Dynamo 和吞吐测试。
+
+在这些条件满足前，推荐生产组合仍是纯 NIXL HMA；pure-P 本地 GPU prefix read 也按
+请求 bypass，以保持 producer 的完整 prefix shape。

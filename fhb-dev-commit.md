@@ -33,8 +33,8 @@
    功能、正确性、性能、构建、测试和设计结果展开为正文；只补充已有记录的
    docs-only commit 只进入完整索引，不递归增加一篇重复正文。
 8. Git commit 无法在自身内容中预先写入自己的 hash，因此每次日志维护提交审计到
-   它的 parent，并在下一次提交中回填真实 hash。当前水位为 `5d296b3958`：相对基线
-   共 `40/40` 个可达提交，其中主线 `33/33` 个、合并支线 `7/7` 个，均已列出。
+   它的 parent，并在下一次提交中回填真实 hash。当前水位为 `aebb50c6e5`：相对基线
+   共 `42/42` 个可达提交，其中主线 `35/35` 个、合并支线 `7/7` 个，均已列出。
 
 ## 功能与工程结果索引
 
@@ -60,15 +60,16 @@
 | 18 | `75d26710b9` | 设计/Cache | LMCache 三级缓存与 Dynamo 适配方案 | 已进入 `fhb-dev` |
 | 19 | `e081d38f5a` | 构建/Cache | 固定 LMCache 0.5.3 的 CUDA 13/SM100 runtime | 已进入 `fhb-dev` |
 | 20 | `5d296b3958` | 正确性/Cache | LMCache 适配 YOCO 31 份物理 KV | 已进入 `fhb-dev` |
+| 21 | `aebb50c6e5` | 正确性/PD | pure-P prefix shape 与 SWA window 传输补充 | 已进入 `fhb-dev` |
 
 ## 完整 Git 提交审计
 
 审计区间为
-`c27db1e189973cea3164ba66b1d00359d4122088..5d296b3958c0db1a664dd74dff78e28a4419b588`。
-基线本身不计入增量提交数。以下两张表覆盖这个区间内全部 `40` 个可达提交，避免把
+`c27db1e189973cea3164ba66b1d00359d4122088..aebb50c6e5`。
+基线本身不计入增量提交数。以下两张表覆盖这个区间内全部 `42` 个可达提交，避免把
 docs-only、验证补充或 merge 引入的支线提交藏在正文之外。
 
-### First-parent 主线：33/33
+### First-parent 主线：35/35
 
 | 序号 | Commit | Subject | 对应记录 |
 | ---: | --- | --- | --- |
@@ -105,6 +106,8 @@ docs-only、验证补充或 merge 引入的支线提交藏在正文之外。
 | 31 | `75d26710b9` | `docs(yoco): plan LMCache and Dynamo adaptation` | 第 18 节 |
 | 32 | `e081d38f5a` | `build(yoco): add pinned LMCache CUDA 13 runtime` | 第 19 节 |
 | 33 | `5d296b3958` | `fix(yoco): adapt LMCache to physical KV layout` | 第 20 节 |
+| 34 | `53f58e5426` | `docs(yoco): complete fhb-dev commit audit` | 审计到第 20 节 |
+| 35 | `aebb50c6e5` | `fix(yoco): preserve pure-P prefix shape with HMA` | 第 21 节 |
 
 ### Merge 引入支线：7/7
 
@@ -3575,3 +3578,106 @@ LMCache 0.5.3 在 warm retrieve 后打印 `Double unpin` 并把负 pin count 归
 回滚只需移除 YOCO 专用 physical view；非 YOCO 的 LMCache 和当前 NIXL-only PD
 路径没有行为变化。生产 profile 在 double-unpin、P/D 串联和持久层测试完成前继续
 默认关闭 LMCache。
+
+## 21. pure-P prefix shape 与 SWA window 传输补充
+
+```text
+commit: aebb50c6e5
+subject: fix(yoco): preserve pure-P prefix shape with HMA
+scope: nixl/scheduler.py, test_nixl_connector_hma.py, YOCO-PD-STRATEGY.md
+functional behavior change: YOCO pure-P 请求在本地 cache lookup 前截断，并按请求
+                            bypass 本地 prefix read；NIXL HMA 裁剪逻辑不变
+runtime base: fhb-dev@53f58e5426
+```
+
+### 目的与根因
+
+本轮首先回答“除 full cross-owner 外，PD 是否只传 SWA window”。真实 checkpoint
+包含 30 个 512-token self-attention SWA physical groups 和 1 个 full cross-owner
+group。既有 NIXL HMA 代码已经逐 group 裁剪，但此前缺少 YOCO 31-group 专项单测、
+full-context 对照和 65K payload 证据。
+
+补测 LMCache cold/warm 时又发现一个独立 scheduler edge：1,356-token pure-P 首次请求
+生成 1,344-token prefix 后，第二次请求会先在 vLLM 本地命中全部 1,344 tokens；旧
+时序随后才把请求截成 1,344，令 `num_new_tokens=0`，触发 scheduler 断言并退出
+EngineCore。
+
+最初候选是把命中回退一个 block，重新计算最后 16 tokens。这个候选通过了单测，
+但 B200 隔离实验让 P 开 cache、D 关 cache 后，1.3K 和 65K 虽然 NIXL 传输零失败，
+输出却不再 exact。原因与第 15 节一致：P 从 1,344-row forward 变成
+`1,328 + 16`，Router/MoE 数值路径改变，重新生成的 KV 不适合发送给独立 D。因此
+没有提交该候选。
+
+最终实现只对 YOCO pure-P 生效：`on_new_request` 在任何本地 cache lookup 前把请求
+截到 NIXL/D 共用的 full-block boundary，并设置 `skip_reading_prefix_cache=true`。
+这样服务级 prefix cache 可继续为其他请求启用，但 pure-P 始终用已经验证过的完整
+prefix shape；Mamba 和普通模型仍走原 connector query 时序，不扩大行为变化。
+
+### 修改文件
+
+- `vllm/distributed/kv_transfer/kv_connector/v1/nixl/scheduler.py`
+    - YOCO P 请求提前执行幂等 truncation；
+    - 只在 `_p_side_truncated` 成立时按请求 bypass 本地 prefix read；
+    - 保持 heartbeat、Mamba 和普通模型路径不变。
+- `tests/v1/kv_connector/unit/test_nixl_connector_hma.py`
+    - 新增真实 30 SWA + 1 full owner 的 group 裁剪测试；
+    - 65,808-token transferable prefix 要求 metadata 为 `30x33+4113`；
+    - 新增 1,356 -> 1,344 的 early truncation、cache bypass 与幂等测试。
+- `YOCO-PD-STRATEGY.md`
+    - 写清 metadata 33 blocks 与实际 payload 32 blocks 的差异；
+    - 记录 HMA/full-context A/B、重复请求隔离门禁和原始 PVC 证据。
+
+### 单元、静态与 B200 测试
+
+目标 CUDA 13/LMCache 镜像内相关回归：
+
+```text
+pytest NIXL YOCO/Mamba subset: 8 passed, 27 deselected
+YOCO 31-group clipping test:  passed
+python compileall:             passed
+git diff --check:              passed
+```
+
+Volcano Job `bonete01/lidong1-yoco-pd-diagnose-g4-0810` 使用 4 x B200，P/D 各
+TP2、BF16、FlashInfer、Triton MoE、FULL_AND_PIECEWISE CUDA Graph。HMA window 和
+full-context baseline 各三轮，共 18 个计入样本全部 text/token trace exact，NIXL
+transfer/notification failure 均为 0：
+
+| Prompt | HMA bytes | Full bytes | 缩减 | HMA D | Full D |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,356 | 68,419,584 | 170,655,744 | 2.49x | 0.212s | 0.436s |
+| 7,999 | 95,617,024 | 1,013,776,384 | 10.60x | 0.380s | 2.429s |
+| 65,809 | 332,464,128 | 8,356,036,608 | 25.13x | 0.909s | 18.835s |
+
+65K scheduler metadata 为 `30x33+4113=5103` blocks；实际 NIXL bytes 对应
+`30x32+4113=5073` blocks，每个全局 block 65,536 bytes。最后又让 P 全局 cache 开、
+D cache 关并复用相同 salt，两轮三档共 6/6 exact，证明请求级 bypass 后重复请求
+仍真实经过 NIXL 且不再崩溃/分叉。
+
+### LMCache 串联负结果
+
+标准 `MultiConnector(LMCache, NIXL)` 因 LMCache 0.5.3 不支持 HMA，只能退化为一个
+full-context group，65K 仍传 8,356,036,608 bytes。未固定 hash seed 时，KV store
+成功但 warm hit 恒为 0；固定 `PYTHONHASHSEED=0` 后，1.3K/8K/65K 分别真实命中
+1,344/7,984/65,808 tokens，但 `cache_salt` 未隔离 key，且通用 full-hit 只回退
+1 token。LMCache -> NIXL -> D 三档均不 exact。因此本提交不启用 LMCache，不宣称
+三级缓存收益；完整阻塞项写入 `YOCO-LMCACHE-DYNAMO-PLAN.md`。
+
+### 性能口径、风险与回滚
+
+上述时间来自串行 correctness harness，不是在线并发吞吐。可归因结论仅为 NIXL
+payload/D transfer 路径随 prompt 增长显著缩短；P 请求级 cache bypass 会放弃 pure-P
+GPU prefix reuse，这是为数值正确性接受的显式代价。
+
+回滚 `aebb50c6e5` 会恢复旧的 P cache lookup 时序，并重新暴露“全 prefix hit 后
+`num_new_tokens=0`”崩溃，因此不建议单独回滚。若必须恢复 P prefix reuse，应先设计
+不改变 producer KV shape 的专用复用协议并重跑“P cache 开、D cache 关”的三档
+exact 门禁，不能恢复已否决的最后一块重算候选。
+
+原始证据：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-swa-transfer-53f58e5426-20260810/
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-nixl-hma-p-cache-bypass-53f58e5426-20260810/
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-lmcache-nixl-stable-hash-53f58e5426-20260810/
+```
