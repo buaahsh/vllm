@@ -409,6 +409,101 @@ if HAS_TRITON:
             mask=valid,
         )
 
+    @triton.jit
+    def _yoco_qk_rms_clip_rotary_kernel(
+        query_ptr,
+        key_ptr,
+        query_output_ptr,
+        key_output_ptr,
+        positions_ptr,
+        cos_sin_cache_ptr,
+        num_rows,
+        query_num_groups,
+        query_row_stride,
+        query_head_stride,
+        key_row_stride,
+        key_head_stride,
+        positions_stride,
+        eps: tl.constexpr,
+        limit: tl.constexpr,
+        QUERY_HEADS: tl.constexpr,
+        KEY_HEADS: tl.constexpr,
+        HEAD_DIM: tl.constexpr,
+        BLOCK_ROWS: tl.constexpr,
+    ):
+        group = tl.program_id(0)
+        is_query = group < query_num_groups
+        local_group = tl.where(is_query, group, group - query_num_groups)
+        head_rows = local_group * BLOCK_ROWS + tl.arange(0, BLOCK_ROWS)[:, None]
+        num_heads = tl.where(is_query, QUERY_HEADS, KEY_HEADS)
+        num_head_rows = num_rows * num_heads
+        row_mask = head_rows < num_head_rows
+        token = head_rows // num_heads
+        head = head_rows % num_heads
+        cols = tl.arange(0, HEAD_DIM)[None, :]
+
+        row_stride = tl.where(is_query, query_row_stride, key_row_stride)
+        head_stride = tl.where(is_query, query_head_stride, key_head_stride)
+        input_base = token * row_stride + head * head_stride
+        input_ptrs = tl.where(
+            is_query,
+            query_ptr + input_base,
+            key_ptr + input_base,
+        )
+        values = tl.load(
+            input_ptrs + cols,
+            mask=row_mask,
+            other=0.0,
+        ).to(tl.float32)
+        square_sum = tl.sum(tl.where(row_mask, values * values, 0.0), axis=1)[:, None]
+        clip_coef = limit * tl.extra.cuda.libdevice.rsqrt(square_sum / HEAD_DIM + eps)
+        clip_coef = tl.minimum(clip_coef, 1.0)
+
+        # Match the unfused RMSClip -> BF16 tensor -> RoPE sequence. The
+        # explicit BF16 round is the semantic boundary that used to be the
+        # intermediate tensor store/load.
+        clipped = (values * clip_coef).to(tl.bfloat16).to(tl.float32)
+        first_half = cols < HEAD_DIM // 2
+        partner_cols = tl.where(
+            first_half,
+            cols + HEAD_DIM // 2,
+            cols - HEAD_DIM // 2,
+        )
+        partner = tl.load(
+            input_ptrs + partner_cols,
+            mask=row_mask,
+            other=0.0,
+        ).to(tl.float32)
+        partner = (partner * clip_coef).to(tl.bfloat16).to(tl.float32)
+
+        rotary_col = cols % (HEAD_DIM // 2)
+        position = tl.load(
+            positions_ptr + token * positions_stride,
+            mask=row_mask,
+            other=0,
+        )
+        cos = tl.load(
+            cos_sin_cache_ptr + position * HEAD_DIM + rotary_col,
+            mask=row_mask,
+            other=0.0,
+        )
+        sin = tl.load(
+            cos_sin_cache_ptr + position * HEAD_DIM + HEAD_DIM // 2 + rotary_col,
+            mask=row_mask,
+            other=0.0,
+        )
+        signed_product = _yoco_mul_rn(partner, sin)
+        signed_product = tl.where(first_half, -signed_product, signed_product)
+        output = _yoco_fma_rn(clipped, cos, signed_product)
+
+        output_base = head_rows * HEAD_DIM
+        output_ptrs = tl.where(
+            is_query,
+            query_output_ptr + output_base,
+            key_output_ptr + output_base,
+        )
+        tl.store(output_ptrs + cols, output, mask=row_mask)
+
 
 def _yoco_rms_clip_cuda(
     x: torch.Tensor,
@@ -565,6 +660,63 @@ def _yoco_rotary_fake(
     )
 
 
+def _yoco_qk_rms_clip_rotary_cuda(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+    eps: float,
+    limit: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    query_output = torch.empty_like(query, memory_format=torch.contiguous_format)
+    key_output = torch.empty_like(key, memory_format=torch.contiguous_format)
+    num_rows = query.shape[0]
+    query_heads = query.shape[1]
+    key_heads = key.shape[1]
+    block_rows = 8
+    query_num_groups = triton.cdiv(num_rows * query_heads, block_rows)
+    key_num_groups = triton.cdiv(num_rows * key_heads, block_rows)
+    _yoco_qk_rms_clip_rotary_kernel[(query_num_groups + key_num_groups,)](
+        query,
+        key,
+        query_output,
+        key_output,
+        positions,
+        cos_sin_cache,
+        num_rows,
+        query_num_groups,
+        query.stride(0),
+        query.stride(1),
+        key.stride(0),
+        key.stride(1),
+        positions.stride(0),
+        eps=eps,
+        limit=limit,
+        QUERY_HEADS=query_heads,
+        KEY_HEADS=key_heads,
+        HEAD_DIM=128,
+        BLOCK_ROWS=block_rows,
+        num_warps=4,
+        num_stages=1,
+    )
+    return query_output, key_output
+
+
+def _yoco_qk_rms_clip_rotary_fake(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+    eps: float,
+    limit: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del positions, cos_sin_cache, eps, limit
+    return (
+        torch.empty_like(query, memory_format=torch.contiguous_format),
+        torch.empty_like(key, memory_format=torch.contiguous_format),
+    )
+
+
 def _yoco_router_linear_tf32_cuda(
     hidden_states: torch.Tensor,
     weight: torch.Tensor,
@@ -633,6 +785,11 @@ if HAS_TRITON and current_platform.is_cuda():
         op_name="yoco_rotary",
         op_func=_yoco_rotary_cuda,
         fake_impl=_yoco_rotary_fake,
+    )
+    direct_register_custom_op(
+        op_name="yoco_qk_rms_clip_rotary",
+        op_func=_yoco_qk_rms_clip_rotary_cuda,
+        fake_impl=_yoco_qk_rms_clip_rotary_fake,
     )
 
 
@@ -1182,10 +1339,42 @@ class YOCOSelfAttention(nn.Module):
         # independently to each head's ``head_dim`` slice — matches training's
         # ``q_norm``/``k_norm``.  Skipped entirely when neither ``qk_rms_clip``
         # nor ``qk_norm`` is set.
-        if self.q_norm is not None:
-            q = _apply_per_head_norm(q, self.num_heads, self.head_dim, self.q_norm)
-            k = _apply_per_head_norm(k, self.num_kv_heads, self.head_dim, self.k_norm)
-        q, k = self.rotary_emb(positions, q, k)
+        can_fuse_qk_clip_rotary = (
+            HAS_TRITON
+            and q.is_cuda
+            and q.dtype == torch.bfloat16
+            and k.dtype == torch.bfloat16
+            and self.head_dim == 128
+            and isinstance(self.q_norm, RMSClip)
+            and isinstance(self.k_norm, RMSClip)
+            and self.q_norm.weight is None
+            and self.k_norm.weight is None
+            and self.q_norm.eps == self.k_norm.eps
+            and self.q_norm.limit == self.k_norm.limit
+            and current_platform.is_cuda()
+        )
+        if can_fuse_qk_clip_rotary:
+            cache = self.rotary_emb._get_cos_sin_cache(q.device)
+            q = q.view(q.shape[0], self.num_heads, self.head_dim)
+            k = k.view(k.shape[0], self.num_kv_heads, self.head_dim)
+            positions = positions.to(device=q.device, dtype=torch.long)
+            q, k = torch.ops.vllm.yoco_qk_rms_clip_rotary(
+                q,
+                k,
+                positions,
+                cache,
+                self.q_norm.eps,
+                self.q_norm.limit,
+            )
+            q = q.flatten(-2)
+            k = k.flatten(-2)
+        else:
+            if self.q_norm is not None:
+                q = _apply_per_head_norm(q, self.num_heads, self.head_dim, self.q_norm)
+                k = _apply_per_head_norm(
+                    k, self.num_kv_heads, self.head_dim, self.k_norm
+                )
+            q, k = self.rotary_emb(positions, q, k)
         attn_out = self.attn[loop_idx](q, k, v)
 
         gate, _ = self.lambda_proj(hidden_states)

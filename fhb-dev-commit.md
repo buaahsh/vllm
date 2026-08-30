@@ -33,8 +33,8 @@
    功能、正确性、性能、构建、测试和设计结果展开为正文；只补充已有记录的
    docs-only commit 只进入完整索引，不递归增加一篇重复正文。
 8. Git commit 无法在自身内容中预先写入自己的 hash，因此每次日志维护提交审计到
-   它的 parent，并在下一次提交中回填真实 hash。当前水位为 `aebb50c6e5`：相对基线
-   共 `42/42` 个可达提交，其中主线 `35/35` 个、合并支线 `7/7` 个，均已列出。
+   它的 parent，并在下一次提交中回填真实 hash。当前水位为 `fb8c42b6a0`：相对基线
+   共 `45/45` 个可达提交，其中主线 `38/38` 个、合并支线 `7/7` 个，均已列出。
 
 ## 功能与工程结果索引
 
@@ -61,15 +61,17 @@
 | 19 | `e081d38f5a` | 构建/Cache | 固定 LMCache 0.5.3 的 CUDA 13/SM100 runtime | 已进入 `fhb-dev` |
 | 20 | `5d296b3958` | 正确性/Cache | LMCache 适配 YOCO 31 份物理 KV | 已进入 `fhb-dev` |
 | 21 | `aebb50c6e5` | 正确性/PD | pure-P prefix shape 与 SWA window 传输补充 | 已进入 `fhb-dev` |
+| 22 | `e5524539f1` | 测试/PD | PD 极限吞吐与 W1/W2/W3 HMA A/B | 已进入 `fhb-dev` |
+| 23 | `本提交` | 性能/Attention | 融合 Q/K RMSClip 与 RoPE | 待提交 |
 
 ## 完整 Git 提交审计
 
 审计区间为
-`c27db1e189973cea3164ba66b1d00359d4122088..aebb50c6e5`。
-基线本身不计入增量提交数。以下两张表覆盖这个区间内全部 `42` 个可达提交，避免把
+`c27db1e189973cea3164ba66b1d00359d4122088..fb8c42b6a0`。
+基线本身不计入增量提交数。以下两张表覆盖这个区间内全部 `45` 个可达提交，避免把
 docs-only、验证补充或 merge 引入的支线提交藏在正文之外。
 
-### First-parent 主线：35/35
+### First-parent 主线：38/38
 
 | 序号 | Commit | Subject | 对应记录 |
 | ---: | --- | --- | --- |
@@ -108,6 +110,9 @@ docs-only、验证补充或 merge 引入的支线提交藏在正文之外。
 | 33 | `5d296b3958` | `fix(yoco): adapt LMCache to physical KV layout` | 第 20 节 |
 | 34 | `53f58e5426` | `docs(yoco): complete fhb-dev commit audit` | 审计到第 20 节 |
 | 35 | `aebb50c6e5` | `fix(yoco): preserve pure-P prefix shape with HMA` | 第 21 节 |
+| 36 | `9b9a945c06` | `docs(yoco): record HMA and LMCache PD validation` | 补记第 21 节及 LMCache 验证 |
+| 37 | `e5524539f1` | `docs(yoco): record PD saturation and HMA workload results` | 第 22 节 |
+| 38 | `fb8c42b6a0` | `docs(yoco): audit PD saturation and HMA benchmarks` | 审计到第 22 节 |
 
 ### Merge 引入支线：7/7
 
@@ -3765,3 +3770,127 @@ W3/batch-4 wall time 从 3,182.82 s 降至 280.75 s。W1 长 decode 淹没传输
 
 本轮 Volcano Job `lidong1-yoco-pd-w123-g4-0810` 已释放，并确认对应 Job/Pod
 `NotFound`，没有继续占用 B200 资源。
+
+## 23. 融合 self-attention Q/K RMSClip 与 RoPE
+
+```text
+commit: 本提交
+subject: perf(yoco): fuse QK clip and rotary
+scope: yoco.py, test_yoco_conversion.py, fhb-dev-commit.md
+functional behavior change: B200/CUDA BF16 的 YOCO self-attention 将
+                            Q RMSClip、K RMSClip、RoPE 三个 kernel 合为一个
+runtime base: fhb-dev@fb8c42b6a0
+```
+
+### 目的与实现
+
+此前每个 YOCO self-attention 层在 QKV projection 后依次执行 Q RMSClip、K
+RMSClip 和 RoPE。即使服务开启 full CUDA Graph，GPU 图中仍保留三个 kernel node，
+并需要把两份 clip 中间张量写回、再由 RoPE 读回。Decode 的有效 token rows 很小，
+这部分主要受固定调度和中间显存流量影响；30 个 self layer 会把开销重复 30 次。
+
+本提交增加一个 Triton CustomOp，同时读取 packed-QKV split 后非连续的 Q/K view，
+按 head 在 FP32 中计算 RMS clip coefficient，并立即完成 rotary。kernel 显式执行
+`FP32 -> BF16 -> FP32`，保留原始 `RMSClip -> BF16 tensor -> RoPE` 的数值边界，不能
+为了少一次转换而改变训练侧舍入语义。Q/K 在同一个 launch 中处理，输出仍是两个
+连续 BF16 tensor，attention 接口没有变化。
+
+融合门禁刻意收窄到已经实测的 CUDA、BF16、head_dim=128、无 weight 的
+`RMSClip`，并要求 Q/K 的 eps 与 limit 相同。CPU、其他 dtype/head dimension、
+weighted RMSClip、普通 qk_norm 或未安装 Triton 时完整走旧实现，不改变通用 YOCO
+路径。当前 checkpoint 的 Q/KV heads 为 64/8，测试另覆盖 32/4 和 48/4，避免把
+kernel 偶然写死为唯一 head 数。
+
+### 修改文件
+
+- `vllm/model_executor/models/yoco.py`
+    - 新增 fused Q/K RMSClip + rotary Triton kernel、CUDA wrapper、fake impl 和
+      CustomOp 注册；
+    - `YOCOSelfAttention.forward` 在严格门禁满足时调用 fused op；
+    - 保留旧 Q/K per-head norm 与 rotary fallback。
+- `tests/model_executor/test_yoco_conversion.py`
+    - 对 M=1/7/17/128 与 heads=64/8、32/4、48/4 做逐元素 bit-exact 回归；
+    - 增加 `torch.library.opcheck`，覆盖 fake tensor、schema 和动态算子注册。
+- `fhb-dev-commit.md`
+    - 记录实现边界、正确性、单 kernel、standalone 与 Mooncake 1P1D A/B。
+
+### 单元、静态与数值测试
+
+本地 A6000 完整 YOCO 回归为 `51 passed, 14 warnings`；所有 pre-commit hooks、
+`py_compile` 和 `git diff --check` 通过。B200 上 `torch.library.opcheck` 通过；
+M=1/2/4/8/16/32/64/128 的 Q/K 输出全部逐元素 bit-exact。
+
+真实 TP1/DP1、BF16、FA4、Triton MoE、full CUDA Graph 的 1,360 -> 512 greedy
+生成中，baseline/candidate 的 512-token trace、文本和逐 token logprob 全部 exact，
+最大与平均 logprob delta 都是 0。
+
+### B200 CUDA Graph 单 kernel 收益
+
+微基准把 30 个 self layer 放入同一个 CUDA Graph 后再摊到每层：
+
+| M | 旧实现 / layer | fused / layer | 30 层节省 |
+| ---: | ---: | ---: | ---: |
+| 1 | 3.210 us | 1.365 us | 55.37 us |
+| 4 | 8.461 us | 1.706 us | 202.66 us |
+| 16 | 9.221 us | 1.708 us | 225.40 us |
+| 64 | 10.588 us | 2.118 us | 254.10 us |
+| 128 | 12.558 us | 2.602 us | 298.70 us |
+
+这说明收益来自 CUDA Graph 内减少 graph node 与中间显存读写，不依赖关闭 CUDA
+Graph 后的 Python/CPU launch 开销。
+
+### Standalone serving 压测
+
+同一张 B200、相同 server 配置顺序跑 baseline/candidate，payload 为
+1,360 input + 512 forced output：
+
+| C | output tok/s 旧 -> 新 | 吞吐变化 | mean TPOT 改善 |
+| ---: | ---: | ---: | ---: |
+| 1 | 140.01 -> 142.48 | +1.77% | +1.54% |
+| 4 | 173.00 -> 175.89 | +1.67% | +2.31% |
+| 8 | 711.72 -> 733.80 | +3.10% | +2.90% |
+| 16 | 1,180.86 -> 1,100.51 | -6.80% | +3.19% |
+| 32 | 1,838.42 -> 1,879.31 | +2.22% | +2.30% |
+| 64 | 2,930.36 -> 3,183.32 | +8.63% | +2.59% |
+
+六个点的 mean TPOT 全部改善。C16 candidate 的 mean TTFT 偶发升至 1,561 ms，
+baseline 为 868 ms，令该点总吞吐反向；因此 standalone output-throughput 几何平均
+只有 +1.66%，不把 C16 抖动或 C64 的 +8.63% 单点写成稳定 kernel 收益。
+
+### Mooncake 自带 1P1D 评测
+
+继续使用项目已有的 Mooncake `benchmarks/xypd_benchmarks` matrix：同节点两张固定
+B200，1P1D、TP1+TP1、Mooncake 0.3.12.post1、RDMA、FA4、Triton MoE、
+FULL_AND_PIECEWISE CUDA Graph；payload 为 1,360 random + 50 shared-prefix input、
+512 output，每并发 4 folds，且每个 revision 先做 C64 warmup。
+
+| C | output tok/s 旧 -> 新 | 吞吐变化 | mean TPOT 改善 |
+| ---: | ---: | ---: | ---: |
+| 1 | 139.07 -> 141.46 | +1.72% | +1.50% |
+| 4 | 380.46 -> 394.05 | +3.57% | +3.41% |
+| 8 | 690.58 -> 703.45 | +1.86% | +1.82% |
+| 16 | 1,091.98 -> 1,132.81 | +3.74% | +2.89% |
+| 32 | 1,771.66 -> 1,817.69 | +2.60% | +2.67% |
+| 64 | 2,799.05 -> 2,866.92 | +2.42% | +2.26% |
+
+六点 output/request throughput 几何平均提升 **2.65%**，mean TPOT 几何平均改善
+**2.42%**。baseline/candidate 各三次真实 Mooncake transfer smoke 内部一致，且两版
+输出 exact；全部性能请求失败数为 0。日志中的 failed transfer、failed recv 和 KV
+expired request 全为 0，P/D 均明确使用 FA4，无 fallback、traceback、CUDA error 或
+OOM。
+
+### 证据、边界与回滚
+
+原始结果同时保存在：
+
+```text
+/mnt/pvc/lidong1/yoco-qk-clip-rope-20260830/
+/mnt/pvc/lidong1/yoco-qk-clip-rope-e2e-20260830/
+/mnt/pvc/lidong1/yoco-qk-clip-rope-mooncake-ab-20260830/
+/home/lidong1/vllm_test/yoco_results/qk-clip-rope-20260830/
+```
+
+本轮证明的是 B200 BF16、当前 64/8 heads 与 30 self-layer checkpoint；没有外推到
+其他 dtype/head_dim、weighted qk norm、多节点 RDMA 或 TP/DP>1。门禁外自动 fallback，
+回滚本提交即可恢复三个独立算子，不涉及 checkpoint、KV layout、PD 协议或 Mooncake
+状态迁移。
