@@ -232,6 +232,25 @@ def test_hf_token_cli_arg(cli_args, expected):
     assert args.hf_token == expected
 
 
+@pytest.mark.parametrize("mode", ["align", "fast"])
+def test_yoco_execution_mode_cli_arg(mode: str) -> None:
+    parser = EngineArgs.add_cli_args(FlexibleArgumentParser())
+
+    args = parser.parse_args([f"--{mode}"])
+    engine_args = EngineArgs.from_cli_args(args)
+
+    assert engine_args.align is (mode == "align")
+    assert engine_args.fast is (mode == "fast")
+    assert engine_args.additional_config["yoco_execution_mode"] == mode
+
+
+def test_yoco_execution_mode_cli_args_are_mutually_exclusive() -> None:
+    parser = EngineArgs.add_cli_args(FlexibleArgumentParser(exit_on_error=False))
+
+    with pytest.raises(ArgumentError):
+        parser.parse_args(["--align", "--fast"])
+
+
 @pytest.mark.parametrize(
     ("arg", "expected"),
     [

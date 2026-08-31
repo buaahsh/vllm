@@ -413,6 +413,8 @@ class EngineArgs:
     """Arguments for vLLM engine."""
 
     model: str = ModelConfig.model
+    align: bool = False
+    fast: bool = False
     enable_return_routed_experts: bool = ModelConfig.enable_return_routed_experts
     model_weights: str = ModelConfig.model_weights
     served_model_name: str | list[str] | None = ModelConfig.served_model_name
@@ -704,6 +706,21 @@ class EngineArgs:
     gdn_prefill_backend: Literal["flashinfer", "triton"] | None = None
 
     def __post_init__(self):
+        if self.align and self.fast:
+            raise ValueError("--align and --fast are mutually exclusive")
+
+        if self.align or self.fast:
+            requested_mode = "align" if self.align else "fast"
+            self.additional_config = dict(self.additional_config)
+            configured_mode = self.additional_config.get("yoco_execution_mode")
+            if configured_mode is not None and configured_mode != requested_mode:
+                raise ValueError(
+                    "Conflicting YOCO execution modes: "
+                    f"--{requested_mode} and additional_config="
+                    f"{configured_mode!r}"
+                )
+            self.additional_config["yoco_execution_mode"] = requested_mode
+
         # support `EngineArgs(compilation_config={...})`
         # without having to manually construct a
         # CompilationConfig object
@@ -764,6 +781,25 @@ class EngineArgs:
         model_group = parser.add_argument_group(
             title="ModelConfig",
             description=ModelConfig.__doc__,
+        )
+        yoco_mode_group = model_group.add_mutually_exclusive_group()
+        yoco_mode_group.add_argument(
+            "--align",
+            action="store_true",
+            help=(
+                "Run YOCO with llm-train-compatible operator boundaries and "
+                "rounding at the real runtime tensor shapes. This mode "
+                "currently targets BF16 alignment."
+            ),
+        )
+        yoco_mode_group.add_argument(
+            "--fast",
+            action="store_true",
+            help=(
+                "Run YOCO with optimized fused and packed kernels and use the "
+                "actual Router batch shape. This is the default when neither "
+                "YOCO mode flag is specified."
+            ),
         )
         if not ("serve" in sys.argv[1:] and "--help" in sys.argv[1:]):
             model_group.add_argument("--model", **model_kwargs["model"])

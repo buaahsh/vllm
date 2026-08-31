@@ -67,6 +67,10 @@ from vllm.v1.kv_cache_interface import AttentionSpec, get_kv_quant_mode
 
 logger = init_logger(__name__)
 
+# YOCO L3 TP=4 on B200 at the full 513-token window: FA4 wins through CUDA
+# graph batch 216, while Triton wins from the next standard capture size.
+_YOCO_L3_TP4_SM100_TRITON_DECODE_MIN_BATCH_SIZE = 224
+
 
 class FlashAttentionBackend(AttentionBackend):
     supported_dtypes: ClassVar[list[torch.dtype]] = [torch.float16, torch.bfloat16]
@@ -654,6 +658,19 @@ class FlashAttentionImpl(AttentionImpl):
             model_type = getattr(
                 vllm_config.model_config.hf_text_config, "model_type", None
             )
+        yoco_execution_mode = "fast"
+        if model_type == "yoco" and vllm_config is not None:
+            additional_config = getattr(vllm_config, "additional_config", None)
+            if isinstance(additional_config, dict):
+                yoco_execution_mode = additional_config.get(
+                    "yoco_execution_mode", "fast"
+                )
+            if yoco_execution_mode not in ("align", "fast"):
+                raise ValueError(
+                    "YOCO execution mode must be 'align' or 'fast', but got "
+                    f"{yoco_execution_mode!r}"
+                )
+        self.yoco_execution_mode = yoco_execution_mode
         self.vllm_flash_attn_version = get_flash_attn_version(
             requires_alibi=alibi_slopes is not None,
             head_size=head_size,
@@ -694,11 +711,27 @@ class FlashAttentionImpl(AttentionImpl):
             if vllm_config is not None
             else None
         )
+        device_capability = current_platform.get_device_capability()
+        is_l3_tp4_fa4_on_sm100 = (
+            self.vllm_flash_attn_version == 4
+            and device_capability is not None
+            and device_capability.major == 10
+            and self.num_heads == 16
+            and self.num_kv_heads == 2
+            and self.head_size == 128
+            and self.sliding_window == (512, 0)
+        )
+        self.yoco_triton_decode_min_batch_size = (
+            _YOCO_L3_TP4_SM100_TRITON_DECODE_MIN_BATCH_SIZE
+            if is_l3_tp4_fa4_on_sm100
+            else 0
+        )
         self.use_triton_yoco_decode = (
             model_type == "yoco"
+            and self.yoco_execution_mode == "fast"
             and cudagraph_mode is not None
             and cudagraph_mode.has_full_cudagraphs()
-            and self.vllm_flash_attn_version != 4
+            and (self.vllm_flash_attn_version != 4 or is_l3_tp4_fa4_on_sm100)
         )
         self.force_single_split = (
             model_type == "yoco" and self.vllm_flash_attn_version == 4
@@ -847,7 +880,11 @@ class FlashAttentionImpl(AttentionImpl):
                     if self.sliding_window is not None
                     else None
                 )
-                if self.use_triton_yoco_decode and attn_metadata.max_query_len == 1:
+                if (
+                    self.use_triton_yoco_decode
+                    and attn_metadata.max_query_len == 1
+                    and num_actual_tokens >= self.yoco_triton_decode_min_batch_size
+                ):
                     unified_attention(
                         q=query[:num_actual_tokens],
                         k=key_cache,

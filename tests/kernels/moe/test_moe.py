@@ -57,6 +57,35 @@ from vllm.utils.math_utils import next_power_of_2
 from vllm.utils.torch_utils import set_random_seed
 
 
+def test_try_get_optimal_moe_config_can_skip_tuned_file(monkeypatch) -> None:
+    from vllm.model_executor.layers import fused_moe as fused_moe_package
+    from vllm.model_executor.layers.fused_moe import fused_moe as fused_moe_module
+
+    expected = {"BLOCK_SIZE_M": 64}
+    monkeypatch.setattr(fused_moe_package, "get_config", lambda: None)
+    monkeypatch.setattr(
+        fused_moe_module,
+        "get_moe_configs",
+        lambda *args, **kwargs: pytest.fail("tuned config lookup must be skipped"),
+    )
+    monkeypatch.setattr(
+        fused_moe_module,
+        "get_default_config",
+        lambda *args, **kwargs: expected,
+    )
+
+    actual = fused_moe_module.try_get_optimal_moe_config(
+        (128, 1920, 1024),
+        (128, 1024, 960),
+        8,
+        None,
+        128,
+        use_tuned_config=False,
+    )
+
+    assert actual is expected
+
+
 def iterative_moe(
     hidden_states: torch.Tensor,
     w1: torch.Tensor,

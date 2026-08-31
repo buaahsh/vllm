@@ -242,56 +242,79 @@ if HAS_TRITON:
             )
 
     @triton.jit
-    def _yoco_routing_softmax_kernel(
+    def _yoco_fused_topk_routing_kernel(
         logits_ptr,
-        scores_ptr,
-        num_rows,
-    ):
-        row = tl.program_id(0)
-        cols = tl.arange(0, 128)
-        row_mask = row < num_rows
-        logits = tl.load(
-            logits_ptr + row * 128 + cols,
-            mask=row_mask,
-            other=0.0,
-        )
-        masked_logits = tl.where(row_mask, logits, float("-inf"))
-        row_max = tl.max(masked_logits, axis=0)
-        numerator = tl.extra.cuda.libdevice.exp(logits - row_max)
-        denominator = tl.sum(
-            tl.where(row_mask, numerator, 0.0),
-            axis=0,
-        )
-        scores = numerator / denominator
-        tl.store(
-            scores_ptr + row * 128 + cols,
-            scores,
-            mask=row_mask,
-        )
-
-    @triton.jit
-    def _yoco_routing_renorm_kernel(
         topk_weights_ptr,
+        topk_ids_ptr,
         num_rows,
         BLOCK_ROWS: tl.constexpr,
     ):
         rows = tl.program_id(0) * BLOCK_ROWS + tl.arange(0, BLOCK_ROWS)[:, None]
-        ranks = tl.arange(0, 8)[None, :]
+        cols = tl.arange(0, 128)[None, :]
         row_mask = rows < num_rows
-        weights = tl.load(
-            topk_weights_ptr + rows * 8 + ranks,
+        logits = tl.load(
+            logits_ptr + rows * 128 + cols,
             mask=row_mask,
-            other=0.0,
+            other=float("-inf"),
         )
-        denominator = tl.sum(
-            tl.where(row_mask, weights, 0.0),
-            axis=1,
-        )[:, None]
-        tl.store(
-            topk_weights_ptr + rows * 8 + ranks,
-            weights / denominator,
-            mask=row_mask,
+
+        # Keep the current fast path's FP32 full-row softmax.  Although its
+        # denominator cancels during the final Top-8 renormalization, retaining
+        # it minimizes numerical differences from the unfused implementation.
+        row_max = tl.max(logits, axis=1)[:, None]
+        numerator = tl.extra.cuda.libdevice.exp(logits - row_max)
+        scores = numerator / tl.sum(numerator, axis=1)[:, None]
+
+        ranks = tl.arange(0, 8)[None, :]
+        selected_scores = tl.full((BLOCK_ROWS, 8), 0.0, tl.float32)
+        selected_ids = tl.full((BLOCK_ROWS, 8), 0, tl.int32)
+        for rank in tl.static_range(8):
+            value, index = tl.max(
+                scores,
+                axis=1,
+                return_indices=True,
+                return_indices_tie_break_left=True,
+            )
+            selected_scores = tl.where(
+                ranks == rank,
+                value[:, None],
+                selected_scores,
+            )
+            selected_ids = tl.where(
+                ranks == rank,
+                index[:, None],
+                selected_ids,
+            )
+            scores = tl.where(cols == index[:, None], float("-inf"), scores)
+
+        selected_scores /= tl.sum(selected_scores, axis=1)[:, None]
+        output_offsets = rows * 8 + ranks
+        tl.store(topk_weights_ptr + output_offsets, selected_scores, mask=row_mask)
+        tl.store(topk_ids_ptr + output_offsets, selected_ids, mask=row_mask)
+
+    @triton.jit
+    def _yoco_diff_attention_v3_kernel(
+        attention_ptr,
+        gate_ptr,
+        output_ptr,
+        NUM_HEAD_PAIRS: tl.constexpr,
+        HEAD_DIM: tl.constexpr,
+    ):
+        """Apply both gates once per head pair, then broadcast over HEAD_DIM."""
+        token = tl.program_id(0)
+        heads = tl.arange(0, NUM_HEAD_PAIRS)[:, None]
+        dims = tl.arange(0, HEAD_DIM)[None, :]
+        pair = token * NUM_HEAD_PAIRS + heads
+        first_head = 2 * pair
+
+        first_gate = tl.load(gate_ptr + first_head).to(tl.float32)
+        second_gate = tl.load(gate_ptr + first_head + 1).to(tl.float32)
+        first = tl.load(attention_ptr + first_head * HEAD_DIM + dims).to(tl.float32)
+        second = tl.load(attention_ptr + (first_head + 1) * HEAD_DIM + dims).to(
+            tl.float32
         )
+        result = first * tl.sigmoid(first_gate) - second * tl.sigmoid(second_gate)
+        tl.store(output_ptr + pair * HEAD_DIM + dims, result)
 
     # Match the current Inductor fallback's PTX exactly: it rounds the second
     # product, then fuses the first product with the final add/subtract.
@@ -413,6 +436,8 @@ if HAS_TRITON:
     def _yoco_qk_rms_clip_rotary_kernel(
         query_ptr,
         key_ptr,
+        query_weight_ptr,
+        key_weight_ptr,
         query_output_ptr,
         key_output_ptr,
         positions_ptr,
@@ -430,6 +455,7 @@ if HAS_TRITON:
         KEY_HEADS: tl.constexpr,
         HEAD_DIM: tl.constexpr,
         BLOCK_ROWS: tl.constexpr,
+        HAS_WEIGHT: tl.constexpr,
     ):
         group = tl.program_id(0)
         is_query = group < query_num_groups
@@ -462,7 +488,18 @@ if HAS_TRITON:
         # Match the unfused RMSClip -> BF16 tensor -> RoPE sequence. The
         # explicit BF16 round is the semantic boundary that used to be the
         # intermediate tensor store/load.
-        clipped = (values * clip_coef).to(tl.bfloat16).to(tl.float32)
+        clipped = values * clip_coef
+        if HAS_WEIGHT:
+            weight_ptrs = tl.where(
+                is_query,
+                query_weight_ptr + cols,
+                key_weight_ptr + cols,
+            )
+            weight = tl.load(weight_ptrs, mask=row_mask, other=0.0).to(tl.float32)
+            clipped = clipped * weight
+        # The affine training kernel fuses the source-level pre-gamma BF16
+        # cast away and materializes BF16 only after gamma multiplication.
+        clipped = clipped.to(tl.bfloat16).to(tl.float32)
         first_half = cols < HEAD_DIM // 2
         partner_cols = tl.where(
             first_half,
@@ -474,7 +511,20 @@ if HAS_TRITON:
             mask=row_mask,
             other=0.0,
         ).to(tl.float32)
-        partner = (partner * clip_coef).to(tl.bfloat16).to(tl.float32)
+        partner = partner * clip_coef
+        if HAS_WEIGHT:
+            partner_weight_ptrs = tl.where(
+                is_query,
+                query_weight_ptr + partner_cols,
+                key_weight_ptr + partner_cols,
+            )
+            partner_weight = tl.load(
+                partner_weight_ptrs,
+                mask=row_mask,
+                other=0.0,
+            ).to(tl.float32)
+            partner = partner * partner_weight
+        partner = partner.to(tl.bfloat16).to(tl.float32)
 
         rotary_col = cols % (HEAD_DIM // 2)
         position = tl.load(
@@ -525,6 +575,39 @@ def _yoco_rms_clip_cuda(
         num_stages=1,
     )
     return output
+
+
+def _yoco_diff_attention_v3_cuda(
+    attention: torch.Tensor,
+    gate: torch.Tensor,
+) -> torch.Tensor:
+    num_tokens, twice_num_heads, head_dim = attention.shape
+    num_head_pairs = twice_num_heads // 2
+    output = torch.empty(
+        (num_tokens, num_head_pairs, head_dim),
+        dtype=attention.dtype,
+        device=attention.device,
+    )
+    _yoco_diff_attention_v3_kernel[(num_tokens,)](
+        attention,
+        gate,
+        output,
+        NUM_HEAD_PAIRS=num_head_pairs,
+        HEAD_DIM=head_dim,
+        num_warps=4,
+        num_stages=1,
+    )
+    return output
+
+
+def _yoco_diff_attention_v3_fake(
+    attention: torch.Tensor,
+    gate: torch.Tensor,
+) -> torch.Tensor:
+    del gate
+    return attention.new_empty(
+        (attention.shape[0], attention.shape[1] // 2, attention.shape[2])
+    )
 
 
 def _yoco_rms_clip_fake(
@@ -679,6 +762,8 @@ def _yoco_qk_rms_clip_rotary_cuda(
     _yoco_qk_rms_clip_rotary_kernel[(query_num_groups + key_num_groups,)](
         query,
         key,
+        query,
+        key,
         query_output,
         key_output,
         positions,
@@ -696,6 +781,7 @@ def _yoco_qk_rms_clip_rotary_cuda(
         KEY_HEADS=key_heads,
         HEAD_DIM=128,
         BLOCK_ROWS=block_rows,
+        HAS_WEIGHT=False,
         num_warps=4,
         num_stages=1,
     )
@@ -717,6 +803,75 @@ def _yoco_qk_rms_clip_rotary_fake(
     )
 
 
+def _yoco_qk_rms_clip_rotary_weighted_cuda(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    query_weight: torch.Tensor,
+    key_weight: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+    eps: float,
+    limit: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    query_output = torch.empty_like(query, memory_format=torch.contiguous_format)
+    key_output = torch.empty_like(key, memory_format=torch.contiguous_format)
+    query_weight = query_weight.to(torch.bfloat16).contiguous()
+    key_weight = key_weight.to(torch.bfloat16).contiguous()
+    num_rows = query.shape[0]
+    query_heads = query.shape[1]
+    key_heads = key.shape[1]
+    # Two rows with one warp is the best balanced A6000 configuration across
+    # decode and prefill sizes.  The fast path is allowed to choose a fixed
+    # reduction tree; the align path keeps Inductor's shape-dependent tree.
+    block_rows = 2
+    query_num_groups = triton.cdiv(num_rows * query_heads, block_rows)
+    key_num_groups = triton.cdiv(num_rows * key_heads, block_rows)
+    _yoco_qk_rms_clip_rotary_kernel[(query_num_groups + key_num_groups,)](
+        query,
+        key,
+        query_weight,
+        key_weight,
+        query_output,
+        key_output,
+        positions,
+        cos_sin_cache,
+        num_rows,
+        query_num_groups,
+        query.stride(0),
+        query.stride(1),
+        key.stride(0),
+        key.stride(1),
+        positions.stride(0),
+        eps=eps,
+        limit=limit,
+        QUERY_HEADS=query_heads,
+        KEY_HEADS=key_heads,
+        HEAD_DIM=128,
+        BLOCK_ROWS=block_rows,
+        HAS_WEIGHT=True,
+        num_warps=1,
+        num_stages=1,
+    )
+    return query_output, key_output
+
+
+def _yoco_qk_rms_clip_rotary_weighted_fake(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    query_weight: torch.Tensor,
+    key_weight: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+    eps: float,
+    limit: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del query_weight, key_weight, positions, cos_sin_cache, eps, limit
+    return (
+        torch.empty_like(query, memory_format=torch.contiguous_format),
+        torch.empty_like(key, memory_format=torch.contiguous_format),
+    )
+
+
 def _yoco_router_linear_tf32_cuda(
     hidden_states: torch.Tensor,
     weight: torch.Tensor,
@@ -724,13 +879,10 @@ def _yoco_router_linear_tf32_cuda(
 ) -> torch.Tensor:
     if normalize_weight:
         weight = weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
-    # cuBLASLt can select a different TF32 reduction tree for prefill and
-    # prefix-cache/PD decode token counts. Router logits are FP32, so those
-    # differences survive and can change top-k experts. Pad only sub-128-row
-    # batches to the first stable cuBLAS shape while retaining the checkpoint's
-    # TF32 inference semantics and the original large-prefill fast path.
+    # The fast serving path intentionally uses the real token-row count.  Shape
+    # padding belongs to the explicit alignment policy, not this default op:
+    # CUDA Graph removes host launch overhead but cannot remove padded GEMM work.
     assert hidden_states.ndim == 2
-    chunk_rows = 128
     previous_allow_tf32 = torch.backends.cuda.matmul.allow_tf32
     previous_matmul_precision = torch.get_float32_matmul_precision()
     previous_cuda_precision = torch.backends.cuda.matmul.fp32_precision
@@ -738,10 +890,6 @@ def _yoco_router_linear_tf32_cuda(
     torch.set_float32_matmul_precision("high")
     torch.backends.cuda.matmul.fp32_precision = "tf32"
     try:
-        num_rows = hidden_states.shape[0]
-        if num_rows < chunk_rows:
-            padded = F.pad(hidden_states, (0, 0, 0, chunk_rows - num_rows))
-            return F.linear(padded, weight)[:num_rows]
         return F.linear(hidden_states, weight)
     finally:
         torch.backends.cuda.matmul.allow_tf32 = previous_allow_tf32
@@ -767,6 +915,11 @@ if current_platform.is_cuda():
 
 if HAS_TRITON and current_platform.is_cuda():
     direct_register_custom_op(
+        op_name="yoco_diff_attention_v3",
+        op_func=_yoco_diff_attention_v3_cuda,
+        fake_impl=_yoco_diff_attention_v3_fake,
+    )
+    direct_register_custom_op(
         op_name="yoco_rms_clip",
         op_func=_yoco_rms_clip_cuda,
         fake_impl=_yoco_rms_clip_fake,
@@ -790,6 +943,11 @@ if HAS_TRITON and current_platform.is_cuda():
         op_name="yoco_qk_rms_clip_rotary",
         op_func=_yoco_qk_rms_clip_rotary_cuda,
         fake_impl=_yoco_qk_rms_clip_rotary_fake,
+    )
+    direct_register_custom_op(
+        op_name="yoco_qk_rms_clip_rotary_weighted",
+        op_func=_yoco_qk_rms_clip_rotary_weighted_cuda,
+        fake_impl=_yoco_qk_rms_clip_rotary_weighted_fake,
     )
 
 
@@ -827,6 +985,37 @@ def _cfg_int(config: PretrainedConfig, *names: str, default: int | None = None) 
     )
 
 
+def _get_yoco_execution_mode(vllm_config: VllmConfig) -> str:
+    """Return the requested YOCO kernel policy.
+
+    ``fast`` preserves the optimized serving path and remains the default.
+    ``align`` preserves llm-train's BF16 operator and rounding boundaries.
+    """
+    additional_config = vllm_config.additional_config
+    mode = (
+        additional_config.get("yoco_execution_mode", "fast")
+        if isinstance(additional_config, dict)
+        else "fast"
+    )
+    if mode not in ("align", "fast"):
+        raise ValueError(
+            f"YOCO execution mode must be 'align' or 'fast', but got {mode!r}"
+        )
+    return mode
+
+
+def _yoco_runtime_sliding_window(training_window_left: int) -> int:
+    """Translate llm-train's left-window count to vLLM's total window size.
+
+    FlashAttention's ``(left, 0)`` includes ``left`` previous tokens and the
+    current token. vLLM accepts the total token count and subtracts one before
+    calling the backend, so training's 512 becomes 513 here.
+    """
+    if training_window_left <= 0:
+        raise ValueError("YOCO self-attention requires a positive sliding window")
+    return training_window_left + 1
+
+
 def _maybe_build_yoco_quant_config(
     quant_config: QuantizationConfig | None,
 ) -> QuantizationConfig | None:
@@ -841,12 +1030,6 @@ def _maybe_build_yoco_quant_config(
     return quant_config
 
 
-def _yoco_routing_renorm_block(num_rows: int) -> int:
-    # Match the Native Inductor choices for the verified 3/66/110-token shapes
-    # without runtime autotuning, which can select different reduction tiles.
-    return 32 if num_rows >= 96 else 1
-
-
 def _yoco_topk_routing_impl(
     router_logits: torch.Tensor,
     topk: int,
@@ -856,23 +1039,61 @@ def _yoco_topk_routing_impl(
     assert topk == 8
     router_logits = router_logits.contiguous()
     num_rows = router_logits.shape[0]
-    gate_scores = torch.empty_like(router_logits)
-    _yoco_routing_softmax_kernel[(num_rows,)](
+    output_shape = (num_rows, 8)
+    topk_weights = torch.empty(
+        output_shape,
+        dtype=torch.float32,
+        device=router_logits.device,
+    )
+    topk_ids = torch.empty(
+        output_shape,
+        dtype=torch.int64,
+        device=router_logits.device,
+    )
+    block_rows = 4
+    _yoco_fused_topk_routing_kernel[(triton.cdiv(num_rows, block_rows),)](
         router_logits,
-        gate_scores,
-        num_rows,
-        num_warps=2,
-        num_stages=1,
-    )
-    topk_weights, topk_ids = torch.topk(gate_scores, k=topk, dim=-1)
-    renorm_block = _yoco_routing_renorm_block(num_rows)
-    _yoco_routing_renorm_kernel[(triton.cdiv(num_rows, renorm_block),)](
         topk_weights,
+        topk_ids,
         num_rows,
-        BLOCK_ROWS=renorm_block,
-        num_warps=2,
+        BLOCK_ROWS=block_rows,
+        num_warps=4,
         num_stages=1,
     )
+    return topk_weights, topk_ids
+
+
+@torch.compile
+def _yoco_align_topk_routing_impl(
+    logits: torch.Tensor,
+    topk: int,
+) -> tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]:
+    """The complete routing expression compiled by llm-train."""
+    gate_scores = F.softmax(logits, dim=-1, dtype=torch.float32)
+    scores, top_indices = torch.topk(gate_scores, k=topk, dim=-1)
+    probs = scores / scores.sum(dim=-1, keepdim=True)
+    routing_probs = torch.zeros_like(logits).scatter(
+        1, top_indices, probs.to(logits.dtype)
+    )
+    routing_map = torch.zeros_like(logits).int().scatter(1, top_indices, 1).bool()
+    return probs, top_indices, routing_probs, routing_map, gate_scores
+
+
+def _yoco_align_topk_routing(
+    hidden_states: torch.Tensor,
+    gating_output: torch.Tensor,
+    topk: int,
+    renormalize: bool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del hidden_states
+    assert renormalize
+    topk_weights, topk_ids, _, _, _ = _yoco_align_topk_routing_impl(gating_output, topk)
     return topk_weights, topk_ids
 
 
@@ -892,6 +1113,35 @@ def _yoco_topk_routing(
     return _yoco_topk_routing_impl(gating_output, topk)
 
 
+@torch.compile
+def _yoco_align_rms_clip(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float,
+    limit: float,
+) -> torch.Tensor:
+    """The exact affine RMSClip expression compiled by llm-train."""
+    x_float = x.float()
+    clip_coef = (
+        limit * torch.rsqrt(x_float.pow(2).mean(-1, keepdim=True) + eps)
+    ).clamp(max=1.0)
+    return (x_float * clip_coef).to(x.dtype) * weight.to(x.dtype)
+
+
+@torch.compile
+def _yoco_align_rms_clip_no_weight(
+    x: torch.Tensor,
+    eps: float,
+    limit: float,
+) -> torch.Tensor:
+    """The exact non-affine RMSClip expression compiled by llm-train."""
+    x_float = x.float()
+    clip_coef = (
+        limit * torch.rsqrt(x_float.pow(2).mean(-1, keepdim=True) + eps)
+    ).clamp(max=1.0)
+    return (x_float * clip_coef).to(x.dtype)
+
+
 class RMSClip(nn.Module):
     """RMS-based clipping for YOCO ``qk_rms_clip`` models.
 
@@ -906,11 +1156,15 @@ class RMSClip(nn.Module):
         eps: float = 1e-6,
         limit: float = 3.0,
         has_weight: bool = False,
+        execution_mode: str = "fast",
     ) -> None:
         super().__init__()
+        if execution_mode not in ("align", "fast"):
+            raise ValueError(f"Unsupported YOCO execution mode: {execution_mode!r}")
         self.dim = dim
         self.eps = eps
         self.limit = limit
+        self.execution_mode = execution_mode
         if has_weight:
             self.weight = nn.Parameter(torch.ones(dim))
         else:
@@ -920,6 +1174,10 @@ class RMSClip(nn.Module):
         return f"dim={self.dim}, eps={self.eps}, limit={self.limit}"
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.execution_mode == "align":
+            if self.weight is None:
+                return _yoco_align_rms_clip_no_weight(x, self.eps, self.limit)
+            return _yoco_align_rms_clip(x, self.weight, self.eps, self.limit)
         if (
             HAS_TRITON
             and x.is_cuda
@@ -939,6 +1197,21 @@ class RMSClip(nn.Module):
         return x
 
 
+@torch.compile
+def _yoco_align_rms_norm(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float,
+) -> torch.Tensor:
+    """The exact BF16 RMSNorm expression compiled by llm-train."""
+    return F.rms_norm(
+        x.to(torch.bfloat16),
+        (x.shape[-1],),
+        weight=weight.to(torch.bfloat16),
+        eps=eps,
+    )
+
+
 class RMSNorm(nn.Module):
     """RMSNorm matching llm-train's compiled reduction semantics.
 
@@ -953,10 +1226,14 @@ class RMSNorm(nn.Module):
         eps: float = 1e-6,
         has_weight: bool = True,
         dtype: torch.dtype | None = None,
+        execution_mode: str = "fast",
     ) -> None:
         super().__init__()
+        if execution_mode not in ("align", "fast"):
+            raise ValueError(f"Unsupported YOCO execution mode: {execution_mode!r}")
         self.dim = dim
         self.eps = eps
+        self.execution_mode = execution_mode
         weight = torch.ones(dim, dtype=dtype or torch.get_default_dtype())
         if has_weight:
             self.weight = nn.Parameter(weight)
@@ -972,6 +1249,12 @@ class RMSNorm(nn.Module):
         residual: torch.Tensor | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         if residual is not None:
+            if self.execution_mode == "align":
+                residual_out = residual + x.float()
+                return (
+                    _yoco_align_rms_norm(residual_out, self.weight, self.eps),
+                    residual_out,
+                )
             if (
                 HAS_TRITON
                 and x.is_cuda
@@ -989,6 +1272,8 @@ class RMSNorm(nn.Module):
             normalized = self.forward(residual_out)
             assert isinstance(normalized, torch.Tensor)
             return normalized, residual_out
+        if self.execution_mode == "align":
+            return _yoco_align_rms_norm(x, self.weight, self.eps)
         if (
             HAS_TRITON
             and x.is_cuda
@@ -1025,6 +1310,28 @@ def _yoco_apply_rotary_emb(
 
 
 @torch.compile
+def _yoco_align_rotary_embedding(
+    cos_sin_cache: torch.Tensor,
+    positions: torch.Tensor,
+    query: torch.Tensor,
+    key: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """The exact cache lookup and RoPE expression compiled by llm-train."""
+    cos_sin = cos_sin_cache[positions]
+    cos, sin = cos_sin.chunk(2, dim=-1)
+    cos = cos.unsqueeze(-2)
+    sin = sin.unsqueeze(-2)
+
+    def apply(x: torch.Tensor) -> torch.Tensor:
+        x1, x2 = torch.chunk(x.to(torch.float32), 2, dim=-1)
+        y1 = x1 * cos - x2 * sin
+        y2 = x2 * cos + x1 * sin
+        return torch.cat((y1, y2), dim=-1).to(x.dtype)
+
+    return apply(query), apply(key)
+
+
+@torch.compile
 def _yoco_diff_attention_v2(
     attn1: torch.Tensor,
     attn2: torch.Tensor,
@@ -1046,11 +1353,58 @@ def _yoco_diff_attention_v3(
     ).unsqueeze(-1)
 
 
+# B200 full-CUDA-graph measurements for the L3 TP=4 shape show a stable win
+# once there are at least 32 token rows. Smaller rows stay on Inductor's flat
+# pointwise kernel, which has slightly lower launch cost.
+_YOCO_SM100_DIFF_V3_MIN_TOKENS = 32
+
+
+def _yoco_diff_attention_v3_dispatch(
+    attention: torch.Tensor,
+    gate: torch.Tensor,
+    use_sm100_kernel: bool,
+) -> torch.Tensor:
+    if (
+        use_sm100_kernel
+        and attention.is_cuda
+        and gate.is_cuda
+        and attention.dtype == torch.bfloat16
+        and gate.dtype == torch.bfloat16
+        and attention.is_contiguous()
+        and gate.is_contiguous()
+        and attention.shape[0] >= _YOCO_SM100_DIFF_V3_MIN_TOKENS
+        and attention.shape[1] == 16
+        and attention.shape[2] == 128
+        and gate.shape == attention.shape[:2]
+    ):
+        return torch.ops.vllm.yoco_diff_attention_v3(attention, gate)
+    return _yoco_diff_attention_v3(attention[:, 0::2, :], attention[:, 1::2, :], gate)
+
+
+def _supports_yoco_sm100_diff_v3_kernel(execution_mode: str) -> bool:
+    if execution_mode != "fast" or not HAS_TRITON or not current_platform.is_cuda():
+        return False
+    capability = current_platform.get_device_capability()
+    return capability is not None and capability.major == 10
+
+
 def _yoco_normalized_router_linear(
     hidden_states: torch.Tensor,
     weight: torch.Tensor,
 ) -> torch.Tensor:
     weight = weight / weight.norm(dim=1, keepdim=True).clamp_min(1e-6)
+    return F.linear(hidden_states, weight)
+
+
+def _yoco_align_router_linear(
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+    normalize_weight: bool,
+) -> torch.Tensor:
+    """Match llm-train's Router expression at the real token-row shape."""
+    assert hidden_states.ndim == 2
+    if normalize_weight:
+        return _yoco_normalized_router_linear(hidden_states, weight)
     return F.linear(hidden_states, weight)
 
 
@@ -1062,11 +1416,15 @@ class YOCORotaryEmbedding(nn.Module):
         head_size: int,
         max_position_embeddings: int,
         base: float,
+        execution_mode: str = "fast",
     ) -> None:
         super().__init__()
+        if execution_mode not in ("align", "fast"):
+            raise ValueError(f"Unsupported YOCO execution mode: {execution_mode!r}")
         self.head_size = head_size
         self.max_position_embeddings = max_position_embeddings
         self.base = base
+        self.execution_mode = execution_mode
         self.register_buffer("cos_sin_cache", None, persistent=False)
 
     def _get_cos_sin_cache(self, device: torch.device) -> torch.Tensor:
@@ -1109,6 +1467,9 @@ class YOCORotaryEmbedding(nn.Module):
         query = query.view(query.shape[0], -1, self.head_size)
         key = key.view(key.shape[0], -1, self.head_size)
         positions = positions.to(device=query.device, dtype=torch.long)
+        if self.execution_mode == "align":
+            query, key = _yoco_align_rotary_embedding(cache, positions, query, key)
+            return query.flatten(-2), key.flatten(-2)
         if (
             HAS_TRITON
             and query.is_cuda
@@ -1127,7 +1488,12 @@ class YOCORotaryEmbedding(nn.Module):
         return query.flatten(-2), key.flatten(-2)
 
 
-def _build_qk_norm(config: PretrainedConfig, head_dim: int, rms_eps: float):
+def _build_qk_norm(
+    config: PretrainedConfig,
+    head_dim: int,
+    rms_eps: float,
+    execution_mode: str = "fast",
+):
     """Build the per-head Q/K normalization module for YOCO attention.
 
     Three mutually exclusive modes, matching training (``llm/arch/attention.py``):
@@ -1139,9 +1505,20 @@ def _build_qk_norm(config: PretrainedConfig, head_dim: int, rms_eps: float):
     has_weight = bool(getattr(config, "qk_rms_gamma", False))
     if bool(getattr(config, "qk_rms_clip", False)):
         limit = float(getattr(config, "qk_rms_limit", 3.0))
-        return RMSClip(head_dim, eps=rms_eps, limit=limit, has_weight=has_weight)
+        return RMSClip(
+            head_dim,
+            eps=rms_eps,
+            limit=limit,
+            has_weight=has_weight,
+            execution_mode=execution_mode,
+        )
     if bool(getattr(config, "qk_norm", False)):
-        return RMSNorm(head_dim, eps=rms_eps, has_weight=has_weight)
+        return RMSNorm(
+            head_dim,
+            eps=rms_eps,
+            has_weight=has_weight,
+            execution_mode=execution_mode,
+        )
     return None
 
 
@@ -1172,6 +1549,30 @@ def _apply_per_head_norm(
 # --------------------------------------------------------------------------- #
 
 
+def _yoco_align_qkv_linear(
+    hidden_states: torch.Tensor,
+    packed_weight: torch.Tensor,
+    q_size: int,
+    kv_size: int,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Run llm-train's three independent BF16 Q/K/V projections."""
+    expected_rows = q_size + 2 * kv_size
+    if packed_weight.shape[0] != expected_rows:
+        raise ValueError(
+            f"Expected {expected_rows} packed QKV rows, got {packed_weight.shape[0]}"
+        )
+    hidden_states = hidden_states.to(torch.bfloat16)
+    packed_weight = packed_weight.to(torch.bfloat16)
+    q_weight, k_weight, v_weight = packed_weight.split(
+        (q_size, kv_size, kv_size), dim=0
+    )
+    return (
+        F.linear(hidden_states, q_weight),
+        F.linear(hidden_states, k_weight),
+        F.linear(hidden_states, v_weight),
+    )
+
+
 class YOCOSelfAttention(nn.Module):
     """Sliding-window self-attention for YOCO layers 0..9.
 
@@ -1189,8 +1590,17 @@ class YOCOSelfAttention(nn.Module):
         cache_config: CacheConfig | None,
         quant_config: QuantizationConfig | None,
         prefix: str,
+        execution_mode: str = "fast",
     ) -> None:
         super().__init__()
+        if execution_mode not in ("align", "fast"):
+            raise ValueError(f"Unsupported YOCO execution mode: {execution_mode!r}")
+        if execution_mode == "align" and quant_config is not None:
+            raise ValueError("YOCO --align currently supports BF16 weights only")
+        self.execution_mode = execution_mode
+        self.use_sm100_diff_v3_kernel = _supports_yoco_sm100_diff_v3_kernel(
+            execution_mode
+        )
         self.hidden_size = _cfg_int(config, "hidden_size", "d_model")
         self.total_num_heads = _cfg_int(config, "num_attention_heads", "head")
         self.total_num_kv_heads = _cfg_int(config, "num_key_value_heads", "kv_head")
@@ -1199,9 +1609,10 @@ class YOCOSelfAttention(nn.Module):
         self.layer_idx = layer_idx
         self.universal_loop = universal_loop
         self.num_hidden_layers = num_hidden_layers
-        self.sliding_window = _cfg_int(
+        self.training_sliding_window = _cfg_int(
             config, "sliding_window_size", "yoco_window_size", default=512
         )
+        self.sliding_window = _yoco_runtime_sliding_window(self.training_sliding_window)
         max_position = _cfg_int(config, "max_position_embeddings", "max_seq_len")
         rope_theta = float(getattr(config, "rope_theta", 10000.0))
 
@@ -1265,17 +1676,16 @@ class YOCOSelfAttention(nn.Module):
         rms_eps = float(
             getattr(config, "rms_norm_eps", getattr(config, "norm_eps", 1e-6))
         )
-        # Per-head Q/K normalization (RMSClip when ``qk_rms_clip``, weight-free
-        # RMSNorm when ``qk_norm``, else nothing).  ``RMSClip`` and weight-free
-        # ``RMSNorm`` carry no parameters, so the checkpoint contains no
-        # ``q_norm``/``k_norm`` weights in any of these modes.
-        self.q_norm = _build_qk_norm(config, self.head_dim, rms_eps)
-        self.k_norm = _build_qk_norm(config, self.head_dim, rms_eps)
+        # Per-head Q/K normalization (RMSClip when ``qk_rms_clip``, RMSNorm
+        # when ``qk_norm``, else nothing). L3 uses affine RMSClip weights.
+        self.q_norm = _build_qk_norm(config, self.head_dim, rms_eps, execution_mode)
+        self.k_norm = _build_qk_norm(config, self.head_dim, rms_eps, execution_mode)
 
         self.rotary_emb = YOCORotaryEmbedding(
             head_size=self.head_dim,
             max_position_embeddings=max_position,
             base=rope_theta,
+            execution_mode=execution_mode,
         )
 
         # Build one Attention module per universal-loop iteration.  Each gets
@@ -1316,11 +1726,13 @@ class YOCOSelfAttention(nn.Module):
         """
         # (n_tokens, 2 * num_heads_per_pair, head_dim)
         attn_view = attn_out.view(-1, 2 * num_heads_per_pair, self.head_dim)
-        attn1 = attn_view[:, 0::2, :]
-        attn2 = attn_view[:, 1::2, :]
         if self.diff_v3:
-            out = _yoco_diff_attention_v3(attn1, attn2, gate)
+            out = _yoco_diff_attention_v3_dispatch(
+                attn_view, gate, self.use_sm100_diff_v3_kernel
+            )
         else:
+            attn1 = attn_view[:, 0::2, :]
+            attn2 = attn_view[:, 1::2, :]
             out = _yoco_diff_attention_v2(attn1, attn2, gate)
         return out.reshape(-1, num_heads_per_pair * self.head_dim)
 
@@ -1333,22 +1745,35 @@ class YOCOSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         loop_idx: int,
     ) -> torch.Tensor:
-        qkv, _ = self.qkv_proj(hidden_states)
-        q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        if self.execution_mode == "align":
+            q, k, v = _yoco_align_qkv_linear(
+                hidden_states,
+                self.qkv_proj.weight,
+                self.q_size,
+                self.kv_size,
+            )
+        else:
+            qkv, _ = self.qkv_proj(hidden_states)
+            q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         # Per-head QK norm/clip on the un-rotated query/key, applied
         # independently to each head's ``head_dim`` slice — matches training's
         # ``q_norm``/``k_norm``.  Skipped entirely when neither ``qk_rms_clip``
         # nor ``qk_norm`` is set.
+        qk_clip_weight_mode_matches = (
+            isinstance(self.q_norm, RMSClip)
+            and isinstance(self.k_norm, RMSClip)
+            and (self.q_norm.weight is None) == (self.k_norm.weight is None)
+        )
         can_fuse_qk_clip_rotary = (
-            HAS_TRITON
+            self.execution_mode == "fast"
+            and HAS_TRITON
             and q.is_cuda
             and q.dtype == torch.bfloat16
             and k.dtype == torch.bfloat16
             and self.head_dim == 128
             and isinstance(self.q_norm, RMSClip)
             and isinstance(self.k_norm, RMSClip)
-            and self.q_norm.weight is None
-            and self.k_norm.weight is None
+            and qk_clip_weight_mode_matches
             and self.q_norm.eps == self.k_norm.eps
             and self.q_norm.limit == self.k_norm.limit
             and current_platform.is_cuda()
@@ -1358,14 +1783,27 @@ class YOCOSelfAttention(nn.Module):
             q = q.view(q.shape[0], self.num_heads, self.head_dim)
             k = k.view(k.shape[0], self.num_kv_heads, self.head_dim)
             positions = positions.to(device=q.device, dtype=torch.long)
-            q, k = torch.ops.vllm.yoco_qk_rms_clip_rotary(
-                q,
-                k,
-                positions,
-                cache,
-                self.q_norm.eps,
-                self.q_norm.limit,
-            )
+            if self.q_norm.weight is None:
+                q, k = torch.ops.vllm.yoco_qk_rms_clip_rotary(
+                    q,
+                    k,
+                    positions,
+                    cache,
+                    self.q_norm.eps,
+                    self.q_norm.limit,
+                )
+            else:
+                assert self.k_norm.weight is not None
+                q, k = torch.ops.vllm.yoco_qk_rms_clip_rotary_weighted(
+                    q,
+                    k,
+                    self.q_norm.weight,
+                    self.k_norm.weight,
+                    positions,
+                    cache,
+                    self.q_norm.eps,
+                    self.q_norm.limit,
+                )
             q = q.flatten(-2)
             k = k.flatten(-2)
         else:
@@ -1406,8 +1844,13 @@ class YOCOCrossAttention(nn.Module):
         cache_config: CacheConfig | None,
         quant_config: QuantizationConfig | None,
         prefix: str,
+        execution_mode: str = "fast",
     ) -> None:
         super().__init__()
+        self.execution_mode = execution_mode
+        self.use_sm100_diff_v3_kernel = _supports_yoco_sm100_diff_v3_kernel(
+            execution_mode
+        )
         self.hidden_size = _cfg_int(config, "hidden_size", "d_model")
         # Cross-attention has its OWN Q-head count via ``cross_head``.  In this
         # checkpoint ``cross_head = 48`` (twice the self-attention head count)
@@ -1465,7 +1908,7 @@ class YOCOCrossAttention(nn.Module):
         )
         # Cross layers apply the same per-head Q norm/clip as self layers (the
         # shared K is normed once at the model level on ``yoco_key``).
-        self.q_norm = _build_qk_norm(config, self.head_dim, rms_eps)
+        self.q_norm = _build_qk_norm(config, self.head_dim, rms_eps, execution_mode)
 
         if layer_idx == first_cross_layer_idx:
             kv_sharing_target = None
@@ -1493,11 +1936,13 @@ class YOCOCrossAttention(nn.Module):
         self, attn_out: torch.Tensor, gate: torch.Tensor
     ) -> torch.Tensor:
         attn_view = attn_out.view(-1, 2 * self.num_lambda_heads, self.head_dim)
-        attn1 = attn_view[:, 0::2, :]
-        attn2 = attn_view[:, 1::2, :]
         if self.diff_v3:
-            out = _yoco_diff_attention_v3(attn1, attn2, gate)
+            out = _yoco_diff_attention_v3_dispatch(
+                attn_view, gate, self.use_sm100_diff_v3_kernel
+            )
         else:
+            attn1 = attn_view[:, 0::2, :]
+            attn2 = attn_view[:, 1::2, :]
             out = _yoco_diff_attention_v2(attn1, attn2, gate)
         return out.reshape(-1, self.num_lambda_heads * self.head_dim)
 
@@ -1633,8 +2078,10 @@ class YOCOMoE(nn.Module):
         config: PretrainedConfig,
         quant_config: QuantizationConfig | None,
         prefix: str,
+        execution_mode: str = "fast",
     ) -> None:
         super().__init__()
+        self.execution_mode = execution_mode
         self.hidden_size = _cfg_int(config, "hidden_size", "d_model")
         self.num_experts = _cfg_int(config, "num_experts", "moe_expert_num")
         self.top_k = _cfg_int(config, "num_experts_per_tok", "moe_top_k", "top_k")
@@ -1699,7 +2146,10 @@ class YOCOMoE(nn.Module):
                 input_size=self.hidden_size,
                 output_size=self.moe_latent_dim,
                 bias=False,
-                quant_config=quant_config,
+                # llm-train does not forward MoE.quant_mode to either latent
+                # projection, so MixPrecisionLinear keeps its BF16 default
+                # even when the routed experts use MXFP8.
+                quant_config=None,
                 prefix=f"{prefix}.fc1_latent_proj",
                 return_bias=False,
             )
@@ -1707,17 +2157,25 @@ class YOCOMoE(nn.Module):
                 input_size=self.moe_latent_dim,
                 output_size=self.hidden_size,
                 bias=False,
-                quant_config=quant_config,
+                quant_config=None,
                 prefix=f"{prefix}.fc2_latent_proj",
                 return_bias=False,
             )
             self.fc1_latent_norm = (
-                RMSNorm(self.moe_latent_dim, eps=rms_eps)
+                RMSNorm(
+                    self.moe_latent_dim,
+                    eps=rms_eps,
+                    execution_mode=execution_mode,
+                )
                 if self.moe_latent_norm
                 else nn.Identity()
             )
             self.fc2_latent_norm = (
-                RMSNorm(self.moe_latent_dim, eps=rms_eps)
+                RMSNorm(
+                    self.moe_latent_dim,
+                    eps=rms_eps,
+                    execution_mode=execution_mode,
+                )
                 if self.moe_latent_norm
                 else nn.Identity()
             )
@@ -1752,6 +2210,11 @@ class YOCOMoE(nn.Module):
         # can make some checkpoints (observed: adamw-3000) degenerate under pure
         # greedy decoding; use temperature>0 in production. Kept on per owner's
         # request for training fidelity.
+        routing_function = (
+            _yoco_align_topk_routing
+            if execution_mode == "align"
+            else _yoco_topk_routing
+        )
         self.experts = FusedMoE(
             shared_experts=self.shared_experts,
             num_experts=self.num_experts,
@@ -1762,18 +2225,19 @@ class YOCOMoE(nn.Module):
             quant_config=quant_config,
             use_grouped_topk=False,
             scoring_func="softmax",
-            custom_routing_function=_yoco_topk_routing,
+            custom_routing_function=routing_function,
             swiglu_limit=self.swiglu_limit,
             apply_router_weight_before_w2=True,
             routed_input_transform=routed_input_transform,
             routed_output_transform=routed_output_transform,
             shared_output_transform=shared_output_transform,
             reduce_shared_experts_separately=True,
+            use_tuned_config=execution_mode == "fast",
             prefix=f"{prefix}.experts",
         )
 
     def initialize_router_weight_cache(self) -> None:
-        if self.router_weights_normalized:
+        if self.execution_mode == "align" or self.router_weights_normalized:
             self._normalized_gate_weight = None
             return
         with torch.no_grad():
@@ -1792,7 +2256,11 @@ class YOCOMoE(nn.Module):
             gate_weight = self._normalized_gate_weight
             normalize_gate_weight = False
 
-        if hidden_states.is_cuda and current_platform.is_cuda():
+        if self.execution_mode == "align":
+            router_logits = _yoco_align_router_linear(
+                hidden_states.float(), gate_weight, normalize_gate_weight
+            )
+        elif hidden_states.is_cuda and current_platform.is_cuda():
             router_logits = torch.ops.vllm.yoco_router_linear_tf32(
                 hidden_states.float(),
                 gate_weight,
@@ -1826,6 +2294,7 @@ class YOCODecoderLayer(nn.Module):
         cache_config: CacheConfig | None,
         quant_config: QuantizationConfig | None,
         prefix: str,
+        execution_mode: str = "fast",
     ) -> None:
         super().__init__()
         hidden_size = _cfg_int(config, "hidden_size", "d_model")
@@ -1839,8 +2308,16 @@ class YOCODecoderLayer(nn.Module):
 
         self.layer_idx = layer_idx
         self.is_self_layer = layer_idx < first_cross_layer_idx
-        self.input_layernorm = RMSNorm(hidden_size, eps=rms_eps)
-        self.post_attention_layernorm = RMSNorm(hidden_size, eps=rms_eps)
+        self.input_layernorm = RMSNorm(
+            hidden_size,
+            eps=rms_eps,
+            execution_mode=execution_mode,
+        )
+        self.post_attention_layernorm = RMSNorm(
+            hidden_size,
+            eps=rms_eps,
+            execution_mode=execution_mode,
+        )
 
         if self.is_self_layer:
             self.self_attn = YOCOSelfAttention(
@@ -1851,6 +2328,7 @@ class YOCODecoderLayer(nn.Module):
                 cache_config=cache_config,
                 quant_config=quant_config,
                 prefix=f"{prefix}.self_attn",
+                execution_mode=execution_mode,
             )
         else:
             self.self_attn = YOCOCrossAttention(
@@ -1860,6 +2338,7 @@ class YOCODecoderLayer(nn.Module):
                 cache_config=cache_config,
                 quant_config=quant_config,
                 prefix=f"{prefix}.self_attn",
+                execution_mode=execution_mode,
             )
 
         # All layers in this checkpoint are MoE (``dense_layers = 0``).
@@ -1867,9 +2346,10 @@ class YOCODecoderLayer(nn.Module):
             config=config,
             quant_config=quant_config,
             prefix=f"{prefix}.mlp",
+            execution_mode=execution_mode,
         )
 
-    def forward(
+    def forward_with_residual(
         self,
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
@@ -1878,10 +2358,16 @@ class YOCODecoderLayer(nn.Module):
         yoco_value: torch.Tensor | None,
         kv_cache_dummy_dep: torch.Tensor | None = None,
         skip_kv_cache_update: bool = False,
-    ) -> torch.Tensor:
-        residual = hidden_states
-        x = self.input_layernorm(hidden_states)
-        assert isinstance(x, torch.Tensor)
+        input_residual: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if input_residual is None:
+            residual = hidden_states
+            x = self.input_layernorm(hidden_states)
+            assert isinstance(x, torch.Tensor)
+        else:
+            norm_output = self.input_layernorm(hidden_states, input_residual)
+            assert isinstance(norm_output, tuple)
+            x, residual = norm_output
         if self.is_self_layer:
             x = self.self_attn(positions, x, loop_idx)
         else:
@@ -1897,6 +2383,30 @@ class YOCODecoderLayer(nn.Module):
         assert isinstance(norm_output, tuple)
         x, residual = norm_output
         x = self.mlp(x)
+        return x, residual
+
+    def forward(
+        self,
+        positions: torch.Tensor,
+        hidden_states: torch.Tensor,
+        loop_idx: int,
+        yoco_key: torch.Tensor | None,
+        yoco_value: torch.Tensor | None,
+        kv_cache_dummy_dep: torch.Tensor | None = None,
+        skip_kv_cache_update: bool = False,
+    ) -> torch.Tensor:
+        x, residual = self.forward_with_residual(
+            positions,
+            hidden_states,
+            loop_idx,
+            yoco_key,
+            yoco_value,
+            kv_cache_dummy_dep=kv_cache_dummy_dep,
+            skip_kv_cache_update=skip_kv_cache_update,
+        )
+        # Align and direct layer callers materialize the block output here.
+        # Fast model loops call ``forward_with_residual`` instead and carry
+        # these two tensors into the next RMSNorm without executing this add.
         return residual + x.float()
 
 
@@ -1935,6 +2445,7 @@ class YOCOCrossBlock(nn.Module):
         # Store as plain list to avoid re-registering parameters
         self._cross_layers = cross_layers
         self.first_cross_layer_idx = first_cross_layer_idx
+        self.execution_mode = _get_yoco_execution_mode(vllm_config)
 
     def forward(
         self,
@@ -1944,6 +2455,24 @@ class YOCOCrossBlock(nn.Module):
         yoco_value: torch.Tensor,
         kv_cache_dummy_dep: torch.Tensor,
     ) -> torch.Tensor:
+        if getattr(self, "execution_mode", "align") == "fast":
+            residual = None
+            for index, layer in enumerate(self._cross_layers):
+                hidden_states, residual = layer.forward_with_residual(
+                    positions,
+                    hidden_states,
+                    0,
+                    yoco_key,
+                    yoco_value,
+                    kv_cache_dummy_dep=kv_cache_dummy_dep if index == 0 else None,
+                    skip_kv_cache_update=index == 0,
+                    input_residual=residual,
+                )
+            assert residual is not None
+            # The compact cross result must be materialized before the outer
+            # fast-prefill wrapper scatters it into the full-token tensor.
+            return residual + hidden_states.float()
+
         for index, layer in enumerate(self._cross_layers):
             hidden_states = layer(
                 positions,
@@ -2010,21 +2539,40 @@ class YOCOSelfBlock(nn.Module):
             hidden_states = model.embed_tokens(input_ids).float()
 
         # Self-attention layers (universal loop) — all tokens.
+        residual = None
         for loop_idx in range(model.universal_loop):
             for layer_idx in range(model.first_cross_layer_idx):
-                hidden_states = model.layers[layer_idx](
-                    positions,
-                    hidden_states,
-                    loop_idx,
-                    None,
-                    None,
-                )
+                if model.execution_mode == "fast":
+                    hidden_states, residual = model.layers[
+                        layer_idx
+                    ].forward_with_residual(
+                        positions,
+                        hidden_states,
+                        loop_idx,
+                        None,
+                        None,
+                        input_residual=residual,
+                    )
+                else:
+                    hidden_states = model.layers[layer_idx](
+                        positions,
+                        hidden_states,
+                        loop_idx,
+                        None,
+                        None,
+                    )
 
         # Produce shared K/V for all tokens and write them directly to the
         # first cross layer's cache.  The cross layer itself is deferred to the
         # compact cross block and therefore only runs for logits tokens.
-        h_norm = model.yoco_norm(hidden_states)
-        assert isinstance(h_norm, torch.Tensor)
+        assert model.yoco_norm is not None
+        if residual is None:
+            h_norm = model.yoco_norm(hidden_states)
+            assert isinstance(h_norm, torch.Tensor)
+        else:
+            norm_output = model.yoco_norm(hidden_states, residual)
+            assert isinstance(norm_output, tuple)
+            h_norm, hidden_states = norm_output
         yoco_key, _ = model.yoco_k_proj(h_norm)
         yoco_value, _ = model.yoco_v_proj(h_norm)
         if model.yoco_k_norm is not None:
@@ -2070,6 +2618,7 @@ class YOCOModel(nn.Module):
 
         self.config = config
         self.quant_config = quant_config
+        self.execution_mode = _get_yoco_execution_mode(vllm_config)
 
         self.hidden_size = _cfg_int(config, "hidden_size", "d_model")
         self.vocab_size = _cfg_int(config, "vocab_size")
@@ -2101,8 +2650,14 @@ class YOCOModel(nn.Module):
             self.yoco_num_kv_heads = max(1, cross_kv_head // tp_size)
             # Per-head K norm/clip applied once to the shared ``yoco_key``
             # (mirrors training's model-level ``k_norm`` in ``llm/arch/model.py``).
-            self.yoco_k_norm = _build_qk_norm(config, head_dim, rms_eps)
-            self.yoco_norm = RMSNorm(self.hidden_size, eps=rms_eps)
+            self.yoco_k_norm = _build_qk_norm(
+                config, head_dim, rms_eps, self.execution_mode
+            )
+            self.yoco_norm = RMSNorm(
+                self.hidden_size,
+                eps=rms_eps,
+                execution_mode=self.execution_mode,
+            )
             self.yoco_k_proj = ColumnParallelLinear(
                 input_size=self.hidden_size,
                 output_size=cross_kv_head * head_dim,
@@ -2139,6 +2694,7 @@ class YOCOModel(nn.Module):
                     cache_config=cache_config,
                     quant_config=quant_config,
                     prefix=f"{prefix}.layers.{i}",
+                    execution_mode=self.execution_mode,
                 )
                 for i in range(self.num_hidden_layers)
             ]
@@ -2147,7 +2703,11 @@ class YOCOModel(nn.Module):
         # utilities; expose them for PP=1 coverage.
         self.start_layer = 0
         self.end_layer = self.num_hidden_layers
-        self.norm = RMSNorm(self.hidden_size, eps=rms_eps)
+        self.norm = RMSNorm(
+            self.hidden_size,
+            eps=rms_eps,
+            execution_mode=self.execution_mode,
+        )
 
         # Fast prefill: split the model into two separately-compiled units so
         # the self portion and the KV-sharing cross layers each get their own
@@ -2229,23 +2789,42 @@ class YOCOModel(nn.Module):
 
         # Universal loop: run layers 0..first_cross_layer_idx-1
         # ``universal_loop`` times.
+        residual = None
         for loop_idx in range(self.universal_loop):
             for layer_idx in range(self.first_cross_layer_idx):
-                hidden_states = self.layers[layer_idx](
-                    positions,
-                    hidden_states,
-                    loop_idx,
-                    None,
-                    None,
-                )
+                if self.execution_mode == "fast":
+                    hidden_states, residual = self.layers[
+                        layer_idx
+                    ].forward_with_residual(
+                        positions,
+                        hidden_states,
+                        loop_idx,
+                        None,
+                        None,
+                        input_residual=residual,
+                    )
+                else:
+                    hidden_states = self.layers[layer_idx](
+                        positions,
+                        hidden_states,
+                        loop_idx,
+                        None,
+                        None,
+                    )
 
         # Cross-attention layers (if any).
         if self.yoco_cross_layers > 0:
             assert self.yoco_norm is not None
             assert self.yoco_k_proj is not None
             assert self.yoco_v_proj is not None
-            h_norm = self.yoco_norm(hidden_states)
-            assert isinstance(h_norm, torch.Tensor)
+            if residual is None:
+                h_norm = self.yoco_norm(hidden_states)
+                assert isinstance(h_norm, torch.Tensor)
+            else:
+                norm_output = self.yoco_norm(hidden_states, residual)
+                assert isinstance(norm_output, tuple)
+                h_norm, hidden_states = norm_output
+                residual = None
             yoco_key, _ = self.yoco_k_proj(h_norm)
             yoco_value, _ = self.yoco_v_proj(h_norm)
             if self.yoco_k_norm is not None:
@@ -2257,16 +2836,33 @@ class YOCOModel(nn.Module):
                 )
             # No RoPE on cross-layer K (``rope_dim = 0`` in HF config).
             for layer_idx in range(self.first_cross_layer_idx, self.num_hidden_layers):
-                hidden_states = self.layers[layer_idx](
-                    positions,
-                    hidden_states,
-                    0,
-                    yoco_key,
-                    yoco_value,
-                )
+                if self.execution_mode == "fast":
+                    hidden_states, residual = self.layers[
+                        layer_idx
+                    ].forward_with_residual(
+                        positions,
+                        hidden_states,
+                        0,
+                        yoco_key,
+                        yoco_value,
+                        input_residual=residual,
+                    )
+                else:
+                    hidden_states = self.layers[layer_idx](
+                        positions,
+                        hidden_states,
+                        0,
+                        yoco_key,
+                        yoco_value,
+                    )
 
-        output = self.norm(hidden_states)
-        assert isinstance(output, torch.Tensor)
+        if residual is None:
+            output = self.norm(hidden_states)
+            assert isinstance(output, torch.Tensor)
+        else:
+            norm_output = self.norm(hidden_states, residual)
+            assert isinstance(norm_output, tuple)
+            output, _ = norm_output
         return output
 
 

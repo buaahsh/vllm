@@ -1309,6 +1309,7 @@ def try_get_optimal_moe_config(
     dtype: str | None,
     M: int,
     block_shape: list[int] | None = None,
+    use_tuned_config: bool = True,
 ) -> dict[str, int]:
     from vllm.model_executor.layers.fused_moe import get_config
 
@@ -1322,7 +1323,9 @@ def try_get_optimal_moe_config(
             N = N * 2
         block_n = block_shape[0] if block_shape else 0
         block_k = block_shape[1] if block_shape else 0
-        configs = get_moe_configs(E, N, dtype, block_n, block_k)
+        configs = (
+            get_moe_configs(E, N, dtype, block_n, block_k) if use_tuned_config else None
+        )
 
         if configs:
             # If an optimal configuration map has been found, look up the

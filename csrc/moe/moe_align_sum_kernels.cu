@@ -346,6 +346,76 @@ __global__ void count_and_sort_expert_tokens_kernel(
       max_num_tokens_padded, nullptr, 0, topk_num, has_expert_map);
 }
 
+// Low-batch SM100 path for YOCO-like E=128 routing.  Unlike the generic
+// implementation, counting, padded-prefix construction, output
+// initialization, and assignment sorting all stay in a single CTA.  The
+// assignment order within an expert is intentionally unspecified, matching
+// the generic atomic sort; each flattened token id is still written exactly
+// once to its expert region.
+template <typename scalar_t>
+__global__ void moe_align_block_size_e128_small_kernel(
+    const scalar_t* __restrict__ topk_ids,
+    int32_t* __restrict__ sorted_token_ids, int32_t* __restrict__ expert_ids,
+    int32_t* __restrict__ total_tokens_post_pad, int32_t block_size,
+    int32_t numel, int32_t max_num_tokens_padded, int32_t max_num_m_blocks) {
+  constexpr int32_t num_experts = 128;
+  constexpr int32_t num_threads = 256;
+  const int32_t tid = threadIdx.x;
+
+  __shared__ int32_t counts[num_experts];
+  __shared__ int32_t write_counts[num_experts];
+  __shared__ int32_t offsets[num_experts + 1];
+  using BlockScan = cub::BlockScan<int32_t, num_threads>;
+  __shared__ typename BlockScan::TempStorage scan_storage;
+
+  for (int32_t i = tid; i < max_num_tokens_padded; i += num_threads) {
+    sorted_token_ids[i] = numel;
+  }
+  for (int32_t i = tid; i < max_num_m_blocks; i += num_threads) {
+    expert_ids[i] = -1;
+  }
+  if (tid < num_experts) {
+    counts[tid] = 0;
+    write_counts[tid] = 0;
+  }
+  __syncthreads();
+
+  for (int32_t i = tid; i < numel; i += num_threads) {
+    const int32_t expert = static_cast<int32_t>(topk_ids[i]);
+    if (expert >= 0 && expert < num_experts) {
+      atomicAdd(&counts[expert], 1);
+    }
+  }
+  __syncthreads();
+
+  int32_t padded_count = 0;
+  if (tid < num_experts) {
+    padded_count = CEILDIV(counts[tid], block_size) * block_size;
+  }
+  int32_t offset;
+  BlockScan(scan_storage).ExclusiveSum(padded_count, offset);
+  if (tid < num_experts) {
+    offsets[tid] = offset;
+    for (int32_t i = offset / block_size;
+         i < (offset + padded_count) / block_size; ++i) {
+      expert_ids[i] = tid;
+    }
+  }
+  if (tid == num_experts - 1) {
+    offsets[num_experts] = offset + padded_count;
+    *total_tokens_post_pad = offset + padded_count;
+  }
+  __syncthreads();
+
+  for (int32_t i = tid; i < numel; i += num_threads) {
+    const int32_t expert = static_cast<int32_t>(topk_ids[i]);
+    if (expert >= 0 && expert < num_experts) {
+      const int32_t rank = atomicAdd(&write_counts[expert], 1);
+      sorted_token_ids[offsets[expert] + rank] = i;
+    }
+  }
+}
+
 template <typename scalar_t, int TOPK>
 __global__ void moe_sum_kernel(
     scalar_t* __restrict__ out,          // [..., d]
@@ -503,6 +573,24 @@ void moe_align_block_size(torch::Tensor topk_ids, int64_t num_experts,
   VLLM_DISPATCH_INTEGRAL_AND_UNSIGNED_TYPES(
       topk_ids.scalar_type(), "moe_align_block_size_kernel", [&] {
         // calc needed amount of shared mem for `cumsum` tensors
+        bool use_sm100_e128_small = false;
+        if (topk_ids.numel() < 1024 && num_experts == 128 && !has_expert_map) {
+          const cudaDeviceProp* device_prop =
+              at::cuda::getDeviceProperties(topk_ids.get_device());
+          use_sm100_e128_small = device_prop->major == 10;
+        }
+        if (use_sm100_e128_small) {
+          constexpr int32_t small_threads = 256;
+          auto small_e128_kernel =
+              vllm::moe::moe_align_block_size_e128_small_kernel<scalar_t>;
+          small_e128_kernel<<<1, small_threads, 0, stream>>>(
+              topk_ids.data_ptr<scalar_t>(),
+              sorted_token_ids.data_ptr<int32_t>(),
+              experts_ids.data_ptr<int32_t>(),
+              num_tokens_post_pad.data_ptr<int32_t>(), block_size,
+              topk_ids.numel(), sorted_token_ids.size(0), experts_ids.size(0));
+          return;
+        }
         bool small_batch_expert_mode =
             (topk_ids.numel() < 1024) && (num_experts <= 64);
 

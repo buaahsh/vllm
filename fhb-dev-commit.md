@@ -33,8 +33,8 @@
    功能、正确性、性能、构建、测试和设计结果展开为正文；只补充已有记录的
    docs-only commit 只进入完整索引，不递归增加一篇重复正文。
 8. Git commit 无法在自身内容中预先写入自己的 hash，因此每次日志维护提交审计到
-   它的 parent，并在下一次提交中回填真实 hash。当前水位为 `fb8c42b6a0`：相对基线
-   共 `45/45` 个可达提交，其中主线 `38/38` 个、合并支线 `7/7` 个，均已列出。
+   它的 parent，并在下一次提交中回填真实 hash。当前水位为 `6c49544ed3`：相对基线
+   共 `46/46` 个可达提交，其中主线 `39/39` 个、合并支线 `7/7` 个，均已列出。
 
 ## 功能与工程结果索引
 
@@ -62,16 +62,17 @@
 | 20 | `5d296b3958` | 正确性/Cache | LMCache 适配 YOCO 31 份物理 KV | 已进入 `fhb-dev` |
 | 21 | `aebb50c6e5` | 正确性/PD | pure-P prefix shape 与 SWA window 传输补充 | 已进入 `fhb-dev` |
 | 22 | `e5524539f1` | 测试/PD | PD 极限吞吐与 W1/W2/W3 HMA A/B | 已进入 `fhb-dev` |
-| 23 | `本提交` | 性能/Attention | 融合 Q/K RMSClip 与 RoPE | 待提交 |
+| 23 | `6c49544ed3` | 性能/Attention | 融合 Q/K RMSClip 与 RoPE | 已进入 `fhb-dev` |
+| 24 | `本提交` | 对齐/性能 | L3 BF16 `align`/`fast` 双执行策略与 B200 算子调优 | 待提交 |
 
 ## 完整 Git 提交审计
 
 审计区间为
-`c27db1e189973cea3164ba66b1d00359d4122088..fb8c42b6a0`。
-基线本身不计入增量提交数。以下两张表覆盖这个区间内全部 `45` 个可达提交，避免把
+`c27db1e189973cea3164ba66b1d00359d4122088..6c49544ed3`。
+基线本身不计入增量提交数。以下两张表覆盖这个区间内全部 `46` 个可达提交，避免把
 docs-only、验证补充或 merge 引入的支线提交藏在正文之外。
 
-### First-parent 主线：38/38
+### First-parent 主线：39/39
 
 | 序号 | Commit | Subject | 对应记录 |
 | ---: | --- | --- | --- |
@@ -113,6 +114,7 @@ docs-only、验证补充或 merge 引入的支线提交藏在正文之外。
 | 36 | `9b9a945c06` | `docs(yoco): record HMA and LMCache PD validation` | 补记第 21 节及 LMCache 验证 |
 | 37 | `e5524539f1` | `docs(yoco): record PD saturation and HMA workload results` | 第 22 节 |
 | 38 | `fb8c42b6a0` | `docs(yoco): audit PD saturation and HMA benchmarks` | 审计到第 22 节 |
+| 39 | `6c49544ed3` | `perf(yoco): fuse QK clip and rotary` | 第 23 节 |
 
 ### Merge 引入支线：7/7
 
@@ -3774,7 +3776,7 @@ W3/batch-4 wall time 从 3,182.82 s 降至 280.75 s。W1 长 decode 淹没传输
 ## 23. 融合 self-attention Q/K RMSClip 与 RoPE
 
 ```text
-commit: 本提交
+commit: 6c49544ed3ddfc7133f6ad238c3b766c7f62a2f4
 subject: perf(yoco): fuse QK clip and rotary
 scope: yoco.py, test_yoco_conversion.py, fhb-dev-commit.md
 functional behavior change: B200/CUDA BF16 的 YOCO self-attention 将
@@ -3894,3 +3896,181 @@ OOM。
 其他 dtype/head_dim、weighted qk norm、多节点 RDMA 或 TP/DP>1。门禁外自动 fallback，
 回滚本提交即可恢复三个独立算子，不涉及 checkpoint、KV layout、PD 协议或 Mooncake
 状态迁移。
+
+## 24. L3 BF16 `align`/`fast` 双执行策略与 B200 算子调优
+
+```text
+commit: 本提交
+subject: perf(yoco): add L3 align and fast execution modes
+runtime base: fhb-dev@6c49544ed3ddfc7133f6ad238c3b766c7f62a2f4
+model: /mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf
+hardware: NVIDIA A6000（定向单测）和 NVIDIA B200（kernel/端到端性能）
+precision scope: BF16；--align 明确拒绝量化权重
+```
+
+### 目的和模式契约
+
+本轮按 L3 前向顺序逐个核对 embedding、RMSNorm、QKV、Q/K RMSClip、RoPE、
+differential attention、KV-cache/FlashAttention、Router、Top-K、MoE dispatch、expert
+grouped GEMM、projection 与 TP all-reduce。结论不是让两种模式共享一套折中实现，而是
+提供两个互斥、可直接从命令行选择的策略：
+
+- `--align`：在实际 runtime tensor shape 上复现 `llm-train` 的 BF16 算子边界、
+  dtype 转换和 Inductor 表达式，作为训练/推理精度排查路径；
+- `--fast`：保留 L3 服务语义并启用已经按 B200 shape 验证的融合、专用 kernel 和
+  tuned config；没有显式传 flag 时仍默认 `fast`，保持现有部署行为；
+- 两个 flag 由 argparse 和 `EngineArgs.__post_init__` 双重互斥校验，并写入
+  `additional_config["yoco_execution_mode"]`。这两个短 flag 只改变 YOCO；其他模型
+  不读取该配置。
+
+`--align` 当前只承诺 BF16。它不接受非空 quant config，也没有把“复现训练表达式”
+误写成“任意 batch 切分后 bitwise invariant”：cuBLAS/Inductor reduction tree 仍可能随
+实际矩阵 shape 改变。本轮没有采集完整训练框架 golden logits，因此端到端结论是
+“对齐路径和逐算子 reference 已建立”，不是“已经证明整个模型与训练任意 batch
+逐 bit 相同”。
+
+### 前向路径改动
+
+#### 对齐路径
+
+- 修正 SWA 窗口语义：训练的 `(left=512, right=0)` 包含 512 个历史 token 加当前
+  token，vLLM 的总窗口因此设为 513，再由 attention backend 转成 `(512, 0)`；
+- embedding 保持普通 table lookup，不因 FP8 expert 或执行模式改变；
+- Q/K/V 在 `align` 中从 packed checkpoint weight 切回三次独立 BF16 `F.linear`，
+  复现训练的 projection 边界；
+- RMSNorm、带/不带 affine weight 的 RMSClip、RoPE、differential-attention v3、
+  Router linear 和 Top-K routing 都使用与 `llm-train` 对应的 `torch.compile`
+  表达式；
+- Router 不复用预归一化 weight cache，MoE 不读取 device/shape tuned config，避免
+  性能策略混进精度定位路径；
+- L3 的两个 latent projection 与训练一致保持 BF16，不继承 routed expert 的
+  MXFP8 quant config。即使后续启用 FP8 expert，embedding、norm、attention activation
+  和 latent projection 仍不会被这项 expert quantization 自动改成 FP8。
+
+#### 快速路径
+
+- decoder layer 在层间携带 FP32 residual 和未加回的 branch output，把前一层
+  residual add 折进下一层 input RMSNorm；首层从 embedding 建立 residual，cross block
+  scatter 前和最终 norm 前再物化，两个 norm 位置都覆盖而不需要按层号硬编码；
+- 将 L3 带 affine gamma 的 Q/K RMSClip 与 RoPE 融为一个 Triton CustomOp；权重先
+  参与 FP32 计算，再显式落到 BF16，保留训练 kernel 实际物化的舍入边界；
+- B200 differential-attention v3 在 token rows >= 32 时使用一次读取 gate、按 head
+  pair 广播的专用 kernel，小 batch 保留更快的 Inductor pointwise 路径；
+- Router 使用真实 token rows，不再把小 batch 补到 128；softmax、Top-8 选择和
+  renormalization 合为一个 Triton kernel。tie 使用确定性的最左优先，但 `align`
+  继续保留训练 `torch.topk` 的顺序；
+- B200 L3 TP4、FA4、完整 513-token SWA decode 下，以实测交叉点选择 backend：
+  batch < 224 用 FA4，batch >= 224 用 Triton unified attention。`align` 始终不启用
+  这个策略；其他 GPU/head/window shape 也不套用该阈值；
+- E=128、Top-K=8 且 assignments < 1024 的 SM100 MoE dispatch 使用单 CTA 完成
+  count、padded prefix、输出初始化和 assignment sort；专家内 assignment 次序与原
+  atomic 实现一样不作为语义，但每个 assignment 和 expert block 映射保持完整；
+- 新增 L3 TP4 BF16 expert 的 `E=128,N=960,device_name=NVIDIA_B200.json`，覆盖
+  token rows 1--32768。`fast` 允许读取该文件，`align` 强制使用默认 config。
+
+### 明确保留默认实现的算子
+
+本轮基准也覆盖了 latent projection、o_proj 后 TP4 all-reduce 和多个候选 fusion，
+但没有为了“看起来做过优化”而修改 runtime：
+
+- embedding 没有额外 kernel；FP8 expert 不改变它的 BF16 hidden-state 语义；
+- QKV 与 lambda projection 没有融合，o_proj GEMM 继续交给现有 parallel linear；
+- TP4 all-reduce 保留 vLLM/open-source 默认 custom-all-reduce/NCCL 选择和全局阈值，
+  没有加入 YOCO 私有全局阈值；
+- latent projection + RMSNorm、另一版 differential-attention 和 Router extension
+  候选只保留可复现 benchmark，没有把负收益候选接入 forward。
+
+### 修改文件及职责
+
+- `vllm/engine/arg_utils.py`、`tests/engine/test_arg_utils.py`
+    - 增加互斥的 `--align`/`--fast`，覆盖 CLI 到 `additional_config` 的传播与冲突。
+- `vllm/model_executor/models/yoco.py`
+    - 实现双执行策略、训练表达式 reference、residual carry、weighted QK fusion、
+      differential-attention、Router Top-K、SWA 窗口和 BF16 latent projection 约束。
+- `vllm/v1/attention/backends/flash_attn.py`、
+  `tests/model_executor/test_yoco_config.py`
+    - 实现并覆盖 L3 TP4 SM100 的 FA4/Triton batch 224 dispatch 门禁。
+- `csrc/moe/moe_align_sum_kernels.cu`、
+  `tests/kernels/moe/test_moe_align_block_size.py`
+    - 增加 SM100 E128 小 batch 单 CTA dispatch 与 expert-level correctness 覆盖。
+- `vllm/model_executor/layers/fused_moe/{config.py,fused_moe.py,layer.py}` 及
+  `experts/{triton_moe.py,fused_batched_moe.py}`
+    - 将 `use_tuned_config` 从 YOCO 层传到 Triton config lookup，使 `align` 可显式
+      跳过 tuning file；普通模型默认值仍为 true。
+- `vllm/model_executor/layers/fused_moe/configs/E=128,N=960,device_name=NVIDIA_B200.json`
+    - 保存 L3 TP4 BF16 grouped-GEMM 调优结果。
+- `tests/model_executor/test_yoco_conversion.py`、`tests/kernels/moe/test_moe.py`
+    - 覆盖训练表达式、模式边界、融合/非融合 residual、batch-shape、Top-K tie、
+      CustomOp/opcheck、latent projection quantization 和 tuned-config bypass。
+- `benchmarks/kernels/benchmark_yoco_*.py` 与三个最小 C++ binding
+    - 固化 SWA、differential attention、Router、latent projection、TP4 all-reduce、
+      MoE dispatch 和 W13 grouped-GEMM 的正确性/性能复现入口；不进入生产 import
+      路径。
+
+### 本地回归与 B200 正确性
+
+提交前在本机 A6000、PyTorch 2.11.0+cu130 上执行：
+
+```text
+.venv/bin/python -m pytest \
+  tests/engine/test_arg_utils.py \
+  tests/model_executor/test_yoco_config.py \
+  tests/model_executor/test_yoco_conversion.py \
+  tests/kernels/moe/test_moe.py::test_try_get_optimal_moe_config_can_skip_tuned_file -q
+
+178 passed, 17 warnings in 73.46s
+```
+
+这些用例包括 CUDA 上 align RMSNorm/RMSClip/RoPE/diff-v3/Router 的 training-expression
+exact 检查、weighted QK fast kernel 的 BF16 邻点容差与 opcheck、以及 CPU fallback。
+另外用 `.venv/bin/python benchmarks/kernels/benchmark_yoco_moe_dispatch.py
+--source-root csrc --tokens 8 --graph-nodes 2 --repeats 5 --rounds 1` 从当前源码重新编译
+CUDA extension；E128、Top-K=8、M=8/32/66/127、block-M=16/32/64 correctness sweep
+全部通过。A6000 只执行 generic dispatch，SM100 专用分支的性能与门禁仍以 B200
+microbenchmark 为准。`git diff --check` 通过。
+
+B200 harness 的两个 standalone endpoint 都满足 Prefill/Decode 重复 smoke exact；
+Mooncake 下 `align` 与 standalone smoke exact。`fast` 与 standalone 的 Mooncake smoke
+没有全量 exact，且 `align` 对 `fast` 的 64-token probe 在共同前缀后出现 greedy 分叉；
+8-token 与 513-token probe 的 64 个生成 token exact。这个结果与两个模式采用不同
+reduction/fusion 策略一致，因此日志不把 `fast` 宣称为 `align` 的 bitwise 等价物。
+全部性能请求失败数为 0。
+
+### B200 端到端性能
+
+最终 greedy matrix 使用同节点 2 x B200、L3 BF16 checkpoint、FA4、Triton MoE：
+standalone 分别运行 `align`/`fast`，Mooncake 使用 1P1D、TP1+TP1；每个点固定 seed，
+并发和请求数保持一致。Fast 相对 Align 的 output/request throughput 几何平均为：
+
+| Workload | 并发点 | Fast / Align |
+| --- | --- | ---: |
+| standalone P：1,024 random + 50 prefix -> 1 | 1/2/4/8/16/32/64/128/256 | -1.3% |
+| standalone P：4,096 random + 50 prefix -> 1 | 1/2/4/8/16/32/64/128/256 | +2.8% |
+| standalone D：8 -> 256 | 1/2/4/8/16/32/64/128/256 | +9.1% |
+| Mooncake same-node：1,360 random + 50 prefix -> 512 | 1/4/8/16/32/64 | +10.0% |
+
+全部 33 个点等权的几何平均提升为 **4.6%**；先对四种 workload 各自求几何平均、
+再等权汇总为 **5.1%**。这是组合后的 `fast` 对 `align` 端到端结果，不能拆成某个
+单 kernel 的独占收益。尤其该 harness 为 TP1，routed expert shape 是 E128/N3840，
+没有使用新增的 TP4 E128/N960 tuning file。
+
+按用户指定的历史图口径，Mooncake Fast 相对历史 YOCO baseline 为 +36.4%，相对
+历史 YOCO optimized 为 +8.5%，相对历史 Qwen3-30B-A3B 为 -28.2%。这些历史 run 的
+checkpoint、runtime 和 sampling 不完全相同，只作为上下文，不是严格 A/B。
+
+### 证据、限制与回滚
+
+原始 matrix、汇总、逐点 CSV 和可视化保存在：
+
+```text
+/mnt/pvc/lidong1/yoco-l3-align-fast-b200-20260831-greedy/
+/home/lidong1/vllm_test/yoco_results/l3-align-fast-b200-20260831/
+/home/lidong1/vllm_test/yoco_results/yoco_image_8_27/l3-align-fast-vs-historical.html
+/home/lidong1/vllm_test/yoco_results/yoco_image_8_27/l3-align-fast-vs-historical.png
+```
+
+结果只覆盖 L3 BF16、单节点 B200、standalone 与 1P1D TP1+TP1；不能外推到 FP8、
+TP4 端到端、多节点 RDMA 或其他 YOCO 版本。TP4-specific kernel/config 的证据来自
+独立 B200 microbenchmark，不应与 TP1 harness 的端到端收益混算。回滚本提交会同时
+移除两个 flag 及其本轮专用优化；上一提交的 non-affine QK clip+RoPE 融合仍可独立
+回滚。

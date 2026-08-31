@@ -102,6 +102,7 @@ class FusedMoE(PluggableLayer):
                                  shared-expert output is reduced.
         reduce_shared_experts_separately: Preserve separate routed-then-shared
                                           reductions instead of reducing their sum.
+        use_tuned_config: Whether shape/device-specific MoE tuning files may be used.
     """
 
     # Auto-incrementing layer ID for routing replay buffer binding.
@@ -152,6 +153,7 @@ class FusedMoE(PluggableLayer):
         apply_routed_scale_to_output: bool = False,
         zero_expert_type: str | None = None,
         hash_indices_table: torch.Tensor | None = None,
+        use_tuned_config: bool = True,
     ):
         super().__init__()
 
@@ -349,6 +351,7 @@ class FusedMoE(PluggableLayer):
             has_bias=has_bias,
             is_act_and_mul=is_act_and_mul,
             is_lora_enabled=vllm_config.lora_config is not None,
+            use_tuned_config=use_tuned_config,
             activation=self.activation,
             device=vllm_config.device_config.device,
             routing_method=self.routing_method_type,
