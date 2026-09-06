@@ -883,6 +883,7 @@ class BatchedTritonExperts(mk.FusedMoEExpertsModular):
             config_dtype,
             max_num_tokens,
             block_shape=self.block_shape,
+            use_tuned_config=self.moe_config.use_tuned_config,
         )
 
         if hidden_states.dtype == torch.bfloat16:

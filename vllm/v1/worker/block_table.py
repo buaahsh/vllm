@@ -234,6 +234,7 @@ class MultiGroupBlockTable:
         kernel_block_sizes: list[int],
         max_num_blocks: list[int] | None = None,
         cp_kv_cache_interleave_size: int = 1,
+        use_yoco_fused_slot_mapping: bool = False,
     ) -> None:
         if len(kernel_block_sizes) != len(block_sizes):
             raise ValueError(
@@ -279,6 +280,17 @@ class MultiGroupBlockTable:
                 block_sizes, kernel_block_sizes, max_num_blocks
             )
         ]
+        self.yoco_fused_slot_mapping = None
+        if (
+            use_yoco_fused_slot_mapping
+            and len(self.block_tables) > 1
+            and device.type == "cuda"
+        ):
+            from vllm.v1.worker.yoco_block_table import (
+                YOCOMultiGroupSlotMapping,
+            )
+
+            self.yoco_fused_slot_mapping = YOCOMultiGroupSlotMapping(self.block_tables)
 
     def append_row(self, block_ids: tuple[list[int], ...], row_idx: int) -> None:
         for i, block_table in enumerate(self.block_tables):
@@ -306,6 +318,9 @@ class MultiGroupBlockTable:
         query_start_loc: torch.Tensor,
         positions: torch.Tensor,
     ) -> None:
+        if self.yoco_fused_slot_mapping is not None:
+            self.yoco_fused_slot_mapping.compute(num_reqs, query_start_loc, positions)
+            return
         for block_table in self.block_tables:
             block_table.compute_slot_mapping(num_reqs, query_start_loc, positions)
 

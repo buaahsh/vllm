@@ -1,0 +1,182 @@
+{
+  "normalized_client_configs_equal": true,
+  "allowed_client_differences": [
+    "cache_salt",
+    "artifact directory"
+  ],
+  "server_commands_equal": true,
+  "normalized_configs": {
+    "before": {
+      "models": {
+        "items": [
+          {
+            "name": "yoco-fast"
+          }
+        ]
+      },
+      "endpoint": {
+        "urls": [
+          "http://127.0.0.1:8670"
+        ],
+        "type": "completions",
+        "timeout": 600.0,
+        "streaming": true,
+        "use_legacy_max_tokens": true,
+        "use_server_token_count": true,
+        "extra": {
+          "temperature": 0,
+          "ignore_eos": true,
+          "cache_salt": "isolated-case"
+        }
+      },
+      "datasets": [
+        {
+          "name": "main",
+          "type": "file",
+          "path": "/data/yoco-fast-optimization-20260905/traces/toolagent-ctx81920-t300-900s-f1.jsonl",
+          "format": "mooncake_trace",
+          "synthesis": {
+            "speedup_ratio": 1.0
+          },
+          "random_seed": 42
+        }
+      ],
+      "phases": [
+        {
+          "name": "profiling",
+          "kind": "profiling",
+          "type": "fixed_schedule",
+          "requests": 3643,
+          "concurrency": 512,
+          "auto_offset": true
+        }
+      ],
+      "artifacts": {
+        "dir": "fresh-directory",
+        "records": [
+          "jsonl"
+        ],
+        "raw": false,
+        "trace": true,
+        "slice_duration": 1.0,
+        "auto_plot": false,
+        "plot_required": false
+      },
+      "tokenizer": {
+        "name": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+        "trust_remote_code": true
+      },
+      "gpu_telemetry": {
+        "enabled": true
+      },
+      "server_metrics": {
+        "enabled": true,
+        "urls": [
+          "http://127.0.0.1:8670/metrics"
+        ],
+        "formats": [
+          "json",
+          "csv",
+          "jsonl"
+        ]
+      },
+      "network_latency": {
+        "enabled": false
+      },
+      "otel": {},
+      "mlflow": {},
+      "wandb": {},
+      "runtime": {
+        "ui": "none",
+        "workers": 32,
+        "record_processors": 1
+      }
+    },
+    "candidate": {
+      "models": {
+        "items": [
+          {
+            "name": "yoco-fast"
+          }
+        ]
+      },
+      "endpoint": {
+        "urls": [
+          "http://127.0.0.1:8670"
+        ],
+        "type": "completions",
+        "timeout": 600.0,
+        "streaming": true,
+        "use_legacy_max_tokens": true,
+        "use_server_token_count": true,
+        "extra": {
+          "temperature": 0,
+          "ignore_eos": true,
+          "cache_salt": "isolated-case"
+        }
+      },
+      "datasets": [
+        {
+          "name": "main",
+          "type": "file",
+          "path": "/data/yoco-fast-optimization-20260905/traces/toolagent-ctx81920-t300-900s-f1.jsonl",
+          "format": "mooncake_trace",
+          "synthesis": {
+            "speedup_ratio": 1.0
+          },
+          "random_seed": 42
+        }
+      ],
+      "phases": [
+        {
+          "name": "profiling",
+          "kind": "profiling",
+          "type": "fixed_schedule",
+          "requests": 3643,
+          "concurrency": 512,
+          "auto_offset": true
+        }
+      ],
+      "artifacts": {
+        "dir": "fresh-directory",
+        "records": [
+          "jsonl"
+        ],
+        "raw": false,
+        "trace": true,
+        "slice_duration": 1.0,
+        "auto_plot": false,
+        "plot_required": false
+      },
+      "tokenizer": {
+        "name": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+        "trust_remote_code": true
+      },
+      "gpu_telemetry": {
+        "enabled": true
+      },
+      "server_metrics": {
+        "enabled": true,
+        "urls": [
+          "http://127.0.0.1:8670/metrics"
+        ],
+        "formats": [
+          "json",
+          "csv",
+          "jsonl"
+        ]
+      },
+      "network_latency": {
+        "enabled": false
+      },
+      "otel": {},
+      "mlflow": {},
+      "wandb": {},
+      "runtime": {
+        "ui": "none",
+        "workers": 32,
+        "record_processors": 1
+      }
+    }
+  }
+}

@@ -845,7 +845,7 @@ def _load_native_model(args: argparse.Namespace):
     modelargs.quant_mode = args.quant_mode
     if args.quant_block_size is not None:
         modelargs.quant_block_size = args.quant_block_size
-    modelargs.use_cute = True
+    modelargs.use_cute = args.native_attention_backend == "fa4"
     modelargs.moe_fwd_bwd_overlap = False
     modelargs.validate()
 
@@ -866,10 +866,14 @@ def _load_native_model(args: argparse.Namespace):
     )
     state = _normalize_native_checkpoint_state(state, checkpoint_modelargs)
     model.load_state_dict(state)
-    fa4_call_count = _install_native_fa4()
+    fa4_call_count = (
+        _install_native_fa4() if args.native_attention_backend == "fa4" else [0]
+    )
     print(
         f"[rl-native] model loaded quant_mode={modelargs.quant_mode} "
-        f"batch_sizes={args.batch_size} use_cute={modelargs.use_cute}",
+        f"batch_sizes={args.batch_size} "
+        f"attention_backend={args.native_attention_backend} "
+        f"use_cute={modelargs.use_cute}",
         flush=True,
     )
     return model, modelargs, fa4_call_count
@@ -883,6 +887,7 @@ def _score_rollout(
     batch_size: int,
     max_model_len: int,
     fa4_call_count: list[int],
+    native_attention_backend: str,
 ) -> dict[str, Any]:
     records = rollout["records"]
     server_urls = rollout.get("server", {}).get("url")
@@ -901,7 +906,7 @@ def _score_rollout(
     scored_records = []
     total_output_tokens = 0
     fa4_start = fa4_call_count[0]
-    torch.cuda.synchronize()
+    torch.accelerator.synchronize()
     start = time.perf_counter()
 
     for group_index, record_group in enumerate(record_groups):
@@ -920,10 +925,10 @@ def _score_rollout(
                 len(record["output_token_ids"]) for record in batch
             )
 
-    torch.cuda.synchronize()
+    torch.accelerator.synchronize()
     elapsed = time.perf_counter() - start
     fa4_calls = fa4_call_count[0] - fa4_start
-    if fa4_calls <= 0:
+    if native_attention_backend == "fa4" and fa4_calls <= 0:
         raise RuntimeError("Native rollout scoring did not execute FA4")
     return {
         "rollout_setting": rollout["setting"],
@@ -932,7 +937,8 @@ def _score_rollout(
             "quant_block_size": modelargs.quant_block_size,
             "batch_size": batch_size,
             "server_groups": len(record_groups),
-            "use_cute": True,
+            "attention_backend": native_attention_backend,
+            "use_cute": native_attention_backend == "fa4",
             "fa4_calls": fa4_calls,
             "scoring_seconds": elapsed,
             "output_tokens": total_output_tokens,
@@ -1028,7 +1034,7 @@ def _score_native_batch(
         )
 
     del hidden, logits, tokens
-    torch.cuda.empty_cache()
+    torch.accelerator.empty_cache()
 
 
 def run_native_score(args: argparse.Namespace) -> None:
@@ -1046,6 +1052,7 @@ def run_native_score(args: argparse.Namespace) -> None:
                     batch_size,
                     args.max_model_len,
                     fa4_call_count,
+                    args.native_attention_backend,
                 )
                 output_path = args.out_dir / (
                     f"{rollout_path.stem}.native-{args.quant_mode}-b{batch_size}.json"
@@ -1247,6 +1254,15 @@ def parse_args() -> argparse.Namespace:
     native.add_argument("--quant-block-size", type=int)
     native.add_argument("--batch-size", type=int, nargs="+", default=[16])
     native.add_argument("--max-model-len", type=int, default=2048)
+    native.add_argument(
+        "--native-attention-backend",
+        choices=("fa2", "fa4"),
+        default="fa4",
+        help=(
+            "Attention implementation used by llm-train teacher forcing. "
+            "Use fa4 when validating YOCO --align against training."
+        ),
+    )
     native.add_argument(
         "--use-torch-fp8-quant",
         action=argparse.BooleanOptionalAction,

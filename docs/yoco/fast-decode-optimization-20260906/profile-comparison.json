@@ -1,0 +1,10 @@
+{
+  "profile_steps": 12,
+  "batch": 128,
+  "before_gemm_us": 140455.20799999993,
+  "candidate_gemm_us": 114410.79900000004,
+  "reduction_pct": 18.542857449614758,
+  "before_calls": 960,
+  "candidate_calls": 960,
+  "scope": "Cumulative GPU kernel time in actual C128 decode; generated routes can differ, not a standalone causal attribution"
+}

@@ -49,6 +49,9 @@ from vllm.triton_utils import tl
 class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
     """Triton-based fused MoE expert implementation."""
 
+    yoco_swapped_w13: bool
+    swiglu_limit: float | None
+
     def __init__(
         self,
         moe_config: FusedMoEConfig,
@@ -138,9 +141,34 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
         activation: MoEActivation,
     ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
         activation_out_dim = self.adjust_N_for_activation(N, activation)
-        workspace1 = (M, topk, max(activation_out_dim, K))
-        workspace2 = (M, topk, max(N, K))
+        workspace1: tuple[int, ...] = (M, topk, max(activation_out_dim, K))
+        workspace2: tuple[int, ...] = (M, topk, max(N, K))
         output = (M, K)
+
+        if (
+            getattr(self, "yoco_align_deep_gemm_w2", False)
+            and not self.quant_config.is_quantized
+            and self.quant_config.weight_quant_dtype is None
+            and self.w2_bias is None
+        ):
+            from vllm.model_executor.layers.fused_moe.experts.yoco_deep_gemm import (
+                supports_yoco_deep_gemm_w2,
+                yoco_deep_gemm_w2_workspace_rows,
+            )
+
+            if supports_yoco_deep_gemm_w2():
+                packed_rows = yoco_deep_gemm_w2_workspace_rows(
+                    M, topk, local_num_experts
+                )
+                workspace1_numel = max(
+                    M * topk * max(activation_out_dim, K), packed_rows * K
+                )
+                workspace2_numel = max(
+                    M * topk * max(N, K), packed_rows * activation_out_dim
+                )
+                # Keep M as the leading dimension for activation chunking.
+                workspace1 = (M, (workspace1_numel + M - 1) // M)
+                workspace2 = (M, (workspace2_numel + M - 1) // M)
         return (workspace1, workspace2, output)
 
     def apply(
@@ -188,14 +216,33 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
         if global_num_experts == -1:
             global_num_experts = E
 
-        config = try_get_optimal_moe_config(
-            w1.size(),
-            w2.size(),
-            top_k_num,
-            self.quant_config.config_name(hidden_states.dtype),
-            num_tokens,
-            block_shape=self.block_shape,
-        )
+        config = None
+        if (
+            getattr(self, "yoco_fast_w13_config", False)
+            and not self.quant_config.is_quantized
+            and self.quant_config.weight_quant_dtype is None
+            and hidden_states.dtype == torch.bfloat16
+        ):
+            from vllm.model_executor.layers.fused_moe.experts.yoco_triton import (
+                try_get_yoco_w13_config,
+            )
+
+            config = try_get_yoco_w13_config(
+                num_tokens,
+                E,
+                w1.size(1) // 2,
+                w1.size(2),
+            )
+        if config is None:
+            config = try_get_optimal_moe_config(
+                w1.size(),
+                w2.size(),
+                top_k_num,
+                self.quant_config.config_name(hidden_states.dtype),
+                num_tokens,
+                block_shape=self.block_shape,
+                use_tuned_config=self.moe_config.use_tuned_config,
+            )
 
         if hidden_states.dtype == torch.bfloat16:
             compute_type = tl.bfloat16
@@ -283,9 +330,74 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
                 top_k_num=top_k_num,
             )
 
-        self.activation(
-            activation, intermediate_cache2, intermediate_cache1.view(-1, N)
+        yoco_align_weighted_swiglu = getattr(self, "yoco_align_weighted_swiglu", False)
+        yoco_swapped_w13 = getattr(self, "yoco_swapped_w13", False)
+        if yoco_align_weighted_swiglu:
+            from vllm.model_executor.layers.fused_moe.experts.yoco_triton import (
+                yoco_weighted_swiglu,
+            )
+
+            assert not apply_router_weight_on_input
+            assert activation == MoEActivation.SILU
+            swiglu_limit = getattr(self, "swiglu_limit", None)
+            assert swiglu_limit is not None and swiglu_limit > 0
+            yoco_weighted_swiglu(
+                intermediate_cache2,
+                intermediate_cache1.view(-1, N),
+                topk_weights.reshape(-1),
+                float(swiglu_limit),
+            )
+        elif yoco_swapped_w13:
+            from vllm.model_executor.layers.fused_moe.experts.yoco_triton import (
+                yoco_swapped_clamped_swiglu,
+            )
+
+            assert not apply_router_weight_on_input
+            assert activation == MoEActivation.SILU
+            swiglu_limit = getattr(self, "swiglu_limit", None)
+            assert swiglu_limit is not None and swiglu_limit > 0
+            yoco_swapped_clamped_swiglu(
+                intermediate_cache2,
+                intermediate_cache1.view(-1, N),
+                float(swiglu_limit),
+            )
+        else:
+            self.activation(
+                activation, intermediate_cache2, intermediate_cache1.view(-1, N)
+            )
+
+        use_yoco_deep_gemm_w2 = (
+            getattr(self, "yoco_align_deep_gemm_w2", False)
+            and yoco_align_weighted_swiglu
+            and not self.quant_config.is_quantized
+            and self.quant_config.weight_quant_dtype is None
+            and self.w2_bias is None
+            and lora_context is None
+            and expert_map is None
+            and global_num_experts == E
+            and intermediate_cache2.dtype == torch.bfloat16
+            and w2.dtype == torch.bfloat16
+            and w2.is_contiguous()
+            and w2.size(1) % 8 == 0
+            and w2.size(2) % 64 == 0
         )
+        if use_yoco_deep_gemm_w2:
+            from vllm.model_executor.layers.fused_moe.experts.yoco_deep_gemm import (
+                supports_yoco_deep_gemm_w2,
+                yoco_deep_gemm_w2,
+            )
+
+            if supports_yoco_deep_gemm_w2():
+                yoco_deep_gemm_w2(
+                    intermediate_cache3.view(-1, K),
+                    intermediate_cache2,
+                    w2,
+                    topk_ids,
+                    workspace2,
+                    workspace13,
+                )
+                self._yoco_moe_sum(intermediate_cache3, output)
+                return
 
         a2q_scale: torch.Tensor | None = None
 
@@ -298,6 +410,25 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
             quantization_emulation=self.quantization_emulation,
         )
 
+        w2_config = config
+        if (
+            getattr(self, "yoco_separate_w2_config", False)
+            and not self.quant_config.is_quantized
+            and self.quant_config.weight_quant_dtype is None
+            and hidden_states.dtype == torch.bfloat16
+        ):
+            from vllm.model_executor.layers.fused_moe.experts.yoco_triton import (
+                try_get_yoco_w2_config,
+            )
+
+            w2_config = try_get_yoco_w2_config(
+                num_tokens,
+                E,
+                w2.size(1),
+                w2.size(2),
+                config,
+            )
+
         invoke_fused_moe_triton_kernel(
             qintermediate_cache2,
             w2,
@@ -308,9 +439,9 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
             sorted_token_ids,
             expert_ids,
             num_tokens_post_padded,
-            not apply_router_weight_on_input,
+            not (apply_router_weight_on_input or yoco_align_weighted_swiglu),
             1,
-            config,
+            w2_config,
             compute_type=compute_type,
             use_fp8_w8a8=self.quant_config.use_fp8_w8a8,
             use_int8_w8a8=self.quant_config.use_int8_w8a8,
@@ -325,6 +456,9 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
         # unquantized intermediate_cache2 as the lora_a input.  Reuses the
         # sorted_token_ids_lora computed above.
         if lora_context is not None:
+            assert not yoco_align_weighted_swiglu, (
+                "Applying router weights before W2 is not supported with MoE LoRA"
+            )
             self.apply_w2_lora(
                 lora_context,
                 y=intermediate_cache3,
@@ -341,7 +475,20 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
             )
 
         # separate function is required for MoE + LoRA
-        self.moe_sum(intermediate_cache3, output)
+        self._yoco_moe_sum(intermediate_cache3, output)
+
+    def _yoco_moe_sum(self, input: torch.Tensor, output: torch.Tensor) -> None:
+        use_yoco_sum = getattr(self, "yoco_align_moe_sum", False) or (
+            getattr(self, "yoco_fast_moe_sum", False) and input.shape[0] >= 2048
+        )
+        if use_yoco_sum:
+            from vllm.model_executor.layers.fused_moe.experts.yoco_triton import (
+                yoco_topk8_sum,
+            )
+
+            yoco_topk8_sum(input, output)
+        else:
+            self.moe_sum(input, output)
 
     def moe_sum(self, input: torch.Tensor, output: torch.Tensor) -> None:
         ops.moe_sum(input, output)
@@ -438,6 +585,7 @@ class TritonWNA16Experts(TritonExperts):
             self.quant_config.config_name(hidden_states.dtype),
             num_tokens,
             block_shape=self.block_shape,
+            use_tuned_config=self.moe_config.use_tuned_config,
         )
 
         if hidden_states.dtype == torch.bfloat16:

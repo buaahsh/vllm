@@ -78,6 +78,10 @@ def _ranks_kernel(
 def compute_token_logprobs(
     logits: torch.Tensor, token_ids: torch.Tensor
 ) -> torch.Tensor:
+    from vllm.model_executor.layers import yoco_probabilities
+
+    if yoco_probabilities.is_enabled():
+        return yoco_probabilities.token_logprobs(logits, token_ids)
     # NOTE(woosuk): To save GPU memory, we do not materialize the full
     # [batch_size, vocab_size] logprobs tensor. The kernel computes
     # max + logsumexp per row and only emits logprobs at `token_ids`.

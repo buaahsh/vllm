@@ -19,6 +19,54 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 ---
 
+## YOCO Align 与 Fast 开发
+
+本分支 `fhb-dev` 包含 YOCO 的 `--align` 和 `--fast`。Align 的前向一致性结论限于已验证的配置与输入范围；Fast 优先性能，不保证 bitwise。上游发行版不包含本分支的开发改动。
+
+### Fast decode 优化（2026-09-06）
+
+在上一轮大 Prefill 优化之上，本轮增加了小 M Triton W13/W2 调参，以及 B200 上预调优的 CUTLASS decode 配置。Triton 只匹配精确测量尺寸；CUTLASS 新路径仅用于 M=64/128/256 的完整、每请求一个 token 的 CUDA Graph。多 token prefill 和混合图保留原 backend 策略。
+
+同一物理 B200、L3 BF16、TP1，128-token 输入、64-token 输出，A/B/B/A，每版每个负载共 6 次，取中位数：
+
+| Batch | 基线 TPOT ms | 优化后 TPOT ms | TPOT 降低 | 端到端吞吐提高 |
+| --- | --- | --- | --- | --- |
+| 1 | 6.086 | 6.041 | 0.75% | 0.86% |
+| 8 | 9.468 | 9.284 | 1.94% | 1.61% |
+| 32 | 13.348 | 13.041 | 2.31% | 1.84% |
+| 64 | 14.822 | 13.538 | 8.66% | 7.49% |
+| 128 | 18.791 | 16.897 | 10.08% | 8.48% |
+| 256 | 25.302 | 23.509 | 7.09% | 5.99% |
+
+端到端吞吐含 Prefill 与调度时间。长输入、Prefill 的独立测量及两轮变化见专项报告。
+
+公开 Mooncake FAST’25 trace 的同卡 600 秒回放：完成 3643/3643 与 3643/3643 请求，输出吞吐 1031.65 → 1037.25 tok/s（+0.54%）。TTFT / ITL / E2E P95 分别变化 +0.08% / +6.43% / -3.66%。共享节点、单次前后长测、未声明延迟 SLO，属于 diagnostic，不代表稳定容量或模型质量。
+
+75 项相关回归与 16 项强 clamp 检查通过。固定 token 前缀比较中，本次抽样 top-1 全部一致；部分大 batch 的 logits 及重复结果仍非 bitwise。数值差异和被拒绝的早期候选保留在报告中。
+
+### 启用条件
+
+现有 `--fast` 命令在 B200、L3 BF16、无量化、TP/DP/PP/CP 均为 1、standalone、启用 `--kv-sharing-fast-prefill`，且满足原 FlashInfer 选择条件时自动应用。新增 CUTLASS decode 还要求 graph capture 上限不超过 256，且官方 cache 加载器接受 GPU/CUDA/library 元数据；不匹配时回退。
+
+本次验证的缓存环境：FlashInfer 0.6.8.post1、CUDA 13.1、cuBLAS 13.2.1、cuDNN 91900。启动时不在线 autotune，不增加专家权重副本。`M` 为实际 MoE token 行数，可能包含图 padding，不等于实际请求数。
+
+关闭本轮 CUTLASS decode 选择，保留 Triton 调参与已有 Prefill 策略：
+
+```bash
+--additional-config '{"yoco_fast_decode_cutlass": false}'
+```
+
+原 `yoco_fast_standalone_flashinfer_moe=false` 开关仍可关闭 standalone FlashInfer 自动选择。
+
+### 报告与历史结果
+
+- [本轮 Fast decode 报告、验证与限制](docs/yoco/fast-decode-optimization-20260906/REPORT.md)
+- [本轮报告 PDF](docs/yoco/fast-decode-optimization-20260906/REPORT.pdf)
+- [本轮短测数据](docs/yoco/fast-decode-optimization-20260906/short-comparison.json)与[公开 trace 对照](docs/yoco/fast-decode-optimization-20260906/trace-comparison.json)
+- [2026-09-05 Prefill 优化报告](docs/yoco/fast-optimization-20260905/REPORT.md)：当轮 Prefill 提升 5.3%–8.9%，Decode 基本持平
+- [2026-09-05 综合开发报告 PDF](docs/yoco/YOCO-Align-Fast-Report-20260905.pdf)：Align、概率归约、训练反向与上一轮 Fast 优化
+- [2026-09-05 README PDF 快照](docs/yoco/README-snapshot-20260905.pdf)
+
 ## About
 
 vLLM is a fast and easy-to-use library for LLM inference and serving.

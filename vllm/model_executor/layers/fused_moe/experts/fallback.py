@@ -164,6 +164,14 @@ class FallbackExperts(mk.FusedMoEExpertsModular, ABC):
         for attr in (
             "swiglu_limit",
             "apply_router_weight_before_w2",
+            "yoco_align_weighted_swiglu",
+            "yoco_align_deep_gemm_w2",
+            "yoco_separate_w2_config",
+            "yoco_fast_w13_config",
+            "yoco_triton_fallback_max_tokens",
+            "yoco_fast_decode_cutlass",
+            "yoco_align_moe_sum",
+            "yoco_fast_moe_sum",
         ):
             if hasattr(self, attr):
                 setattr(experts, attr, getattr(self, attr))

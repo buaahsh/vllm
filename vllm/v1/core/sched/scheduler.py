@@ -249,6 +249,10 @@ class Scheduler(SchedulerInterface):
         self.need_mamba_block_aligned_split = (
             self.has_mamba_layers and self.cache_config.mamba_cache_mode == "align"
         )
+        self.need_yoco_final_prompt_block_split = (
+            self.vllm_config.model_config.hf_config.model_type == "yoco"
+            and self.cache_config.kv_sharing_fast_prefill
+        )
         self.perf_metrics: ModelMetrics | None = None
         if self.log_stats and vllm_config.observability_config.enable_mfu_metrics:
             self.perf_metrics = ModelMetrics(vllm_config)
@@ -303,6 +307,36 @@ class Scheduler(SchedulerInterface):
             else:
                 # prefill the last few tokens
                 pass
+        return num_new_tokens
+
+    def _yoco_final_prompt_block_split(
+        self,
+        request: Request,
+        num_computed_tokens: int,
+        num_new_tokens: int,
+    ) -> int:
+        """Defer YOCO's final prompt block tail to a uniform step.
+
+        YOCO fast prefill runs its self-decoder on every newly computed token.
+        Consequently, the final prompt state can otherwise be produced by a
+        full prefill, a local-cache block tail, or a one-token remote-KV replay.
+        Shape-dependent floating-point reductions can then select different
+        MoE experts.  Splitting at the final KV block boundary makes the tail
+        shape identical in all three cases.
+        """
+        if not self.need_yoco_final_prompt_block_split:
+            return num_new_tokens
+        if request.kv_transfer_params and request.kv_transfer_params.get(
+            "_p_side_truncated"
+        ):
+            return num_new_tokens
+
+        final_prompt_block_start = (
+            (request.num_prompt_tokens - 1) // self.block_size * self.block_size
+        )
+        scheduled_end = num_computed_tokens + num_new_tokens
+        if num_computed_tokens < final_prompt_block_start < scheduled_end:
+            return final_prompt_block_start - num_computed_tokens
         return num_new_tokens
 
     def schedule(self) -> SchedulerOutput:
@@ -398,6 +432,12 @@ class Scheduler(SchedulerInterface):
                 num_new_tokens = self._mamba_block_aligned_split(
                     request, num_new_tokens
                 )
+
+            num_new_tokens = self._yoco_final_prompt_block_split(
+                request,
+                request.num_computed_tokens,
+                num_new_tokens,
+            )
 
             if num_new_tokens == 0:
                 # The request cannot be scheduled because one of the following
@@ -675,6 +715,12 @@ class Scheduler(SchedulerInterface):
                     )
                     if num_new_tokens == 0:
                         break
+
+                num_new_tokens = self._yoco_final_prompt_block_split(
+                    request,
+                    num_computed_tokens,
+                    num_new_tokens,
+                )
 
                 # Handles an edge case when P/D Disaggregation
                 # is used with Spec Decoding where an

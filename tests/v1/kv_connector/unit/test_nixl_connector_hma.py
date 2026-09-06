@@ -14,6 +14,12 @@ from vllm.v1.core.single_type_kv_cache_manager import (
     FullAttentionManager,
     SlidingWindowManager,
 )
+from vllm.v1.kv_cache_interface import (
+    FullAttentionSpec,
+    KVCacheConfig,
+    KVCacheGroupSpec,
+    SlidingWindowSpec,
+)
 
 from .utils import (
     create_request,
@@ -58,6 +64,72 @@ def test_sw_sizes(mock_platform, swa_enabled, expected_sw_sizes):
     assert scheduler.blocks_per_sw == expected_sw_sizes, (
         f"Expected sw_sizes={expected_sw_sizes}, got {scheduler.blocks_per_sw}"
     )
+
+
+@pytest.mark.cpu_test
+@patch("vllm.distributed.kv_transfer.kv_connector.v1.nixl.scheduler.current_platform")
+def test_yoco_clips_30_swa_groups_and_keeps_cross_owner_full(mock_platform):
+    """YOCO transfers one window for every physical self-KV and full cross-KV.
+
+    The production model has ten physical self-attention caches per universal
+    loop and ``universal_loop=3``.  Its logical cross layers alias one physical
+    owner, so NIXL must receive 30 sliding-window groups plus one full group.
+    """
+    from vllm.distributed.kv_transfer.kv_connector.v1.nixl.scheduler import (
+        NixlConnectorScheduler,
+    )
+
+    mock_platform.device_type = "cpu"
+    block_size = 16
+    sliding_window = 512
+    physical_self_indices = [
+        loop * 20 + layer for loop in range(3) for layer in range(10)
+    ]
+    common_spec = dict(
+        block_size=block_size,
+        num_kv_heads=4,
+        head_size=128,
+        dtype=torch.bfloat16,
+    )
+    groups = [
+        KVCacheGroupSpec(
+            [f"model.layers.{layer}.self_attn"],
+            SlidingWindowSpec(sliding_window=sliding_window, **common_spec),
+        )
+        for layer in physical_self_indices
+    ]
+    groups.append(
+        KVCacheGroupSpec(
+            ["model.layers.10.cross_attn"],
+            FullAttentionSpec(**common_spec),
+        )
+    )
+    kv_cache_config = KVCacheConfig(
+        num_blocks=8192,
+        kv_cache_tensors=[],
+        kv_cache_groups=groups,
+    )
+    vllm_config = create_vllm_config(block_size=block_size)
+    vllm_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    scheduler = NixlConnectorScheduler(
+        vllm_config=vllm_config,
+        engine_id="yoco-test-engine",
+        kv_cache_config=kv_cache_config,
+    )
+
+    full_prefix_blocks = 4113  # 65,808 transferred prompt tokens / 16.
+    block_ids = tuple(
+        list(range(group * full_prefix_blocks, (group + 1) * full_prefix_blocks))
+        for group in range(31)
+    )
+    clipped = scheduler.get_sw_clipped_blocks(block_ids)
+
+    assert scheduler.blocks_per_sw == [33] * 30 + [0]
+    assert [len(group) for group in clipped] == [33] * 30 + [4113]
+    assert sum(map(len, clipped)) == 5103
+    assert clipped[-1] == block_ids[-1]
+    for group_index in range(30):
+        assert clipped[group_index] == block_ids[group_index][-33:]
 
 
 @pytest.mark.cpu_test
@@ -613,7 +685,7 @@ def test_nixl_metadata_hybrid_ssm_block_ids():
     assert len(req_meta.remote.block_ids[0]) != len(req_meta.remote.block_ids[1])
 
 
-# ── Mamba N-1 prefill tests ──────────────────────────────────────────────
+# ── Model-specific remote prefill truncation tests ───────────────────────
 
 
 @pytest.mark.cpu_test
@@ -669,6 +741,85 @@ def test_mamba_n1_p_side_truncation():
 
     fa_sched.get_num_new_matched_tokens(fa_req, num_computed_tokens=0)
     assert len(fa_req.prompt_token_ids) == fa_original
+
+
+@pytest.mark.cpu_test
+def test_yoco_final_block_d_side():
+    """D-side: YOCO transfers only through the final full block boundary."""
+    sched = make_nixl_scheduler(use_yoco_final_prompt_block_split=True)
+    req = create_request(num_tokens=44, do_remote_prefill=True)
+
+    count, is_async = sched.get_num_new_matched_tokens(req, num_computed_tokens=0)
+
+    assert count == 32
+    assert is_async is True
+
+
+@pytest.mark.cpu_test
+def test_yoco_final_block_p_side_truncation():
+    """P-side: YOCO publishes the same block-aligned prefix D expects."""
+    sched = make_nixl_scheduler(use_yoco_final_prompt_block_split=True)
+    req = create_request(num_tokens=44, do_remote_decode=True)
+    original_token_ids = req.prompt_token_ids.copy()
+
+    count, is_async = sched.get_num_new_matched_tokens(req, num_computed_tokens=0)
+
+    assert count == 0
+    assert is_async is False
+    assert req.num_prompt_tokens == 32
+    assert req.prompt_token_ids == original_token_ids[:32]
+    assert req.max_tokens == 1
+    assert req.kv_transfer_params["_p_side_truncated"] is True
+
+    sched.get_num_new_matched_tokens(req, num_computed_tokens=0)
+    assert req.num_prompt_tokens == 32
+
+
+@pytest.mark.cpu_test
+def test_yoco_p_side_skips_local_prefix_cache_before_lookup():
+    """Pure-P must keep the established full-prefix numerical shape.
+
+    For a 1,356-token request, YOCO transfers 1,344 tokens.  Truncating before
+    ``KVCacheManager.get_computed_blocks`` avoids the zero-work scheduler edge.
+    Skipping the local cache prevents a 1,328 + 16 recompute split, whose
+    different Router/MoE row shape can change the KV sent to D.
+    """
+    sched = make_nixl_scheduler(use_yoco_final_prompt_block_split=True)
+    req = create_request(num_tokens=1356, do_remote_decode=True)
+
+    sched.on_new_request(req)
+
+    assert req.num_prompt_tokens == 1344
+    assert req.num_tokens == 1344
+    assert req.skip_reading_prefix_cache is True
+    assert req.kv_transfer_params["_p_side_truncated"] is True
+
+    # The later connector cache query is idempotent.
+    count, is_async = sched.get_num_new_matched_tokens(req, num_computed_tokens=0)
+    assert count == 0
+    assert is_async is False
+    assert req.num_prompt_tokens == 1344
+
+
+@pytest.mark.cpu_test
+def test_yoco_sub_block_prompt_stays_valid_and_recomputes_on_d():
+    """A sub-block prompt has no transferable prefix but must remain valid on P."""
+    sched = make_nixl_scheduler(use_yoco_final_prompt_block_split=True)
+    p_req = create_request(num_tokens=12, do_remote_decode=True)
+    original_token_ids = p_req.prompt_token_ids.copy()
+
+    count, is_async = sched.get_num_new_matched_tokens(p_req, num_computed_tokens=0)
+
+    assert count == 0
+    assert is_async is False
+    assert p_req.num_prompt_tokens == 12
+    assert p_req.prompt_token_ids == original_token_ids
+    assert "_p_side_truncated" not in p_req.kv_transfer_params
+
+    d_req = create_request(num_tokens=12, do_remote_prefill=True)
+    count, is_async = sched.get_num_new_matched_tokens(d_req, num_computed_tokens=0)
+    assert count == 0
+    assert is_async is False
 
 
 @pytest.mark.cpu_test

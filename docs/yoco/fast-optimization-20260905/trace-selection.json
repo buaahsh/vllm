@@ -1,0 +1,10 @@
+{
+  "cases": {
+    "before": "before-long",
+    "candidate": "candidate-long-r2"
+  },
+  "failed_candidate": "candidate-long",
+  "selection_reason": "Repeat full candidate trace after one connection reset on a reused HTTP connection before any response; select the first complete retry, not the fastest attempt",
+  "unchanged_client_parameters": true,
+  "fresh_cache_salt": true
+}

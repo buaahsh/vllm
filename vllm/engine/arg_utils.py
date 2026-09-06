@@ -6,6 +6,7 @@ import copy
 import dataclasses
 import functools
 import json
+import os
 import sys
 from collections.abc import Callable
 from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
@@ -36,7 +37,9 @@ from vllm.config import (
     AttentionConfig,
     CacheConfig,
     CompilationConfig,
+    CompilationMode,
     ConfigType,
+    CUDAGraphMode,
     DeviceConfig,
     ECTransferConfig,
     EPLBConfig,
@@ -413,6 +416,8 @@ class EngineArgs:
     """Arguments for vLLM engine."""
 
     model: str = ModelConfig.model
+    align: bool = False
+    fast: bool = False
     enable_return_routed_experts: bool = ModelConfig.enable_return_routed_experts
     model_weights: str = ModelConfig.model_weights
     served_model_name: str | list[str] | None = ModelConfig.served_model_name
@@ -704,6 +709,21 @@ class EngineArgs:
     gdn_prefill_backend: Literal["flashinfer", "triton"] | None = None
 
     def __post_init__(self):
+        if self.align and self.fast:
+            raise ValueError("--align and --fast are mutually exclusive")
+
+        if self.align or self.fast:
+            requested_mode = "align" if self.align else "fast"
+            self.additional_config = dict(self.additional_config)
+            configured_mode = self.additional_config.get("yoco_execution_mode")
+            if configured_mode is not None and configured_mode != requested_mode:
+                raise ValueError(
+                    "Conflicting YOCO execution modes: "
+                    f"--{requested_mode} and additional_config="
+                    f"{configured_mode!r}"
+                )
+            self.additional_config["yoco_execution_mode"] = requested_mode
+
         # support `EngineArgs(compilation_config={...})`
         # without having to manually construct a
         # CompilationConfig object
@@ -723,6 +743,20 @@ class EngineArgs:
             )
         if isinstance(self.ir_op_priority, dict):
             self.ir_op_priority = IrOpPriorityConfig(**self.ir_op_priority)
+
+        if (
+            isinstance(self.additional_config, dict)
+            and self.additional_config.get("yoco_execution_mode") == "align"
+        ):
+            # Several llm-train alignment expressions are themselves
+            # torch.compile functions. Compiling the complete vLLM model
+            # around them can select a different reduction/fusion context.
+            # Keep those operator boundaries while retaining full CUDA Graphs
+            # for decode. An explicit --enforce-eager remains available for
+            # diagnostics and VllmConfig will disable graphs in that case.
+            self.compilation_config.mode = CompilationMode.NONE
+            if not self.enforce_eager:
+                self.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_DECODE_ONLY
 
         from vllm.config.quantization import resolve_quantization_config
 
@@ -764,6 +798,26 @@ class EngineArgs:
         model_group = parser.add_argument_group(
             title="ModelConfig",
             description=ModelConfig.__doc__,
+        )
+        yoco_mode_group = model_group.add_mutually_exclusive_group()
+        yoco_mode_group.add_argument(
+            "--align",
+            action="store_true",
+            help=(
+                "Run YOCO BF16 TP1 with fixed numerical kernels and enable "
+                "process-scoped VLLM_BATCH_INVARIANT. Keeps decode CUDA Graphs "
+                "and disables enclosing Inductor model compilation. Bitwise "
+                "training alignment requires the same kernels in training."
+            ),
+        )
+        yoco_mode_group.add_argument(
+            "--fast",
+            action="store_true",
+            help=(
+                "Run YOCO with optimized fused and packed kernels and use the "
+                "actual Router batch shape. This is the default when neither "
+                "YOCO mode flag is specified."
+            ),
         )
         if not ("serve" in sys.argv[1:] and "--help" in sys.argv[1:]):
             model_group.add_argument("--model", **model_kwargs["model"])
@@ -1646,6 +1700,19 @@ class EngineArgs:
 
         NOTE: If VllmConfig is incompatible, we raise an error.
         """
+        yoco_align = (
+            isinstance(self.additional_config, dict)
+            and self.additional_config.get("yoco_execution_mode") == "align"
+        )
+        if yoco_align:
+            # This must precede config/backend selection and worker spawning.
+            # Workers install the invariant operators in init_batch_invariance.
+            # The policy is process-scoped, like VLLM_BATCH_INVARIANT itself.
+            if envs._is_envs_cache_enabled() and not envs.VLLM_BATCH_INVARIANT:
+                raise ValueError("YOCO --align requires a fresh engine process")
+            os.environ["VLLM_BATCH_INVARIANT"] = "1"
+            os.environ["TORCH_ALLOW_TF32_CUBLAS_OVERRIDE"] = "0"
+
         current_platform.pre_register_and_update()
 
         device_config = DeviceConfig(device=cast(Device, current_platform.device_type))
@@ -1670,6 +1737,25 @@ class EngineArgs:
             )
 
         model_config = self.create_model_config()
+        if yoco_align:
+            if (
+                model_config.dtype != torch.bfloat16
+                or model_config.quantization is not None
+                or self.kv_cache_dtype not in ("auto", "bfloat16")
+            ):
+                raise ValueError("YOCO --align requires BF16 weights and KV cache")
+            if any(
+                size != 1
+                for size in (
+                    self.tensor_parallel_size,
+                    self.pipeline_parallel_size,
+                    self.prefill_context_parallel_size,
+                    self.decode_context_parallel_size,
+                )
+            ):
+                raise ValueError(
+                    "YOCO --align invariance currently requires TP/PP/CP=1"
+                )
         self.model = model_config.model
         self.model_weights = model_config.model_weights
         self.tokenizer = model_config.tokenizer

@@ -27,6 +27,54 @@ DEVICES = [f"{DEVICE_TYPE}:{i}" for i in range(min(current_platform.device_count
 MAX_NUM_PROMPT_TOKENS = 64
 
 
+@pytest.mark.skipif(DEVICE_TYPE != "cuda", reason="requires CUDA")
+def test_yoco_fused_multi_group_slot_mapping_matches_reference() -> None:
+    block_table = MultiGroupBlockTable(
+        max_num_reqs=3,
+        max_model_len=128,
+        max_num_batched_tokens=16,
+        pin_memory=is_pin_memory_available(),
+        device=torch.device("cuda"),
+        block_sizes=[16, 32, 16],
+        kernel_block_sizes=[16, 32, 16],
+        use_yoco_fused_slot_mapping=True,
+    )
+    assert block_table.yoco_fused_slot_mapping is not None
+
+    for req_idx in range(3):
+        block_table.add_row(
+            tuple(
+                [100 * group_idx + 10 * req_idx + block_idx for block_idx in range(4)]
+                for group_idx in range(3)
+            ),
+            req_idx,
+        )
+    block_table.commit_block_table(3)
+
+    query_start_loc = torch.tensor([0, 2, 5, 6], dtype=torch.int32, device="cuda")
+    positions = torch.tensor([0, 17, 15, 16, 33, 7], device="cuda")
+    for table in block_table.block_tables:
+        table.compute_slot_mapping(3, query_start_loc, positions)
+    expected = [table.slot_mapping.gpu.clone() for table in block_table.block_tables]
+
+    block_table.compute_slot_mapping(3, query_start_loc, positions)
+    for table, expected_slots in zip(block_table.block_tables, expected):
+        assert torch.equal(table.slot_mapping.gpu, expected_slots)
+
+    # Decode has one token per request and uses the vectorized YOCO kernel.
+    decode_query_start_loc = torch.arange(4, dtype=torch.int32, device="cuda")
+    decode_positions = torch.tensor([0, 17, 33], device="cuda")
+    for table in block_table.block_tables:
+        table.compute_slot_mapping(3, decode_query_start_loc, decode_positions)
+    expected_decode = [
+        table.slot_mapping.gpu.clone() for table in block_table.block_tables
+    ]
+
+    block_table.compute_slot_mapping(3, decode_query_start_loc, decode_positions)
+    for table, expected_slots in zip(block_table.block_tables, expected_decode):
+        assert torch.equal(table.slot_mapping.gpu, expected_slots)
+
+
 def _compare_objs(obj1, obj2, skip: Sequence = ("logitsprocs", "batch_update_builder")):
     attrs = inspect.getmembers(obj1, lambda a: not (inspect.isroutine(a)))
     attr_names = set(

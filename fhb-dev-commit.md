@@ -1,4 +1,4 @@
-# `fhb-dev` 功能提交记录
+# `fhb-dev` 逐提交工程记录
 
 本文是 `fhb-dev` 的逐提交工程日志，用于在不依赖 Pull Request 邮件和网页上下文
 的情况下，回答以下问题：
@@ -29,10 +29,14 @@
    `方涵斌 <2190556589@qq.com>`。AI 辅助通过 commit trailer 明示。
 6. 默认将经过本地检查和 GPU 验证的 commit 直接同步到 `fhb-dev`，避免每个小功能
    都创建 PR 触发邮件；确实需要跨团队网页审阅时再单独创建 PR。
-7. 本文只逐条记录功能 commit。仅用于补充本日志的文档提交不递归记录自身 hash；
-   文档历史可通过 `git log -- fhb-dev-commit.md` 审计。
+7. 从基线到审计水位的每一个可达 commit 都必须出现在“完整 Git 提交审计”中。
+   功能、正确性、性能、构建、测试和设计结果展开为正文；只补充已有记录的
+   docs-only commit 只进入完整索引，不递归增加一篇重复正文。
+8. Git commit 无法在自身内容中预先写入自己的 hash，因此每次日志维护提交审计到
+   它的 parent，并在下一次提交中回填真实 hash。当前水位为 `6c49544ed3`：相对基线
+   共 `46/46` 个可达提交，其中主线 `39/39` 个、合并支线 `7/7` 个，均已列出。
 
-## 提交索引
+## 功能与工程结果索引
 
 | 序号 | Commit | 类型 | 功能 | 状态 |
 | ---: | --- | --- | --- | --- |
@@ -49,6 +53,82 @@
 | 11 | `26614af40f` | 文档/负结果 | 放弃 differential-attention CustomOp | 已进入 `fhb-dev` |
 | 12 | `9106abeb3a` | 合并/DP8 | 合入 YOCO B200 multigpu long-context | 已进入 `fhb-dev` |
 | 13 | `4364a96501` | 性能/Router | 缓存 FP32 Router 归一化权重 | 已进入 `fhb-dev` |
+| 14 | `81df1f21e8` | 正确性/DeepEP | NVSHMEM ABI、RDMA 与 IBGDA 启动保护 | 已进入 `fhb-dev` |
+| 15 | `03a0479b67` | 正确性/PD | 对齐 standalone、local cache 与 NIXL PD shape | 已进入 `fhb-dev` |
+| 16 | `fa8e4eac6a` | 文档/PD | 当前 PD 部署策略独立报告 | 已进入 `fhb-dev` |
+| 17 | `f54af87aec` | 测试/PD | TP2/DP1 batch 容量、吞吐和 forward 曲线 | 已进入 `fhb-dev` |
+| 18 | `75d26710b9` | 设计/Cache | LMCache 三级缓存与 Dynamo 适配方案 | 已进入 `fhb-dev` |
+| 19 | `e081d38f5a` | 构建/Cache | 固定 LMCache 0.5.3 的 CUDA 13/SM100 runtime | 已进入 `fhb-dev` |
+| 20 | `5d296b3958` | 正确性/Cache | LMCache 适配 YOCO 31 份物理 KV | 已进入 `fhb-dev` |
+| 21 | `aebb50c6e5` | 正确性/PD | pure-P prefix shape 与 SWA window 传输补充 | 已进入 `fhb-dev` |
+| 22 | `e5524539f1` | 测试/PD | PD 极限吞吐与 W1/W2/W3 HMA A/B | 已进入 `fhb-dev` |
+| 23 | `6c49544ed3` | 性能/Attention | 融合 Q/K RMSClip 与 RoPE | 已进入 `fhb-dev` |
+| 24 | `本提交` | 对齐/性能 | L3 BF16 `align`/`fast` 双执行策略与 B200 算子调优 | 待提交 |
+
+## 完整 Git 提交审计
+
+审计区间为
+`c27db1e189973cea3164ba66b1d00359d4122088..6c49544ed3`。
+基线本身不计入增量提交数。以下两张表覆盖这个区间内全部 `46` 个可达提交，避免把
+docs-only、验证补充或 merge 引入的支线提交藏在正文之外。
+
+### First-parent 主线：39/39
+
+| 序号 | Commit | Subject | 对应记录 |
+| ---: | --- | --- | --- |
+| 1 | `85eab7b56e` | `perf(yoco): skip cross layers for KV-only producer prefill (#3)` | 第 1 节 |
+| 2 | `ea4f80d1b4` | `fix(yoco): deduplicate NIXL KV-sharing aliases (#4)` | 第 2 节 |
+| 3 | `d11cc022bd` | `perf(yoco): remove redundant router materialization` | 第 3 节 |
+| 4 | `d77fed9d2a` | `docs(yoco): add fhb-dev commit ledger` | 初始化并补记第 1--3 节 |
+| 5 | `ef60ee0255` | `perf(yoco): fuse residual add with RMSNorm` | 第 4 节 |
+| 6 | `cd1e22c7ff` | `docs(yoco): record fused add-RMSNorm commit` | 补记第 4 节 |
+| 7 | `9988ae737f` | `perf(yoco): overlap shared and routed experts` | 第 5 节 |
+| 8 | `2e1b8ecc53` | `docs(yoco): record shared expert overlap` | 补记第 5 节 |
+| 9 | `8eae22948c` | `perf(yoco): fuse FP32 clamped SwiGLU` | 第 6 节 |
+| 10 | `4b0f7d3d42` | `docs(yoco): record FP32 clamped SwiGLU fusion` | 补记第 6 节 |
+| 11 | `1c51cac0d7` | `fix(pd): preserve KV metadata on streamed stops` | 第 7 节 |
+| 12 | `0f8c9d95b5` | `docs(pd): record streamed-stop KV metadata fix` | 补记第 7 节 |
+| 13 | `2765c22a1b` | `build(pd): unify runtime on UCX 1.21` | 第 8 节 |
+| 14 | `66a87747fa` | `docs(pd): record UCX 1.21 runtime validation` | 补记第 8 节 |
+| 15 | `7c03e0cb73` | `perf(moe): add tuned B200 YOCO config` | 第 9 节 |
+| 16 | `84906823de` | `docs(yoco): record B200 MoE tuning results` | 补记第 9 节 |
+| 17 | `8abfd6c6d0` | `perf(yoco): fuse BF16 rotary embedding` | 第 10 节 |
+| 18 | `625ff8ea06` | `docs(yoco): record BF16 rotary fusion` | 补记第 10 节 |
+| 19 | `26614af40f` | `docs(yoco): record rejected diff-attention fusion` | 第 11 节 |
+| 20 | `9106abeb3a` | `Merge YOCO B200 multigpu long-context support` | 第 12 节 |
+| 21 | `fd6baffea2` | `docs(yoco): record multigpu merge validation` | 第 12 节补充验证 |
+| 22 | `0223cd9099` | `docs(yoco): record DP1 and DP4 validation` | 第 12 节补充验证 |
+| 23 | `4364a96501` | `perf(yoco): cache normalized router weights` | 第 13 节 |
+| 24 | `a9cd5c2072` | `docs(yoco): record Router weight cache results` | 补记第 13 节 |
+| 25 | `81df1f21e8` | `fix(yoco): guard DeepEP NVSHMEM runtime` | 第 14 节 |
+| 26 | `4a39087d27` | `docs(yoco): record DeepEP NVSHMEM validation` | 补记第 14 节 |
+| 27 | `03a0479b67` | `fix(yoco): align fast-prefill shapes across PD` | 第 15 节 |
+| 28 | `b63e04909b` | `docs(yoco): record PD shape consistency fix` | 补记第 15 节 |
+| 29 | `fa8e4eac6a` | `docs(yoco): add standalone PD strategy report` | 第 16 节 |
+| 30 | `f54af87aec` | `docs(yoco): record PD batch capacity and throughput` | 第 17 节 |
+| 31 | `75d26710b9` | `docs(yoco): plan LMCache and Dynamo adaptation` | 第 18 节 |
+| 32 | `e081d38f5a` | `build(yoco): add pinned LMCache CUDA 13 runtime` | 第 19 节 |
+| 33 | `5d296b3958` | `fix(yoco): adapt LMCache to physical KV layout` | 第 20 节 |
+| 34 | `53f58e5426` | `docs(yoco): complete fhb-dev commit audit` | 审计到第 20 节 |
+| 35 | `aebb50c6e5` | `fix(yoco): preserve pure-P prefix shape with HMA` | 第 21 节 |
+| 36 | `9b9a945c06` | `docs(yoco): record HMA and LMCache PD validation` | 补记第 21 节及 LMCache 验证 |
+| 37 | `e5524539f1` | `docs(yoco): record PD saturation and HMA workload results` | 第 22 节 |
+| 38 | `fb8c42b6a0` | `docs(yoco): audit PD saturation and HMA benchmarks` | 审计到第 22 节 |
+| 39 | `6c49544ed3` | `perf(yoco): fuse QK clip and rotary` | 第 23 节 |
+
+### Merge 引入支线：7/7
+
+以下提交由 `9106abeb3a` 引入，都是第 12 节 multigpu long-context 合并的一部分。
+
+| 序号 | Commit | Subject |
+| ---: | --- | --- |
+| 1 | `6c0b7a35ee` | `perf: tune YOCO B200 long-context serving` |
+| 2 | `4a6f4400d4` | `Improve YOCO long-context serving tooling` |
+| 3 | `2304668e15` | `Correct YOCO per-engine sequence limits` |
+| 4 | `e3974c1c97` | `Document YOCO multigpu long-context results` |
+| 5 | `bbd96cacb0` | `Rebuild YOCO B200 presentation probes` |
+| 6 | `34f4044acb` | `docs: show direct vllm long-context launches` |
+| 7 | `85f7d2ac1b` | `docs: add max-throughput rates to summary` |
 
 ---
 
@@ -2734,6 +2814,192 @@ Top-K、routed/shared expert GEMM、collective、scheduler 或 P/D transport。�
 - revert `4364a96501` 会恢复每次 forward 的归一化，不影响此前 RoPE、MoE、
   add-RMSNorm、SwiGLU、UCX/NIXL 或 multigpu 功能。
 
+## 14. DeepEP / NVSHMEM ABI、RDMA 与 IBGDA 启动保护
+
+### 提交信息
+
+```text
+commit: 81df1f21e8
+subject: fix(yoco): guard DeepEP NVSHMEM runtime
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: a9cd5c2072
+branch: review/yoco-13-deepep-nvshmem
+diff: 3 files, 186 insertions, 7 deletions
+```
+
+### 目的和旧失败链
+
+multigpu 合并后的 long-context launcher 没有启用 EP，也没有把 RDMA device 传入
+nested Docker；同时它用自定义 `LD_LIBRARY_PATH` 覆盖镜像默认值。基础镜像同时
+存在 CUDA toolkit NVSHMEM 和 pip `nvidia-nvshmem-cu13` 时，DeepEP extension
+可能加载到 ABI/符号不匹配的 host library。此前日志中的
+`nvshmem_selected_device_transport` import error 就属于该类 loader 问题。
+
+修正 library 顺序后，DP4 DeepEP LL 的真实下一层问题依次暴露：
+
+1. `MAX_NUM_BATCHED_TOKENS=32768` 产生约 97.5 GiB LL RDMA buffer，触发
+   `num_rdma_bytes / sizeof(int4) < INT_MAX`；
+2. 改为 8192 后，默认 `NVSHMEM_QP_DEPTH=1024` 小于
+   `(8192 + 1) * 2`，DeepEP 初始化断言失败；
+3. 使用 QP depth 32768 后进入实际 dispatch，但 NVSHMEM 报
+   `init failed for transport: IBGDA`；
+4. DeepEP `internode_ll.cu:285` 随后反复触发
+   `ibgda_get_state()->num_rc_per_pe >= num_local_experts`，四个 rank 最终以异步
+   `CUDA error: unspecified launch failure` 退出，并在宿主记录 Xid 43。
+
+节点并非完全没有 RDMA：Pod 可见 `uverbs/rdma_cm`，`mlx5_ib` 与
+`nvidia_peermem` 已加载。决定性条件是
+`/proc/driver/nvidia/params` 为 `EnableStreamMemOPs: 0`，且没有 `/dev/gdrdrv`；
+这不满足 DeepEP LL 文档要求的两种 IBGDA 启用方式。旧 nested container 的
+`HostConfig.Devices` 也只有 NVIDIA GPU device，没有任何 `/dev/infiniband/*`。
+
+### 修改文件及职责
+
+#### `docker/Dockerfile.b200.longctx`
+
+- 将 mutable base tag 固定为已经验证的 registry digest
+  `sha256:08a08f36ab8c6c80ee1c7f09b9e5f8b6ce0b91cc684455982b2e5e286c736f2b`；
+- build 时定位 `deep_ep_cpp`，用 `ldd` 要求 `libnvshmem_host.so.3` 来自 pip
+  NVSHMEM 的 `site-packages` 或 `dist-packages` 路径；
+- 用 `objdump -T` 检查 `nvshmem_selected_device_transport`；
+- 创建临时 CUDA driver stub 后实际 `import deep_ep`，失败则终止 build；
+- label 明确该镜像提供 guarded DeepEP/NVSHMEM，而不是声称 LL 在所有宿主可用。
+
+#### `tools/yoco_serving/launch_nested_docker.sh`
+
+- 不再覆盖镜像 `LD_LIBRARY_PATH`，保留 pip NVSHMEM 在 CUDA toolkit copy 之前；
+- NVML 改挂到镜像已有搜索目录 `/usr/local/nvidia/lib64`；
+- 枚举外层 Pod 实际可见的 `/dev/infiniband` character devices，逐个通过
+  `--device` 映射，不使用会额外暴露 GPU 的 `--privileged`；
+- 设置 `--ulimit memlock=-1:-1`；
+- 透传 EP/backend/buffer/QP/token budget 开关；默认 backend 是本轮 A/B 胜出的
+  `allgather_reducescatter`。
+
+#### `tools/yoco_serving/serve_long_context.sh`
+
+- DP>1 的 `auto` 启用 EP，DP1 保持非 EP；允许
+  `ENABLE_EXPERT_PARALLEL=0` 显式回滚；
+- 仅显式选择 DeepEP backend 时执行 version/import/`ldd` runtime 检查；
+- LL `auto` token budget 取 8192，其他 backend 继续使用 32768；
+- 按 `(max_tokens + 1) * 2` 计算 QP depth 下限并向上取二次幂；8192 自动得到
+  32768；先 `unset` launcher sentinel，避免字符串 `auto` 被 NVSHMEM 当成数值；
+- 调用 DeepEP size hint，在启动前拒绝超过 int32 index 上限的 LL buffer；
+- LL 要求可见 `uverbs`，并要求 `EnableStreamMemOPs=1` 或 `/dev/gdrdrv`，否则
+  code 2 fail closed，不再执行已知会 device assert 的 kernel。
+
+### 构建、静态和参数测试
+
+最终功能镜像从 commit `81df1f21e8` 的精确工作树构建：
+
+```text
+tag:  yoco-pr13-deepep-nvshmem-81df1f21e8
+id:   sha256:f3920f514a8a164529a7116660dae7f4ee355c14d56fa5e0c21bc4784277d124
+size: 37,668,087,694 bytes
+```
+
+build 和重新启动的 container 内均确认：
+
+```text
+deep_ep: 1.2.1+567632d
+nvidia-nvshmem-cu13: 3.6.5
+libnvshmem_host.so.3:
+  /usr/local/lib/python3.12/dist-packages/nvidia/nvshmem/lib/libnvshmem_host.so.3
+nvshmem_selected_device_transport: present
+import deep_ep with CUDA stub: passed
+```
+
+最终 launcher 的 `docker inspect` 显示全部可见 `uverbs/umad/issm/rdma_cm`
+已进入 inner container，`memlock` soft/hard 都为 `-1`。参数 smoke 使用 fake vLLM
+entrypoint，确认：
+
+- DP1 默认不带 EP 参数，token budget 为 32768；
+- DP4 默认带 `--enable-expert-parallel --all2all-backend
+  allgather_reducescatter`；
+- 显式 `deepep_high_throughput` 会先验证 DeepEP/NVSHMEM，再传给 vLLM；
+- 显式 LL 在当前宿主打印 IBGDA 条件错误并返回 code 2。
+
+静态检查：
+
+```text
+shellcheck 0.11.0: passed
+bash -n: passed
+git diff --check: passed
+Docker build: passed
+```
+
+### B200 DeepEP HT 正确性
+
+```text
+Job:  bonete01/lidong1-yoco-pr13-deepep-g4-0805
+Node: slc01-cl02-hgx-0201
+GPU:  physical 4,5,6,7; NVIDIA B200
+Model: /mnt/pvc/lidong1/vllm_test_artifacts/fhb-dev-dp14-20260805/model
+DP/EP/TP: 4/4/1
+precision / attention / MoE: BF16 / FlashInfer / Triton
+```
+
+服务日志确认不是 silent fallback：
+
+```text
+Using DeepEPHTAll2AllManager
+Using DeepEPHTPrepareAndFinalize
+```
+
+8,192 和 65,536 token prompt 各做两次 greedy 256-token 生成。四个请求均输出
+精确 256 tokens、`finish_reason=length`，同 shape 重复一致，并与已有 baseline
+逐 token hash 相同：
+
+```text
+8K:  9751294543df49838834be427e34887ff536c92c9b6b044d6d1011875fa8355a
+65K: 345b5a43f2d8ef3f7e208b3027430e96c24853657fc72df6f37796e65ce84983
+```
+
+### Pure-P 65K Prefill 严格 A/B
+
+因为目标是 PD 分离后的 pure-P node，性能测试不使用包含 16K/64K 本地 decode 的
+W1/W2。两边用同一候选镜像、同一节点和 GPU，DP4/EP4，固定 seed，20 个
+`65,536 input + 1 output` 请求，并发 4。harness 在计时前先执行一个单请求 warmup；
+两边都是 20/20 成功，总输入 1,310,720 tokens。
+
+| 指标 | AllGather+ReduceScatter | DeepEP HT | DeepEP 变化 |
+| --- | ---: | ---: | ---: |
+| wall | 11.33 s | 16.79 s | +48.19% |
+| total token throughput | 115,676.90 tok/s | 78,058.63 tok/s | -32.52% |
+| request throughput | 1.77 req/s | 1.19 req/s | -32.77% |
+| mean TTFT | 2.124 s | 3.215 s | +51.35% |
+| median TTFT | 1.920 s | 3.006 s | +56.59% |
+
+DeepEP HT 按 vLLM 设计关闭 CUDA Graph；baseline 实际 capture
+`FULL_AND_PIECEWISE`。HT 的 engine init 约 188 s、compile 约 72 s，和 baseline
+约 189 s/71 s 接近，因此 serving 回退不是把冷启动混入 benchmark 导致的。
+
+这组结果否定了“修好 import 后直接把 DeepEP HT 设为默认”的方案。功能仍保留为
+显式实验选项，便于后续结合 E=32 MoE tuning 或新 DeepEP 版本重测；默认保持
+AllGather+ReduceScatter。本提交是 correctness/operability 修复，不声称性能收益。
+
+### 边界、风险和回滚
+
+- 当前宿主没有满足 IBGDA 条件，所以只证明 LL 能准确 fail closed，不证明 LL
+  dispatch 成功；启用 driver registry 参数需要更新 initramfs 并 reboot，或由节点
+  管理员安装/加载 gdrdrv，均不属于容器代码权限；
+- `nvidia_peermem` 只解决 GPUDirect RDMA memory registration，不等于已启用
+  GPUDirect Async；
+- DeepEP 使用 NVSHMEM/IBGDA，UCX 1.21 用于 NIXL/PD KV transfer；两者是独立
+  transport 栈，本提交没有修改 `Dockerfile.b200.pd` 或重建 UCX；
+- 本轮只测试单节点 DP4/EP4。跨节点 HT、宿主修正后的 LL、Decode 小 batch/CUDA
+  Graph 组合需要独立资源验证；
+- 当前 E=32,N=1280 没有 B200 专用 Triton MoE config，两边 A/B 都使用相同 default
+  config，因此不影响本次归因，但它是后续单独优化点；
+- 回滚 `git revert 81df1f21e8` 会恢复旧 launcher 和非 EP 默认，同时也恢复已知的
+  NVSHMEM loader/RDMA/IBGDA 风险，不影响此前 Router、RMSNorm、SwiGLU、RoPE、
+  UCX/NIXL 或 multigpu merge commit。
+
+全部原始证据保存在：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pr13-deepep-nvshmem-20260805
+```
+
 ## 本日志初始化
 
 ```text
@@ -2744,3 +3010,1368 @@ functional behavior change: none
 
 本日志初始化只增加可审计文档，不改变模型、worker、NIXL 或 kernel 行为。其目的
 是用单一文件替代分散的 PR 邮件上下文；后续功能 commit 继续按上面的模板追加。
+
+## 15. YOCO fast-prefill 的 standalone、prefix cache 与 NIXL PD shape 对齐
+
+### 提交信息
+
+```text
+commit: 03a0479b67
+subject: fix(yoco): align fast-prefill shapes across PD
+author/committer: 方涵斌 <2190556589@qq.com>
+baseline: 4a39087d27
+branch: review/yoco-14-pd-rms-shape-consistency
+diff: 7 files, 273 insertions, 18 deletions
+```
+
+### 问题、根因与修复目标
+
+现有 YOCO fast-prefill 在 1.3K 短请求上出现稳定而可复现的输出分叉，JIT 预热后
+仍然存在。相同 prompt 的 standalone fresh、本地 prefix-cache hit 和 NIXL 1P1D
+remote-KV hit 可能分别得到不同 key；8K 或 65K 某些候选还会改变停止位置。UCX
+传输、RMSNorm、attention backend 和 Triton MoE 都曾被逐项排查，但决定性变量是
+模型实际 forward 的 token rows：
+
+- fresh standalone 可能一次执行完整 prompt；
+- 本地 prefix cache 只重算最后一个 KV block 的尾段；
+- 默认 NIXL remote full hit 只回退并重算最后 1 token；
+- PD producer 和 standalone 若又被 scheduler 分成不同 chunk，即使传输 block
+  内容完整，P 端产生 KV 的数值路径仍不同。
+
+YOCO Router 使用归一化后的 FP32 weight 和 TF32 GEMM。B200 探针中，12 行与
+1,356 行 Router 的 1,536 个 logits 有 1,533 个不同，未归一化权重的最大绝对差
+为 `0.0014801`。这些差异足以改变接近边界的 top-k expert，并经 routed MoE 放大
+为可见 token 分叉。因此最终修复目标不是强制所有模型使用严格 FP32，而是只在
+YOCO fast-prefill 范围内让 fresh/local/remote 三条路径使用相同有效 shape。
+
+最终语义如下：
+
+1. FP32 TF32 Router 的 token rows 小于 128 时补零到 128，再裁回原行数；权重
+   normalization 仍只使用原 FP32 weight，大 prefill 继续走原始 GEMM；
+2. standalone 和本地 prefix-cache 请求在最后一个 KV block 起点拆分 prompt，
+   使两者用相同尾段 shape；
+3. NIXL P 节点把 prompt 截到同一 block 边界，只计算并发布完整 prefix block；
+4. NIXL D 节点使用同一个公式计算 external token count，只接收该 prefix，尾段
+   从未进入 D 的 remote block table，再由 D 本地计算；
+5. `_p_side_truncated` 防止通用 scheduler 把已对齐的 P prefix 再拆一次；
+6. 少于或等于一个 block 的 YOCO prompt 没有可发布的完整 prefix：P 不被截成
+   空 prompt，D 返回 0 external tokens 并完整本地重算；
+7. Mamba 检查优先于 YOCO 分支，原有 N−1 producer truncation 和 D receive count
+   不变。普通模型及关闭 `kv_sharing_fast_prefill` 的 YOCO 不启用该逻辑。
+
+### 修改文件及职责
+
+#### `vllm/model_executor/models/yoco.py`
+
+- 在 `_yoco_router_linear_tf32_cuda` 中保留 checkpoint 的 TF32 inference 语义；
+- 将 `<128` token rows 补零到 128 行后执行 `F.linear`，再裁回有效行；
+- 保留并恢复调用前的 CUDA TF32 和 matmul precision 全局状态。
+
+#### `vllm/v1/core/sched/scheduler.py`
+
+- 仅为 `model_type == "yoco"` 且启用 fast-prefill 的配置建立
+  `need_yoco_final_prompt_block_split`；
+- 在 WAITING 和 RUNNING 两条调度路径用同一个最后 block 起点公式拆分尾段；
+- 识别 NIXL 已截断的 P 请求，避免 producer prefix 被二次拆分。
+
+#### `vllm/distributed/kv_transfer/kv_connector/v1/nixl/scheduler.py`
+
+- 将原 Mamba 专用 token-count/truncation helper 泛化，但保留 Mamba 优先语义；
+- YOCO P/D 两端共享 block-boundary token-count 公式，消除 remote/local group
+  block 数不一致；
+- P 端同时更新 prompt token/embedding、`_all_token_ids`、prompt length 和
+  `max_tokens`，并通过 `_p_side_truncated` 保证 preemption 后幂等；
+- 对 sub-block YOCO prompt 返回安全的 0-transfer 语义，不构造空 prompt。
+
+#### `tests/model_executor/test_yoco_conversion.py`
+
+- 新增 CUDA 参数化测试，覆盖 1/12/127 token rows；
+- 逐位验证 CustomOp 输出等于显式 128-row padding 的 TF32 reference。
+
+#### `tests/v1/core/test_scheduler.py`
+
+- 覆盖 YOCO/非 YOCO、fast-prefill 开关、block 边界、已截断 P 请求和实际两步
+  schedule；
+- 验证 44-token prompt 首步为 32、第二步为 12，而非只修改计数。
+
+#### `tests/v1/kv_connector/unit/test_nixl_connector_hma.py`
+
+- 保留并复跑 Mamba N−1 的 P/D 行为与幂等性；
+- 新增 YOCO 44-token P/D 对称 count/truncation case；
+- 新增 12-token sub-block case，确认 P 请求有效且 D 不异步拉取 partial block。
+
+#### `tests/v1/kv_connector/unit/utils.py`
+
+- 测试构造器增加 YOCO shape-alignment 开关和固定 block size，不改变生产逻辑。
+
+### run17--run25 排查记录
+
+| Run | 候选 | 关键结果 | 结论 |
+| --- | --- | --- | --- |
+| 17 | 只做 Router `<128 -> 128` padding | 1.3K standalone=`00340`、PD=`00663`；8K exact；65K 停止不一致 | Router 是放大器，但单独修不完整 |
+| 18 | D full remote hit 后只把计算计数回退到 block 起点 | 1.3K exact；8K `04165` 对 `00395`；65K 仍错 | 单边改 D shape 会破坏其他长度 |
+| 19 | Router padding + fresh prompt 最后 1 token 独立调度 | 1.3K/8K/65K PD 全 exact；1.3K fresh=`00663`、local hit=`00340` | PD 可对齐，但本地 cache 仍不稳定 |
+| 20 | 去掉 Router padding，只保留 final-token split | 1.3K/65K exact，8K 不一致 | Router 固定小 batch shape 仍是必要条件 |
+| 21 | fresh/local/remote 都按 block-tail 回退计数 | standalone fresh/local exact；PD 1.3K/65K exact，8K 为 `04165` 对 `02346` | remote 尾块已进 block table，计数回退是伪重算 |
+| 22 | P producer 真正截断到 block boundary | standalone fresh/两次 local hit exact；PD 首请求 HTTP 500 | P 发布 84 blocks，D 仍按原 prompt 分配 85 blocks |
+| 23 | NIXL per-group block-count 诊断 | 定位 full-attention 第 30 组 `D=85/P=84` | 必须让 NIXL P/D 共享 token-count 公式 |
+| 24 | P/D 对称 block prefix transfer | block 传输成功但 1.3K 数值仍不一致 | P 的 1,344 又被 scheduler 拆成 `1,328 + 16` |
+| 25 | 加 `_p_side_truncated` shape guard | standalone fresh/local 与 1P1D 三档全部 exact | 最终采用 |
+
+run17--run24 都保留为诊断证据，没有把失败候选或 worker 临时诊断改动带入提交。
+尤其没有采用 run21 的“先接收完整 remote block、再只回退
+`num_computed_tokens`”方案。
+
+### B200 正确性与时延
+
+最终 run25 的 standalone 首先对 1,356-token prompt 执行 fresh 和两次相同
+cache salt 的重复请求。三次文本均为 `" 00663\n"`，本地 cache 命中 1,344
+tokens，首 token 及其 logprob 逐位一致。随后串行执行 P 请求、等待 KV ready、再
+执行 D 请求；三档均 `all_exact_match: true`：
+
+| Case | Prompt tokens | SHA256 | P time | D time | Total |
+| --- | ---: | --- | ---: | ---: | ---: |
+| 1.3K warmup | 1,356 | `fde361c254896b017d5496f6e8cd4a128d7e258544675fab97574d01c973c033` | 0.0692 s | 0.2609 s | 0.3301 s |
+| 8K | 7,999 | `8b676d6658af7e5d789c559690a8c763683c433e8e857b4146df5054dfa71c01` | 0.1549 s | 0.4190 s | 0.5739 s |
+| 65K | 65,809 | `82e7da1423e3c6e149b622b75a9674c5508bf91c1a06099b46e75a22033bfe53` | 1.1278 s | 1.1470 s | 2.2748 s |
+
+上述 Total 是 correctness harness 中串行相加的 wall time，不是在线并发吞吐，也
+不能与 standalone 直接解释为性能提升。Router microbenchmark 以未 padding 的
+直接 GEMM 为对照，1/12/127 rows 分别约 `+185%/+150%/+160%`，128 rows 约
+`+3%`；小 shape 的绝对增加约 `44--50 us/router call`。本提交首先解决
+correctness，端到端 QPS、ITL 和高并发 P/D 性能需另做固定并发 A/B。
+
+### 单元、静态与环境测试
+
+最终验证包括：
+
+```text
+YOCO conversion/CUDA file: 38 passed
+NIXL/Mamba/YOCO focused:   7 passed, 26 deselected
+scheduler + NIXL/HMA:      137 passed, 1 external-access failure
+ruff check:                passed
+ruff format:               passed
+git diff --check:          passed
+```
+
+唯一未通过项为：
+
+```text
+test_fewer_blocks_with_hma[google/gemma-3-1b-it-512]
+```
+
+它在加载 HuggingFace `google/gemma-3-1b-it/config.json` 时返回 gated repo HTTP
+403；失败发生在模型配置下载阶段，未进入本提交修改的 NIXL scheduler。开发循环
+中相关定向集合另有一轮 `145 passed`，最终 B200 端到端不是用 mock connector。
+
+原始 evidence：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-current-4a39087d27-20260805/run25-yoco-nixl-shape-aligned-pd-20260809
+```
+
+测试结束后已恢复 Pod 内 PID 7，并释放：
+
+```text
+Volcano Job: lidong1-yoco-pd-rms-shape-g2-0809-r2
+ConfigMap:   yoco-pd-rms-shape-candidate
+```
+
+### 风险、限制与回滚
+
+- 当前只证明 B200 单节点 1P1D、文本 token、三种长度的 greedy exact match；未
+  覆盖多 P/D、DP>1、TP>1、高并发、preemption 实压或 prompt embeddings；
+- P/D 仍需使用相同 KV block size 和兼容 NIXL metadata；这是既有 connector
+  契约，不由本提交增加动态协商；
+- 小 batch Router 固定 shape 有明确微基准开销，应在真实 decode 并发下继续观察
+  ITL/QPS；大于等于 128 rows 的 prefill 路径不 padding；
+- sub-block prompt 会让 P 做一次最终不被 D 使用的短 prefill，换取不构造空请求
+  和 D 端完整本地 correctness；该长度应由 router 策略进一步考虑直接走 D；
+- Mamba N−1 路径有单测保护，但本轮 B200 服务模型是 YOCO，不是 Mamba；
+- 本提交没有修改 CUDA Graph 开关、Docker、UCX 1.21、DeepEP/NVSHMEM、Router
+  服务或负载均衡策略；
+- `git revert 03a0479b67` 可完整回滚功能提交，不影响此前 DeepEP、Router weight
+  cache、RoPE、SwiGLU、add-RMSNorm 或 multigpu merge，但会恢复已知的
+  fresh/local/remote shape 分叉。
+
+## 16. 当前 YOCO PD 策略独立报告
+
+```text
+commit: fa8e4eac6a30aa14ccd7b0ff8aa5e4ee9309f107
+subject: docs(yoco): add standalone PD strategy report
+scope: YOCO-PD-STRATEGY.md, fhb-dev-commit.md
+functional behavior change: none
+```
+
+本提交将散落在 `yoco.md`、功能提交记录、NIXL 文档和实际 run25 harness 中的
+PD 约束整理为独立报告，便于部署、Gateway 和审核人员使用。报告明确：
+
+- 推荐 pure `kv_producer` P + independent `kv_consumer` D；
+- pure-P 的 DP 不限制为 1，但 DP>1 不应使用混合流量的 `kv_both`；
+- P token 必须丢弃，D 负责所有用户可见 token；
+- YOCO block-tail、Router fixed-shape 和 NIXL P/D 对称 token count；
+- NIXL 1.3.2 + UCX 1.21、side-channel、RDMA HCA 和 single-UCX 契约；
+- Gateway 状态机、租约、失败策略、可观测性和上线检查表；
+- run25 只证明同节点 1P1D correctness，不能写成跨节点 RDMA 或并发吞吐。
+
+该提交不修改模型、scheduler、NIXL、Docker、launcher 或请求协议，不增加新的
+性能归因。回滚本提交只删除独立报告及本条记录，不影响已合入的 PD 功能。
+
+## 17. TP2/DP1 batch 容量、吞吐与 forward 延迟曲线
+
+```text
+commit: f54af87aecf78e2db92c15cfa5062fadff1d9509
+subject: docs(yoco): record PD batch capacity and throughput
+scope: YOCO-PD-BATCH-CURVE-20260810.md, fhb-dev-commit.md
+functional behavior change: none
+runtime under test: fhb-dev@fa8e4eac6a
+```
+
+### 目的与修改文件
+
+本提交把 `fhb-dev@fa8e4eac6a` 的 4 x B200 NIXL PD 容量扫描固化为独立、可审核
+报告，回答“当前正确性覆盖到哪里、吞吐是多少、最大 batch 能否运行、为什么
+batch 48 性能突然下降”四个问题。只修改两个文档文件：
+
+- `YOCO-PD-BATCH-CURVE-20260810.md`：记录测试口径、正确性、batch 1--256
+  吞吐表、Prefill/Decode GPU 同步前向延迟和 PVC 证据；
+- `fhb-dev-commit.md`：增加本条提交记录和索引，不修改生产实现。
+
+没有提交 harness、截图、HTML、运行时只读挂载文件或原始大日志；完整证据继续保留
+在 PVC，避免扩大 review diff。
+
+### 正确性结果与边界
+
+拓扑为 `P=TP2/DP1, D=TP2/DP1`。同配置 standalone -> PD 覆盖 1,356-token
+自然停止、1,356-token 强制 256 decode、7,999-token 和 65,809-token 四档，均为
+逐 token 和文本 exact。7,999-token prompt 使用不同 cache salt 执行
+concurrency=4、8 requests，8 个请求收敛为一个 token trace。
+
+该结论不能扩大为所有并行方式均正确：先前复核的 DP2 + CUDA Graph 并发仍会在
+不同 rank 出现多 trace；PCP/DCP 也未在本轮 4 卡拓扑覆盖。batch 1--256 性能扫描
+都返回预期 completion token 数，但没有逐 batch 再运行 standalone -> PD
+token-exact 矩阵，报告中对此明确区分。
+
+### 容量、吞吐与性能拐点
+
+服务配置为 `max_num_seqs=256`、`max_num_batched_tokens=8192`，完整 CUDA Graph
+只 capture decode batch 1--32。本轮确认短上下文 decode batch 256 和 Prefill
+token batch 8192 均可运行，但推荐的综合点是 batch 32：
+
+```text
+D service:      1,139.27 output tok/s
+PD end-to-end:  1,078.67 output tok/s
+PD request QPS: 4.21 req/s
+```
+
+GPU 同步 model-forward median 在 actual decode batch 32 为 `8.08 ms`，到 48
+变为 `68.88 ms`，增加约 `8.5x`。对应 D 吞吐从 `1,139.27` 降到
+`477.06 output tok/s`。batch 256 虽重新达到 `1,079.91 output tok/s`，端到端仅
+`1,005.90 output tok/s`，仍低于 batch 32，并且端到端请求 p50 已到
+`64.66 s`。因此 256 是已验证的 scheduler 配置上限，不是默认生产目标。
+
+Prefill 在 concurrency 48 达到本轮峰值 `77.85K input tok/s`，但系统端到端受
+Decode 限制。Prefill 单 forward 在 token batch 128--4096 约 `52.79--53.24 ms`，
+8192 为 `82.85 ms`。
+
+### 测试和证据
+
+```text
+Job:       bonete01/lidong1-yoco-pd-diagnose-g4-0810
+Node:      slc01-cl02-hgx-0297
+GPU:       4 x NVIDIA B200
+Transport: NIXL
+```
+
+吞吐和 forward 客户端、correctness harness 与 forward stats parser 返回码均为 0。
+前向延迟来自 vLLM `Batchsize forward time stats` 的 GPU 同步中位数，不把 HTTP
+wall time 当作 model forward。完整结果位于：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/
+  pd-batch-curve-fa8e4eac6a-20260810/
+```
+
+测试完成后已删除 Volcano Job，并确认 Job/Pod 均为 `NotFound`。本提交只同步已有
+GPU 实测文档，不产生性能行为变化；回滚只需删除独立报告并移除本条记录。
+
+## 18. LMCache 三级缓存与 Dynamo 适配方案
+
+```text
+commit: 75d26710b9b0ea3d548d607f2de73557394927ec
+subject: docs(yoco): plan LMCache and Dynamo adaptation
+scope: YOCO-LMCACHE-DYNAMO-PLAN.md, fhb-dev-commit.md
+functional behavior change: none
+runtime under review: fhb-dev@f54af87aecf78e2db92c15cfa5062fadff1d9509
+```
+
+### 目的与结论
+
+本提交在修改镜像和运行逻辑前，先固定 YOCO 接入 LMCache、GPU/CPU/持久后端三级
+KV 缓存和 NVIDIA Dynamo 的实施边界。推荐的第一阶段组合为：
+
+- Prefill 使用 vLLM GPU prefix cache、LMCache 跨请求缓存和 NIXL producer；
+- Decode 保持 NIXL consumer，不在第一阶段写 LMCache；
+- P 到 D 的实时数据面继续使用已经验证的 NIXL 1.3.2 + UCX 1.21；
+- Dynamo 先承担 Frontend、KV-aware 路由和 P/D 编排，不替换 NIXL 数据面；
+- LMCache 第一阶段关闭 layerwise、异步加载和 MP sidecar，保持完整 CUDA Graph。
+
+这样可以分别归因 LMCache lookup/load、三级存储、NIXL P/D 和 Dynamo Router 的
+正确性及性能，不把多个高风险变化合并为一个不可诊断的上线步骤。
+
+### 修改文件
+
+- `YOCO-LMCACHE-DYNAMO-PLAN.md`：记录架构、固定版本、YOCO 兼容风险、connector
+  组合、三级缓存、Dynamo shared-indexer 缺口、测试矩阵、性能口径和回退顺序；
+- `fhb-dev-commit.md`：增加本条设计记录及提交索引。
+
+### 源码审阅发现
+
+本轮对当前 vLLM connector、LMCache `v0.5.3@140819c9d57a` 和 Dynamo
+`v1.3.1@a49702e4432e` 做了只读审阅，确认：
+
+1. 当前 `docker/Dockerfile.b200.pd` 没有安装 LMCache；LMCache 0.5.3 已有 CUDA 13
+   wheel，但仍应从固定提交源码构建，使扩展与镜像内 torch C++ ABI、CUDA 13 和
+   SM100 精确对齐；
+2. YOCO 后 10 个 cross layers 是 10 个逻辑名字指向同一个物理 KV tensor；当时据此
+   推测需要 20 logical -> 11 physical。第 20 节的真实 B200 启动验证进一步发现
+   `universal_loop=3`，并将该结论更正为 20 个基础逻辑层 -> 31 份物理 KV；
+3. LMCache chunk 和 YOCO/NIXL block-tail 是两层对齐规则。第一阶段固定
+   `chunk_size=256`、`save_unfull_chunk=false`、`discard_partial_chunks=true`，不能
+   让 LMCache 恢复 D 应本地重算的最后 prompt block；
+4. vLLM `MultiConnector` 是“第一个命中负责 load、所有 child 参与 save”，但
+   LMCache hit -> P 计算 miss -> NIXL send 的串联语义仍需真实端到端证明；
+5. Dynamo 1.3.1 可按 host/disk cache event 给路由打分，但其
+   `shared_cache_type` 只有 `none/hicache`，LMCache 共享持久层需要后续独立
+   shared-indexer adapter。
+
+### 测试与性能
+
+本提交是设计文档，不修改运行行为，因此没有 GPU 性能收益，也没有申请资源。
+执行的检查为：
+
+```text
+git diff --check: passed
+repository state before edit: fhb-dev == snow2022jlu/fhb-dev
+```
+
+方案明确要求后续报告 cold、CPU warm、persistent warm 和 Dynamo routing 四组相对
+当前 NIXL-only baseline 的 TTFT、ITL、吞吐、load/store 带宽与各层 hit rate，且
+standalone -> LMCache -> NIXL PD 必须逐 token exact。设计稿不能作为兼容性或性能
+已经通过的证据。
+
+### 风险与回滚
+
+该提交不修改模型、scheduler、connector、Docker、CUDA Graph、UCX、NIXL、
+Gateway 或 Kubernetes profile。回滚只需删除方案文件并移除本条记录，不影响当前
+NIXL-only PD 服务。后续实现继续拆成镜像、shared-KV 单测、adapter、P/D 串联、
+持久层和 Dynamo 六类独立提交。
+
+## 19. 固定 LMCache 0.5.3 的 CUDA 13/SM100 runtime
+
+```text
+commit: e081d38f5aeb9976d9aba8d3fa00d9bf5d3ab7d2
+subject: build(yoco): add pinned LMCache CUDA 13 runtime
+scope: docker/Dockerfile.b200.pd, fhb-dev-commit.md
+functional behavior change: PD 镜像新增 LMCache runtime；默认 NIXL-only 服务行为不变
+runtime base: fhb-dev@75d26710b9
+```
+
+### 目的与版本契约
+
+本提交只解决“后续 YOCO LMCache adapter 在哪个可复现 runtime 上开发和测试”，
+不提前修改 connector、scheduler 或线上启动参数。镜像新增并固定：
+
+```text
+LMCache: v0.5.3@140819c9d57a975dbc5678a6459a218e544cb58b
+NIXL:    1.3.2@de8115ca97d3f8fb63a4988e9b4d4a038b2e0f72
+UCX:     1.21.0@b6a9d47fccce849c28111f05a7fa8f1c930ff17d
+CUDA:    13.1 / SM100
+torch:   基础镜像自带 2.11.0a0，CXX11 ABI=1
+```
+
+LMCache 同时按 tag 和 commit 校验。仅 shallow fetch commit 会让
+`setuptools-scm` 看不到 tag 并产出错误的 `0.1.dev1` wheel；现在拉取
+`refs/tags/v0.5.3` 后再断言 `HEAD` 等于固定 commit，既保留正确的 `0.5.3`
+包版本，也防止 tag 移动后静默改变镜像内容。
+
+### 修改文件
+
+- `docker/Dockerfile.b200.pd`
+    - 在 native builder 中使用基础镜像的 torch、CUDA 13.1 和 CXX11 ABI=1 从源码
+    构建 LMCache wheel，`TORCH_CUDA_ARCH_LIST=10.0`，不混入 CUDA 12 runtime；
+    - runtime 安装固定 wheel 和 `wheel==0.47.0`，后者补齐基础镜像中
+    `astunparse` 的既有依赖缺项；
+    - 保持 vLLM P 到 D 的传输仍由 NIXL 1.3.2 + UCX 1.21 承担，安装 LMCache 不会
+    自动改变 connector；
+    - 构建阶段导入 `lmcache.c_ops`，检查 LMCache/NIXL 版本、禁用 `nixl_ep` shim、
+    验证唯一 UCX、编译 Python tree，并把 `uv pip check --system` 设为硬门禁；
+    - OCI labels 新增 LMCache version/revision，镜像说明明确三组件版本。
+- `fhb-dev-commit.md`
+    - 记录构建原因、文件范围、验证证据、依赖变化和回退边界。
+
+### 构建与测试结果
+
+完整构建命令：
+
+```text
+docker build --progress=plain \
+  -f docker/Dockerfile.b200.pd \
+  -t vllm-yoco-pd:lmcache053-local .
+```
+
+结果：
+
+```text
+image:  vllm-yoco-pd:lmcache053-local
+digest: sha256:5d96d8cef49b873c615f91fa7176f71e15b1baa16571aa74fce534563ad61e04
+status: build exit 0
+```
+
+镜像内和成品镜像外分别执行了以下检查：
+
+```text
+LMCache package:          0.5.3
+LMCache CUDA c_ops:       import passed
+LMCache vLLM adapter:     import passed
+NIXL packages:            nixl==nixl-cu13==1.3.2
+single-UCX verification:  UCX 1.21.0 passed
+torch CXX11 ABI:          true
+numpy:                    2.1.0（保持基础镜像版本）
+transformers:             5.8.1（保持基础镜像版本）
+OpenTelemetry:            1.40.0（LMCache 0.5.3 的兼容上限）
+uv pip check --system:    all installed packages are compatible
+Python compileall:        passed
+LMCache c_ops ldd:        no missing shared libraries
+git diff --check:         passed
+```
+
+依赖解析将基础镜像的 OpenTelemetry 1.44 统一降到 LMCache 约束允许的 1.40，
+没有改变 torch、numpy 或 transformers。构建前基础镜像的 `uv pip check` 有 16 个
+缺项；LMCache 安装并显式补充 wheel 后，成品镜像为零冲突。
+
+### 性能、限制与回滚
+
+本提交没有启动 LMCache connector，也没有申请 GPU，因此没有可归因的 TTFT、
+吞吐或命中率收益。它只提供后续单卡 CPU cold/warm、1P1D LMCache -> NIXL 和三级
+缓存测试所需的 runtime；不能把“wheel 可导入”写成 KV 保存/恢复正确。
+
+本节构建时曾按 20 个逻辑 attention layer 对应 11 份物理 KV tensor 估算。第 20 节
+通过真实 checkpoint 和 B200 启动把它更正为 `0..10, 20..29, 40..49` 共 31 份；
+11--19 仍是 owner 10 的 alias。镜像提交本身尚未启用 connector，因此该估算不影响
+镜像行为。回滚本提交只需恢复 `docker/Dockerfile.b200.pd` 并重建镜像，现有
+NIXL-only 已发布镜像不受影响。
+
+## 20. YOCO universal-loop-aware LMCache 物理 KV 适配
+
+```text
+commit: 5d296b3958c0db1a664dd74dff78e28a4419b588
+subject: fix(yoco): adapt LMCache to physical KV layout
+scope: lmcache_connector.py, test_lmcache_connector.py,
+       YOCO-LMCACHE-DYNAMO-PLAN.md, fhb-dev-commit.md
+functional behavior change: YOCO 可安全注册 31 份物理 KV 到 LMCache；
+                            非 YOCO connector 行为不变
+runtime base: fhb-dev@e081d38f5a
+```
+
+### 目的、真实布局与修改文件
+
+第一次 B200 启动使原先的 20 -> 11 假设 fail closed，并暴露 checkpoint 的真实配置：
+
+```text
+num_hidden_layers=20
+yoco_cross_layers=10
+universal_loop=3
+physical KV indices=0..10, 20..29, 40..49
+```
+
+也就是说，三轮 self-attention 各有 10 份 KV，cross owner 为 layer 10，共 31 份
+物理 tensor；逻辑 cross layers 11--19 继续 alias owner 10。本提交围绕这个单一功能
+修改四个文件：
+
+- `vllm/distributed/kv_transfer/kv_connector/v1/lmcache_connector.py`
+    - 从 HF config 读取 `universal_loop`，按基础逻辑层号偏移构造物理顺序；
+    - 初始化 LMCache 时临时暴露 31 层 metadata 和隔离 namespace，初始化后恢复
+    vLLM 原始 20 层配置；
+    - 注册前要求物理层集合完整，并严格断言 11--19 与 owner 10 是同一个 tensor
+    对象、地址、offset、shape、stride 和 dtype；
+    - 只把 31 份唯一物理 tensor 传给 LMCache，避免重复保存 cross alias；
+    - YOCO 首版强制非 layerwise、非 async-load、非 blending 和 GPU connector v3，
+    不支持的组合直接失败，不静默降级。
+- `tests/v1/kv_connector/unit/test_lmcache_connector.py`
+    - 覆盖三轮 31 份布局、单轮 11 份布局、alias clone、缺失 alias、31 层 metadata/
+    engine 和实际注册集合。
+- `YOCO-LMCACHE-DYNAMO-PLAN.md`
+    - 把设计阶段的 11 份估算更正为实测 31 份，并把首轮功能配置改为与 vLLM block
+    对齐的 16-token chunk。
+- `fhb-dev-commit.md`
+    - 更正第 18、19 节的历史假设，并记录本次实现和测试证据。
+
+### CPU、镜像与静态检查
+
+本地和目标 LMCache 0.5.3/CUDA 13 镜像内执行同一测试文件：
+
+```text
+local pytest:       29 passed
+image pytest:       29 passed
+ruff check/format:  passed
+mypy hook:          passed
+all pre-commit:     passed
+git diff --check:   passed
+```
+
+B200 运行时从 PVC 只读挂载经过测试的 connector，源码 SHA256 为
+`6da5612848b13be15e5e199cbc352b00f9d48e816cb82f48d84c9a0a3ccc8b6d`。
+节点 Docker 的既有候选镜像已达到最大 layer depth，无法再 `docker commit`；这只影响
+临时测试镜像的再封层，不影响第 19 节从干净基础镜像构建的 pinned Dockerfile。
+
+### B200 正确性
+
+```text
+Volcano Job: bonete01/lidong1-yoco-lmcache-g1-0810
+Pod:         lidong1-yoco-lmcache-g1-0810-master-0
+Node:        slc01-cl02-hgx-0297
+GPU:         1 x NVIDIA B200
+LMCache:     0.5.3-g140819c, LocalCPUBackend, GPU connector v3
+Model:       BF16, FlashInfer, Triton MoE, FULL_AND_PIECEWISE CUDA Graph
+```
+
+服务日志确认 LMCache 的 `num_layer=31`、`kv_shape=(31, 2, 16, 8, 128)`，以及
+`20 logical layers -> 31 physical KV tensors`。对 2,125-token prompt，LMCache cold
+保存 2,112 token，warm 和 partial 各真实命中并恢复 2,112 token。
+
+严格门禁分两层：
+
+1. cold LMCache 与无缓存全量重算的 text、token IDs、逐 token logprob 全部 exact；
+2. warm/partial 与相同 2,112-token 恢复边界的 vLLM 原生 prefix cache 全部 exact。
+
+原先用 `chunk_size=256` 只恢复 2,048 token，而原生 prefix cache 恢复 2,112 token；
+两种路径都成功返回，但与全量重算不逐 token exact。随后证明即使完全不经过
+LMCache，vLLM 原生 prefix cache 相对全量重算也有同类差异。因此不能把不同恢复
+边界和 prefill kernel 路径的 BF16 数值差异误判为 LMCache 层映射错误；同边界 exact
+才是本 connector 的有效正确性证据。
+
+### 性能结果
+
+公平对照先用第一条请求完成 JIT，再比较相同 2,125-token 请求。单次结果如下：
+
+| 场景 | 无 prefix 全量重算 | 原生 GPU prefix | LMCache CPU warm | LMCache / 重算 |
+| --- | ---: | ---: | ---: | ---: |
+| 相同 prompt | 273.88 ms | 223.96 ms | 239.63 ms | 1.143x |
+| 共享前缀、不同尾部 | 277.19 ms | 223.10 ms | 238.03 ms | 1.165x |
+
+LMCache 相对全量重算降低约 12.5%--14.1% 延迟，但比 GPU 原生 prefix cache 慢
+约 6.7%--7.0%，符合 CPU tier 需要搬运数据的预期。每次恢复 0.2498 GB，实测读取
+26.62--26.74 ms、9.34--9.38 GB/s；cold 保存 56.43 ms、4.43 GB/s。该结果是单卡
+短样本功能基准，不外推为并发吞吐或跨节点 persistent tier 收益。
+
+### 已知限制、后续与回滚
+
+LMCache 0.5.3 在 warm retrieve 后打印 `Double unpin` 并把负 pin count 归零。三组结果
+仍与原生 prefix cache exact，但这个上游生命周期告警必须在长稳测试前解决，当前
+不能把本提交描述为 production ready。以下项目尚未由本提交证明：
+
+- LMCache -> NIXL producer -> independent Decode 的 1P1D 串联；
+- local NVMe、共享持久层和跨 Pod cache reuse；
+- Dynamo KV-aware 路由、shared indexer、故障回退和并发吞吐；
+- TP/DP/EP/PCP 下的 LMCache rank namespace 和缓存一致性。
+
+完整 B200 原始结果位于 PVC：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/lmcache-physical-kv-20260810/results/
+```
+
+回滚只需移除 YOCO 专用 physical view；非 YOCO 的 LMCache 和当前 NIXL-only PD
+路径没有行为变化。生产 profile 在 double-unpin、P/D 串联和持久层测试完成前继续
+默认关闭 LMCache。
+
+## 21. pure-P prefix shape 与 SWA window 传输补充
+
+```text
+commit: aebb50c6e5
+subject: fix(yoco): preserve pure-P prefix shape with HMA
+scope: nixl/scheduler.py, test_nixl_connector_hma.py, YOCO-PD-STRATEGY.md
+functional behavior change: YOCO pure-P 请求在本地 cache lookup 前截断，并按请求
+                            bypass 本地 prefix read；NIXL HMA 裁剪逻辑不变
+runtime base: fhb-dev@53f58e5426
+```
+
+### 目的与根因
+
+本轮首先回答“除 full cross-owner 外，PD 是否只传 SWA window”。真实 checkpoint
+包含 30 个 512-token self-attention SWA physical groups 和 1 个 full cross-owner
+group。既有 NIXL HMA 代码已经逐 group 裁剪，但此前缺少 YOCO 31-group 专项单测、
+full-context 对照和 65K payload 证据。
+
+补测 LMCache cold/warm 时又发现一个独立 scheduler edge：1,356-token pure-P 首次请求
+生成 1,344-token prefix 后，第二次请求会先在 vLLM 本地命中全部 1,344 tokens；旧
+时序随后才把请求截成 1,344，令 `num_new_tokens=0`，触发 scheduler 断言并退出
+EngineCore。
+
+最初候选是把命中回退一个 block，重新计算最后 16 tokens。这个候选通过了单测，
+但 B200 隔离实验让 P 开 cache、D 关 cache 后，1.3K 和 65K 虽然 NIXL 传输零失败，
+输出却不再 exact。原因与第 15 节一致：P 从 1,344-row forward 变成
+`1,328 + 16`，Router/MoE 数值路径改变，重新生成的 KV 不适合发送给独立 D。因此
+没有提交该候选。
+
+最终实现只对 YOCO pure-P 生效：`on_new_request` 在任何本地 cache lookup 前把请求
+截到 NIXL/D 共用的 full-block boundary，并设置 `skip_reading_prefix_cache=true`。
+这样服务级 prefix cache 可继续为其他请求启用，但 pure-P 始终用已经验证过的完整
+prefix shape；Mamba 和普通模型仍走原 connector query 时序，不扩大行为变化。
+
+### 修改文件
+
+- `vllm/distributed/kv_transfer/kv_connector/v1/nixl/scheduler.py`
+    - YOCO P 请求提前执行幂等 truncation；
+    - 只在 `_p_side_truncated` 成立时按请求 bypass 本地 prefix read；
+    - 保持 heartbeat、Mamba 和普通模型路径不变。
+- `tests/v1/kv_connector/unit/test_nixl_connector_hma.py`
+    - 新增真实 30 SWA + 1 full owner 的 group 裁剪测试；
+    - 65,808-token transferable prefix 要求 metadata 为 `30x33+4113`；
+    - 新增 1,356 -> 1,344 的 early truncation、cache bypass 与幂等测试。
+- `YOCO-PD-STRATEGY.md`
+    - 写清 metadata 33 blocks 与实际 payload 32 blocks 的差异；
+    - 记录 HMA/full-context A/B、重复请求隔离门禁和原始 PVC 证据。
+
+### 单元、静态与 B200 测试
+
+目标 CUDA 13/LMCache 镜像内相关回归：
+
+```text
+pytest NIXL YOCO/Mamba subset: 8 passed, 27 deselected
+YOCO 31-group clipping test:  passed
+python compileall:             passed
+git diff --check:              passed
+```
+
+Volcano Job `bonete01/lidong1-yoco-pd-diagnose-g4-0810` 使用 4 x B200，P/D 各
+TP2、BF16、FlashInfer、Triton MoE、FULL_AND_PIECEWISE CUDA Graph。HMA window 和
+full-context baseline 各三轮，共 18 个计入样本全部 text/token trace exact，NIXL
+transfer/notification failure 均为 0：
+
+| Prompt | HMA bytes | Full bytes | 缩减 | HMA D | Full D |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,356 | 68,419,584 | 170,655,744 | 2.49x | 0.212s | 0.436s |
+| 7,999 | 95,617,024 | 1,013,776,384 | 10.60x | 0.380s | 2.429s |
+| 65,809 | 332,464,128 | 8,356,036,608 | 25.13x | 0.909s | 18.835s |
+
+65K scheduler metadata 为 `30x33+4113=5103` blocks；实际 NIXL bytes 对应
+`30x32+4113=5073` blocks，每个全局 block 65,536 bytes。最后又让 P 全局 cache 开、
+D cache 关并复用相同 salt，两轮三档共 6/6 exact，证明请求级 bypass 后重复请求
+仍真实经过 NIXL 且不再崩溃/分叉。
+
+### LMCache 串联负结果
+
+标准 `MultiConnector(LMCache, NIXL)` 因 LMCache 0.5.3 不支持 HMA，只能退化为一个
+full-context group，65K 仍传 8,356,036,608 bytes。未固定 hash seed 时，KV store
+成功但 warm hit 恒为 0；固定 `PYTHONHASHSEED=0` 后，1.3K/8K/65K 分别真实命中
+1,344/7,984/65,808 tokens，但 `cache_salt` 未隔离 key，且通用 full-hit 只回退
+1 token。LMCache -> NIXL -> D 三档均不 exact。因此本提交不启用 LMCache，不宣称
+三级缓存收益；完整阻塞项写入 `YOCO-LMCACHE-DYNAMO-PLAN.md`。
+
+### 性能口径、风险与回滚
+
+上述时间来自串行 correctness harness，不是在线并发吞吐。可归因结论仅为 NIXL
+payload/D transfer 路径随 prompt 增长显著缩短；P 请求级 cache bypass 会放弃 pure-P
+GPU prefix reuse，这是为数值正确性接受的显式代价。
+
+回滚 `aebb50c6e5` 会恢复旧的 P cache lookup 时序，并重新暴露“全 prefix hit 后
+`num_new_tokens=0`”崩溃，因此不建议单独回滚。若必须恢复 P prefix reuse，应先设计
+不改变 producer KV shape 的专用复用协议并重跑“P cache 开、D cache 关”的三档
+exact 门禁，不能恢复已否决的最后一块重算候选。
+
+原始证据：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-swa-transfer-53f58e5426-20260810/
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-nixl-hma-p-cache-bypass-53f58e5426-20260810/
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-lmcache-nixl-stable-hash-53f58e5426-20260810/
+```
+
+## 22. PD 极限吞吐与 W1/W2/W3 HMA A/B 报告
+
+```text
+commit: e5524539f1
+subject: docs(yoco): record PD saturation and HMA workload results
+scope: YOCO-PD-BATCH-CURVE-20260810.md, YOCO-PD-STRATEGY.md,
+       YOCO-PD-W123-HMA-AB-20260810.md
+functional behavior change: none; this is a measurement and documentation commit
+runtime base: fhb-dev@9b9a945c06
+```
+
+### 目的
+
+本提交补齐两组此前已经在 4 x B200 上完成、但尚未进入远端提交历史的 PD 实测：
+
+1. 在 `P=TP2/DP1, D=TP2/DP1` 下扩大 P token budget，并把 D CUDA Graph capture
+   扩到 batch 256，给出 P、D 和端到端 PD 的 batch--吞吐--延迟曲线；
+2. 对 W1、W2、W3 workload 比较当前 HMA/SWA window 传输与 full-context baseline，
+   分离 TTFT、总吞吐和 NIXL 流量收益，并如实记录异步 W3/batch-4 的精度边界。
+
+本提交只记录测试证据，没有修改运行时代码、默认参数或服务行为。
+
+### 修改文件
+
+- `YOCO-PD-BATCH-CURVE-20260810.md`
+    - 追加 P 侧 batch 1--256、D 侧 graph-128/graph-256 和端到端 batch 16--128 扫描；
+    - 记录 1.3K、强制 256 decode、8K、65K 的 standalone 对 PD exact 门禁；
+    - 给出在线 admission 与 CUDA Graph capture 的配置建议。
+- `YOCO-PD-W123-HMA-AB-20260810.md`
+    - 新增完整 W1/W2/W3 HMA 对 full-context 的环境、方法、逐点性能和流量报告；
+    - 记录 W3 双向 `D -> P -> D` metadata 复用；
+    - 记录 W3/batch-4 主测 hash 差异及三次短复现，避免把并发非确定性写成全量 exact。
+- `YOCO-PD-STRATEGY.md`
+    - 汇总极限吞吐、推荐 batch、W1/W2/W3 收益和正确性边界；
+    - 链接完整报告及 PVC 原始证据。
+
+### 测试环境与结果
+
+两组测试均使用 4 x NVIDIA B200、BF16、FlashInfer、Triton MoE、NIXL 1.3.2 +
+UCX 1.21，同节点 `lo`/CUDA IPC，拓扑为 P=TP2、D=TP2。极限吞吐补测的观测峰值：
+
+| 侧 | 负载与峰值点 | 峰值吞吐 |
+| --- | --- | ---: |
+| P | 8,192 effective input，batch 64 | 84,055 input tok/s |
+| D | 1,345 context + 512 output，batch 256 | 2,284 output tok/s |
+| PD | 1,345 input + 256 output，batch 96 | 1,128 output tok/s / 4.407 req/s |
+
+D graph capture 从 128 扩到 256 后，batch 192/256 不再跌回 eager；新增图只多约
+0.10 GiB/卡，并使 KV capacity 下降约 0.15%。在线建议 P admission 48--64、D
+admission 64--96，但 D graph 保留到 256 以覆盖突发。
+
+HMA 对 full-context 的聚合吞吐变化为：
+
+| Workload | batch 1 | batch 4 | NIXL 流量缩减 |
+| --- | ---: | ---: | ---: |
+| W1 | -3.14% | -2.49% | 10.77x |
+| W2 | +12.79% | +43.37% | 25.11x |
+| W3 | +553.02% | +1033.70% | 21.16x |
+
+W3/batch-4 wall time 从 3,182.82 s 降至 280.75 s。W1 长 decode 淹没传输收益，
+因此只宣称 TTFT、流量和容量改善，不宣称总吞吐提升。
+
+### 正确性、静态检查与限制
+
+- 极限吞吐 profile 的 1.3K、强制 256 decode、8K、65K 均与 TP2 standalone
+  逐 token exact，8K concurrency-4 的八个请求只有一个 token trace；
+- W1/W2 batch 1/4 与 W3 batch 1 主测逐 token exact；
+- 异步 W3/batch-4 主测 hash 不同。短复现证明 HMA 与 full-context 存在逐 turn exact
+  的共同路径，但 HMA 会随实际 batching 组合产生不同 greedy trace，因此本提交没有
+  把它描述为“任意异步 batching 全量 exact”；
+- 六个 W1/W2/W3 性能点的 NIXL failed transfer/notification 均为 0，且无 CUDA OOM；
+- `git diff --check` 与 Markdown lint 通过，测试辅助 Python/Shell 脚本语法检查通过；
+- 结果只覆盖同节点 CUDA IPC，不能外推为跨节点 UCX RDMA、多 P/D 或 Gateway 稳态性能。
+
+原始证据：
+
+```text
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-saturation-9b9a945c06-20260810/
+/mnt/pvc/lidong1/vllm_test_artifacts/pd-w123-hma-ab-9b9a945c06-20260810/
+```
+
+本轮 Volcano Job `lidong1-yoco-pd-w123-g4-0810` 已释放，并确认对应 Job/Pod
+`NotFound`，没有继续占用 B200 资源。
+
+## 23. 融合 self-attention Q/K RMSClip 与 RoPE
+
+```text
+commit: 6c49544ed3ddfc7133f6ad238c3b766c7f62a2f4
+subject: perf(yoco): fuse QK clip and rotary
+scope: yoco.py, test_yoco_conversion.py, fhb-dev-commit.md
+functional behavior change: B200/CUDA BF16 的 YOCO self-attention 将
+                            Q RMSClip、K RMSClip、RoPE 三个 kernel 合为一个
+runtime base: fhb-dev@fb8c42b6a0
+```
+
+### 目的与实现
+
+此前每个 YOCO self-attention 层在 QKV projection 后依次执行 Q RMSClip、K
+RMSClip 和 RoPE。即使服务开启 full CUDA Graph，GPU 图中仍保留三个 kernel node，
+并需要把两份 clip 中间张量写回、再由 RoPE 读回。Decode 的有效 token rows 很小，
+这部分主要受固定调度和中间显存流量影响；30 个 self layer 会把开销重复 30 次。
+
+本提交增加一个 Triton CustomOp，同时读取 packed-QKV split 后非连续的 Q/K view，
+按 head 在 FP32 中计算 RMS clip coefficient，并立即完成 rotary。kernel 显式执行
+`FP32 -> BF16 -> FP32`，保留原始 `RMSClip -> BF16 tensor -> RoPE` 的数值边界，不能
+为了少一次转换而改变训练侧舍入语义。Q/K 在同一个 launch 中处理，输出仍是两个
+连续 BF16 tensor，attention 接口没有变化。
+
+融合门禁刻意收窄到已经实测的 CUDA、BF16、head_dim=128、无 weight 的
+`RMSClip`，并要求 Q/K 的 eps 与 limit 相同。CPU、其他 dtype/head dimension、
+weighted RMSClip、普通 qk_norm 或未安装 Triton 时完整走旧实现，不改变通用 YOCO
+路径。当前 checkpoint 的 Q/KV heads 为 64/8，测试另覆盖 32/4 和 48/4，避免把
+kernel 偶然写死为唯一 head 数。
+
+### 修改文件
+
+- `vllm/model_executor/models/yoco.py`
+    - 新增 fused Q/K RMSClip + rotary Triton kernel、CUDA wrapper、fake impl 和
+      CustomOp 注册；
+    - `YOCOSelfAttention.forward` 在严格门禁满足时调用 fused op；
+    - 保留旧 Q/K per-head norm 与 rotary fallback。
+- `tests/model_executor/test_yoco_conversion.py`
+    - 对 M=1/7/17/128 与 heads=64/8、32/4、48/4 做逐元素 bit-exact 回归；
+    - 增加 `torch.library.opcheck`，覆盖 fake tensor、schema 和动态算子注册。
+- `fhb-dev-commit.md`
+    - 记录实现边界、正确性、单 kernel、standalone 与 Mooncake 1P1D A/B。
+
+### 单元、静态与数值测试
+
+本地 A6000 完整 YOCO 回归为 `51 passed, 14 warnings`；所有 pre-commit hooks、
+`py_compile` 和 `git diff --check` 通过。B200 上 `torch.library.opcheck` 通过；
+M=1/2/4/8/16/32/64/128 的 Q/K 输出全部逐元素 bit-exact。
+
+真实 TP1/DP1、BF16、FA4、Triton MoE、full CUDA Graph 的 1,360 -> 512 greedy
+生成中，baseline/candidate 的 512-token trace、文本和逐 token logprob 全部 exact，
+最大与平均 logprob delta 都是 0。
+
+### B200 CUDA Graph 单 kernel 收益
+
+微基准把 30 个 self layer 放入同一个 CUDA Graph 后再摊到每层：
+
+| M | 旧实现 / layer | fused / layer | 30 层节省 |
+| ---: | ---: | ---: | ---: |
+| 1 | 3.210 us | 1.365 us | 55.37 us |
+| 4 | 8.461 us | 1.706 us | 202.66 us |
+| 16 | 9.221 us | 1.708 us | 225.40 us |
+| 64 | 10.588 us | 2.118 us | 254.10 us |
+| 128 | 12.558 us | 2.602 us | 298.70 us |
+
+这说明收益来自 CUDA Graph 内减少 graph node 与中间显存读写，不依赖关闭 CUDA
+Graph 后的 Python/CPU launch 开销。
+
+### Standalone serving 压测
+
+同一张 B200、相同 server 配置顺序跑 baseline/candidate，payload 为
+1,360 input + 512 forced output：
+
+| C | output tok/s 旧 -> 新 | 吞吐变化 | mean TPOT 改善 |
+| ---: | ---: | ---: | ---: |
+| 1 | 140.01 -> 142.48 | +1.77% | +1.54% |
+| 4 | 173.00 -> 175.89 | +1.67% | +2.31% |
+| 8 | 711.72 -> 733.80 | +3.10% | +2.90% |
+| 16 | 1,180.86 -> 1,100.51 | -6.80% | +3.19% |
+| 32 | 1,838.42 -> 1,879.31 | +2.22% | +2.30% |
+| 64 | 2,930.36 -> 3,183.32 | +8.63% | +2.59% |
+
+六个点的 mean TPOT 全部改善。C16 candidate 的 mean TTFT 偶发升至 1,561 ms，
+baseline 为 868 ms，令该点总吞吐反向；因此 standalone output-throughput 几何平均
+只有 +1.66%，不把 C16 抖动或 C64 的 +8.63% 单点写成稳定 kernel 收益。
+
+### Mooncake 自带 1P1D 评测
+
+继续使用项目已有的 Mooncake `benchmarks/xypd_benchmarks` matrix：同节点两张固定
+B200，1P1D、TP1+TP1、Mooncake 0.3.12.post1、RDMA、FA4、Triton MoE、
+FULL_AND_PIECEWISE CUDA Graph；payload 为 1,360 random + 50 shared-prefix input、
+512 output，每并发 4 folds，且每个 revision 先做 C64 warmup。
+
+| C | output tok/s 旧 -> 新 | 吞吐变化 | mean TPOT 改善 |
+| ---: | ---: | ---: | ---: |
+| 1 | 139.07 -> 141.46 | +1.72% | +1.50% |
+| 4 | 380.46 -> 394.05 | +3.57% | +3.41% |
+| 8 | 690.58 -> 703.45 | +1.86% | +1.82% |
+| 16 | 1,091.98 -> 1,132.81 | +3.74% | +2.89% |
+| 32 | 1,771.66 -> 1,817.69 | +2.60% | +2.67% |
+| 64 | 2,799.05 -> 2,866.92 | +2.42% | +2.26% |
+
+六点 output/request throughput 几何平均提升 **2.65%**，mean TPOT 几何平均改善
+**2.42%**。baseline/candidate 各三次真实 Mooncake transfer smoke 内部一致，且两版
+输出 exact；全部性能请求失败数为 0。日志中的 failed transfer、failed recv 和 KV
+expired request 全为 0，P/D 均明确使用 FA4，无 fallback、traceback、CUDA error 或
+OOM。
+
+### 证据、边界与回滚
+
+原始结果同时保存在：
+
+```text
+/mnt/pvc/lidong1/yoco-qk-clip-rope-20260830/
+/mnt/pvc/lidong1/yoco-qk-clip-rope-e2e-20260830/
+/mnt/pvc/lidong1/yoco-qk-clip-rope-mooncake-ab-20260830/
+/home/lidong1/vllm_test/yoco_results/qk-clip-rope-20260830/
+```
+
+本轮证明的是 B200 BF16、当前 64/8 heads 与 30 self-layer checkpoint；没有外推到
+其他 dtype/head_dim、weighted qk norm、多节点 RDMA 或 TP/DP>1。门禁外自动 fallback，
+回滚本提交即可恢复三个独立算子，不涉及 checkpoint、KV layout、PD 协议或 Mooncake
+状态迁移。
+
+## 24. L3 BF16 `align`/`fast` 双执行策略与 B200 算子调优
+
+```text
+commit: 本提交
+subject: perf(yoco): add L3 align and fast execution modes
+runtime base: fhb-dev@6c49544ed3ddfc7133f6ad238c3b766c7f62a2f4
+model: /mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf
+hardware: NVIDIA A6000（定向单测）和 NVIDIA B200（kernel/端到端性能）
+precision scope: BF16；--align 明确拒绝量化权重
+```
+
+### 目的和模式契约
+
+本轮按 L3 前向顺序逐个核对 embedding、RMSNorm、QKV、Q/K RMSClip、RoPE、
+differential attention、KV-cache/FlashAttention、Router、Top-K、MoE dispatch、expert
+grouped GEMM、projection 与 TP all-reduce。结论不是让两种模式共享一套折中实现，而是
+提供两个互斥、可直接从命令行选择的策略：
+
+- `--align`：在实际 runtime tensor shape 上复现 `llm-train` 的 BF16 算子边界、
+  dtype 转换和 Inductor 表达式，作为训练/推理精度排查路径；
+- `--fast`：保留 L3 服务语义并启用已经按 B200 shape 验证的融合、专用 kernel 和
+  tuned config；没有显式传 flag 时仍默认 `fast`，保持现有部署行为；
+- 两个 flag 由 argparse 和 `EngineArgs.__post_init__` 双重互斥校验，并写入
+  `additional_config["yoco_execution_mode"]`。这两个短 flag 只改变 YOCO；其他模型
+  不读取该配置。
+
+`--align` 当前只承诺 BF16。它不接受非空 quant config，也没有把“复现训练表达式”
+误写成“任意 batch 切分后 bitwise invariant”：cuBLAS/Inductor reduction tree 仍可能随
+实际矩阵 shape 改变。本轮没有采集完整训练框架 golden logits，因此端到端结论是
+“对齐路径和逐算子 reference 已建立”，不是“已经证明整个模型与训练任意 batch
+逐 bit 相同”。
+
+### 前向路径改动
+
+#### 对齐路径
+
+- 修正 SWA 窗口语义：训练的 `(left=512, right=0)` 包含 512 个历史 token 加当前
+  token，vLLM 的总窗口因此设为 513，再由 attention backend 转成 `(512, 0)`；
+- embedding 保持普通 table lookup，不因 FP8 expert 或执行模式改变；
+- Q/K/V 在 `align` 中从 packed checkpoint weight 切回三次独立 BF16 `F.linear`，
+  复现训练的 projection 边界；
+- RMSNorm、带/不带 affine weight 的 RMSClip、RoPE、differential-attention v3、
+  Router linear 和 Top-K routing 都使用与 `llm-train` 对应的 `torch.compile`
+  表达式；
+- Router 不复用预归一化 weight cache，MoE 不读取 device/shape tuned config，避免
+  性能策略混进精度定位路径；
+- L3 的两个 latent projection 与训练一致保持 BF16，不继承 routed expert 的
+  MXFP8 quant config。即使后续启用 FP8 expert，embedding、norm、attention activation
+  和 latent projection 仍不会被这项 expert quantization 自动改成 FP8。
+
+#### 快速路径
+
+- decoder layer 在层间携带 FP32 residual 和未加回的 branch output，把前一层
+  residual add 折进下一层 input RMSNorm；首层从 embedding 建立 residual，cross block
+  scatter 前和最终 norm 前再物化，两个 norm 位置都覆盖而不需要按层号硬编码；
+- 将 L3 带 affine gamma 的 Q/K RMSClip 与 RoPE 融为一个 Triton CustomOp；权重先
+  参与 FP32 计算，再显式落到 BF16，保留训练 kernel 实际物化的舍入边界；
+- B200 differential-attention v3 在 token rows >= 32 时使用一次读取 gate、按 head
+  pair 广播的专用 kernel，小 batch 保留更快的 Inductor pointwise 路径；
+- Router 使用真实 token rows，不再把小 batch 补到 128；softmax、Top-8 选择和
+  renormalization 合为一个 Triton kernel。tie 使用确定性的最左优先，但 `align`
+  继续保留训练 `torch.topk` 的顺序；
+- B200 L3 TP4、FA4、完整 513-token SWA decode 下，以实测交叉点选择 backend：
+  batch < 224 用 FA4，batch >= 224 用 Triton unified attention。`align` 始终不启用
+  这个策略；其他 GPU/head/window shape 也不套用该阈值；
+- E=128、Top-K=8 且 assignments < 1024 的 SM100 MoE dispatch 使用单 CTA 完成
+  count、padded prefix、输出初始化和 assignment sort；专家内 assignment 次序与原
+  atomic 实现一样不作为语义，但每个 assignment 和 expert block 映射保持完整；
+- 新增 L3 TP4 BF16 expert 的 `E=128,N=960,device_name=NVIDIA_B200.json`，覆盖
+  token rows 1--32768。`fast` 允许读取该文件，`align` 强制使用默认 config。
+
+### 明确保留默认实现的算子
+
+本轮基准也覆盖了 latent projection、o_proj 后 TP4 all-reduce 和多个候选 fusion，
+但没有为了“看起来做过优化”而修改 runtime：
+
+- embedding 没有额外 kernel；FP8 expert 不改变它的 BF16 hidden-state 语义；
+- QKV 与 lambda projection 没有融合，o_proj GEMM 继续交给现有 parallel linear；
+- TP4 all-reduce 保留 vLLM/open-source 默认 custom-all-reduce/NCCL 选择和全局阈值，
+  没有加入 YOCO 私有全局阈值；
+- latent projection + RMSNorm、另一版 differential-attention 和 Router extension
+  候选只保留可复现 benchmark，没有把负收益候选接入 forward。
+
+### 修改文件及职责
+
+- `vllm/engine/arg_utils.py`、`tests/engine/test_arg_utils.py`
+    - 增加互斥的 `--align`/`--fast`，覆盖 CLI 到 `additional_config` 的传播与冲突。
+- `vllm/model_executor/models/yoco.py`
+    - 实现双执行策略、训练表达式 reference、residual carry、weighted QK fusion、
+      differential-attention、Router Top-K、SWA 窗口和 BF16 latent projection 约束。
+- `vllm/v1/attention/backends/flash_attn.py`、
+  `tests/model_executor/test_yoco_config.py`
+    - 实现并覆盖 L3 TP4 SM100 的 FA4/Triton batch 224 dispatch 门禁。
+- `csrc/moe/moe_align_sum_kernels.cu`、
+  `tests/kernels/moe/test_moe_align_block_size.py`
+    - 增加 SM100 E128 小 batch 单 CTA dispatch 与 expert-level correctness 覆盖。
+- `vllm/model_executor/layers/fused_moe/{config.py,fused_moe.py,layer.py}` 及
+  `experts/{triton_moe.py,fused_batched_moe.py}`
+    - 将 `use_tuned_config` 从 YOCO 层传到 Triton config lookup，使 `align` 可显式
+      跳过 tuning file；普通模型默认值仍为 true。
+- `vllm/model_executor/layers/fused_moe/configs/E=128,N=960,device_name=NVIDIA_B200.json`
+    - 保存 L3 TP4 BF16 grouped-GEMM 调优结果。
+- `tests/model_executor/test_yoco_conversion.py`、`tests/kernels/moe/test_moe.py`
+    - 覆盖训练表达式、模式边界、融合/非融合 residual、batch-shape、Top-K tie、
+      CustomOp/opcheck、latent projection quantization 和 tuned-config bypass。
+- `benchmarks/kernels/benchmark_yoco_*.py` 与三个最小 C++ binding
+    - 固化 SWA、differential attention、Router、latent projection、TP4 all-reduce、
+      MoE dispatch 和 W13 grouped-GEMM 的正确性/性能复现入口；不进入生产 import
+      路径。
+
+### 本地回归与 B200 正确性
+
+提交前在本机 A6000、PyTorch 2.11.0+cu130 上执行：
+
+```text
+.venv/bin/python -m pytest \
+  tests/engine/test_arg_utils.py \
+  tests/model_executor/test_yoco_config.py \
+  tests/model_executor/test_yoco_conversion.py \
+  tests/kernels/moe/test_moe.py::test_try_get_optimal_moe_config_can_skip_tuned_file -q
+
+178 passed, 17 warnings in 73.46s
+```
+
+这些用例包括 CUDA 上 align RMSNorm/RMSClip/RoPE/diff-v3/Router 的 training-expression
+exact 检查、weighted QK fast kernel 的 BF16 邻点容差与 opcheck、以及 CPU fallback。
+另外用 `.venv/bin/python benchmarks/kernels/benchmark_yoco_moe_dispatch.py
+--source-root csrc --tokens 8 --graph-nodes 2 --repeats 5 --rounds 1` 从当前源码重新编译
+CUDA extension；E128、Top-K=8、M=8/32/66/127、block-M=16/32/64 correctness sweep
+全部通过。A6000 只执行 generic dispatch，SM100 专用分支的性能与门禁仍以 B200
+microbenchmark 为准。`git diff --check` 通过。
+
+B200 harness 的两个 standalone endpoint 都满足 Prefill/Decode 重复 smoke exact；
+Mooncake 下 `align` 与 standalone smoke exact。`fast` 与 standalone 的 Mooncake smoke
+没有全量 exact，且 `align` 对 `fast` 的 64-token probe 在共同前缀后出现 greedy 分叉；
+8-token 与 513-token probe 的 64 个生成 token exact。这个结果与两个模式采用不同
+reduction/fusion 策略一致，因此日志不把 `fast` 宣称为 `align` 的 bitwise 等价物。
+全部性能请求失败数为 0。
+
+### B200 端到端性能
+
+最终 greedy matrix 使用同节点 2 x B200、L3 BF16 checkpoint、FA4、Triton MoE：
+standalone 分别运行 `align`/`fast`，Mooncake 使用 1P1D、TP1+TP1；每个点固定 seed，
+并发和请求数保持一致。Fast 相对 Align 的 output/request throughput 几何平均为：
+
+| Workload | 并发点 | Fast / Align |
+| --- | --- | ---: |
+| standalone P：1,024 random + 50 prefix -> 1 | 1/2/4/8/16/32/64/128/256 | -1.3% |
+| standalone P：4,096 random + 50 prefix -> 1 | 1/2/4/8/16/32/64/128/256 | +2.8% |
+| standalone D：8 -> 256 | 1/2/4/8/16/32/64/128/256 | +9.1% |
+| Mooncake same-node：1,360 random + 50 prefix -> 512 | 1/4/8/16/32/64 | +10.0% |
+
+全部 33 个点等权的几何平均提升为 **4.6%**；先对四种 workload 各自求几何平均、
+再等权汇总为 **5.1%**。这是组合后的 `fast` 对 `align` 端到端结果，不能拆成某个
+单 kernel 的独占收益。尤其该 harness 为 TP1，routed expert shape 是 E128/N3840，
+没有使用新增的 TP4 E128/N960 tuning file。
+
+按用户指定的历史图口径，Mooncake Fast 相对历史 YOCO baseline 为 +36.4%，相对
+历史 YOCO optimized 为 +8.5%，相对历史 Qwen3-30B-A3B 为 -28.2%。这些历史 run 的
+checkpoint、runtime 和 sampling 不完全相同，只作为上下文，不是严格 A/B。
+
+### 证据、限制与回滚
+
+原始 matrix、汇总、逐点 CSV 和可视化保存在：
+
+```text
+/mnt/pvc/lidong1/yoco-l3-align-fast-b200-20260831-greedy/
+/home/lidong1/vllm_test/yoco_results/l3-align-fast-b200-20260831/
+/home/lidong1/vllm_test/yoco_results/yoco_image_8_27/l3-align-fast-vs-historical.html
+/home/lidong1/vllm_test/yoco_results/yoco_image_8_27/l3-align-fast-vs-historical.png
+```
+
+结果只覆盖 L3 BF16、单节点 B200、standalone 与 1P1D TP1+TP1；不能外推到 FP8、
+TP4 端到端、多节点 RDMA 或其他 YOCO 版本。TP4-specific kernel/config 的证据来自
+独立 B200 microbenchmark，不应与 TP1 harness 的端到端收益混算。回滚本提交会同时
+移除两个 flag 及其本轮专用优化；上一提交的 non-affine QK clip+RoPE 融合仍可独立
+回滚。
+
+## 2026-09-02：Align 切换到真实训练 FA4 路径
+
+- checkpoint metadata 与训练 YAML 均为 `use_cute=true`；`llm-train/eval.py` 才会
+  强制 FA2。因此 YOCO `--align` 现在要求并强制 FA4，不再把 FA2 eval 路径当作训练
+  reference；不支持 FA4 的设备会明确报错。
+- `--align` 自动启用 eager execution，避免完整 vLLM `torch.compile`/CUDA Graph
+  改变训练表达式的 reduction/fusion 上下文。`--fast` 的编译、CUDA Graph 和
+  FA4/Triton 性能策略保持不变。
+- hidden-3072 RMSNorm 新增 Align 私有的固定 4096-wide reduction；Fast 继续保留
+  小 M=2048、大 M=4096 的原性能策略。
+- affine Q/K RMSClip 按真实训练编译边界分流：token rows `<128` 保留 compiled
+  expression，`>=128` 使用 Align 私有的固定 reduction，并在乘 gamma 后物化 BF16。
+  M=260 的同 shape 完整词表由 KL=`0.0136575` 修复为 KL=0。
+- B200 TP1 BF16 same-QKV replay 的 40 次 self/cross FA4 调用全部 bitwise exact；
+  mixed5 五条不同长度 prompt（3/6/8/66/110 tokens）以及 260-token prefill 的完整
+  154,880 维概率分布全部 KL=0。
+- 自回归 rollout 与整段 teacher forcing 仍不是同一执行 shape。729-token 自然轨迹
+  在 eager FA4 下的 k3 KL 为 `0.00131582086`，但不满足 bitwise exact；Native 同进程
+  trace 显示 causal prefix 的首个差异出现在 FA4 attention。`num_splits=1`、
+  `pack_gqa=False/True`、固定 `max_seqlen=512` 和补齐到 32-token tile 均不能消除。
+  若要求这两种不同执行形态逐 bit 相同，需要修改训练评分为逐 prefix/KV-cache
+  计算，或提供 train/infer 共用的 shape-invariant attention kernel。
+
+## 2026-09-03：Fast TP1 E128/N3840 grouped-GEMM 调优
+
+- 同卡 B200 profiler 显示，8x1024 Prefill 中 YOCO routed MoE kernel 累计
+  `106.824 ms`，Qwen 为 `44.647 ms`；YOCO 日志同时明确报告缺少
+  `E=128,N=3840` tuned config。
+- 增加 YOCO 私有 W13/W2 config loader 与两个 `yoco_configs` 文件。它们只在
+  `--fast`、BF16、非量化 YOCO 上启用，不写入通用 shape config，因此不会改变
+  其他同 shape 模型。
+- 真实端到端 A/B 否定了 synthetic M=1/8 调优结果。最终 map 的最小 bucket 为
+  M=2048，loader 禁止向更小 M 外推，C1 Prefill 和 Decode 保持原路径。
+- CUDA Graph microbenchmark 中，W13+W2 在 M=2048/4096/7168/8192/16384/32768
+  分别加速 7.6%/12.4%/26.8%/20.8%/24.3%/26.6%。
+- 同 GPU5、相同 seed 的最终短测中，1024->1 C8 total throughput 从
+  `30,926.26` 提升到 `32,154.48 tok/s`，即 **+3.97%**；所有请求成功，64-token
+  greedy smoke exact。完整证据位于
+  `yoco_results/l3-fast-tp1-moe-tuned-b200-20260903/`。
+- Shared Expert GEMM+clamped-SwiGLU Triton fusion 在 M=1024/7168 分别慢
+  54.8%/51.6%，因此只保留 benchmark，没有接入 forward。
+- FlashInfer CUTLASS BF16 接口在 `[up, gate]` weight layout 下传
+  `alpha=1,beta=0,limit=10`，对强制触发 clamp 的输入与 YOCO reference bitwise
+  exact。`flashinfer_cutlass_moe.py` 现在只为显式 positive `swiglu_limit` 构造这组
+  参数；其他模型仍传 `None`。
+- 单卡短测中，FlashInfer heuristic 相对 Triton baseline 的 Prefill C1/C8 为
+  +14.1%/+12.8%，但 Decode C1/C8 为 -13.6%/-13.0%。官方 autotune 又使 C8
+  Prefill 回退到 baseline。因此只推荐 PD 纯 Prefill 使用
+  `--moe-backend flashinfer_cutlass` 且关闭 autotune；Decode/standalone mixed
+  保留 Triton。
+- 完整 DeepGEMM W2（含二次 dispatch、pack/unpack）在 M=2048/7168 比 tuned
+  Triton 慢 50.3%/77.7%，不接入 Fast。
+- `FusedMoE` 增加默认 `None` 的 per-layer backend override；YOCO Fast 只在 L3、
+  B200、TP1、BF16、非量化、fast-prefill、纯 `kv_producer` 且未显式开启
+  FlashInfer autotune 时，将 routed experts 从全局 Triton 覆盖为
+  `flashinfer_cutlass`。D、standalone、Align 和其他模型不变；additional config
+  提供显式关闭开关。
+- 隔离 B200 上用仍显式指定 `--moe-backend triton` 的 pure-P 命令完成 health-ready
+  验证；日志确认自动选择 FlashInfer，Mooncake RDMA worker、scheduler、bootstrap
+  全部初始化成功，且没有 Triton backend 选择日志。
+- 独立 4×B200 Job 上用同两张物理卡顺序比较 YOCO/Qwen 1P1D。YOCO pure-P 为
+  FlashInfer heuristic；高吞吐 D 改用 FlashInfer + official autotune 后，六点
+  output-throughput 几何平均比 Triton-D 高 3.94%，C32/C64 的 AB/BA 几何收益为
+  6.83%/8.43%。因此 Fast 对 `kv_consumer` 增加 `max_num_seqs>=64`、scheduler
+  budget>=8192 的自动选择门禁，并提供独立关闭开关。
+- 加入 M=1 hybrid 前，YOCO FlashInfer-P/D 相对 Qwen 1P1D 的六点
+  output-throughput 几何平均低29.41%。Profiler 的 Decode routed-MoE 时间比
+  2.04x 已接近两模型按层数折算的
+  2.08x active-expert FLOP 比；BF16、Top-8、模型方程不变时无法仅靠普通 kernel
+  fusion 追平 Qwen。
+- 为消除 FlashInfer-D 的 C1 -7.03% 回退，增加 M=1 Triton fallback。它不复制
+  FlashInfer 已转换的 expert weight，而是按 `[up, gate]` 解释 W13，使用私有
+  clamped-SwiGLU kernel 后复用 Triton W2/Top-8 sum；每层仅缓存固定 M=1 workspace。
+- B200 swapped-layout activation 对 FP32 clamp reference bitwise exact；完整 1P1D
+  C1 为149.65/149.61 tok/s 两次稳定重复，相比纯 FlashInfer 140.69 提升 6.37%，
+  距 Triton 151.33 仅 -1.11%。C32/C64 相对纯 FlashInfer仅 -0.70%/-1.01%。最终
+  hybrid 六点比 Triton-D 几何平均高 5.91%，与 Qwen 的差距由29.41%进一步缩至
+  28.07%。
+
+## 2026-09-03：Fast TP1/B200 高 batch SWA attention
+
+- 用最终 FlashInfer hybrid 重新采集 C64 Decode trace；两次 routed expert GEMM
+  仍占采样 CUDA 时间 66.0%，确认普通 pointwise fusion 已不是主导方向。
+- 尝试把 `fc2_latent_proj` 的 `[3072,1024]` BF16 权重缓存为转置布局。虽然 M=1
+  单 projection microbenchmark 快 11.9%，完整 1P1D C1/C8/C64 三点几何平均只快
+  0.096%，低于噪声且额外占约 120 MiB，因此完整回退。
+- 扩展 `benchmark_yoco_swa_decode.py`，可参数化 Q/KV heads 和滑窗。B200、TP1、
+  `QH=64,KVH=8,D=128,window=513` 的 full CUDA Graph 交叉点是 batch=64：
+  B32 FA4/Triton 为 26.63/30.96 us，B64 为 50.77/48.66 us；到 B128/192/224/256，
+  Triton 分别快 12.6%/23.7%/35.3%/39.3%。
+- Fast attention dispatch 因此新增 TP1 阈值 64，只匹配 L3、SM100、FA4、
+  513-token self/SWA 和 full CUDA Graph。无窗口 cross-attention 的 B64 仍由 FA4
+  获胜（113.37 vs 126.66 us），故不切；Align、TP4 原阈值和其他模型均不变。
+- B200 dispatch 定向测试 10 passed。Triton/FA4 输出 max abs `0.00390625`、mean
+  abs 约 `1.25e-4`，符合 Fast backend 切换口径，不宣称 bitwise equal。
+- 同 GPU0/1 的 candidate-baseline-candidate 1P1D C64 中，候选两次几何平均
+  `3751.11 tok/s`，三次旧版参考几何平均 `3639.99`，提升 3.05%；反向夹测单次
+  提升 2.67%，mean TPOT 从 14.63 降至 14.22 ms。C32 不触发门禁，候选/旧版
+  几何均值差 -0.06%。最终六点相对 Qwen 的几何差距从 28.07% 缩至 27.70%。
+- 证据保存在 `yoco_results/l3-fast-pd-b200-20260903/` 的
+  `yoco-final-hybrid-profile-r20`、`yoco-tp1-swa-candidate-r21`、
+  `yoco-tp1-swa-baseline-r22` 与 `yoco-tp1-swa-candidate-r23`。
+- 补测无窗口 cross-attention：B128 在 context=8/128/513/1360/1872/4096 的
+  event 与 full-graph 口径均由 Triton 获胜，因此新增独立的 cross 阈值 128；
+  full-attention sentinel 使用正规化后的 `(-1,-1)`。完整 config 测试 23 passed。
+- C128 若只捕获 graph<=64 会进入 piecewise，YOCO 仅 `1668.50 tok/s`。harness
+  新增 `CUDAGRAPH_CAPTURE_SIZES` 参数；graph=128 后 YOCO attention candidate 为
+  `5730.63 tok/s`，同 graph 的 FA4-only 为 `5484.79`，净提升 4.48%，mean TPOT
+  下降 5.63%。同卡 Qwen 为 `7476.35 tok/s`，YOCO 差距为 23.35%。
+- FlashInfer CUTLASS PDL 已是默认最优：M64 PDL off/on 为 455.03/454.13 us，
+  仅快 0.20%；Blackwell min-latency 未实现。镜像自带的 TRTLLM 0.6.8 BF16 API
+  不支持 YOCO clamp，因此不能直接接入；后续改用官方 0.6.18 private overlay。
+- Shared MLP M64 双转置在 microbenchmark 快 13.82% 且 bitwise exact，但端到端
+  C64 throughput 下降约 2.3%、TPOT 慢 0.57%，已完整回退。
+- 新增/更新证据：`yoco-shared-m64-candidate-r24`、
+  `yoco-tp1-attn-{candidate-r25,baseline-r26}`、
+  `yoco-tp1-attn-graph128-{candidate-r27,baseline-r28}`、`qwen-graph128-r29`。
+- graph=256 的 candidate-baseline-candidate 为 `6893.30/6532.02/6920.26 tok/s`，
+  attention 候选几何平均提升 5.74%，mean TPOT 降低 7.42%。同配置 Qwen C256
+  为 `8876.23 tok/s`，YOCO 差距缩至 22.19%。
+- 两波 512 请求的首次 C256 r30 有 2 个客户端 streaming payload 截断，明确作废；
+  harness 新增 `FOLDS` 参数，r31-r34 使用单波 256 请求且均零失败。
+- FlashInfer 0.6.8 的 TRTLLM BF16 wrapper 虽比 CUTLASS 快，但没有暴露 YOCO
+  clamp。核对官方 release 后确认 v0.6.14 起支持 `gemm1_alpha/beta/clamp_limit`；
+  在独立 Decode overlay 安装并验证 v0.6.18。
+- 新增 `yoco_flashinfer_trtllm` 私有 modular backend：复用外部 FP32 Top-8，保留
+  shared-expert overlap，使用 block-major expert 权重，并向官方 routed API 传
+  `alpha=1,beta=0,limit=10` 与预分配 output。旧 FlashInfer 自动回退 CUTLASS。
+- 强制 pre-activation≈102 的 M1/4/8/16/32/64/128/256 sweep 与 PyTorch clamp
+  reference 全部 bitwise exact；无 clamp reference 最大误差 39,808。M64/128/256
+  kernel 比当前 CUTLASS 快约 7.8%/9.1%/10.1%。
+- 每次启动重新 autotune 时，TRTLLM 只在 max CUDA graph<=32 稳定收益。最终
+  C1/4/8/16/32 为 `165.39/544.09/1017.09/1616.31/2652.41 tok/s`，相对上一版
+  分别 +10.52%/+12.29%/+11.93%/+6.72%/+4.67%。
+- C64 每次重新 autotune 的三次结果方差过大；将 M1…64 的 7 个 tactic 固定到
+  带版本/硬件元数据的 cache 后，三次为 `3867.38/3872.75/3862.93 tok/s`，跨度
+  仅 0.25%，相对 CUTLASS 几何提升 5.06%，TPOT 改善 4.60%。存在 cache 时 Fast
+  自动允许 TRTLLM 到 graph64；无 cache 仍限制 graph32。C128 慢 2.70%，因此
+  graph128 以上继续 CUTLASS。最终六点相对上一版 Fast 几何平均提升 8.15%，与
+  Qwen 差距从 27.70% 缩至 21.81%。
+- 独立 graph128 cache 含 8 个 tactic；固定后 C128 为 `5713.56 tok/s / 17.46 ms`，
+  仍不及 CUTLASS 的 `5730.63 / 17.23 ms`；这是 synthetic-routing cache 阶段的
+  graph64 上限，已被后续 real-route graph128/256 调优推翻。
+- `kernel_warmup.py` 支持 `VLLM_YOCO_FLASHINFER_AUTOTUNE_CACHE`，官方 loader
+  校验 FlashInfer/CUDA/cuBLAS/cuDNN/GPU 元数据；cache 传递定向测试通过。
+- 新增 `tools/yoco_alignment/install_decode_flashinfer.sh` 安装官方 v0.6.18 D-only
+  overlay；1P1D harness 增加 `DECODE_EXTRA_PYTHONPATH`，P 仍使用镜像 0.6.8。
+- 证据：`yoco-trtllm-d-{candidate-r36,candidate-r38,candidate-r41}`、
+  `yoco-cutlass-d-baseline-r37`、`yoco-trtllm-d-candidate-r40`、
+  `yoco-trtllm-d-graph32-final-r42`、`yoco-trtllm-d-graph128-r39`、
+  `yoco-trtllm-d-cache-r44/r45`、`yoco-trtllm-d-cache-auto-r46` 以及
+  `trtllm-graph64-autotune-r2.json`；graph128 拒绝证据为
+  `yoco-trtllm-d-cache128-r47` 与 `trtllm-graph128-autotune-r1.json`。
+
+## 2026-09-04：TRTLLM 与 shared-expert overlap 联合调优
+
+- 在固定 FlashInfer 0.6.18、B200、PDL 和 CUDA Graph 口径下，新增 TRTLLM BF16
+  全 tactic 诊断：每个 token shape 枚举 352 个合法 tactic，同时在 auxiliary stream
+  执行 YOCO `3072→2560→3072` shared MLP，以完整 layer makespan 而不是 routed-only
+  时间选型。
+- M64 从官方 `(16,137)` 改为 `(16,132)`。完整
+  candidate-baseline-candidate 的候选几何均值为
+  `3878.25 tok/s / 13.547 ms`，原 cache 为 `3849.47 / 13.630 ms`：吞吐
+  **+0.75%**、mean TPOT **-0.60%**。另三次候选
+  `3880.53/3877.00/3898.51 tok/s` 均零失败。
+- M16 从 `(8,61)` 改为 `(8,134)`。两次候选几何均值
+  `1621.86 tok/s / 8.899 ms`，夹测原 cache
+  `1615.84 / 9.024 ms`：吞吐 **+0.37%**、mean TPOT **-1.38%**。
+- M4/M8/M32 的 synthetic overlap 最优没有通过完整反向 A/B：全 shape 候选对原
+  cache 的六点 throughput 几何平均为 **-0.278%**，所以最终只改 M16/M64；其他
+  cache entry 原样保留。
+- PDL M64 off/on 为 `424.41/421.71 us`，继续开启。reserved SM 0/4/8/12/16/24
+  的 overlap makespan 差异不到 0.04%；`reserved=0` 完整 C64 为
+  `3861.46 tok/s`，继续使用官方默认 8。
+- 重新验证 shared MLP M64 双转置：三轮候选几何均值 `3884.05 tok/s`，相邻
+  pre-shared 基线 `3880.07`，仅 +0.10%；该候选再次完整回退，Fast 只保留原有
+  M1 down-projection 转置。对应定向测试改为验证 M1-only 路径，并在 B200 Pod 上
+  `1 passed`。
+- 最终 cache 为
+  `yoco_results/l3-fast-pd-b200-20260903/trtllm-graph64-overlap-hybrid-r1.json`，
+  metadata 限定 FlashInfer 0.6.18/CUDA 13.1/B200，generation hash 按内容重算。
+  新六点相对 Triton-D 的几何提升为 **15.25%**，对 Qwen 的差距由 21.81%
+  缩至 **21.73%**。
+- 原始证据：`yoco-shared-m64-trtllm-candidate-r49/r50/r51`、
+  `yoco-shared-m64-pre-baseline-r52`、`yoco-trtllm-reserved0-r53`、
+  `yoco-trtllm-overlap-tactic132-r54/r55/r56`、
+  `yoco-trtllm-original-tactic137-r57`、`yoco-trtllm-overlap-autotune-r58`、
+  `yoco-trtllm-original-autotune-r59` 与 `yoco-trtllm-overlap-hybrid-r60`。
+
+## 2026-09-04：真实 Decode 路由驱动的 high-batch tactic
+
+- harness 增加仅诊断使用的 `ENABLE_RETURN_ROUTED_EXPERTS` 和
+  `HOLD_AFTER_SMOKE_FILE`；捕获模式显式关闭 async scheduling，普通性能路径的
+  参数与调度不变。固定 1410-input、64-output 的 C4/C8/C16/C32/C64 请求各导出
+  63 个 Decode step、20 个物理 layer、top-8 expert IDs。
+- 路由远比 autotuner 的随机输入集中：C8 每个 layer/step 的 64 个 assignment
+  只有中位 19 个不同 expert，最热 expert 通常由 8/8 token 命中；C32 最热 expert
+  的中位/P95/最大命中为 31/32/32，C64 为 62/64/64。
+- `benchmark_yoco_trtllm_upper_bound.py` 现在可载入 capture，将
+  `[request,step,layer,topk]` 重排为 1,260 个真实 `[batch,topk]` routing matrix，
+  同时回放 shared MLP，并可枚举或限定 TRTLLM tactic 候选。
+- 全 route replay 得到 M8 `(8,48)`、M16 `(16,50)`、M32 `(32,24)`、M64
+  `(32,17)`；相对阶段 cache 的 layer makespan 分别改善 1.59%/2.01%/7.82%/9.30%。
+  M4 当前 `(8,60)` 与最优只差 0.21%，不改。
+- 内置 routed capture 对 YOCO universal-loop self layer 只保留最后一次 buffer
+  写入，无法覆盖前两轮。因此全 shape `r64` 只作为筛选：M8 端到端回退，M16 无
+  稳定收益；最终 cache 仅将 M32/M64 替换为 real-route tactic，其余继承上一阶段。
+- C32/C64 candidate-baseline-candidate 结果：C32 候选几何
+  `2740.30 tok/s / 10.080 ms`，基线 `2687.76 / 10.320 ms`，即吞吐
+  **+1.95%**、TPOT **-2.33%**；C64 候选 `3933.40 / 13.317 ms`，基线
+  `3892.12 / 13.562 ms`，即吞吐 **+1.06%**、TPOT **-1.80%**。全部请求零失败。
+- 最终 cache 为
+  `yoco_results/l3-fast-pd-b200-20260903/trtllm-graph64-real-routing-highbatch-r1.json`；
+  完整六点 `r68` 为
+  `165.42/552.15/1011.11/1616.34/2725.13/3945.03 tok/s`。相对此前最终表几何
+  再提升 **0.83%**，相对 Triton-D 提升 **16.21%**，对 Qwen 的差距从 21.73%
+  降至 **21.08%**。
+- 证据：`real-routing-capture-r62/r63`、
+  `yoco-trtllm-real-routing-candidate-r64`、
+  `yoco-trtllm-real-highbatch-candidate-r65/r67`、
+  `yoco-trtllm-overlap-hybrid-baseline-r66`、
+  `yoco-trtllm-real-highbatch-final-r68`。
+
+### graph128 / graph256
+
+- C128 的真实路由中，最热 expert 的中位/P95/最大命中为 124/128/128。M128
+  从 synthetic `(16,65)` 的 `170.597 us` 改为 `(32,17)` 的 `140.396 us`，
+  layer makespan **-17.70%**。
+- 正式 C128 candidate-baseline-candidate：TRTLLM 几何
+  `5952.12 tok/s / 16.539 ms`，CUTLASS `5747.78 / 17.456 ms`，即吞吐
+  **+3.56%**、TPOT **-5.25%**。对同卡 Qwen 的差距由 23.35% 降至 20.39%。
+- C256 用短 prompt 捕获路由以避免 API prompt-route JSON 占用数 GB 主存，但 tactic
+  只作筛选；正式验证仍为 1410→512、FOLDS=1。M256 最终 `(64,0)` 为
+  `316.837 us`。reserved SM 0/16/32/48 的全 route makespan 差异小于0.07%，
+  保留默认8。
+- 正式 C256 A/B/A：TRTLLM 几何 `7230.95 tok/s / 23.132 ms`，CUTLASS
+  `6878.71 / 24.718 ms`，即吞吐 **+5.12%**、TPOT **-6.42%**。对 Qwen 差距
+  由 22.19% 降至 18.54%。
+- `_yoco_verified_trtllm_cache_max_capture` 会读取 cache 内容：只有精确包含已验证的
+  M32/M64/M128 tactic 才自动允许 graph128，再包含 M256 `(64,0)` 才允许
+  graph256。旧 synthetic cache、损坏文件或任一不匹配项仍保持原上限/回退
+  CUTLASS；显式 additional-config override 不变。自动选择定向测试通过，实机日志
+  在 graph128/256 均确认私有 TRTLLM。
+- 该阶段 graph256 cache：
+  `yoco_results/l3-fast-pd-b200-20260903/trtllm-graph256-real-routing-r1.json`；
+  graph128 子集：`trtllm-graph128-real-routing-r1.json`。
+- 证据：`real-routing-capture-c128-r70`、
+  `yoco-trtllm-real-c128-candidate-r71/r73`、`yoco-cutlass-c128-baseline-r72`、
+  `yoco-trtllm-real-c128-auto-r74`、`real-routing-capture-c256-r75`、
+  `yoco-trtllm-real-c256-candidate-r76/r78`、`yoco-cutlass-c256-baseline-r77`、
+  `yoco-trtllm-real-c256-auto-r79`。
+
+### 完整40次 logical MoE 路由与 M16
+
+- 内置 routed-expert capture 按20个物理层存储，YOCO 前十层重复三轮时前两轮被
+  覆盖。nested CUDA Graph 40-slot buffer 方案虽返回正确 shape，但内容全零，已
+  完整回退。
+- 最终加入仅诊断的 Decode eager dump。只有显式设置
+  `VLLM_YOCO_LOGICAL_ROUTE_DUMP`、目标 batch 列表且目录存在 `ENABLED` sentinel
+  才会额外计算 Top-K 并保存；普通 Fast graph、普通 routed-expert API、Align 和
+  其他模型不进入该路径。
+- logical ID 固定为 self loop0/1/2 的0..29和 cross的30..39；转换器要求每40条记录
+  严格覆盖0..39。C8/C16 各捕获30×40个真实 route matrix，expert ID 范围0..127。
+- 完整路由下 M8 `(8,60)` 虽比当前 tactic 的 replay 快约1.9%，端到端 A/B/A 吞吐
+  短测只 +0.30%；64请求长测的两次候选几何 `980.13 tok/s`，基线 `977.23`，
+  仍仅 +0.30%，TPOT只改善0.34%。并存在此前 tactic 改变后路由反馈回退的反例，
+  因此 M8不改。
+- M16 `(16,132)` replay 比 `(8,134)` 快约1.73%；两次端到端候选几何
+  `1629.12 tok/s`，基线 `1614.35`，吞吐 **+0.91%**，TPOT **-0.40%**，最终保留。
+- 最终通用 cache 更新为
+  `yoco_results/l3-fast-pd-b200-20260903/trtllm-graph256-real-routing-r2.json`；
+  完整六点 `r85` 为
+  `165.43/552.38/998.45/1628.78/2764.90/3960.17 tok/s`。相对 Triton-D 提升
+  **16.48%**，对 Qwen 六点差距为 **20.89%**。
+- 证据：`logical-routing-eager-dump-r81`、
+  `yoco-trtllm-lowbatch-candidate-r82/r84`、`yoco-trtllm-lowbatch-baseline-r83`、
+  `yoco-trtllm-final-r2-matrix-r85`、
+  `yoco-trtllm-c8-long-candidate-r86/r88`、`yoco-trtllm-c8-long-baseline-r87`。
+
+### 同 C64 的 YOCO/Qwen 剩余差距
+
+- 新增 Qwen C64、8→16、graph64 同卡 trace，和最新 YOCO C64 trace 按11个稳态
+  GPU graph step 取中位，避免把嵌套 annotation 或 overlapping stream 百分比当成
+  wall time。
+- YOCO/Qwen step wall 为 `21.033/11.836 ms`，差 `9.196 ms`；expert GEMM 为
+  `16.157/7.397 ms`，差 `8.759 ms`，解释 **95.25%** 的 wall gap。
+- 每 block expert GEMM 为 `403.92/154.11 us`，比值 `2.621x`；模型理论 FLOP 比
+  `2.5x`，额外 kernel-efficiency 损耗只剩 **4.84%**。即使完全消除它，也只能再省
+  约0.75 ms，无法追回约20%的端到端差距。
+- 这确认 BF16、Top-8、模型方程固定时，剩余主要是结构计算量；进一步接近 Qwen
+  需要 FP8、减少 active expert compute 或改变解码算法，均不在当前授权范围。
+- 也核对了 FlashInfer MonoMoE：它硬编码 SM90a/FP8/E256/N512/K2048/M<=8，和
+  YOCO B200/BF16/E128/N3840/K1024 完全不匹配，不能作为现成 hot-expert fallback。
+- 正式1410-token 1P1D Decode profile 也已补采，但 YOCO D 稳态为batch63，Qwen D
+  被到达节奏拆成batch31并出现每个annotation两次forward，不能拿单graph kernel
+  sum直接相除；该组只保留作调度证据，不进入上述2.621x计算。standalone长上下文
+  同样未形成匹配batch，明确作废。
+- 证据：`qwen-c64-profile-r89`、`yoco-trtllm-real-highbatch-profile-r69`、
+  `yoco-pd-c64-i1410-profile-r92`、`qwen-pd-c64-i1410-profile-r94`、
+  `analyze_c64_profile_gap.py`、`c64-yoco-qwen-gap.json`。

@@ -1211,6 +1211,91 @@ def _step_until_kv_transfer_finished(scheduler: Scheduler, req_ids: list[str]):
     return initial_ecos
 
 
+@pytest.mark.parametrize(
+    "model_type,fast_prefill,expected_new_tokens",
+    [
+        ("yoco", True, 32),
+        ("yoco", False, 44),
+        ("opt", True, 44),
+    ],
+)
+def test_yoco_fast_prefill_defers_final_prompt_block(
+    model_type: str,
+    fast_prefill: bool,
+    expected_new_tokens: int,
+):
+    scheduler = create_scheduler(block_size=16)
+    scheduler.vllm_config.model_config.hf_config.model_type = model_type
+    scheduler.cache_config.kv_sharing_fast_prefill = fast_prefill
+    scheduler.need_yoco_final_prompt_block_split = model_type == "yoco" and fast_prefill
+    (request,) = create_requests(num_requests=1, num_tokens=44)
+
+    assert (
+        scheduler._yoco_final_prompt_block_split(request, 0, 44) == expected_new_tokens
+    )
+
+
+@pytest.mark.parametrize(
+    "num_computed_tokens,num_new_tokens,expected_new_tokens",
+    [
+        (0, 32, 32),
+        (32, 12, 12),
+        (43, 1, 1),
+    ],
+)
+def test_yoco_final_prompt_block_split_boundaries(
+    num_computed_tokens: int,
+    num_new_tokens: int,
+    expected_new_tokens: int,
+):
+    scheduler = create_scheduler(block_size=16)
+    scheduler.need_yoco_final_prompt_block_split = True
+    (request,) = create_requests(num_requests=1, num_tokens=44)
+
+    assert (
+        scheduler._yoco_final_prompt_block_split(
+            request, num_computed_tokens, num_new_tokens
+        )
+        == expected_new_tokens
+    )
+
+
+def test_yoco_truncated_pd_prefill_is_not_split_again():
+    scheduler = create_scheduler(block_size=16)
+    scheduler.need_yoco_final_prompt_block_split = True
+    (request,) = create_requests(num_requests=1, num_tokens=32)
+    request.kv_transfer_params = {
+        "do_remote_decode": True,
+        "_p_side_truncated": True,
+    }
+
+    assert scheduler._yoco_final_prompt_block_split(request, 0, 32) == 32
+
+
+def test_yoco_final_prompt_block_is_scheduled_separately():
+    scheduler = create_scheduler(block_size=16)
+    scheduler.need_yoco_final_prompt_block_split = True
+    (request,) = create_requests(num_requests=1, num_tokens=44)
+    scheduler.add_request(request)
+
+    first_output = scheduler.schedule()
+    assert first_output.num_scheduled_tokens[request.request_id] == 32
+    scheduler.update_from_output(
+        first_output,
+        ModelRunnerOutput(
+            req_ids=[request.request_id],
+            req_id_to_index={request.request_id: 0},
+            sampled_token_ids=[[]],
+            logprobs=None,
+            prompt_logprobs_dict={},
+            pooler_output=[],
+        ),
+    )
+
+    second_output = scheduler.schedule()
+    assert second_output.num_scheduled_tokens[request.request_id] == 12
+
+
 @pytest.mark.parametrize("is_async", [False, True])
 def test_kv_connector_basic(is_async: bool):
     """
