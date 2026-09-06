@@ -1,8 +1,10 @@
 # YOCO Align 与 Fast 开发记录
 
-这些文件保存 2026-09-05 的实现说明与测量结果。发布到 `fhb-dev` 时补充了类型标注、
+这些文件保存 2026-09-05 与 2026-09-06 的实现说明与测量结果。发布到 `fhb-dev` 时补充了类型标注、
 格式和基准脚本 API 整理；推理库与实测版本的可执行 AST 一致（忽略仅供类型检查的标注）。
 
+- [2026-09-06 Fast decode 优化](fast-decode-optimization-20260906/REPORT.md)：同卡配对测量、固定前缀数值检查与 AIPerf。
+- [2026-09-06 Fast decode 报告 PDF](fast-decode-optimization-20260906/REPORT.pdf)。
 - [综合报告 PDF](YOCO-Align-Fast-Report-20260905.pdf)：Align 前向对齐、概率归约、训练反向优化与 Fast 性能。
 - [Fast 专项报告](fast-optimization-20260905/REPORT.md)：适用条件、开关、固定形状测量、AIPerf 诊断与失败记录。
 - [README PDF 快照](README-snapshot-20260905.pdf)：发布前生成的说明快照。
@@ -13,5 +15,5 @@
 完整 trace 导出和实验 runtime 保留在实验工作区，未全部复制到 Git 仓库；此处发布报告、
 图表、汇总数据与 PDF。PDF 中的本地证据链接仍依赖原工作区。
 
-Fast 的主要收益是 Prefill，Decode 与这次固定到达 trace 的总吞吐基本持平。
+2026-09-05 的主要收益是 Prefill；2026-09-06 的后续工作针对 decode，结果见新报告。
 Fast 不提供 bitwise 保证；Align 的前向一致性结论限于报告明确列出的配置和验证矩阵。

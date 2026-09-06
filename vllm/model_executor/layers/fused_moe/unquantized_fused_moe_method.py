@@ -327,6 +327,9 @@ class UnquantizedFusedMoEMethod(FusedMoEMethodBase, CustomOp):
             _fe.yoco_triton_fallback_max_tokens = getattr(
                 layer, "yoco_triton_fallback_max_tokens", 0
             )
+            _fe.yoco_fast_decode_cutlass = getattr(
+                layer, "yoco_fast_decode_cutlass", False
+            )
             _fe.yoco_align_moe_sum = getattr(layer, "yoco_align_moe_sum", False)
             _fe.yoco_fast_moe_sum = getattr(layer, "yoco_fast_moe_sum", False)
         return self.moe_kernel.apply(

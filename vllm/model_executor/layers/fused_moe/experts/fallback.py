@@ -169,6 +169,7 @@ class FallbackExperts(mk.FusedMoEExpertsModular, ABC):
             "yoco_separate_w2_config",
             "yoco_fast_w13_config",
             "yoco_triton_fallback_max_tokens",
+            "yoco_fast_decode_cutlass",
             "yoco_align_moe_sum",
             "yoco_fast_moe_sum",
         ):

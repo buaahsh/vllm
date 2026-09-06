@@ -1,0 +1,33 @@
+{
+  "_metadata": {
+    "flashinfer_version": "0.6.8.post1",
+    "cuda_version": "13.1",
+    "cublas_version": "13.2.1",
+    "cudnn_version": "91900",
+    "gpu": "NVIDIA B200"
+  },
+  "('trtllm::fused_moe::gemm1', 'MoERunner', ((128, 1024), (128, 7680, 1024), (0,), (128, 1024, 3840), (0,)))": [
+    "MoERunner",
+    162
+  ],
+  "('trtllm::fused_moe::gemm1', 'MoERunner', ((256, 1024), (128, 7680, 1024), (0,), (128, 1024, 3840), (0,)))": [
+    "MoERunner",
+    162
+  ],
+  "('trtllm::fused_moe::gemm1', 'MoERunner', ((64, 1024), (128, 7680, 1024), (0,), (128, 1024, 3840), (0,)))": [
+    "MoERunner",
+    162
+  ],
+  "('trtllm::fused_moe::gemm2', 'MoERunner', ((128, 1024), (128, 7680, 1024), (0,), (128, 1024, 3840), (0,)))": [
+    "MoERunner",
+    471
+  ],
+  "('trtllm::fused_moe::gemm2', 'MoERunner', ((256, 1024), (128, 7680, 1024), (0,), (128, 1024, 3840), (0,)))": [
+    "MoERunner",
+    505
+  ],
+  "('trtllm::fused_moe::gemm2', 'MoERunner', ((64, 1024), (128, 7680, 1024), (0,), (128, 1024, 3840), (0,)))": [
+    "MoERunner",
+    469
+  ]
+}

@@ -21,6 +21,7 @@ from vllm.model_executor.layers.fused_moe.experts.yoco_deep_gemm import (
     yoco_deep_gemm_w2_workspace_rows,
 )
 from vllm.model_executor.layers.fused_moe.experts.yoco_triton import (
+    select_yoco_decode_config,
     select_yoco_w2_config,
     select_yoco_w13_config,
     yoco_swapped_clamped_swiglu,
@@ -467,6 +468,49 @@ def test_yoco_w13_config_selects_nearest_token_bucket() -> None:
     assert select_yoco_w13_config(configs, 7) is None
     assert select_yoco_w13_config(configs, 8) is small
     assert select_yoco_w13_config(configs, 7000) is large
+
+
+def test_yoco_decode_config_is_bounded() -> None:
+    small = {"BLOCK_SIZE_M": 16}
+    large = {"BLOCK_SIZE_M": 32}
+    configs = {1: small, 256: large}
+    assert select_yoco_decode_config(configs, 0) is None
+    assert select_yoco_decode_config(configs, 1) is small
+    assert select_yoco_decode_config(configs, 128) is None
+    assert select_yoco_decode_config(configs, 256) is large
+    assert select_yoco_decode_config(configs, 257) is None
+    assert select_yoco_decode_config(None, 128) is None
+
+
+def test_yoco_decode_configs_preserve_prefill_and_align(monkeypatch) -> None:
+    from vllm.model_executor.layers.fused_moe.experts import yoco_triton as module
+
+    decode = {"BLOCK_SIZE_M": 16, "BLOCK_SIZE_N": 128}
+    prefill = {"BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256}
+    fallback = {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 128}
+    monkeypatch.setattr(module.envs, "VLLM_BATCH_INVARIANT", False)
+    monkeypatch.setattr(
+        module,
+        "current_platform",
+        SimpleNamespace(get_device_name=lambda: "NVIDIA B200"),
+    )
+    monkeypatch.setattr(module, "_load_yoco_w13_configs", lambda *args: {2048: prefill})
+    monkeypatch.setattr(module, "_load_yoco_w2_configs", lambda *args: {2048: prefill})
+    monkeypatch.setattr(
+        module,
+        "_load_yoco_decode_configs",
+        lambda *args: {1: decode, 128: decode, 256: decode},
+    )
+    assert module.try_get_yoco_w13_config(128, 128, 3840, 1024) is decode
+    assert module.try_get_yoco_w13_config(257, 128, 3840, 1024) is None
+    assert module.try_get_yoco_w13_config(2048, 128, 3840, 1024) is prefill
+    assert module.try_get_yoco_w2_config(128, 128, 1024, 3840, decode) is decode
+    assert module.try_get_yoco_w2_config(128, 128, 1024, 3840, fallback) is fallback
+    assert module.try_get_yoco_w2_config(257, 128, 1024, 3840, fallback) is fallback
+    assert module.try_get_yoco_w2_config(2048, 128, 1024, 3840, prefill) is prefill
+    monkeypatch.setattr(module.envs, "VLLM_BATCH_INVARIANT", True)
+    assert module.try_get_yoco_w13_config(128, 128, 3840, 1024) is None
+    assert module.try_get_yoco_w2_config(128, 128, 1024, 3840, fallback) is fallback
 
 
 def test_yoco_flashinfer_clamped_swiglu_parameters() -> None:

@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING
 import torch
 
 import vllm.model_executor.layers.fused_moe.modular_kernel as mk
-from vllm.config import get_current_vllm_config
+from vllm.config import CUDAGraphMode, get_current_vllm_config
+from vllm.forward_context import get_forward_context
 from vllm.logger import init_logger
 from vllm.model_executor.layers.fused_moe.activation import MoEActivation
 from vllm.model_executor.layers.fused_moe.config import (
@@ -114,6 +115,7 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
         self.max_capture_size = (
             get_current_vllm_config().compilation_config.max_cudagraph_capture_size
         )
+        self.max_batched_tokens = moe_config.max_num_tokens
         self._unquantized_swiglu_limit: float | None = None
         self._unquantized_swiglu_alpha: torch.Tensor | None = None
         self._unquantized_swiglu_beta: torch.Tensor | None = None
@@ -304,8 +306,12 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
         apply_router_weight_on_input: bool | None,
     ):
         fallback_max_tokens = int(getattr(self, "yoco_triton_fallback_max_tokens", 0))
+        use_yoco_decode = FlashInferExperts._use_yoco_decode_cutlass(
+            self, hidden_states, w1, w2
+        )
         if (
             0 < hidden_states.shape[0] <= fallback_max_tokens
+            and not use_yoco_decode
             and self.quant_config.weight_quant_dtype is None
             and hidden_states.dtype == torch.bfloat16
             and w1.dtype == w2.dtype == torch.bfloat16
@@ -533,7 +539,42 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
             use_deepseek_fp8_block_scale=self.use_deepseek_fp8_block_scale,
             use_mxfp8_act_scaling=use_mxfp8_act_scaling,
             use_w4_group_scaling=use_w4_group_scaling,
-            tune_max_num_tokens=max(self.max_capture_size, 1),
+            # Decode cache entries must not match a large prefill clamped to
+            # the last decode bucket. Use one constant covering this engine's
+            # full scheduler range; uncached prefill buckets keep heuristics.
+            tune_max_num_tokens=(
+                max(self.max_batched_tokens, self.max_capture_size or 1)
+                if getattr(self, "yoco_fast_decode_cutlass", False)
+                else max(self.max_capture_size, 1)
+            ),
+        )
+
+    def _use_yoco_decode_cutlass(
+        self, hidden_states: torch.Tensor, w1: torch.Tensor, w2: torch.Tensor
+    ) -> bool:
+        if not getattr(self, "yoco_fast_decode_cutlass", False):
+            return False
+        # The same M can also be a multi-token prefill. Only specialize
+        # single-token decode graphs, whose numerical behavior was audited.
+        context = get_forward_context()
+        descriptor = context.batch_descriptor
+        if (
+            context.cudagraph_runtime_mode != CUDAGraphMode.FULL
+            or descriptor is None
+            or not descriptor.uniform
+            or descriptor.num_tokens != descriptor.num_reqs
+        ):
+            return False
+        from vllm.model_executor.layers.fused_moe.experts.yoco_flashinfer_decode import (  # noqa: E501
+            YOCO_CUTLASS_DECODE_ROWS,
+        )
+
+        return (
+            hidden_states.shape[0] in YOCO_CUTLASS_DECODE_ROWS
+            and hidden_states.dtype == w1.dtype == w2.dtype == torch.bfloat16
+            and tuple(w1.shape) == (128, 7680, 1024)
+            and tuple(w2.shape) == (128, 1024, 3840)
+            and self.tp_size == self.ep_size == 1
         )
 
     def moe_sum(self, input: torch.Tensor, output: torch.Tensor) -> None:

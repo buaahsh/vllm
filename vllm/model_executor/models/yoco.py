@@ -350,8 +350,7 @@ def _select_yoco_fast_moe_backend(
     if standalone:
         kernel_config.enable_flashinfer_autotune = False
         logger.info_once(
-            "YOCO Fast standalone uses FlashInfer CUTLASS for M>=%d; "
-            "smaller batches retain Triton with shared workspace",
+            "YOCO Fast standalone uses FlashInfer CUTLASS prefill for M>=%d",
             _yoco_standalone_prefill_min_tokens(vllm_config),
         )
         return selected_backend
@@ -3934,8 +3933,23 @@ class YOCOModel(nn.Module):
             kv_transfer is None or kv_transfer.kv_connector is None
         ):
             fallback_max = _yoco_standalone_prefill_min_tokens(vllm_config) - 1
+            use_decode_cutlass = False
+            additional = vllm_config.additional_config or {}
+            capture_max = vllm_config.compilation_config.max_cudagraph_capture_size or 0
+            if (
+                self.execution_mode == "fast"
+                and 0 < capture_max <= 256
+                and additional.get("yoco_fast_decode_cutlass", True)
+                and not os.getenv("VLLM_YOCO_FLASHINFER_AUTOTUNE_CACHE")
+            ):
+                from vllm.model_executor.layers.fused_moe.experts.yoco_flashinfer_decode import (  # noqa: E501
+                    load_yoco_decode_cutlass_cache,
+                )
+
+                use_decode_cutlass = load_yoco_decode_cutlass_cache()
             for layer in self.layers:
                 layer.mlp.experts.yoco_triton_fallback_max_tokens = fallback_max
+                layer.mlp.experts.yoco_fast_decode_cutlass = use_decode_cutlass
         # ``start_layer``/``end_layer`` are referenced by some shared
         # utilities; expose them for PP=1 coverage.
         self.start_layer = 0

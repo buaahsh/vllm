@@ -166,6 +166,29 @@ def _load_yoco_w2_configs(
     return None
 
 
+@functools.lru_cache
+def _load_yoco_decode_configs(file_name: str) -> dict[int, dict[str, int]] | None:
+    """Load a bounded small-M map separately from the prefill tuning."""
+    file_name = f"decode_{file_name}"
+    paths: list[Path] = []
+    if envs.VLLM_TUNED_CONFIG_FOLDER is not None:
+        paths.append(Path(envs.VLLM_TUNED_CONFIG_FOLDER) / file_name)
+    paths.append(Path(__file__).with_name("yoco_configs") / file_name)
+    for path in paths:
+        if path.is_file():
+            configs = _parse_yoco_configs(path)
+            logger.info_once("Using YOCO decode tuning from %s", path)
+            return configs
+    return None
+
+
+def select_yoco_decode_config(
+    configs: dict[int, dict[str, int]] | None, num_tokens: int
+) -> dict[str, int] | None:
+    """Use measured rows only; neighboring shapes can prefer different tiles."""
+    return configs.get(num_tokens) if configs else None
+
+
 def select_yoco_w13_config(
     configs: dict[int, dict[str, int]], num_tokens: int
 ) -> dict[str, int] | None:
@@ -189,12 +212,18 @@ def try_get_yoco_w13_config(
     configs = _load_yoco_w13_configs(
         num_experts, intermediate_size, hidden_size, device_name
     )
-    if not configs:
-        return None
-    # Do not extrapolate a large-M map into decode/small-prefill shapes.
-    # Those shapes keep the common vLLM config unless measured entries are
-    # explicitly present in this private file.
-    return select_yoco_w13_config(configs, num_tokens)
+    if configs:
+        selected = select_yoco_w13_config(configs, num_tokens)
+        if selected is not None:
+            return selected
+    return select_yoco_decode_config(
+        _load_yoco_decode_configs(
+            _yoco_w13_config_file_name(
+                num_experts, intermediate_size, hidden_size, device_name
+            )
+        ),
+        num_tokens,
+    )
 
 
 def select_yoco_w2_config(
@@ -224,9 +253,17 @@ def try_get_yoco_w2_config(
         return w13_config
     device_name = current_platform.get_device_name()
     configs = _load_yoco_w2_configs(num_experts, output_size, input_size, device_name)
-    if not configs or num_tokens < min(configs):
-        return w13_config
-    return select_yoco_w2_config(configs, num_tokens, w13_config)
+    if configs and num_tokens >= min(configs):
+        return select_yoco_w2_config(configs, num_tokens, w13_config)
+    selected = select_yoco_decode_config(
+        _load_yoco_decode_configs(
+            _yoco_w2_config_file_name(num_experts, output_size, input_size, device_name)
+        ),
+        num_tokens,
+    )
+    if selected is not None and selected["BLOCK_SIZE_M"] == w13_config["BLOCK_SIZE_M"]:
+        return selected
+    return w13_config
 
 
 @triton.jit

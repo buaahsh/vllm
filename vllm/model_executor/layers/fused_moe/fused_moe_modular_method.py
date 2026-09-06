@@ -113,6 +113,9 @@ class FusedMoEModularMethod(FusedMoEMethodBase, CustomOp):
             fused_experts.yoco_triton_fallback_max_tokens = getattr(
                 layer, "yoco_triton_fallback_max_tokens", 0
             )
+            fused_experts.yoco_fast_decode_cutlass = getattr(
+                layer, "yoco_fast_decode_cutlass", False
+            )
             fused_experts.yoco_align_moe_sum = getattr(
                 layer, "yoco_align_moe_sum", False
             )
