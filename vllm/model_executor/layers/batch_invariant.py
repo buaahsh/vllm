@@ -732,6 +732,11 @@ def addmm_batch_invariant(bias, a, b):
 
 
 def _log_softmax_batch_invariant(input, dim, _half_to_float):
+    from vllm.model_executor.layers import yoco_probabilities
+
+    if yoco_probabilities.is_enabled():
+        output = yoco_probabilities.log_softmax(input, dim)
+        return output if _half_to_float else output.to(input.dtype)
     if _half_to_float:
         return log_softmax(input.float(), dim=dim)
     return log_softmax(input, dim=dim)
@@ -931,9 +936,12 @@ def enable_batch_invariant_mode():
     if current_platform.is_cuda():
         _fp16_block_size_n = 256 if get_max_shared_memory_bytes() > 106496 else 128
 
-    _batch_invariant_LIB.impl(
-        "aten::_log_softmax", _log_softmax_batch_invariant, "CUDA"
-    )
+    from vllm.model_executor.layers import yoco_probabilities
+
+    if not yoco_probabilities.has_training_override():
+        _batch_invariant_LIB.impl(
+            "aten::_log_softmax", _log_softmax_batch_invariant, "CUDA"
+        )
     _batch_invariant_LIB.impl("aten::softmax", softmax_batch_invariant, "CUDA")
     _batch_invariant_LIB.impl("aten::_softmax", softmax_batch_invariant, "CUDA")
     _batch_invariant_LIB.impl("aten::mean.dim", mean_batch_invariant, "CUDA")
@@ -979,9 +987,13 @@ def override_envs_for_invariance():
     os.environ["VLLM_USE_AOT_COMPILE"] = "0"
 
 
-def init_batch_invariance():
+def init_batch_invariance(*, yoco_align: bool = False):
     # this will hit all the csrc overrides as well
     if envs.VLLM_BATCH_INVARIANT:
+        if yoco_align:
+            from vllm.model_executor.layers import yoco_probabilities
+
+            yoco_probabilities.enable()
         override_envs_for_invariance()
         enable_batch_invariant_mode()
 

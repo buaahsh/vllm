@@ -631,6 +631,17 @@ class GPUModelRunner(
         placeholder_block_size = (
             self.cache_config.block_size or CacheConfig.DEFAULT_BLOCK_SIZE
         )
+        hf_text_config = self.model_config.hf_text_config
+        additional_config = self.vllm_config.additional_config
+        yoco_execution_mode = (
+            additional_config.get("yoco_execution_mode", "fast")
+            if isinstance(additional_config, dict)
+            else "fast"
+        )
+        self.use_yoco_fused_slot_mapping = (
+            getattr(hf_text_config, "model_type", None) == "yoco"
+            and yoco_execution_mode == "fast"
+        )
         self._init_block_sizes = [placeholder_block_size]
         self._init_kernel_block_sizes = [placeholder_block_size]
         self.input_batch = InputBatch(
@@ -661,6 +672,7 @@ class GPUModelRunner(
             is_pooling_model=self.is_pooling_model,
             cp_kv_cache_interleave_size=self.parallel_config.cp_kv_cache_interleave_size,
             reasoning_config=self.vllm_config.reasoning_config,
+            use_yoco_fused_slot_mapping=self.use_yoco_fused_slot_mapping,
         )
 
         # Separate cuda stream for overlapping transfer of sampled token ids from
@@ -6848,6 +6860,7 @@ class GPUModelRunner(
                 logitsprocs_need_output_token_ids=self.input_batch.logitsprocs_need_output_token_ids,
                 is_pooling_model=self.is_pooling_model,
                 reasoning_config=self.vllm_config.reasoning_config,
+                use_yoco_fused_slot_mapping=self.use_yoco_fused_slot_mapping,
             )
 
         assert self._init_block_sizes == block_sizes, (

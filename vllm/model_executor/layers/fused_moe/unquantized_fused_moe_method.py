@@ -314,6 +314,21 @@ class UnquantizedFusedMoEMethod(FusedMoEMethodBase, CustomOp):
         _fe = getattr(self.moe_kernel, "fused_experts", None)
         if _fe is not None:
             _fe.swiglu_limit = getattr(layer, "swiglu_limit", None)
+            _fe.yoco_align_weighted_swiglu = getattr(
+                layer, "yoco_align_weighted_swiglu", False
+            )
+            _fe.yoco_align_deep_gemm_w2 = getattr(
+                layer, "yoco_align_deep_gemm_w2", False
+            )
+            _fe.yoco_separate_w2_config = getattr(
+                layer, "yoco_separate_w2_config", False
+            )
+            _fe.yoco_fast_w13_config = getattr(layer, "yoco_fast_w13_config", False)
+            _fe.yoco_triton_fallback_max_tokens = getattr(
+                layer, "yoco_triton_fallback_max_tokens", 0
+            )
+            _fe.yoco_align_moe_sum = getattr(layer, "yoco_align_moe_sum", False)
+            _fe.yoco_fast_moe_sum = getattr(layer, "yoco_fast_moe_sum", False)
         return self.moe_kernel.apply(
             hidden_states=x,
             w1=layer.w13_weight,

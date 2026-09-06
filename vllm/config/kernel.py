@@ -115,6 +115,7 @@ MoEBackend = Literal[
     "deep_gemm_mega_moe",
     "cutlass",
     "flashinfer_trtllm",
+    "yoco_flashinfer_trtllm",
     "flashinfer_cutlass",
     "flashinfer_cutedsl",
     "marlin",

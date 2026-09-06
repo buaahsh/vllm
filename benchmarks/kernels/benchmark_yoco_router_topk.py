@@ -195,10 +195,11 @@ def triton_fused_routing(
     logits: torch.Tensor,
     block_rows: int = 4,
     num_warps: int = 4,
+    ids_dtype: torch.dtype = torch.int64,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     shape = (logits.shape[0], 8)
     weights = torch.empty(shape, dtype=torch.float32, device=logits.device)
-    ids = torch.empty(shape, dtype=torch.int64, device=logits.device)
+    ids = torch.empty(shape, dtype=ids_dtype, device=logits.device)
     fused_routing_triton_kernel[(triton.cdiv(logits.shape[0], block_rows),)](
         logits,
         weights,
@@ -209,6 +210,19 @@ def triton_fused_routing(
         num_stages=1,
     )
     return weights, ids
+
+
+def triton_i64_then_cast(
+    logits: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    weights, ids = triton_fused_routing(logits)
+    return weights, ids.to(torch.int32)
+
+
+def triton_i32_direct(
+    logits: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    return triton_fused_routing(logits, ids_dtype=torch.int32)
 
 
 def triton_logits_routing(logits: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -357,7 +371,7 @@ def main() -> None:
     print(
         f"{'tokens':>8} {'current':>10} {'cuda':>10} "
         f"{'b4w1':>10} {'b4w2':>10} {'b4w4':>10} {'b4w8':>10} {'b8w8':>10} "
-        f"{'logits':>10}"
+        f"{'logits':>10} {'i64+cast':>10} {'i32':>10}"
     )
     for num_tokens in args.tokens:
         logits = torch.randn(num_tokens, 128, dtype=torch.float32, device="cuda")
@@ -372,6 +386,8 @@ def main() -> None:
             for config in triton_configs
         }
         logits_run = capture(triton_logits_routing, logits)
+        i64_cast_run = capture(triton_i64_then_cast, logits)
+        i32_run = capture(triton_i32_direct, logits)
         iterations = (
             args.iterations if num_tokens <= 4096 else max(500, args.iterations // 4)
         )
@@ -382,10 +398,12 @@ def main() -> None:
             for config, run in triton_runs.items()
         }
         logits_us = graph_latency_us(logits_run, iterations)
+        i64_cast_us = graph_latency_us(i64_cast_run, iterations)
+        i32_us = graph_latency_us(i32_run, iterations)
         print(
             f"{num_tokens:8d} {current_us:10.3f} {fused_us:10.3f} "
             + " ".join(f"{triton_us[config]:10.3f}" for config in triton_configs)
-            + f" {logits_us:10.3f}"
+            + f" {logits_us:10.3f} {i64_cast_us:10.3f} {i32_us:10.3f}"
         )
 
 

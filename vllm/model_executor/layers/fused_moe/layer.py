@@ -10,6 +10,7 @@ from torch.nn.parameter import UninitializedParameter
 
 from vllm._aiter_ops import rocm_aiter_ops
 from vllm.config import get_current_vllm_config
+from vllm.config.kernel import MoEBackend
 from vllm.config.parallel import ExpertPlacementStrategy
 from vllm.distributed import (
     get_dp_group,
@@ -100,9 +101,13 @@ class FusedMoE(PluggableLayer):
                                       not supported by the router (or the experts).
         shared_output_transform: Optional model-specific transform applied after the
                                  shared-expert output is reduced.
+        combined_output_transform: Optional model-specific transform that consumes
+                                   reduced shared and routed outputs together.
         reduce_shared_experts_separately: Preserve separate routed-then-shared
                                           reductions instead of reducing their sum.
         use_tuned_config: Whether shape/device-specific MoE tuning files may be used.
+        moe_backend_override: Optional per-layer backend. None preserves the global
+                              KernelConfig selection.
     """
 
     # Auto-incrementing layer ID for routing replay buffer binding.
@@ -149,11 +154,13 @@ class FusedMoE(PluggableLayer):
         routed_input_transform: torch.nn.Module | None = None,
         routed_output_transform: torch.nn.Module | None = None,
         shared_output_transform: torch.nn.Module | None = None,
+        combined_output_transform: torch.nn.Module | None = None,
         reduce_shared_experts_separately: bool = False,
         apply_routed_scale_to_output: bool = False,
         zero_expert_type: str | None = None,
         hash_indices_table: torch.Tensor | None = None,
         use_tuned_config: bool = True,
+        moe_backend_override: MoEBackend | None = None,
     ):
         super().__init__()
 
@@ -248,6 +255,16 @@ class FusedMoE(PluggableLayer):
         self.shared_expert_gate = shared_expert_gate
         if reduce_shared_experts_separately and shared_experts is None:
             raise ValueError("reduce_shared_experts_separately requires shared_experts")
+        if combined_output_transform is not None and shared_experts is None:
+            raise ValueError("combined_output_transform requires shared_experts")
+        if (
+            combined_output_transform is not None
+            and shared_output_transform is not None
+        ):
+            raise ValueError(
+                "combined_output_transform and shared_output_transform are mutually "
+                "exclusive"
+            )
 
         if (
             not self.aiter_fmoe_shared_expert_enabled
@@ -345,7 +362,11 @@ class FusedMoE(PluggableLayer):
             num_logical_experts=self.logical_num_experts,
             moe_parallel_config=self.moe_parallel_config,
             in_dtype=moe_in_dtype,
-            moe_backend=vllm_config.kernel_config.moe_backend,
+            moe_backend=(
+                moe_backend_override
+                if moe_backend_override is not None
+                else vllm_config.kernel_config.moe_backend
+            ),
             router_logits_dtype=router_logits_dtype,
             max_num_tokens=max_num_batched_tokens,
             has_bias=has_bias,
@@ -455,6 +476,7 @@ class FusedMoE(PluggableLayer):
             routed_input_transform=routed_input_transform,
             routed_output_transform=routed_output_transform,
             shared_output_transform=shared_output_transform,
+            combined_output_transform=combined_output_transform,
             reduce_shared_experts_separately=reduce_shared_experts_separately,
             # When apply_routed_scale_to_output is True, we allow
             # the scaling factor to be passed to the runner, otherwise

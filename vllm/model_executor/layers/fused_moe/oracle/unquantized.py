@@ -31,6 +31,7 @@ logger = init_logger(__name__)
 
 class UnquantizedMoeBackend(Enum):
     FLASHINFER_TRTLLM = "FlashInfer TRTLLM"
+    YOCO_FLASHINFER_TRTLLM = "YOCO FlashInfer TRTLLM"
     FLASHINFER_CUTLASS = "FlashInfer CUTLASS"
     AITER = "ROCm AITER"
     TRITON = "TRITON"
@@ -91,6 +92,13 @@ def backend_to_kernel_cls(
 
         return TrtLlmBf16Experts
 
+    elif backend == UnquantizedMoeBackend.YOCO_FLASHINFER_TRTLLM:
+        from vllm.model_executor.layers.fused_moe.experts.yoco_trtllm_bf16 import (
+            YocoTrtLlmBf16Experts,
+        )
+
+        return YocoTrtLlmBf16Experts
+
     elif backend == UnquantizedMoeBackend.FLASHINFER_CUTLASS:
         from vllm.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (  # noqa: E501
             FlashInferExperts,
@@ -133,6 +141,7 @@ def map_unquantized_backend(runner_backend: MoEBackend) -> UnquantizedMoeBackend
     mapping = {
         "triton": UnquantizedMoeBackend.TRITON,
         "flashinfer_trtllm": UnquantizedMoeBackend.FLASHINFER_TRTLLM,
+        "yoco_flashinfer_trtllm": UnquantizedMoeBackend.YOCO_FLASHINFER_TRTLLM,
         "flashinfer_cutlass": UnquantizedMoeBackend.FLASHINFER_CUTLASS,
         "aiter": UnquantizedMoeBackend.AITER,
     }
@@ -307,7 +316,10 @@ def convert_to_unquantized_kernel_format(
             # Non-gated MoE: w13 is a single projection, no need to swap.
             w13_weight = swap_w13_to_w31(w13_weight)
 
-    elif unquantized_backend == UnquantizedMoeBackend.FLASHINFER_TRTLLM:
+    elif unquantized_backend in (
+        UnquantizedMoeBackend.FLASHINFER_TRTLLM,
+        UnquantizedMoeBackend.YOCO_FLASHINFER_TRTLLM,
+    ):
         # Swap halves to arrange as [w3; w1] (kernel expectation)
         w13_weight = swap_w13_to_w31(w13_weight)
         _cache_permute_indices: dict[torch.Size, torch.Tensor] = {}

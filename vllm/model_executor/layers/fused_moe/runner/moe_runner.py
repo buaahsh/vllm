@@ -226,6 +226,7 @@ class MoERunner(MoERunnerInterface):
         shared_expert_gate: torch.nn.Module | None = None,
         routed_output_transform: torch.nn.Module | None = None,
         shared_output_transform: torch.nn.Module | None = None,
+        combined_output_transform: torch.nn.Module | None = None,
         reduce_shared_experts_separately: bool = False,
         routed_scaling_factor: float = 1.0,
     ):
@@ -235,6 +236,7 @@ class MoERunner(MoERunnerInterface):
         self.routed_input_transform = routed_input_transform
         self.routed_output_transform = routed_output_transform
         self.shared_output_transform = shared_output_transform
+        self.combined_output_transform = combined_output_transform
         self.reduce_shared_experts_separately = reduce_shared_experts_separately
         self.routed_scaling_factor = routed_scaling_factor
         self.gate = gate
@@ -460,6 +462,27 @@ class MoERunner(MoERunnerInterface):
             return shared_output
         assert shared_experts_input is not None
         return self.shared_output_transform(shared_output, shared_experts_input)
+
+    def apply_combined_output_transform(
+        self,
+        shared_output: torch.Tensor,
+        fused_output: torch.Tensor,
+        shared_experts_input: torch.Tensor | None,
+    ) -> torch.Tensor:
+        """Apply an optional model-specific shared+routed output transform."""
+        if self.combined_output_transform is None:
+            shared_output = self.apply_shared_output_transform(
+                shared_output, shared_experts_input
+            )
+            assert shared_output is not None
+            # Preserve the default runner's historical operand order.
+            return shared_output + fused_output
+        assert shared_experts_input is not None
+        return self.combined_output_transform(
+            shared_output,
+            fused_output,
+            shared_experts_input,
+        )
 
     def _encode_layer_name(self) -> str | LayerName:
         if _USE_LAYERNAME:
@@ -728,12 +751,12 @@ class MoERunner(MoERunnerInterface):
 
         # Apply output transform (e.g. latent -> full dim)
         fused_output = self.apply_routed_output_transform(fused_output)
-        shared_output = self.apply_shared_output_transform(
-            shared_output, shared_experts_input
-        )
-
         if shared_output is not None:
-            result = shared_output + fused_output
+            result = self.apply_combined_output_transform(
+                shared_output,
+                fused_output,
+                shared_experts_input,
+            )
         else:
             result = fused_output
 

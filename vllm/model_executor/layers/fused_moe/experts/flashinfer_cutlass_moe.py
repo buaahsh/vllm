@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+from typing import TYPE_CHECKING
+
 import torch
 
 import vllm.model_executor.layers.fused_moe.modular_kernel as mk
@@ -31,6 +33,21 @@ from vllm.utils.flashinfer import (
 )
 
 logger = init_logger(__name__)
+
+if TYPE_CHECKING:
+    from vllm.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+
+
+def make_unquantized_swiglu_params(
+    num_experts: int,
+    device: torch.device | str,
+    limit: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Build FlashInfer parameters for YOCO's standard clamped SwiGLU."""
+    alpha = torch.ones(num_experts, dtype=torch.float32, device=device)
+    beta = torch.zeros_like(alpha)
+    limit_tensor = torch.full_like(alpha, limit)
+    return alpha, beta, limit_tensor
 
 
 def is_valid_flashinfer_cutlass_fused_moe(
@@ -97,6 +114,13 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
         self.max_capture_size = (
             get_current_vllm_config().compilation_config.max_cudagraph_capture_size
         )
+        self._unquantized_swiglu_limit: float | None = None
+        self._unquantized_swiglu_alpha: torch.Tensor | None = None
+        self._unquantized_swiglu_beta: torch.Tensor | None = None
+        self._unquantized_swiglu_limit_tensor: torch.Tensor | None = None
+        self._yoco_triton_fallback: TritonExperts | None = None
+        self._yoco_triton_workspace13: torch.Tensor | None = None
+        self._yoco_triton_workspace2: torch.Tensor | None = None
 
         if quant_config.weight_quant_dtype == "mxfp4":
             # This value is used specifically for gpt-oss,
@@ -232,6 +256,26 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
         - Note: in order for activation chunking to work, the first dimension
           of each tuple must be the number of tokens.
         """
+        fallback_max = int(getattr(self, "yoco_triton_fallback_max_tokens", 0))
+        if (
+            fallback_max > 1
+            and M > 0
+            and self.quant_config.weight_quant_dtype is None
+            and self.out_dtype == torch.bfloat16
+            and activation == MoEActivation.SILU
+        ):
+            # Reserve the largest possible fallback even when the profiling
+            # call itself runs CUTLASS. The arena is shared across layers and
+            # must already cover every decode graph before graph capture.
+            rows = min(M, fallback_max)
+            activation_dim = self.adjust_N_for_activation(N, activation)
+            workspace1_numel = max(M * K, rows * topk * max(activation_dim, K))
+            workspace2_numel = rows * topk * max(N, K)
+            # Triton resizes these Standard-format scratch tensors by numel.
+            # Exact flat capacities grow monotonically with M; rounding to
+            # an M-leading shape can make an intermediate batch require a
+            # few more bytes than the maximum-M profiling allocation.
+            return ((workspace1_numel,), (workspace2_numel,), (M, K))
         workspace1 = (M, K)
         workspace2 = (0,)
         # For NVFP4, the output is stored in a packed int8 format,
@@ -259,6 +303,85 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
         expert_tokens_meta: mk.ExpertTokensMetadata | None,
         apply_router_weight_on_input: bool | None,
     ):
+        fallback_max_tokens = int(getattr(self, "yoco_triton_fallback_max_tokens", 0))
+        if (
+            0 < hidden_states.shape[0] <= fallback_max_tokens
+            and self.quant_config.weight_quant_dtype is None
+            and hidden_states.dtype == torch.bfloat16
+            and w1.dtype == w2.dtype == torch.bfloat16
+            and activation == MoEActivation.SILU
+            and expert_map is None
+            and global_num_experts == self.num_experts
+            and self.w1_bias is None
+            and self.w2_bias is None
+        ):
+            from vllm.model_executor.layers.fused_moe.experts.triton_moe import (
+                TritonExperts,
+            )
+
+            if self._yoco_triton_fallback is None:
+                logger.info_once(
+                    "YOCO FlashInfer experts use Triton for M<=%d with the "
+                    "converted [up, gate] W13 layout",
+                    fallback_max_tokens,
+                )
+                self._yoco_triton_fallback = TritonExperts(
+                    self.moe_config, self.quant_config
+                )
+                self._yoco_triton_fallback.yoco_swapped_w13 = True
+                self._yoco_triton_fallback.swiglu_limit = getattr(
+                    self, "swiglu_limit", None
+                )
+                if fallback_max_tokens > 1:
+                    for name in (
+                        "yoco_fast_w13_config",
+                        "yoco_separate_w2_config",
+                        "yoco_fast_moe_sum",
+                    ):
+                        setattr(
+                            self._yoco_triton_fallback, name, getattr(self, name, False)
+                        )
+                else:
+                    routes = fallback_max_tokens * topk_ids.shape[1]
+                    self._yoco_triton_workspace13 = torch.empty(
+                        routes * (w1.shape[1] // 2),
+                        dtype=hidden_states.dtype,
+                        device=hidden_states.device,
+                    )
+                    self._yoco_triton_workspace2 = torch.empty(
+                        routes * w1.shape[1],
+                        dtype=hidden_states.dtype,
+                        device=hidden_states.device,
+                    )
+            fallback_workspace13 = (
+                workspace13
+                if fallback_max_tokens > 1
+                else self._yoco_triton_workspace13
+            )
+            fallback_workspace2 = (
+                workspace2 if fallback_max_tokens > 1 else self._yoco_triton_workspace2
+            )
+            assert fallback_workspace13 is not None
+            assert fallback_workspace2 is not None
+            self._yoco_triton_fallback.apply(
+                output,
+                hidden_states,
+                w1,
+                w2,
+                topk_weights,
+                topk_ids,
+                activation,
+                global_num_experts,
+                expert_map,
+                a1q_scale,
+                a2_scale,
+                fallback_workspace13,
+                fallback_workspace2,
+                expert_tokens_meta,
+                bool(apply_router_weight_on_input),
+            )
+            return
+
         from flashinfer.fused_moe.core import ActivationType
 
         activation_str_to_value_map = {
@@ -365,6 +488,26 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
             a1q_scale = None
             fc1_expert_weights = w1
             fc2_expert_weights = w2
+            # FlashInfer's BF16 SwiGLU accepts the same clamp expression used
+            # by YOCO when alpha=1 and beta=0. The oracle has already swapped
+            # vLLM's [gate, up] W13 layout to FlashInfer's [up, gate] layout.
+            # Models without an explicit positive swiglu_limit keep the
+            # original all-None parameters and are unaffected.
+            limit = getattr(self, "swiglu_limit", None)
+            if limit is not None and float(limit) > 0:
+                limit_value = float(limit)
+                if self._unquantized_swiglu_limit != limit_value:
+                    self._unquantized_swiglu_limit = limit_value
+                    (
+                        self._unquantized_swiglu_alpha,
+                        self._unquantized_swiglu_beta,
+                        self._unquantized_swiglu_limit_tensor,
+                    ) = make_unquantized_swiglu_params(
+                        self.num_experts, hidden_states.device, limit_value
+                    )
+                swiglu_alpha = self._unquantized_swiglu_alpha
+                swiglu_beta = self._unquantized_swiglu_beta
+                swiglu_limit = self._unquantized_swiglu_limit_tensor
 
         _ = flashinfer_cutlass_fused_moe(
             input=hidden_states,

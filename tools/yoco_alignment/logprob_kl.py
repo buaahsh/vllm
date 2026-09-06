@@ -239,6 +239,9 @@ def parse_args() -> argparse.Namespace:
             )
             sub.add_argument("--attn-implementation")
         else:
+            mode_group = sub.add_mutually_exclusive_group()
+            mode_group.add_argument("--align", action="store_true")
+            mode_group.add_argument("--fast", action="store_true")
             sub.add_argument(
                 "--dtype",
                 choices=("auto", "bfloat16", "float16", "float32"),
@@ -249,6 +252,9 @@ def parse_args() -> argparse.Namespace:
             sub.add_argument("--gpu-memory-utilization", type=float, default=0.9)
             sub.add_argument("--max-num-seqs", type=int)
             sub.add_argument("--max-num-batched-tokens", type=int)
+            sub.add_argument("--max-num-partial-prefills", type=int)
+            sub.add_argument("--max-long-partial-prefills", type=int)
+            sub.add_argument("--long-prefill-token-threshold", type=int)
             sub.add_argument(
                 "--enable-chunked-prefill",
                 action=argparse.BooleanOptionalAction,
@@ -256,6 +262,16 @@ def parse_args() -> argparse.Namespace:
             )
             sub.add_argument("--kv-sharing-fast-prefill", action="store_true")
             sub.add_argument("--enforce-eager", action="store_true")
+            sub.add_argument(
+                "--stage-batch-before-run",
+                action="store_true",
+                help="Pause scheduling, enqueue the whole probe batch, then resume.",
+            )
+            sub.add_argument(
+                "--async-scheduling",
+                action=argparse.BooleanOptionalAction,
+                default=None,
+            )
             sub.add_argument("--compilation-config-json")
             sub.add_argument("--quantization", default=None)
             sub.add_argument("--quantization-config-json")
@@ -617,6 +633,8 @@ def run_native(args: argparse.Namespace) -> None:
     trace_handles = []
     trace_counts: dict[str, int] = {}
     native_moe_patches = []
+    trace_slim = os.environ.get("YOCO_TRACE_SLIM") == "1"
+    trace_detail_layer = int(os.environ.get("YOCO_TRACE_DETAIL_LAYER", "-1"))
     if args.trace_out:
         trace_prompt_records = _prompt_records(
             args.model,
@@ -625,12 +643,12 @@ def run_native(args: argparse.Namespace) -> None:
             args.prompt_start,
             args.prompt_limit,
         )[1]
-        if (
-            len(trace_prompt_records) != 1
-            or args.batch_size != 1
-            or args.first_batch_size not in (None, 1)
-        ):
-            raise ValueError("--trace-out requires exactly one prompt and batch-size=1")
+        if len(
+            trace_prompt_records
+        ) != args.batch_size or args.first_batch_size not in (None, args.batch_size):
+            raise ValueError(
+                "--trace-out requires exactly one complete batch of prompts"
+            )
         if args.native_forward_repeats != 1:
             raise ValueError("--trace-out requires --native-forward-repeats=1")
 
@@ -690,21 +708,27 @@ def run_native(args: argparse.Namespace) -> None:
                     layer.input_layernorm.register_forward_hook(
                         trace_hook(f"{prefix}.input_norm")
                     ),
-                    layer.self_attn.register_forward_pre_hook(set_active_attn),
                     layer.self_attn.register_forward_hook(
                         trace_hook(f"{prefix}.attn_out")
-                    ),
-                    layer.self_attn.register_forward_hook(clear_active_attn),
-                    layer.self_attn.o_proj.register_forward_hook(
-                        trace_hook(f"{attn_prefix}.output")
                     ),
                     layer.post_attention_layernorm.register_forward_hook(
                         trace_hook(f"{prefix}.post_attn_norm")
                     ),
-                    layer.mlp.register_forward_pre_hook(set_active_mlp),
                     layer.mlp.register_forward_hook(trace_hook(f"{prefix}.mlp_out")),
-                    layer.mlp.register_forward_hook(clear_active_mlp),
                     layer.register_forward_hook(trace_hook(f"{prefix}.output")),
+                ]
+            )
+            if trace_slim and layer_idx != trace_detail_layer:
+                continue
+            trace_handles.extend(
+                [
+                    layer.self_attn.register_forward_pre_hook(set_active_attn),
+                    layer.self_attn.register_forward_hook(clear_active_attn),
+                    layer.self_attn.o_proj.register_forward_hook(
+                        trace_hook(f"{attn_prefix}.output")
+                    ),
+                    layer.mlp.register_forward_pre_hook(set_active_mlp),
+                    layer.mlp.register_forward_hook(clear_active_mlp),
                     layer.mlp.gate.register_forward_hook(
                         trace_hook(f"{mlp_prefix}.router_logits")
                     ),
@@ -772,7 +796,9 @@ def run_native(args: argparse.Namespace) -> None:
         original_routed_moe = native_moe.nnscaler_all2all_moe_gmm
         original_te_unpermute = native_moe_utils.moe_unpermute
         original_fused_silu = native_moe_ffn.fused_silu
-        original_per_block_cast_to_fp8 = native_moe_ffn.per_block_cast_to_fp8
+        original_per_block_cast_to_fp8 = getattr(
+            native_moe_ffn, "per_block_cast_to_fp8", None
+        )
 
         def traced_topk_routing(*call_args, **call_kwargs):
             outputs = original_topk_routing(*call_args, **call_kwargs)
@@ -877,7 +903,6 @@ def run_native(args: argparse.Namespace) -> None:
         native_moe.nnscaler_all2all_moe_gmm = traced_routed_moe
         native_moe_utils.moe_unpermute = traced_te_unpermute
         native_moe_ffn.fused_silu = traced_fused_silu
-        native_moe_ffn.per_block_cast_to_fp8 = traced_per_block_cast_to_fp8
         native_moe_patches.extend(
             [
                 (
@@ -904,13 +929,17 @@ def run_native(args: argparse.Namespace) -> None:
                 (native_moe, "nnscaler_all2all_moe_gmm", original_routed_moe),
                 (native_moe_utils, "moe_unpermute", original_te_unpermute),
                 (native_moe_ffn, "fused_silu", original_fused_silu),
+            ]
+        )
+        if original_per_block_cast_to_fp8 is not None:
+            native_moe_ffn.per_block_cast_to_fp8 = traced_per_block_cast_to_fp8
+            native_moe_patches.append(
                 (
                     native_moe_ffn,
                     "per_block_cast_to_fp8",
                     original_per_block_cast_to_fp8,
-                ),
-            ]
-        )
+                )
+            )
 
     patched_cute_funcs = []
     if args.native_use_cute:
@@ -1351,6 +1380,18 @@ def run_vllm(args: argparse.Namespace) -> None:
     }
     if args.max_num_seqs is not None:
         llm_kwargs["max_num_seqs"] = args.max_num_seqs
+    if args.max_num_partial_prefills is not None:
+        llm_kwargs["max_num_partial_prefills"] = args.max_num_partial_prefills
+    if args.max_long_partial_prefills is not None:
+        llm_kwargs["max_long_partial_prefills"] = args.max_long_partial_prefills
+    if args.long_prefill_token_threshold is not None:
+        llm_kwargs["long_prefill_token_threshold"] = args.long_prefill_token_threshold
+    if args.async_scheduling is not None:
+        llm_kwargs["async_scheduling"] = args.async_scheduling
+    if args.align:
+        llm_kwargs["align"] = True
+    elif args.fast:
+        llm_kwargs["fast"] = True
     if args.enable_expert_parallel:
         llm_kwargs["enable_expert_parallel"] = True
     if args.enable_chunked_prefill is not None:
@@ -1388,17 +1429,35 @@ def run_vllm(args: argparse.Namespace) -> None:
     vocab_size = int(llm.llm_engine.model_config.get_vocab_size())
     results = []
     for batch in _record_batches(records, args.batch_size, args.first_batch_size):
-        outputs = llm.generate(
-            [
-                {
-                    "prompt_token_ids": record["prompt_token_ids"],
-                    "prompt": record["prompt_text"],
-                }
-                for record in batch
-            ],
-            sampling_params=params,
-            use_tqdm=False,
-        )
+        prompts = [
+            {
+                "prompt_token_ids": record["prompt_token_ids"],
+                "prompt": record["prompt_text"],
+            }
+            for record in batch
+        ]
+        if args.stage_batch_before_run:
+            llm.sleep(level=0)
+            request_ids = llm.enqueue(
+                prompts,
+                sampling_params=params,
+                use_tqdm=False,
+            )
+            llm.wake_up(tags=["scheduling"])
+            completed = llm.wait_for_completion(use_tqdm=False)
+            if len(completed) != len(request_ids):
+                raise RuntimeError(
+                    f"Expected {len(request_ids)} staged outputs, got {len(completed)}"
+                )
+            # wait_for_completion returns outputs sorted by its numeric engine
+            # request ID. enqueue returns external IDs with a random suffix.
+            outputs = completed
+        else:
+            outputs = llm.generate(
+                prompts,
+                sampling_params=params,
+                use_tqdm=False,
+            )
         for record, request_output in zip(batch, outputs):
             output = request_output.outputs[0]
             logprobs = _vllm_logprob_tensor(output.logprobs[0], vocab_size).cpu()

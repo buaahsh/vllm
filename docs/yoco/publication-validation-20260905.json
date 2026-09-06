@@ -1,0 +1,15 @@
+{
+  "account": "Snow2022jlu",
+  "vllm_base": "4015343fa3ad5fddf773bb52e1a700f0349cb39d",
+  "train_base": "0e076659216d5165def170accc07f5b5d9584616",
+  "publication_tests": {
+    "passed": 49,
+    "deselected": 72,
+    "environment": "B200 GPU 5, existing validated venv"
+  },
+  "inference_executable_ast_matches_measured_source": true,
+  "training_python_sources_match_validated_worktree": true,
+  "pre_commit": "All applicable checks passed except the repository-wide shellcheck hook, which reports pre-existing failures in unchanged scripts; the changed installer passed direct shellcheck.",
+  "train_incremental_lint": "45 baseline findings, 45 current findings, zero new findings",
+  "historical_validation": "See the dated experiment reports; raw model weights and large GPU artifacts are not included."
+}

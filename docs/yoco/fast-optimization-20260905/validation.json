@@ -1,0 +1,19 @@
+{
+  "branch": "dev/yoco-fast-optimization-20260905",
+  "targeted_tests_passed": 40,
+  "short_runs_per_mode_per_case": 8,
+  "selected_trace_requests_per_mode": 3643,
+  "selected_trace_all_gates_pass": true,
+  "actual_token_counts_identical": true,
+  "environment_observed_gates_pass": true,
+  "original_pod_and_services_unchanged": true,
+  "gpu5_released": true,
+  "incremental_patch_reproduces_final": true,
+  "report_zip_valid": true,
+  "failed_attempts_preserved": [
+    "before-profile-attempt1",
+    "candidate-a",
+    "cases/before-smoke",
+    "cases/candidate-long"
+  ]
+}

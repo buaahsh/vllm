@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tune YOCO L3 TP4 BF16 expert GEMMs on B200.
+"""Tune YOCO L3 BF16 expert GEMMs on B200.
 
 The checked-in fused-MoE configuration is shared by W13 and W2.  This
-benchmark reports both kernels separately and selects on their sum, while
-keeping dispatch and activation out of the timed region.  W2 includes the
-router-weight multiply fused by the real inference path.
+benchmark can optimize W13, W2, or their sum while reporting both kernels.
+For the W2-only objective, BLOCK_SIZE_M is fixed to W13's selected value so
+the runtime can reuse one token dispatch. W2 includes the router-weight
+multiply fused by the real inference path. Defaults reproduce TP4
+(``K=1024,N=960``); pass ``--intermediate-size 3840`` for TP1.
 """
 
 from __future__ import annotations
@@ -75,6 +77,25 @@ def _load_seed_configs(paths: list[Path]) -> list[Config]:
             canonical = _canonical(config)
             configs[_config_key(canonical)] = canonical
     return list(configs.values())
+
+
+def _load_token_configs(path: Path) -> dict[int, Config]:
+    data = json.loads(path.read_text())
+    data.pop("triton_version", None)
+    return {int(tokens): _canonical(config) for tokens, config in data.items()}
+
+
+def _nearest_config(configs: dict[int, Config], tokens: int) -> Config:
+    nearest = min(configs, key=lambda candidate: abs(candidate - tokens))
+    return configs[nearest]
+
+
+def _objective_value(objective: str, w13_us: float, w2_us: float) -> float:
+    if objective == "w13":
+        return w13_us
+    if objective == "w2":
+        return w2_us
+    return w13_us + w2_us
 
 
 def _base_search_space(seed_configs: list[Config]) -> list[Config]:
@@ -301,6 +322,75 @@ def _benchmark_config(
     return w13_us, w2_us
 
 
+def _benchmark_objective(
+    objective: str,
+    kernel,
+    a1: torch.Tensor,
+    w1: torch.Tensor,
+    c1: torch.Tensor,
+    a2: torch.Tensor,
+    w2: torch.Tensor,
+    c2: torch.Tensor,
+    routed_weights: torch.Tensor,
+    assignment: Assignment,
+    config: Config,
+    *,
+    graph_nodes: int,
+    repeats: int,
+    rounds: int,
+) -> tuple[float, float]:
+    """Time only the requested kernel during the broad config screen."""
+    if objective == "w13":
+        return (
+            _time_kernel(
+                kernel,
+                a1,
+                w1,
+                c1,
+                None,
+                assignment,
+                8,
+                config,
+                graph_nodes=graph_nodes,
+                repeats=repeats,
+                rounds=rounds,
+            ),
+            0.0,
+        )
+    if objective == "w2":
+        return (
+            0.0,
+            _time_kernel(
+                kernel,
+                a2,
+                w2,
+                c2,
+                routed_weights,
+                assignment,
+                1,
+                config,
+                graph_nodes=graph_nodes,
+                repeats=repeats,
+                rounds=rounds,
+            ),
+        )
+    return _benchmark_config(
+        kernel,
+        a1,
+        w1,
+        c1,
+        a2,
+        w2,
+        c2,
+        routed_weights,
+        assignment,
+        config,
+        graph_nodes=graph_nodes,
+        repeats=repeats,
+        rounds=rounds,
+    )
+
+
 def _default_config(tokens: int) -> Config:
     if tokens <= 32:
         block_m = 16
@@ -376,12 +466,14 @@ def _screen(
     w2: torch.Tensor,
     *,
     keep: int,
+    objective: str,
 ) -> list[tuple[float, float, float, Config]]:
     _, routed_weights, a1, a2, c1, c2 = problem
     results = []
     for index, config in enumerate(configs, 1):
         try:
-            w13_us, w2_us = _benchmark_config(
+            w13_us, w2_us = _benchmark_objective(
+                objective,
                 kernel,
                 a1,
                 w1,
@@ -399,9 +491,11 @@ def _screen(
         except Exception as error:
             print(f"skip config={config}: {type(error).__name__}: {error}")
             continue
-        results.append((w13_us + w2_us, w13_us, w2_us, config))
+        score = _objective_value(objective, w13_us, w2_us)
+        results.append((score, w13_us, w2_us, config))
         if index % 25 == 0:
-            print(f"screened={index}/{len(configs)} best_us={min(results)[0]:.3f}")
+            best_us = min(results, key=lambda item: item[0])[0]
+            print(f"screened={index}/{len(configs)} best_us={best_us:.3f}")
     results.sort(key=lambda item: item[0])
     return results[:keep]
 
@@ -411,7 +505,34 @@ def main() -> None:
     parser.add_argument("--kernel-source", type=Path, required=True)
     parser.add_argument("--seed-config", type=Path, action="append", default=[])
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--experts", type=int, default=128)
+    parser.add_argument(
+        "--intermediate-size",
+        type=int,
+        default=960,
+        help="Per-TP-rank expert intermediate width N.",
+    )
+    parser.add_argument(
+        "--hidden-size",
+        type=int,
+        default=1024,
+        help="Latent routed-expert input/output width K.",
+    )
     parser.add_argument("--base-limit", type=int)
+    parser.add_argument(
+        "--objective",
+        choices=("total", "w13", "w2"),
+        default="total",
+        help="Kernel time used to select the winning configuration.",
+    )
+    parser.add_argument(
+        "--w13-config",
+        type=Path,
+        help=(
+            "Shared/W13 config map whose BLOCK_SIZE_M must be reused when "
+            "--objective=w2."
+        ),
+    )
     parser.add_argument(
         "--benchmark-only-config",
         type=Path,
@@ -449,7 +570,9 @@ def main() -> None:
 
     torch.manual_seed(20260831)
     kernel = _load_vllm_fused_moe_kernel(args.kernel_source)
-    experts, n, k = 128, 960, 1024
+    experts = args.experts
+    n = args.intermediate_size
+    k = args.hidden_size
     w1 = torch.randn((experts, 2 * n, k), dtype=torch.bfloat16, device="cuda")
     w2 = torch.randn((experts, k, n), dtype=torch.bfloat16, device="cuda")
     _validate_kernel(kernel, w1, w2, experts, n, k)
@@ -457,9 +580,16 @@ def main() -> None:
     base_configs = _base_search_space(seeds)
     if args.base_limit is not None:
         base_configs = base_configs[: args.base_limit]
+    if args.objective == "w2" and args.w13_config is None:
+        parser.error("--objective=w2 requires --w13-config")
+    w13_configs = (
+        _load_token_configs(args.w13_config) if args.w13_config is not None else None
+    )
+
     print(
         f"device={current_platform.get_device_name()} triton={triton.__version__} "
-        f"E={experts} N={n} K={k} topk=8 base_configs={len(base_configs)}"
+        f"E={experts} N={n} K={k} topk=8 objective={args.objective} "
+        f"base_configs={len(base_configs)}"
     )
 
     benchmark_only_configs = None
@@ -475,13 +605,32 @@ def main() -> None:
     for tokens in args.tokens:
         problem = _make_problem(tokens, experts, n, k)
         topk_ids = problem[0]
+        default = (
+            _nearest_config(w13_configs, tokens)
+            if args.objective == "w2" and w13_configs is not None
+            else _default_config(tokens)
+        )
+        token_base_configs = base_configs
+        if args.objective == "w2":
+            token_base_configs = [
+                config
+                for config in base_configs
+                if config["BLOCK_SIZE_M"] == default["BLOCK_SIZE_M"]
+            ]
         if benchmark_only_configs is not None:
             nearest = min(
                 benchmark_only_configs,
                 key=lambda candidate: abs(candidate - tokens),
             )
             tuned = benchmark_only_configs[nearest]
-            default = _default_config(tokens)
+            if (
+                args.objective == "w2"
+                and tuned["BLOCK_SIZE_M"] != default["BLOCK_SIZE_M"]
+            ):
+                raise ValueError(
+                    "W2 config changes BLOCK_SIZE_M and cannot reuse W13 dispatch: "
+                    f"tokens={tokens}, W13={default}, W2={tuned}"
+                )
             assignments = {
                 block_m: _make_assignment(topk_ids, block_m, experts)
                 for block_m in {
@@ -522,6 +671,8 @@ def main() -> None:
             )
             tuned_total = tuned_w13 + tuned_w2
             default_total = default_w13 + default_w2
+            tuned_score = _objective_value(args.objective, tuned_w13, tuned_w2)
+            default_score = _objective_value(args.objective, default_w13, default_w2)
             output[str(tokens)] = tuned
             print(
                 f"tokens={tokens} nearest={nearest} "
@@ -529,7 +680,8 @@ def main() -> None:
                 f"(w13={default_w13:.3f},w2={default_w2:.3f}) "
                 f"tuned={tuned_total:.3f}us "
                 f"(w13={tuned_w13:.3f},w2={tuned_w2:.3f}) "
-                f"speedup={default_total / tuned_total:.3f} config={tuned}"
+                f"objective_speedup={default_score / tuned_score:.3f} "
+                f"config={tuned}"
             )
             args.output.write_text(json.dumps(output, indent=4) + "\n")
             del problem, assignments
@@ -538,17 +690,19 @@ def main() -> None:
 
         assignments = {
             block_m: _make_assignment(topk_ids, block_m, experts)
-            for block_m in (16, 32, 64, 128, 256)
+            for block_m in {
+                config["BLOCK_SIZE_M"] for config in token_base_configs + [default]
+            }
         }
-        default = _default_config(tokens)
         first_pass = _screen(
             kernel,
-            base_configs,
+            token_base_configs,
             problem,
             assignments,
             w1,
             w2,
             keep=5,
+            objective=args.objective,
         )
         refinement = _refine_configs([item[3] for item in first_pass])
         second_pass = _screen(
@@ -559,6 +713,7 @@ def main() -> None:
             w1,
             w2,
             keep=5,
+            objective=args.objective,
         )
 
         finalists = {_config_key(item[3]): item[3] for item in first_pass + second_pass}
@@ -581,20 +736,24 @@ def main() -> None:
                 repeats=20,
                 rounds=5,
             )
-            final_results.append((w13_us + w2_us, w13_us, w2_us, config))
+            score = _objective_value(args.objective, w13_us, w2_us)
+            final_results.append((score, w13_us, w2_us, config))
         final_results.sort(key=lambda item: item[0])
-        best_total, best_w13, best_w2, best_config = final_results[0]
-        base_total, base_w13, base_w2, _ = next(
+        best_score, best_w13, best_w2, best_config = final_results[0]
+        base_score, base_w13, base_w2, _ = next(
             item
             for item in final_results
             if _config_key(item[3]) == _config_key(default)
         )
         output[str(tokens)] = best_config
+        best_total = best_w13 + best_w2
+        base_total = base_w13 + base_w2
         print(
             f"tokens={tokens} baseline={base_total:.3f}us "
             f"(w13={base_w13:.3f},w2={base_w2:.3f}) "
             f"best={best_total:.3f}us (w13={best_w13:.3f},w2={best_w2:.3f}) "
-            f"speedup={base_total / best_total:.3f} config={best_config}"
+            f"objective_speedup={base_score / best_score:.3f} "
+            f"config={best_config}"
         )
         args.output.write_text(json.dumps(output, indent=4) + "\n")
         del problem, assignments

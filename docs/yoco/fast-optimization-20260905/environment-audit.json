@@ -1,0 +1,90 @@
+{
+  "before": {
+    "gates": {
+      "server_completions_equal_client_records": true,
+      "server_tokens_equal_client_usage": true,
+      "only_expected_gpu_process": true,
+      "no_new_uncorrectable_ecc": true,
+      "no_observed_cuda_error_in_server_log": true
+    },
+    "all_observed_gates_pass": true,
+    "server_request_delta": 3643.0,
+    "client_records": 3643,
+    "server_token_deltas": {
+      "prompt": 30522126.0,
+      "generation": 643375.0
+    },
+    "client_tokens": {
+      "prompt": 30522126,
+      "generation": 643375
+    },
+    "observed_gpu_pids": [
+      158597
+    ],
+    "engine_pids": [
+      158597
+    ],
+    "ecc_before": {
+      "volatile/sram_uncorrectable_parity": 0,
+      "volatile/sram_uncorrectable_secded": 0,
+      "volatile/dram_uncorrectable": 0,
+      "aggregate/sram_uncorrectable_parity": 0,
+      "aggregate/sram_uncorrectable_secded": 0,
+      "aggregate/dram_uncorrectable": 0
+    },
+    "ecc_after": {
+      "volatile/sram_uncorrectable_parity": 0,
+      "volatile/sram_uncorrectable_secded": 0,
+      "volatile/dram_uncorrectable": 0,
+      "aggregate/sram_uncorrectable_parity": 0,
+      "aggregate/sram_uncorrectable_secded": 0,
+      "aggregate/dram_uncorrectable": 0
+    },
+    "runtime_error_lines": [],
+    "limitation": "Checks observed server logs and nvidia-smi ECC; not a full host-driver Xid log audit"
+  },
+  "candidate": {
+    "gates": {
+      "server_completions_equal_client_records": true,
+      "server_tokens_equal_client_usage": true,
+      "only_expected_gpu_process": true,
+      "no_new_uncorrectable_ecc": true,
+      "no_observed_cuda_error_in_server_log": true
+    },
+    "all_observed_gates_pass": true,
+    "server_request_delta": 3643.0,
+    "client_records": 3643,
+    "server_token_deltas": {
+      "prompt": 30522126.0,
+      "generation": 643375.0
+    },
+    "client_tokens": {
+      "prompt": 30522126,
+      "generation": 643375
+    },
+    "observed_gpu_pids": [
+      161917
+    ],
+    "engine_pids": [
+      161917
+    ],
+    "ecc_before": {
+      "volatile/sram_uncorrectable_parity": 0,
+      "volatile/sram_uncorrectable_secded": 0,
+      "volatile/dram_uncorrectable": 0,
+      "aggregate/sram_uncorrectable_parity": 0,
+      "aggregate/sram_uncorrectable_secded": 0,
+      "aggregate/dram_uncorrectable": 0
+    },
+    "ecc_after": {
+      "volatile/sram_uncorrectable_parity": 0,
+      "volatile/sram_uncorrectable_secded": 0,
+      "volatile/dram_uncorrectable": 0,
+      "aggregate/sram_uncorrectable_parity": 0,
+      "aggregate/sram_uncorrectable_secded": 0,
+      "aggregate/dram_uncorrectable": 0
+    },
+    "runtime_error_lines": [],
+    "limitation": "Checks observed server logs and nvidia-smi ECC; not a full host-driver Xid log audit"
+  }
+}

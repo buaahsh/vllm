@@ -1133,7 +1133,14 @@ def init_worker_distributed_environment(
     parallel_config = vllm_config.parallel_config
     from vllm.model_executor.layers.batch_invariant import init_batch_invariance
 
-    init_batch_invariance()
+    additional_config = getattr(vllm_config, "additional_config", {}) or {}
+    text_config = getattr(vllm_config.model_config, "hf_text_config", None)
+    init_batch_invariance(
+        yoco_align=(
+            getattr(text_config, "model_type", None) == "yoco"
+            and additional_config.get("yoco_execution_mode") == "align"
+        )
+    )
     override_envs_for_eplb(parallel_config)
     set_custom_all_reduce(not parallel_config.disable_custom_all_reduce)
 

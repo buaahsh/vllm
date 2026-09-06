@@ -4074,3 +4074,304 @@ TP4 端到端、多节点 RDMA 或其他 YOCO 版本。TP4-specific kernel/confi
 独立 B200 microbenchmark，不应与 TP1 harness 的端到端收益混算。回滚本提交会同时
 移除两个 flag 及其本轮专用优化；上一提交的 non-affine QK clip+RoPE 融合仍可独立
 回滚。
+
+## 2026-09-02：Align 切换到真实训练 FA4 路径
+
+- checkpoint metadata 与训练 YAML 均为 `use_cute=true`；`llm-train/eval.py` 才会
+  强制 FA2。因此 YOCO `--align` 现在要求并强制 FA4，不再把 FA2 eval 路径当作训练
+  reference；不支持 FA4 的设备会明确报错。
+- `--align` 自动启用 eager execution，避免完整 vLLM `torch.compile`/CUDA Graph
+  改变训练表达式的 reduction/fusion 上下文。`--fast` 的编译、CUDA Graph 和
+  FA4/Triton 性能策略保持不变。
+- hidden-3072 RMSNorm 新增 Align 私有的固定 4096-wide reduction；Fast 继续保留
+  小 M=2048、大 M=4096 的原性能策略。
+- affine Q/K RMSClip 按真实训练编译边界分流：token rows `<128` 保留 compiled
+  expression，`>=128` 使用 Align 私有的固定 reduction，并在乘 gamma 后物化 BF16。
+  M=260 的同 shape 完整词表由 KL=`0.0136575` 修复为 KL=0。
+- B200 TP1 BF16 same-QKV replay 的 40 次 self/cross FA4 调用全部 bitwise exact；
+  mixed5 五条不同长度 prompt（3/6/8/66/110 tokens）以及 260-token prefill 的完整
+  154,880 维概率分布全部 KL=0。
+- 自回归 rollout 与整段 teacher forcing 仍不是同一执行 shape。729-token 自然轨迹
+  在 eager FA4 下的 k3 KL 为 `0.00131582086`，但不满足 bitwise exact；Native 同进程
+  trace 显示 causal prefix 的首个差异出现在 FA4 attention。`num_splits=1`、
+  `pack_gqa=False/True`、固定 `max_seqlen=512` 和补齐到 32-token tile 均不能消除。
+  若要求这两种不同执行形态逐 bit 相同，需要修改训练评分为逐 prefix/KV-cache
+  计算，或提供 train/infer 共用的 shape-invariant attention kernel。
+
+## 2026-09-03：Fast TP1 E128/N3840 grouped-GEMM 调优
+
+- 同卡 B200 profiler 显示，8x1024 Prefill 中 YOCO routed MoE kernel 累计
+  `106.824 ms`，Qwen 为 `44.647 ms`；YOCO 日志同时明确报告缺少
+  `E=128,N=3840` tuned config。
+- 增加 YOCO 私有 W13/W2 config loader 与两个 `yoco_configs` 文件。它们只在
+  `--fast`、BF16、非量化 YOCO 上启用，不写入通用 shape config，因此不会改变
+  其他同 shape 模型。
+- 真实端到端 A/B 否定了 synthetic M=1/8 调优结果。最终 map 的最小 bucket 为
+  M=2048，loader 禁止向更小 M 外推，C1 Prefill 和 Decode 保持原路径。
+- CUDA Graph microbenchmark 中，W13+W2 在 M=2048/4096/7168/8192/16384/32768
+  分别加速 7.6%/12.4%/26.8%/20.8%/24.3%/26.6%。
+- 同 GPU5、相同 seed 的最终短测中，1024->1 C8 total throughput 从
+  `30,926.26` 提升到 `32,154.48 tok/s`，即 **+3.97%**；所有请求成功，64-token
+  greedy smoke exact。完整证据位于
+  `yoco_results/l3-fast-tp1-moe-tuned-b200-20260903/`。
+- Shared Expert GEMM+clamped-SwiGLU Triton fusion 在 M=1024/7168 分别慢
+  54.8%/51.6%，因此只保留 benchmark，没有接入 forward。
+- FlashInfer CUTLASS BF16 接口在 `[up, gate]` weight layout 下传
+  `alpha=1,beta=0,limit=10`，对强制触发 clamp 的输入与 YOCO reference bitwise
+  exact。`flashinfer_cutlass_moe.py` 现在只为显式 positive `swiglu_limit` 构造这组
+  参数；其他模型仍传 `None`。
+- 单卡短测中，FlashInfer heuristic 相对 Triton baseline 的 Prefill C1/C8 为
+  +14.1%/+12.8%，但 Decode C1/C8 为 -13.6%/-13.0%。官方 autotune 又使 C8
+  Prefill 回退到 baseline。因此只推荐 PD 纯 Prefill 使用
+  `--moe-backend flashinfer_cutlass` 且关闭 autotune；Decode/standalone mixed
+  保留 Triton。
+- 完整 DeepGEMM W2（含二次 dispatch、pack/unpack）在 M=2048/7168 比 tuned
+  Triton 慢 50.3%/77.7%，不接入 Fast。
+- `FusedMoE` 增加默认 `None` 的 per-layer backend override；YOCO Fast 只在 L3、
+  B200、TP1、BF16、非量化、fast-prefill、纯 `kv_producer` 且未显式开启
+  FlashInfer autotune 时，将 routed experts 从全局 Triton 覆盖为
+  `flashinfer_cutlass`。D、standalone、Align 和其他模型不变；additional config
+  提供显式关闭开关。
+- 隔离 B200 上用仍显式指定 `--moe-backend triton` 的 pure-P 命令完成 health-ready
+  验证；日志确认自动选择 FlashInfer，Mooncake RDMA worker、scheduler、bootstrap
+  全部初始化成功，且没有 Triton backend 选择日志。
+- 独立 4×B200 Job 上用同两张物理卡顺序比较 YOCO/Qwen 1P1D。YOCO pure-P 为
+  FlashInfer heuristic；高吞吐 D 改用 FlashInfer + official autotune 后，六点
+  output-throughput 几何平均比 Triton-D 高 3.94%，C32/C64 的 AB/BA 几何收益为
+  6.83%/8.43%。因此 Fast 对 `kv_consumer` 增加 `max_num_seqs>=64`、scheduler
+  budget>=8192 的自动选择门禁，并提供独立关闭开关。
+- 加入 M=1 hybrid 前，YOCO FlashInfer-P/D 相对 Qwen 1P1D 的六点
+  output-throughput 几何平均低29.41%。Profiler 的 Decode routed-MoE 时间比
+  2.04x 已接近两模型按层数折算的
+  2.08x active-expert FLOP 比；BF16、Top-8、模型方程不变时无法仅靠普通 kernel
+  fusion 追平 Qwen。
+- 为消除 FlashInfer-D 的 C1 -7.03% 回退，增加 M=1 Triton fallback。它不复制
+  FlashInfer 已转换的 expert weight，而是按 `[up, gate]` 解释 W13，使用私有
+  clamped-SwiGLU kernel 后复用 Triton W2/Top-8 sum；每层仅缓存固定 M=1 workspace。
+- B200 swapped-layout activation 对 FP32 clamp reference bitwise exact；完整 1P1D
+  C1 为149.65/149.61 tok/s 两次稳定重复，相比纯 FlashInfer 140.69 提升 6.37%，
+  距 Triton 151.33 仅 -1.11%。C32/C64 相对纯 FlashInfer仅 -0.70%/-1.01%。最终
+  hybrid 六点比 Triton-D 几何平均高 5.91%，与 Qwen 的差距由29.41%进一步缩至
+  28.07%。
+
+## 2026-09-03：Fast TP1/B200 高 batch SWA attention
+
+- 用最终 FlashInfer hybrid 重新采集 C64 Decode trace；两次 routed expert GEMM
+  仍占采样 CUDA 时间 66.0%，确认普通 pointwise fusion 已不是主导方向。
+- 尝试把 `fc2_latent_proj` 的 `[3072,1024]` BF16 权重缓存为转置布局。虽然 M=1
+  单 projection microbenchmark 快 11.9%，完整 1P1D C1/C8/C64 三点几何平均只快
+  0.096%，低于噪声且额外占约 120 MiB，因此完整回退。
+- 扩展 `benchmark_yoco_swa_decode.py`，可参数化 Q/KV heads 和滑窗。B200、TP1、
+  `QH=64,KVH=8,D=128,window=513` 的 full CUDA Graph 交叉点是 batch=64：
+  B32 FA4/Triton 为 26.63/30.96 us，B64 为 50.77/48.66 us；到 B128/192/224/256，
+  Triton 分别快 12.6%/23.7%/35.3%/39.3%。
+- Fast attention dispatch 因此新增 TP1 阈值 64，只匹配 L3、SM100、FA4、
+  513-token self/SWA 和 full CUDA Graph。无窗口 cross-attention 的 B64 仍由 FA4
+  获胜（113.37 vs 126.66 us），故不切；Align、TP4 原阈值和其他模型均不变。
+- B200 dispatch 定向测试 10 passed。Triton/FA4 输出 max abs `0.00390625`、mean
+  abs 约 `1.25e-4`，符合 Fast backend 切换口径，不宣称 bitwise equal。
+- 同 GPU0/1 的 candidate-baseline-candidate 1P1D C64 中，候选两次几何平均
+  `3751.11 tok/s`，三次旧版参考几何平均 `3639.99`，提升 3.05%；反向夹测单次
+  提升 2.67%，mean TPOT 从 14.63 降至 14.22 ms。C32 不触发门禁，候选/旧版
+  几何均值差 -0.06%。最终六点相对 Qwen 的几何差距从 28.07% 缩至 27.70%。
+- 证据保存在 `yoco_results/l3-fast-pd-b200-20260903/` 的
+  `yoco-final-hybrid-profile-r20`、`yoco-tp1-swa-candidate-r21`、
+  `yoco-tp1-swa-baseline-r22` 与 `yoco-tp1-swa-candidate-r23`。
+- 补测无窗口 cross-attention：B128 在 context=8/128/513/1360/1872/4096 的
+  event 与 full-graph 口径均由 Triton 获胜，因此新增独立的 cross 阈值 128；
+  full-attention sentinel 使用正规化后的 `(-1,-1)`。完整 config 测试 23 passed。
+- C128 若只捕获 graph<=64 会进入 piecewise，YOCO 仅 `1668.50 tok/s`。harness
+  新增 `CUDAGRAPH_CAPTURE_SIZES` 参数；graph=128 后 YOCO attention candidate 为
+  `5730.63 tok/s`，同 graph 的 FA4-only 为 `5484.79`，净提升 4.48%，mean TPOT
+  下降 5.63%。同卡 Qwen 为 `7476.35 tok/s`，YOCO 差距为 23.35%。
+- FlashInfer CUTLASS PDL 已是默认最优：M64 PDL off/on 为 455.03/454.13 us，
+  仅快 0.20%；Blackwell min-latency 未实现。镜像自带的 TRTLLM 0.6.8 BF16 API
+  不支持 YOCO clamp，因此不能直接接入；后续改用官方 0.6.18 private overlay。
+- Shared MLP M64 双转置在 microbenchmark 快 13.82% 且 bitwise exact，但端到端
+  C64 throughput 下降约 2.3%、TPOT 慢 0.57%，已完整回退。
+- 新增/更新证据：`yoco-shared-m64-candidate-r24`、
+  `yoco-tp1-attn-{candidate-r25,baseline-r26}`、
+  `yoco-tp1-attn-graph128-{candidate-r27,baseline-r28}`、`qwen-graph128-r29`。
+- graph=256 的 candidate-baseline-candidate 为 `6893.30/6532.02/6920.26 tok/s`，
+  attention 候选几何平均提升 5.74%，mean TPOT 降低 7.42%。同配置 Qwen C256
+  为 `8876.23 tok/s`，YOCO 差距缩至 22.19%。
+- 两波 512 请求的首次 C256 r30 有 2 个客户端 streaming payload 截断，明确作废；
+  harness 新增 `FOLDS` 参数，r31-r34 使用单波 256 请求且均零失败。
+- FlashInfer 0.6.8 的 TRTLLM BF16 wrapper 虽比 CUTLASS 快，但没有暴露 YOCO
+  clamp。核对官方 release 后确认 v0.6.14 起支持 `gemm1_alpha/beta/clamp_limit`；
+  在独立 Decode overlay 安装并验证 v0.6.18。
+- 新增 `yoco_flashinfer_trtllm` 私有 modular backend：复用外部 FP32 Top-8，保留
+  shared-expert overlap，使用 block-major expert 权重，并向官方 routed API 传
+  `alpha=1,beta=0,limit=10` 与预分配 output。旧 FlashInfer 自动回退 CUTLASS。
+- 强制 pre-activation≈102 的 M1/4/8/16/32/64/128/256 sweep 与 PyTorch clamp
+  reference 全部 bitwise exact；无 clamp reference 最大误差 39,808。M64/128/256
+  kernel 比当前 CUTLASS 快约 7.8%/9.1%/10.1%。
+- 每次启动重新 autotune 时，TRTLLM 只在 max CUDA graph<=32 稳定收益。最终
+  C1/4/8/16/32 为 `165.39/544.09/1017.09/1616.31/2652.41 tok/s`，相对上一版
+  分别 +10.52%/+12.29%/+11.93%/+6.72%/+4.67%。
+- C64 每次重新 autotune 的三次结果方差过大；将 M1…64 的 7 个 tactic 固定到
+  带版本/硬件元数据的 cache 后，三次为 `3867.38/3872.75/3862.93 tok/s`，跨度
+  仅 0.25%，相对 CUTLASS 几何提升 5.06%，TPOT 改善 4.60%。存在 cache 时 Fast
+  自动允许 TRTLLM 到 graph64；无 cache 仍限制 graph32。C128 慢 2.70%，因此
+  graph128 以上继续 CUTLASS。最终六点相对上一版 Fast 几何平均提升 8.15%，与
+  Qwen 差距从 27.70% 缩至 21.81%。
+- 独立 graph128 cache 含 8 个 tactic；固定后 C128 为 `5713.56 tok/s / 17.46 ms`，
+  仍不及 CUTLASS 的 `5730.63 / 17.23 ms`；这是 synthetic-routing cache 阶段的
+  graph64 上限，已被后续 real-route graph128/256 调优推翻。
+- `kernel_warmup.py` 支持 `VLLM_YOCO_FLASHINFER_AUTOTUNE_CACHE`，官方 loader
+  校验 FlashInfer/CUDA/cuBLAS/cuDNN/GPU 元数据；cache 传递定向测试通过。
+- 新增 `tools/yoco_alignment/install_decode_flashinfer.sh` 安装官方 v0.6.18 D-only
+  overlay；1P1D harness 增加 `DECODE_EXTRA_PYTHONPATH`，P 仍使用镜像 0.6.8。
+- 证据：`yoco-trtllm-d-{candidate-r36,candidate-r38,candidate-r41}`、
+  `yoco-cutlass-d-baseline-r37`、`yoco-trtllm-d-candidate-r40`、
+  `yoco-trtllm-d-graph32-final-r42`、`yoco-trtllm-d-graph128-r39`、
+  `yoco-trtllm-d-cache-r44/r45`、`yoco-trtllm-d-cache-auto-r46` 以及
+  `trtllm-graph64-autotune-r2.json`；graph128 拒绝证据为
+  `yoco-trtllm-d-cache128-r47` 与 `trtllm-graph128-autotune-r1.json`。
+
+## 2026-09-04：TRTLLM 与 shared-expert overlap 联合调优
+
+- 在固定 FlashInfer 0.6.18、B200、PDL 和 CUDA Graph 口径下，新增 TRTLLM BF16
+  全 tactic 诊断：每个 token shape 枚举 352 个合法 tactic，同时在 auxiliary stream
+  执行 YOCO `3072→2560→3072` shared MLP，以完整 layer makespan 而不是 routed-only
+  时间选型。
+- M64 从官方 `(16,137)` 改为 `(16,132)`。完整
+  candidate-baseline-candidate 的候选几何均值为
+  `3878.25 tok/s / 13.547 ms`，原 cache 为 `3849.47 / 13.630 ms`：吞吐
+  **+0.75%**、mean TPOT **-0.60%**。另三次候选
+  `3880.53/3877.00/3898.51 tok/s` 均零失败。
+- M16 从 `(8,61)` 改为 `(8,134)`。两次候选几何均值
+  `1621.86 tok/s / 8.899 ms`，夹测原 cache
+  `1615.84 / 9.024 ms`：吞吐 **+0.37%**、mean TPOT **-1.38%**。
+- M4/M8/M32 的 synthetic overlap 最优没有通过完整反向 A/B：全 shape 候选对原
+  cache 的六点 throughput 几何平均为 **-0.278%**，所以最终只改 M16/M64；其他
+  cache entry 原样保留。
+- PDL M64 off/on 为 `424.41/421.71 us`，继续开启。reserved SM 0/4/8/12/16/24
+  的 overlap makespan 差异不到 0.04%；`reserved=0` 完整 C64 为
+  `3861.46 tok/s`，继续使用官方默认 8。
+- 重新验证 shared MLP M64 双转置：三轮候选几何均值 `3884.05 tok/s`，相邻
+  pre-shared 基线 `3880.07`，仅 +0.10%；该候选再次完整回退，Fast 只保留原有
+  M1 down-projection 转置。对应定向测试改为验证 M1-only 路径，并在 B200 Pod 上
+  `1 passed`。
+- 最终 cache 为
+  `yoco_results/l3-fast-pd-b200-20260903/trtllm-graph64-overlap-hybrid-r1.json`，
+  metadata 限定 FlashInfer 0.6.18/CUDA 13.1/B200，generation hash 按内容重算。
+  新六点相对 Triton-D 的几何提升为 **15.25%**，对 Qwen 的差距由 21.81%
+  缩至 **21.73%**。
+- 原始证据：`yoco-shared-m64-trtllm-candidate-r49/r50/r51`、
+  `yoco-shared-m64-pre-baseline-r52`、`yoco-trtllm-reserved0-r53`、
+  `yoco-trtllm-overlap-tactic132-r54/r55/r56`、
+  `yoco-trtllm-original-tactic137-r57`、`yoco-trtllm-overlap-autotune-r58`、
+  `yoco-trtllm-original-autotune-r59` 与 `yoco-trtllm-overlap-hybrid-r60`。
+
+## 2026-09-04：真实 Decode 路由驱动的 high-batch tactic
+
+- harness 增加仅诊断使用的 `ENABLE_RETURN_ROUTED_EXPERTS` 和
+  `HOLD_AFTER_SMOKE_FILE`；捕获模式显式关闭 async scheduling，普通性能路径的
+  参数与调度不变。固定 1410-input、64-output 的 C4/C8/C16/C32/C64 请求各导出
+  63 个 Decode step、20 个物理 layer、top-8 expert IDs。
+- 路由远比 autotuner 的随机输入集中：C8 每个 layer/step 的 64 个 assignment
+  只有中位 19 个不同 expert，最热 expert 通常由 8/8 token 命中；C32 最热 expert
+  的中位/P95/最大命中为 31/32/32，C64 为 62/64/64。
+- `benchmark_yoco_trtllm_upper_bound.py` 现在可载入 capture，将
+  `[request,step,layer,topk]` 重排为 1,260 个真实 `[batch,topk]` routing matrix，
+  同时回放 shared MLP，并可枚举或限定 TRTLLM tactic 候选。
+- 全 route replay 得到 M8 `(8,48)`、M16 `(16,50)`、M32 `(32,24)`、M64
+  `(32,17)`；相对阶段 cache 的 layer makespan 分别改善 1.59%/2.01%/7.82%/9.30%。
+  M4 当前 `(8,60)` 与最优只差 0.21%，不改。
+- 内置 routed capture 对 YOCO universal-loop self layer 只保留最后一次 buffer
+  写入，无法覆盖前两轮。因此全 shape `r64` 只作为筛选：M8 端到端回退，M16 无
+  稳定收益；最终 cache 仅将 M32/M64 替换为 real-route tactic，其余继承上一阶段。
+- C32/C64 candidate-baseline-candidate 结果：C32 候选几何
+  `2740.30 tok/s / 10.080 ms`，基线 `2687.76 / 10.320 ms`，即吞吐
+  **+1.95%**、TPOT **-2.33%**；C64 候选 `3933.40 / 13.317 ms`，基线
+  `3892.12 / 13.562 ms`，即吞吐 **+1.06%**、TPOT **-1.80%**。全部请求零失败。
+- 最终 cache 为
+  `yoco_results/l3-fast-pd-b200-20260903/trtllm-graph64-real-routing-highbatch-r1.json`；
+  完整六点 `r68` 为
+  `165.42/552.15/1011.11/1616.34/2725.13/3945.03 tok/s`。相对此前最终表几何
+  再提升 **0.83%**，相对 Triton-D 提升 **16.21%**，对 Qwen 的差距从 21.73%
+  降至 **21.08%**。
+- 证据：`real-routing-capture-r62/r63`、
+  `yoco-trtllm-real-routing-candidate-r64`、
+  `yoco-trtllm-real-highbatch-candidate-r65/r67`、
+  `yoco-trtllm-overlap-hybrid-baseline-r66`、
+  `yoco-trtllm-real-highbatch-final-r68`。
+
+### graph128 / graph256
+
+- C128 的真实路由中，最热 expert 的中位/P95/最大命中为 124/128/128。M128
+  从 synthetic `(16,65)` 的 `170.597 us` 改为 `(32,17)` 的 `140.396 us`，
+  layer makespan **-17.70%**。
+- 正式 C128 candidate-baseline-candidate：TRTLLM 几何
+  `5952.12 tok/s / 16.539 ms`，CUTLASS `5747.78 / 17.456 ms`，即吞吐
+  **+3.56%**、TPOT **-5.25%**。对同卡 Qwen 的差距由 23.35% 降至 20.39%。
+- C256 用短 prompt 捕获路由以避免 API prompt-route JSON 占用数 GB 主存，但 tactic
+  只作筛选；正式验证仍为 1410→512、FOLDS=1。M256 最终 `(64,0)` 为
+  `316.837 us`。reserved SM 0/16/32/48 的全 route makespan 差异小于0.07%，
+  保留默认8。
+- 正式 C256 A/B/A：TRTLLM 几何 `7230.95 tok/s / 23.132 ms`，CUTLASS
+  `6878.71 / 24.718 ms`，即吞吐 **+5.12%**、TPOT **-6.42%**。对 Qwen 差距
+  由 22.19% 降至 18.54%。
+- `_yoco_verified_trtllm_cache_max_capture` 会读取 cache 内容：只有精确包含已验证的
+  M32/M64/M128 tactic 才自动允许 graph128，再包含 M256 `(64,0)` 才允许
+  graph256。旧 synthetic cache、损坏文件或任一不匹配项仍保持原上限/回退
+  CUTLASS；显式 additional-config override 不变。自动选择定向测试通过，实机日志
+  在 graph128/256 均确认私有 TRTLLM。
+- 该阶段 graph256 cache：
+  `yoco_results/l3-fast-pd-b200-20260903/trtllm-graph256-real-routing-r1.json`；
+  graph128 子集：`trtllm-graph128-real-routing-r1.json`。
+- 证据：`real-routing-capture-c128-r70`、
+  `yoco-trtllm-real-c128-candidate-r71/r73`、`yoco-cutlass-c128-baseline-r72`、
+  `yoco-trtllm-real-c128-auto-r74`、`real-routing-capture-c256-r75`、
+  `yoco-trtllm-real-c256-candidate-r76/r78`、`yoco-cutlass-c256-baseline-r77`、
+  `yoco-trtllm-real-c256-auto-r79`。
+
+### 完整40次 logical MoE 路由与 M16
+
+- 内置 routed-expert capture 按20个物理层存储，YOCO 前十层重复三轮时前两轮被
+  覆盖。nested CUDA Graph 40-slot buffer 方案虽返回正确 shape，但内容全零，已
+  完整回退。
+- 最终加入仅诊断的 Decode eager dump。只有显式设置
+  `VLLM_YOCO_LOGICAL_ROUTE_DUMP`、目标 batch 列表且目录存在 `ENABLED` sentinel
+  才会额外计算 Top-K 并保存；普通 Fast graph、普通 routed-expert API、Align 和
+  其他模型不进入该路径。
+- logical ID 固定为 self loop0/1/2 的0..29和 cross的30..39；转换器要求每40条记录
+  严格覆盖0..39。C8/C16 各捕获30×40个真实 route matrix，expert ID 范围0..127。
+- 完整路由下 M8 `(8,60)` 虽比当前 tactic 的 replay 快约1.9%，端到端 A/B/A 吞吐
+  短测只 +0.30%；64请求长测的两次候选几何 `980.13 tok/s`，基线 `977.23`，
+  仍仅 +0.30%，TPOT只改善0.34%。并存在此前 tactic 改变后路由反馈回退的反例，
+  因此 M8不改。
+- M16 `(16,132)` replay 比 `(8,134)` 快约1.73%；两次端到端候选几何
+  `1629.12 tok/s`，基线 `1614.35`，吞吐 **+0.91%**，TPOT **-0.40%**，最终保留。
+- 最终通用 cache 更新为
+  `yoco_results/l3-fast-pd-b200-20260903/trtllm-graph256-real-routing-r2.json`；
+  完整六点 `r85` 为
+  `165.43/552.38/998.45/1628.78/2764.90/3960.17 tok/s`。相对 Triton-D 提升
+  **16.48%**，对 Qwen 六点差距为 **20.89%**。
+- 证据：`logical-routing-eager-dump-r81`、
+  `yoco-trtllm-lowbatch-candidate-r82/r84`、`yoco-trtllm-lowbatch-baseline-r83`、
+  `yoco-trtllm-final-r2-matrix-r85`、
+  `yoco-trtllm-c8-long-candidate-r86/r88`、`yoco-trtllm-c8-long-baseline-r87`。
+
+### 同 C64 的 YOCO/Qwen 剩余差距
+
+- 新增 Qwen C64、8→16、graph64 同卡 trace，和最新 YOCO C64 trace 按11个稳态
+  GPU graph step 取中位，避免把嵌套 annotation 或 overlapping stream 百分比当成
+  wall time。
+- YOCO/Qwen step wall 为 `21.033/11.836 ms`，差 `9.196 ms`；expert GEMM 为
+  `16.157/7.397 ms`，差 `8.759 ms`，解释 **95.25%** 的 wall gap。
+- 每 block expert GEMM 为 `403.92/154.11 us`，比值 `2.621x`；模型理论 FLOP 比
+  `2.5x`，额外 kernel-efficiency 损耗只剩 **4.84%**。即使完全消除它，也只能再省
+  约0.75 ms，无法追回约20%的端到端差距。
+- 这确认 BF16、Top-8、模型方程固定时，剩余主要是结构计算量；进一步接近 Qwen
+  需要 FP8、减少 active expert compute 或改变解码算法，均不在当前授权范围。
+- 也核对了 FlashInfer MonoMoE：它硬编码 SM90a/FP8/E256/N512/K2048/M<=8，和
+  YOCO B200/BF16/E128/N3840/K1024 完全不匹配，不能作为现成 hot-expert fallback。
+- 正式1410-token 1P1D Decode profile 也已补采，但 YOCO D 稳态为batch63，Qwen D
+  被到达节奏拆成batch31并出现每个annotation两次forward，不能拿单graph kernel
+  sum直接相除；该组只保留作调度证据，不进入上述2.621x计算。standalone长上下文
+  同样未形成匹配batch，明确作废。
+- 证据：`qwen-c64-profile-r89`、`yoco-trtllm-real-highbatch-profile-r69`、
+  `yoco-pd-c64-i1410-profile-r92`、`qwen-pd-c64-i1410-profile-r94`、
+  `analyze_c64_profile_gap.py`、`c64-yoco-qwen-gap.json`。

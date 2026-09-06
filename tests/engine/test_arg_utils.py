@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 import json
+import os
 from argparse import ArgumentError
 from contextlib import AbstractContextManager, nullcontext
 from typing import Annotated, Literal
@@ -9,7 +10,14 @@ from typing import Annotated, Literal
 import pytest
 from pydantic import Field
 
-from vllm.config import AttentionConfig, CompilationConfig, ModelConfig, config
+from vllm.config import (
+    AttentionConfig,
+    CompilationConfig,
+    CompilationMode,
+    CUDAGraphMode,
+    ModelConfig,
+    config,
+)
 from vllm.engine.arg_utils import (
     EngineArgs,
     _expand_json_human_readable_numbers,
@@ -24,6 +32,73 @@ from vllm.engine.arg_utils import (
     parse_type,
 )
 from vllm.utils.argparse_utils import FlexibleArgumentParser
+
+
+@pytest.mark.parametrize("use_alias", [False, True])
+def test_yoco_align_sets_invariant_policy_before_platform_init(monkeypatch, use_alias):
+    from vllm import envs
+    from vllm.engine.arg_utils import current_platform
+
+    monkeypatch.setenv("VLLM_BATCH_INVARIANT", "0")
+    monkeypatch.setenv("TORCH_ALLOW_TF32_CUBLAS_OVERRIDE", "1")
+    monkeypatch.setenv("VLLM_DISABLE_SHARED_EXPERTS_STREAM", "0")
+    monkeypatch.setattr(envs, "_is_envs_cache_enabled", lambda: False)
+
+    class PlatformReached(Exception):
+        pass
+
+    def check_policy():
+        assert os.environ["VLLM_BATCH_INVARIANT"] == "1"
+        assert os.environ["TORCH_ALLOW_TF32_CUBLAS_OVERRIDE"] == "0"
+        assert os.environ["VLLM_DISABLE_SHARED_EXPERTS_STREAM"] == "0"
+        raise PlatformReached
+
+    monkeypatch.setattr(current_platform, "pre_register_and_update", check_policy)
+    kwargs: dict = (
+        {"additional_config": {"yoco_execution_mode": "align"}}
+        if use_alias
+        else {"align": True}
+    )
+    args = EngineArgs(**kwargs)
+    assert args.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_DECODE_ONLY
+    assert not args.enforce_eager
+    with pytest.raises(PlatformReached):
+        args.create_engine_config()
+
+
+def test_yoco_fast_does_not_change_invariant_policy(monkeypatch):
+    from vllm.engine.arg_utils import current_platform
+
+    monkeypatch.setenv("VLLM_BATCH_INVARIANT", "0")
+    monkeypatch.setenv("TORCH_ALLOW_TF32_CUBLAS_OVERRIDE", "1")
+    monkeypatch.setenv("VLLM_DISABLE_SHARED_EXPERTS_STREAM", "0")
+
+    class PlatformReached(Exception):
+        pass
+
+    def check_policy():
+        assert os.environ["VLLM_BATCH_INVARIANT"] == "0"
+        assert os.environ["TORCH_ALLOW_TF32_CUBLAS_OVERRIDE"] == "1"
+        assert os.environ["VLLM_DISABLE_SHARED_EXPERTS_STREAM"] == "0"
+        raise PlatformReached
+
+    monkeypatch.setattr(current_platform, "pre_register_and_update", check_policy)
+    with pytest.raises(PlatformReached):
+        EngineArgs(fast=True).create_engine_config()
+
+
+@pytest.mark.parametrize("async_scheduling", [False, True])
+def test_yoco_align_preserves_explicit_scheduler_choice(async_scheduling):
+    args = EngineArgs(align=True, async_scheduling=async_scheduling)
+    assert args.async_scheduling is async_scheduling
+    assert args.enforce_eager is False
+    assert args.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_DECODE_ONLY
+    assert EngineArgs(fast=True, async_scheduling=True).async_scheduling is True
+    parser = EngineArgs.add_cli_args(FlexibleArgumentParser())
+    explicit = EngineArgs.from_cli_args(
+        parser.parse_args(["--align", "--no-async-scheduling"])
+    )
+    assert explicit.async_scheduling is False
 
 
 @pytest.mark.parametrize(
@@ -242,6 +317,29 @@ def test_yoco_execution_mode_cli_arg(mode: str) -> None:
     assert engine_args.align is (mode == "align")
     assert engine_args.fast is (mode == "fast")
     assert engine_args.additional_config["yoco_execution_mode"] == mode
+    assert engine_args.enforce_eager is False
+    if mode == "align":
+        assert engine_args.compilation_config.mode == CompilationMode.NONE
+        assert (
+            engine_args.compilation_config.cudagraph_mode
+            == CUDAGraphMode.FULL_DECODE_ONLY
+        )
+
+
+def test_yoco_align_overrides_whole_model_compilation() -> None:
+    engine_args = EngineArgs(
+        align=True,
+        compilation_config={
+            "mode": CompilationMode.VLLM_COMPILE,
+            "cudagraph_mode": CUDAGraphMode.FULL_AND_PIECEWISE,
+        },
+    )
+
+    assert engine_args.enforce_eager is False
+    assert engine_args.compilation_config.mode == CompilationMode.NONE
+    assert (
+        engine_args.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_DECODE_ONLY
+    )
 
 
 def test_yoco_execution_mode_cli_args_are_mutually_exclusive() -> None:

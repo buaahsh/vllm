@@ -215,6 +215,11 @@ def test_yoco_execution_mode_controls_triton_decode(
     )
     monkeypatch.setattr(
         flash_attn,
+        "is_fa_version_supported",
+        lambda version: version == 4,
+    )
+    monkeypatch.setattr(
+        flash_attn,
         "flash_attn_supports_quant_query_input",
         lambda: False,
     )
@@ -230,16 +235,108 @@ def test_yoco_execution_mode_controls_triton_decode(
     )
 
     assert impl.sliding_window == (512, 0)
+    assert impl.vllm_flash_attn_version == (
+        4 if execution_mode == "align" else fa_version
+    )
     assert impl.use_triton_yoco_decode is use_triton_decode
     assert impl.yoco_triton_decode_min_batch_size == min_batch_size
 
 
+def test_yoco_align_respects_batch_invariant_attention_selection(monkeypatch):
+    from vllm.v1.attention.backends import flash_attn
+
+    config = SimpleNamespace(
+        model_config=SimpleNamespace(hf_text_config=SimpleNamespace(model_type="yoco")),
+        additional_config={"yoco_execution_mode": "align"},
+        compilation_config=SimpleNamespace(cudagraph_mode=CUDAGraphMode.FULL),
+        parallel_config=SimpleNamespace(
+            decode_context_parallel_size=1, dcp_comm_backend="a2a"
+        ),
+    )
+    monkeypatch.setenv("VLLM_BATCH_INVARIANT", "1")
+    monkeypatch.setattr(flash_attn, "get_current_vllm_config_or_none", lambda: config)
+    monkeypatch.setattr(flash_attn, "get_flash_attn_version", lambda **_: 2)
+    monkeypatch.setattr(
+        flash_attn, "flash_attn_supports_quant_query_input", lambda: False
+    )
+    monkeypatch.setattr(
+        flash_attn.current_platform,
+        "get_device_capability",
+        lambda: SimpleNamespace(major=10),
+    )
+    impl = flash_attn.FlashAttentionImpl(
+        num_heads=64,
+        head_size=128,
+        scale=128**-0.5,
+        num_kv_heads=8,
+        alibi_slopes=None,
+        sliding_window=513,
+        kv_cache_dtype="auto",
+    )
+    assert impl.vllm_flash_attn_version == 2
+    assert impl.batch_invariant_enabled
+    assert not impl.use_triton_yoco_decode
+    assert not impl.use_direct_prefill_qkv
+
+
+def test_yoco_align_requires_fa4(monkeypatch) -> None:
+    from vllm.v1.attention.backends import flash_attn
+
+    vllm_config = SimpleNamespace(
+        model_config=SimpleNamespace(
+            hf_text_config=SimpleNamespace(model_type="yoco"),
+        ),
+        additional_config={"yoco_execution_mode": "align"},
+        compilation_config=SimpleNamespace(cudagraph_mode=CUDAGraphMode.NONE),
+        parallel_config=SimpleNamespace(
+            decode_context_parallel_size=1,
+            dcp_comm_backend="a2a",
+        ),
+    )
+    monkeypatch.setattr(
+        flash_attn,
+        "get_current_vllm_config_or_none",
+        lambda: vllm_config,
+    )
+    monkeypatch.setattr(
+        flash_attn,
+        "get_flash_attn_version",
+        lambda **_: 2,
+    )
+    monkeypatch.setattr(
+        flash_attn,
+        "is_fa_version_supported",
+        lambda _version: False,
+    )
+
+    with pytest.raises(RuntimeError, match="requires FlashAttention 4"):
+        flash_attn.FlashAttentionImpl(
+            num_heads=16,
+            head_size=128,
+            scale=128**-0.5,
+            num_kv_heads=2,
+            alibi_slopes=None,
+            sliding_window=513,
+            kv_cache_dtype="auto",
+        )
+
+
 @pytest.mark.parametrize(
-    "batch_size,expected_kernel",
-    [(223, "fa4"), (224, "triton")],
+    "num_heads,num_kv_heads,sliding_window,batch_size,expected_kernel",
+    [
+        (16, 2, 513, 223, "fa4"),
+        (16, 2, 513, 224, "triton"),
+        (64, 8, 513, 63, "fa4"),
+        (64, 8, 513, 64, "triton"),
+        (64, 8, None, 127, "fa4"),
+        (64, 8, None, 128, "triton"),
+    ],
 )
 def test_yoco_sm100_fast_decode_dispatch(
     monkeypatch,
+    num_heads: int,
+    num_kv_heads: int,
+    sliding_window: int | None,
     batch_size: int,
     expected_kernel: str,
 ) -> None:
@@ -273,20 +370,18 @@ def test_yoco_sm100_fast_decode_dispatch(
         lambda: False,
     )
 
-    calls = []
+    calls: list[tuple[str, tuple[int, int] | None]] = []
     monkeypatch.setattr(
         flash_attn,
         "unified_attention",
-        lambda **_: calls.append("triton"),
+        lambda **kwargs: calls.append(("triton", kwargs["window_size"])),
     )
     monkeypatch.setattr(
         flash_attn,
         "flash_attn_varlen_func",
-        lambda **_: calls.append("fa4"),
+        lambda **kwargs: calls.append(("fa4", kwargs["window_size"])),
     )
 
-    num_heads = 16
-    num_kv_heads = 2
     head_size = 128
     impl = flash_attn.FlashAttentionImpl(
         num_heads=num_heads,
@@ -294,7 +389,7 @@ def test_yoco_sm100_fast_decode_dispatch(
         scale=head_size**-0.5,
         num_kv_heads=num_kv_heads,
         alibi_slopes=None,
-        sliding_window=513,
+        sliding_window=sliding_window,
         kv_cache_dtype="auto",
     )
     metadata = flash_attn.FlashAttentionMetadata(
@@ -324,4 +419,6 @@ def test_yoco_sm100_fast_decode_dispatch(
 
     impl.forward(layer, query, key, value, kv_cache, metadata, output)
 
-    assert calls == [expected_kernel]
+    assert calls[0][0] == expected_kernel
+    if expected_kernel == "triton" and sliding_window is None:
+        assert calls[0][1] == (-1, -1)

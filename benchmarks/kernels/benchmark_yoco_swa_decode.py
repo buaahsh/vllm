@@ -68,6 +68,9 @@ def _graph_us(fn: Kernel, warmup: int, iterations: int, samples: int) -> float:
 def benchmark_case(
     batch_size: int,
     context_len: int,
+    num_query_heads: int,
+    num_kv_heads: int,
+    window_left: int | None,
     kernel_names: list[str],
     warmup: int,
     iterations: int,
@@ -75,11 +78,9 @@ def benchmark_case(
 ) -> None:
     device = "cuda"
     dtype = torch.bfloat16
-    num_query_heads = 16
-    num_kv_heads = 2
     head_size = 128
     block_size = 16
-    window_size = [512, 0]
+    window_size = [window_left, 0] if window_left is not None else [-1, -1]
     scale = head_size**-0.5
 
     blocks_per_seq = (context_len + block_size - 1) // block_size
@@ -213,6 +214,14 @@ def main() -> None:
     parser.add_argument(
         "--contexts", type=int, nargs="+", default=[128, 513, 1024, 4096]
     )
+    parser.add_argument("--num-query-heads", type=int, default=16)
+    parser.add_argument("--num-kv-heads", type=int, default=2)
+    parser.add_argument(
+        "--window-left",
+        type=int,
+        default=512,
+        help="Left sliding window; use a negative value for full attention.",
+    )
     parser.add_argument(
         "--kernels",
         nargs="+",
@@ -236,6 +245,9 @@ def main() -> None:
             benchmark_case(
                 batch_size,
                 context_len,
+                args.num_query_heads,
+                args.num_kv_heads,
+                args.window_left if args.window_left >= 0 else None,
                 args.kernels,
                 args.warmup,
                 args.iterations,
