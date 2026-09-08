@@ -1,0 +1,52 @@
+{
+  "passed": true,
+  "checks": {
+    "runtime_sources_equal": true,
+    "compiled_runtime_equal": true,
+    "aiperf_source_equal": true,
+    "model_metadata_equal": true,
+    "tokenizer_config_equal": true,
+    "timestamps_only_scaled": true
+  },
+  "cases": [
+    {
+      "topology": "standalone",
+      "same_aiperf_parameters_except_rate_paths_and_salt": true,
+      "same_physical_gpus": true,
+      "unique_nonempty_salt": true,
+      "roles": {
+        "standalone": {
+          "command_equal": true,
+          "environment_equal": true,
+          "align_profile_equal": true
+        }
+      }
+    },
+    {
+      "topology": "pd",
+      "same_aiperf_parameters_except_rate_paths_and_salt": true,
+      "same_physical_gpus": true,
+      "unique_nonempty_salt": true,
+      "roles": {
+        "p": {
+          "command_equal": true,
+          "environment_equal": true,
+          "align_profile_equal": true
+        },
+        "d": {
+          "command_equal": true,
+          "environment_equal": true,
+          "align_profile_equal": true
+        },
+        "proxy": {
+          "command_equal": true,
+          "environment_equal": true,
+          "align_profile_equal": true
+        }
+      }
+    }
+  ],
+  "comparison": "Fast load response at different explicit rates; not a same-load kernel A/B",
+  "shared_node": true,
+  "workload_scope": "Trace ISL/OSL/order/hash_ids are preserved; realized synthetic prompt tokens are not proven identical across rate files. See TOKEN_REALIZATION.json for the one-token input-count deltas."
+}

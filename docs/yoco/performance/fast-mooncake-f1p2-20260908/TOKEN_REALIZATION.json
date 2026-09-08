@@ -1,0 +1,16 @@
+{
+  "standalone": {
+    "input_count_changed_among_success": 19,
+    "max_input_count_difference": 1,
+    "missing_records": 1,
+    "trace_fields_identical_except_timestamp": true,
+    "realized_inputs_proven_bitwise_identical": false
+  },
+  "pd": {
+    "input_count_changed_among_success": 19,
+    "max_input_count_difference": 1,
+    "missing_records": 0,
+    "trace_fields_identical_except_timestamp": true,
+    "realized_inputs_proven_bitwise_identical": false
+  }
+}

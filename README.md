@@ -58,6 +58,19 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 [报告与原始汇总](docs/yoco/align-4gpu-1p1d-20260907/REPORT.md) · [PDF](docs/yoco/align-4gpu-1p1d-20260907/REPORT.pdf)。
 
+### Fast Mooncake 1.2× 负载复测（2026-09-08 UTC）
+
+保持同一Fast实现和物理B200，将相同3643请求的到达时间从约600秒压缩到500秒。以下为**负载响应**，实现与kernel未修改；1.2×结果独立维护，Qwen3和Align尚未测量该速率。
+
+| 拓扑 | 1× 输出tok/s | 1.2× 输出tok/s | 吞吐变化 | 1.2× TTFT / ITL / E2E P95 ms |
+| --- | ---: | ---: | ---: | --- |
+| 单卡 | 1038.83 | 1190.07 | +14.56% | 10222.08 / 338.66 / 98452.09 |
+| 1P1D | 1046.78 | 1244.77 | +18.91% | 5274.00 / 24.33 / 16094.88 |
+
+单卡 3642/3643完成，1错误，client/server/drain=FAIL/PASS/PASS；1P1D 3643/3643完成，0错误，client/server/drain=PASS/PASS/PASS。单次、共享节点、500秒到达、未声明SLO，属于diagnostic，不能当作容量验收。
+
+[完整报告与图表](docs/yoco/performance/fast-mooncake-f1p2-20260908/REPORT.md) · [1.2×持续表](docs/yoco/performance/THROUGHPUT_F1P2.md)。
+
 ### Fast Mooncake 开源 trace 复测（2026-09-08 UTC）
 
 只重测恢复split-KV后的Fast，沿用2026-09-07的同物理B200和完整参数：Mooncake FAST’25 toolagent源时间300–900秒、1×、3643请求；单卡GPU5，1P1D为GPU4/5。Qwen3、Align和W2表保留原测量时间及数值。

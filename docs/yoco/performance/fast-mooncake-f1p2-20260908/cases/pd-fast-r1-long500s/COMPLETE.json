@@ -1,0 +1,29 @@
+{
+  "name": "pd-fast-r1-long500s",
+  "finished": 1788861133.2586062,
+  "client_exit": 0,
+  "client_audit_exit": 0,
+  "token_accounting_pass": true,
+  "services": {
+    "p": {
+      "scrape_errors": 0,
+      "max_gap_seconds": 1.2626357078552246,
+      "counter_resets": []
+    },
+    "d": {
+      "scrape_errors": 0,
+      "max_gap_seconds": 1.262556791305542,
+      "counter_resets": []
+    },
+    "proxy": {
+      "scrape_errors": 0,
+      "max_gap_seconds": 1.262519359588623,
+      "counter_resets": []
+    }
+  },
+  "transfer_pass": true,
+  "proxy_pass": true,
+  "server_pass": true,
+  "drained": true,
+  "passed": true
+}

@@ -1,0 +1,181 @@
+{
+  "errors": [
+    {
+      "index": 1896,
+      "utc": "2026-09-08T09:28:31.320+00:00",
+      "request": {
+        "timestamp": 272500,
+        "input_length": 904,
+        "output_length": 10
+      },
+      "duration_ms": 3.647171,
+      "error": {
+        "type": "ClientOSError",
+        "message": "ClientOSError(104, 'Connection reset by peer')",
+        "cause": "ConnectionResetError(104, 'Connection reset by peer')",
+        "cause_chain": [
+          "ClientOSError",
+          "ConnectionResetError"
+        ]
+      },
+      "connection_reused": true,
+      "response_bytes": 0,
+      "http_status": null,
+      "baseline_same_request": {
+        "error": null,
+        "prompt_tokens": {
+          "value": 905,
+          "unit": "tokens"
+        },
+        "completion_tokens": {
+          "value": 10,
+          "unit": "tokens"
+        }
+      },
+      "nearby_metrics": [
+        {
+          "utc": "2026-09-08T09:28:28.710+00:00",
+          "running": 208.0,
+          "waiting": 0.0,
+          "success_total": 1701.0
+        },
+        {
+          "utc": "2026-09-08T09:28:29.715+00:00",
+          "running": 215.0,
+          "waiting": 15.0,
+          "success_total": 1703.0
+        },
+        {
+          "utc": "2026-09-08T09:28:30.721+00:00",
+          "running": 223.0,
+          "waiting": 5.0,
+          "success_total": 1705.0
+        },
+        {
+          "utc": "2026-09-08T09:28:31.727+00:00",
+          "running": 217.0,
+          "waiting": 0.0,
+          "success_total": 1717.0
+        },
+        {
+          "utc": "2026-09-08T09:28:32.889+00:00",
+          "running": 228.0,
+          "waiting": 8.0,
+          "success_total": 1723.0
+        },
+        {
+          "utc": "2026-09-08T09:28:33.895+00:00",
+          "running": 223.0,
+          "waiting": 0.0,
+          "success_total": 1736.0
+        }
+      ],
+      "raw_record": {
+        "metadata": {
+          "session_num": 1896,
+          "x_request_id": "d6d65527-0781-412b-9bed-384e914c9a30",
+          "x_correlation_id": "a7b0da64-5dd9-45a1-80d9-a311ea5557f0",
+          "conversation_id": "session_001896",
+          "turn_index": 0,
+          "credit_issued_ns": 1788859711319465815,
+          "request_start_ns": 1788859711320340819,
+          "request_end_ns": 1788859711323987990,
+          "worker_id": "worker_e1f4d312",
+          "record_processor_id": "record_processor_d5da3b1e",
+          "benchmark_phase": "profiling",
+          "phase_index": 0,
+          "profiling_index": 0,
+          "phase_name": "profiling",
+          "phase_kind": "profiling",
+          "was_cancelled": false,
+          "context_overflow_skip": false,
+          "agent_depth": 0,
+          "root_correlation_id": "a7b0da64-5dd9-45a1-80d9-a311ea5557f0"
+        },
+        "metrics": {},
+        "trace_data": {
+          "trace_type": "aiohttp",
+          "request_send_start_ns": 1788859711320414803,
+          "request_headers": {
+            "Host": "127.0.0.1:8694",
+            "User-Agent": "aiperf/0.12.0",
+            "X-Request-ID": "d6d65527-0781-412b-9bed-384e914c9a30",
+            "X-Correlation-ID": "a7b0da64-5dd9-45a1-80d9-a311ea5557f0",
+            "Accept": "text/event-stream",
+            "Content-Type": "application/json",
+            "Content-Length": "4100"
+          },
+          "request_headers_sent_ns": 1788859711320556800,
+          "request_chunks": [],
+          "request_send_end_ns": 1788859711320592917,
+          "request_chunks_count": 1,
+          "request_bytes_total": 4100,
+          "response_chunks": [],
+          "response_chunks_count": 0,
+          "response_bytes_total": 0,
+          "error_timestamp_ns": 1788859711323957081,
+          "connection_reused_ns": 1788859711320518253,
+          "sending_ns": 178114
+        },
+        "error": {
+          "type": "ClientOSError",
+          "message": "ClientOSError(104, 'Connection reset by peer')",
+          "cause": "ConnectionResetError(104, 'Connection reset by peer')",
+          "cause_chain": [
+            "ClientOSError",
+            "ConnectionResetError"
+          ]
+        }
+      }
+    }
+  ],
+  "server_error_lines": [],
+  "client_audit": {
+    "aiperf_version": "0.12.0",
+    "bad_http": 1,
+    "cancelled": 0,
+    "case_dir": "/data/fast-mooncake-f1p2-20260908/cases/standalone-fast-r1-long500s",
+    "client_gates": {
+      "command_exit_zero": true,
+      "concurrency_ceiling_not_reached": true,
+      "http_2xx_only": false,
+      "no_context_skips": true,
+      "no_error_summary": false,
+      "not_cancelled": true,
+      "planned_equals_completed": false,
+      "record_count_matches_completed": false,
+      "schedule_lag_within_limit": true,
+      "schedule_not_degraded": true,
+      "zero_osl_mismatch": true
+    },
+    "client_pass": false,
+    "completed": 3642,
+    "context_skips": 0,
+    "e2e_p95_ms": 98452.09386894995,
+    "e2e_p99_ms": 138930.18771243005,
+    "effective_concurrency_max": 362.0,
+    "input_token_throughput": 56456.66524058113,
+    "itl_p95_ms": 338.66363759999996,
+    "itl_p99_ms": 510.48636079999994,
+    "manual_review_required": [
+      "server metrics continuity and counter resets",
+      "server running/waiting and complete drain",
+      "GPU Xid/ECC and competing traffic",
+      "declared latency SLO",
+      "P/D transfer/bootstrap/revoke and queues when applicable"
+    ],
+    "osl_mismatch": 0.0,
+    "output_token_throughput": 1190.065221262665,
+    "planned": 3643,
+    "records": 3643,
+    "request_throughput": 6.736794099521463,
+    "schedule_degraded": 0.0,
+    "schedule_lag_p99_ms": 10.071142400000001,
+    "ttft_p95_ms": 10222.0835218,
+    "ttft_p99_ms": 13205.79853035
+  },
+  "scope": "This is a connection reset before an HTTP response, not an observed HTTP 4xx/5xx status. bad_http=1 in the generic audit includes the absence of a 2xx response.",
+  "cause": "Unresolved. The reused connection and 3.65ms failure localize it to the transport/API path; these artifacts cannot distinguish keepalive timing, connection handling or host interference.",
+  "result": "The original case remains client/token FAIL:3642/3643 valid completions. No retry was inserted and no failed record was discarded. Successful requests have zero OSL mismatch; the failed request requested904 input and10 output tokens.",
+  "capacity": "The connection error prevents a clean no-error pass; independently, larger queues and latency tails demonstrate load pressure. Neither finding alone establishes a kernel defect."
+}

@@ -1,0 +1,29 @@
+{
+  "passed": true,
+  "sha256": "5317e2301656c7d5441bbd63e58b7e8b9d3d445e0118729cd7fde0b8717b960c",
+  "rows": 3643,
+  "duration_seconds": 499.99916666666667,
+  "offered_request_s": 7.286012143353572,
+  "input_tokens": 30518473,
+  "output_tokens": 643375,
+  "max_context": 80172,
+  "speedup": 1.2,
+  "only_timestamps_changed": true,
+  "baseline_trace_sha256": "680e526d49545258c0ca5b635d0004a44cce2ce990d533ac32024cefee1f0170",
+  "command": [
+    "/home/lidong1/vllm_test/vllm_yoco_align_invariant/.venv/bin/python",
+    "/home/lidong1/vllm_test/yoco_results/fast-mooncake-f1p2-20260908/prepare_trace.py",
+    "/home/lidong1/vllm_test/yoco_results/fast-mooncake-f1p2-20260908/traces/source-toolagent_trace.jsonl",
+    "/home/lidong1/vllm_test/yoco_results/fast-mooncake-f1p2-20260908/traces/toolagent-ctx81920-t300-900s-f1p2.jsonl",
+    "--max-model-len",
+    "81920",
+    "--start-ms",
+    "300000",
+    "--end-ms",
+    "900000",
+    "--speedup",
+    "1.2",
+    "--manifest",
+    "/home/lidong1/vllm_test/yoco_results/fast-mooncake-f1p2-20260908/traces/f1p2-manifest.json"
+  ]
+}

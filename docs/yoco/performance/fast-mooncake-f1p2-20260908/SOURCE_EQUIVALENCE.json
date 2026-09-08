@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "source_commit": "8c74b459542ff6b03cab9f355daabc47e80990b5",
+  "baseline_source_commit": "416b83d83504af902b8da248452a19cc5d56b5db",
+  "files_checked": 2303,
+  "all_runtime_sources_identical": true
+}

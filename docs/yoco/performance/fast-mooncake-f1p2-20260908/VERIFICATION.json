@@ -1,0 +1,64 @@
+{
+  "source_commit": "8c74b459542ff6b03cab9f355daabc47e80990b5",
+  "pod_unchanged": true,
+  "cases": [
+    {
+      "name": "pd-fast-r1-long500s",
+      "planned": 3643,
+      "completed": 3643,
+      "client_pass": true,
+      "server_pass": true,
+      "drained": true,
+      "output_accounting_pass": true,
+      "max_metrics_gap": 1.2626357078552246,
+      "client_launch_utc": "2026-09-08T09:42:58+00:00",
+      "measured_start_utc": "2026-09-08T09:43:22+00:00",
+      "manifest_sha256": "954deb0940c9c2d246ce65e6699d0a2246fc885c2d7f235a6556fa14ddd787b4"
+    },
+    {
+      "name": "pd-fast-r1-smoke50",
+      "planned": 50,
+      "completed": 50,
+      "client_pass": true,
+      "server_pass": true,
+      "drained": true,
+      "output_accounting_pass": true,
+      "max_metrics_gap": 1.184859275817871,
+      "client_launch_utc": "2026-09-08T09:42:01+00:00",
+      "measured_start_utc": "2026-09-08T09:42:27+00:00",
+      "manifest_sha256": "c4b81153b0f3e9d719bb84b03ac43461dc2574b2ae918bed03fdcd053b7a9eb7"
+    },
+    {
+      "name": "standalone-fast-r1-long500s",
+      "planned": 3643,
+      "completed": 3642,
+      "client_pass": false,
+      "server_pass": true,
+      "drained": true,
+      "output_accounting_pass": false,
+      "max_metrics_gap": 1.2543730735778809,
+      "client_launch_utc": "2026-09-08T09:22:17+00:00",
+      "measured_start_utc": "2026-09-08T09:23:58+00:00",
+      "manifest_sha256": "ce856600e2cb8747bc0942f9d50d08e0bbc19be0c658c4c4de7a01c6de7c030c"
+    },
+    {
+      "name": "standalone-fast-r1-smoke50",
+      "planned": 50,
+      "completed": 50,
+      "client_pass": true,
+      "server_pass": true,
+      "drained": true,
+      "output_accounting_pass": true,
+      "max_metrics_gap": 1.2304630279541016,
+      "client_launch_utc": "2026-09-08T09:21:27+00:00",
+      "measured_start_utc": "2026-09-08T09:21:50+00:00",
+      "manifest_sha256": "e49395bb5bbeeea983760ab0d2548fe6701809292d9c5aa910851d3a889f8a0b"
+    }
+  ],
+  "final_audit_pass": true,
+  "aiperf_source_unchanged": true,
+  "diagnostic": true,
+  "all_completed": false,
+  "slo": "Not declared",
+  "claim": "Data integrity checks; failures remain recorded and are not reclassified as capacity pass."
+}

@@ -1,0 +1,12 @@
+{
+  "passed": false,
+  "rows": 3643,
+  "input_delta_histogram": {
+    "1": 3633,
+    "2": 9
+  },
+  "missing_token_count_records": 1,
+  "observed_output_length_mismatches": 0,
+  "output_mismatches_or_missing": 1,
+  "original_sha256": "0b4bc941df7316b1fe727cd6f29f7c8c026072dfcdbaaa9cca870d4d5b1b2818"
+}

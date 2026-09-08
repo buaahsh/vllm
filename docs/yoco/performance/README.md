@@ -1,5 +1,7 @@
 # YOCO 性能结果入口
 
+新增[Mooncake 1.2×持续表](THROUGHPUT_F1P2.md)和[Fast负载响应报告](fast-mooncake-f1p2-20260908/REPORT.md)。与1×表分开维护。
+
 日常开源trace比较和更新使用 [三模式持续吞吐表](THROUGHPUT.md)。低并发固定形状W2使用独立的 [低并发W2表](LOW_CONCURRENCY.md)；两组工作负载与统计口径不同。
 
 每次只重测本次修改涉及的模式，并只更新该模式已测的拓扑；其他模式沿用历史结果并保留测量日期。
