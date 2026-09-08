@@ -34,7 +34,7 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 每个点为一次完整请求测量，包含 prefill 与调度；共享节点、固定形状合成输入，属于诊断结果。36项配置/分派回归通过；48个固定前缀位置的平均/最大KL为0.000841/0.006718，Top-1相同47/48，完整W2的B1生成序列发生变化，Fast不保证bitwise。此轮没有修改llm-train或共享Align kernel。
 
-[完整报告与图表](docs/yoco/fast-low-concurrency-20260908/REPORT.md) · [低并发W2持续表](docs/yoco/performance/LOW_CONCURRENCY.md)。W2组独立记录，原Mooncake开源trace表保留历史测量值。
+[完整报告与图表](docs/yoco/fast-low-concurrency-20260908/REPORT.md) · [低并发W2持续表](docs/yoco/performance/LOW_CONCURRENCY.md)。W2组独立记录；随后完成的Mooncake复测见[开源trace报告](docs/yoco/performance/fast-mooncake-20260908/REPORT.md)，两组工作负载不混用。
 
 ### Align backward 越界修复（2026-09-08）
 
@@ -58,9 +58,20 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 [报告与原始汇总](docs/yoco/align-4gpu-1p1d-20260907/REPORT.md) · [PDF](docs/yoco/align-4gpu-1p1d-20260907/REPORT.pdf)。
 
-### 持续吞吐对照（2026-09-07）
+### Fast Mooncake 开源 trace 复测（2026-09-08 UTC）
 
-[三模式持续表](docs/yoco/performance/THROUGHPUT.md)保留每行的测量时间和证据；每次只重测本次修改涉及的模式。本轮只重测 Fast，单卡 / 1P1D 输出吞吐为 **1037.27 / 1045.68 tok/s**；历史 Qwen3 为 929.63 / 1040.93，Align GEMM 为 612.83 / 826.76。所有数据均为同物理 B200、固定 1× 开源 trace、不同时间的共享节点诊断，不能据此比较峰值能力。Align 单卡有 5 个超时，Fast/Qwen3 的单卡与 P/D log-prob 差异待定位。详见[报告及更新规则](docs/yoco/performance/README.md)。
+只重测恢复split-KV后的Fast，沿用2026-09-07的同物理B200和完整参数：Mooncake FAST’25 toolagent源时间300–900秒、1×、3643请求；单卡GPU5，1P1D为GPU4/5。Qwen3、Align和W2表保留原测量时间及数值。
+
+| 拓扑 | 旧Fast输出 tok/s | 当前Fast输出 tok/s | 变化 |
+| --- | ---: | ---: | ---: |
+| 单卡 | 1037.27 | 1038.83 | +0.15% |
+| 1P1D | 1045.68 | 1046.78 | +0.10% |
+
+TTFT / ITL / E2E P95变化：单卡 +0.59% / -4.14% / -2.29%；1P1D +66.61% / +0.02% / +9.12%。
+
+两组均3643/3643完成，零错误，客户端/长度/服务/排空门槛通过。这是共享节点、单次测量、无预设SLO的诊断；固定1×输出负载约1072 tok/s，不能据此推断峰值能力或期待W2的加速比例。单卡/P-D四组探针输出token相同，但所选token log-prob最大差0.1599，差异待定位，Fast不保证bitwise。
+
+[完整报告与证据](docs/yoco/performance/fast-mooncake-20260908/REPORT.md) · [三模式持续表](docs/yoco/performance/THROUGHPUT.md)。
 
 ### Fast decode 优化（2026-09-06）
 

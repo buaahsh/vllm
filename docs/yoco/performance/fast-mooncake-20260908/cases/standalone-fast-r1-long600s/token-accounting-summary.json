@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "rows": 3643,
+  "input_delta_histogram": {
+    "1": 3633,
+    "2": 10
+  },
+  "output_mismatches": 0,
+  "original_sha256": "28ecbcab75a1c519e4242fd0e7d2e7fe899a45c41c0dcc00f1bd53207541c9d1"
+}

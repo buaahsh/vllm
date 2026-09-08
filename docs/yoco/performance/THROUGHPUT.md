@@ -16,7 +16,7 @@ Qwen3与YOCO是不同模型。各模式采用自身执行路径：Align强制的
 | --- | ---: | ---: | --- | ---: | ---: | --- | --- |
 | Qwen3-30B-A3B-Instruct-2507 | 929.63 | 929.63 | 3643/3643；0 | 77.64 | 183.57 | 2026-09-07 10:42:06 | [客户端负载门槛失败](qwen3-compare-b200-20260907/cases/standalone-qwen3-r1-long600s/COMPLETE.json) |
 | YOCO Align GEMM | 612.83 | 612.83 | 3638/3643；5 | 89.30 | 725.70 | 2026-09-07 09:13:55 | [请求/长度未全通过；客户端负载门槛失败](align-4gpu-1p1d-20260906/pd-tail-fix/cases/standalone-candidate-fixed-long600s/COMPLETE.json) |
-| YOCO Fast | 1037.27 | 1037.27 | 3643/3643；0 | 2.66 | 311.56 | 2026-09-07 12:56:36 | [客户端/服务门槛通过；诊断](fast-compare-b200-20260907/cases/standalone-fast-r1-long600s/COMPLETE.json) |
+| YOCO Fast | 1038.83 | 1038.83 | 3643/3643；0 | 2.67 | 298.65 | 2026-09-08 07:26:11 | [客户端/服务门槛通过；诊断](fast-mooncake-20260908/cases/standalone-fast-r1-long600s/COMPLETE.json) |
 
 ## 1P1D（P GPU4 / D GPU5）
 
@@ -24,7 +24,7 @@ Qwen3与YOCO是不同模型。各模式采用自身执行路径：Align强制的
 | --- | ---: | ---: | --- | ---: | ---: | --- | --- |
 | Qwen3-30B-A3B-Instruct-2507 | 1040.93 | 520.46 | 3643/3643；0 | 3.57 | 46.05 | 2026-09-07 11:00:42 | [客户端/服务门槛通过；P/D log-prob差异待定位](qwen3-compare-b200-20260907/cases/pd-qwen3-r1-long600s/COMPLETE.json) |
 | YOCO Align GEMM | 826.76 | 413.38 | 3643/3643；0 | 108.83 | 59.82 | 2026-09-07 08:49:40 | [客户端负载门槛失败](align-4gpu-1p1d-20260906/pd-tail-fix/cases/pd-candidate-fixed-long600s/COMPLETE.json) |
-| YOCO Fast | 1045.68 | 522.84 | 3643/3643；0 | 3.90 | 22.58 | 2026-09-07 13:16:45 | [客户端/服务门槛通过；单卡/P-D探针log-prob差0.1322；待定位](fast-compare-b200-20260907/cases/pd-fast-r1-long600s/COMPLETE.json) |
+| YOCO Fast | 1046.78 | 523.39 | 3643/3643；0 | 6.49 | 22.59 | 2026-09-08 07:46:27 | [客户端/服务门槛通过；单卡/P-D探针log-prob差0.1599；待定位](fast-mooncake-20260908/cases/pd-fast-r1-long600s/COMPLETE.json) |
 
 ## 解释与更新规则
 
@@ -43,6 +43,6 @@ uv run --python 3.12 update_throughput.py \
   --case pd-fast-r1-long600s
 ```
 
-原始报告：[Align](align-4gpu-1p1d-20260906/REPORT.md)、[Qwen3](qwen3-compare-b200-20260907/REPORT.md)、[Fast](fast-compare-b200-20260907/REPORT.md)。
+原始报告：[Align](align-4gpu-1p1d-20260906/REPORT.md)、[Qwen3](qwen3-compare-b200-20260907/REPORT.md)、[Fast报告1](fast-mooncake-20260908/REPORT.md)。
 
 对比图：[吞吐](throughput/figures/throughput.png)、[延迟](throughput/figures/latency.png)、[Fast相对变化](throughput/figures/fast-relative.png)、[到达与完成](throughput/figures/completion.png)。

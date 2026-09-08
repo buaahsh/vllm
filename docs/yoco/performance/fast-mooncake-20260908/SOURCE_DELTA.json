@@ -1,0 +1,12 @@
+{
+  "current_commit": "416b83d83504af902b8da248452a19cc5d56b5db",
+  "changed_git_runtime_files": [
+    "vllm/model_executor/layers/fused_moe/experts/yoco_configs/README.md",
+    "vllm/model_executor/layers/fused_moe/experts/yoco_configs/align_moe_NVIDIA_B200.experimental.json",
+    "vllm/v1/attention/backends/flash_attn.py"
+  ],
+  "production_python_changes": [
+    "vllm/v1/attention/backends/flash_attn.py"
+  ],
+  "checked_git_files": 2303
+}

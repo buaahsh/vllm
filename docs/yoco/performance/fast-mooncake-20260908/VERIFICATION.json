@@ -1,0 +1,60 @@
+{
+  "source_commit": "416b83d83504af902b8da248452a19cc5d56b5db",
+  "pod_unchanged": true,
+  "cases": [
+    {
+      "name": "pd-fast-r1-long600s",
+      "planned": 3643,
+      "completed": 3643,
+      "client_pass": true,
+      "server_pass": true,
+      "drained": true,
+      "output_accounting_pass": true,
+      "max_metrics_gap": 1.274014949798584,
+      "measured_start_utc": "2026-09-08T07:35:28+00:00",
+      "manifest_sha256": "7e71de5924355dcff5185e4d348f0c10d949d4a1d140b3c39849fa6d0eeb144e"
+    },
+    {
+      "name": "pd-fast-r1-smoke50",
+      "planned": 50,
+      "completed": 50,
+      "client_pass": true,
+      "server_pass": true,
+      "drained": true,
+      "output_accounting_pass": true,
+      "max_metrics_gap": 1.1958799362182617,
+      "measured_start_utc": "2026-09-08T07:34:32+00:00",
+      "manifest_sha256": "bc8b12dda82cb6d339a3a2343bc741f1e52e20a3729b52eaded7609e5e730e03"
+    },
+    {
+      "name": "standalone-fast-r1-long600s",
+      "planned": 3643,
+      "completed": 3643,
+      "client_pass": true,
+      "server_pass": true,
+      "drained": true,
+      "output_accounting_pass": true,
+      "max_metrics_gap": 1.282501459121704,
+      "measured_start_utc": "2026-09-08T07:15:16+00:00",
+      "manifest_sha256": "695094827a1c6bf7988e80a274c30724c46208d4de831d532aedb783f7f1e6d5"
+    },
+    {
+      "name": "standalone-fast-r1-smoke50",
+      "planned": 50,
+      "completed": 50,
+      "client_pass": true,
+      "server_pass": true,
+      "drained": true,
+      "output_accounting_pass": true,
+      "max_metrics_gap": 1.239074945449829,
+      "measured_start_utc": "2026-09-08T07:14:20+00:00",
+      "manifest_sha256": "caa22c5fc1296d5557164a6c7257c6e2bcb8cce76ee590eee4ccdbf4f9183562"
+    }
+  ],
+  "final_audit_pass": true,
+  "aiperf_source_unchanged": true,
+  "diagnostic": true,
+  "all_completed": true,
+  "slo": "Not declared",
+  "claim": "Data integrity checks; failures remain recorded and are not reclassified as capacity pass."
+}

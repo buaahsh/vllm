@@ -1,0 +1,43 @@
+{
+  "counts": {
+    "dropped_context": 116,
+    "dropped_limit": 14216,
+    "dropped_output_length": 9226,
+    "dropped_window": 0,
+    "retained": 50,
+    "source_rows": 23608
+  },
+  "filters": {
+    "end_ms": null,
+    "limit": 50,
+    "max_model_len": 81920,
+    "max_output_length": 128,
+    "start_ms": null,
+    "timestamp_speedup": 1.0
+  },
+  "input_length": {
+    "max": 19976,
+    "mean": 6149.04,
+    "p50": 6279.5,
+    "p95": 11505.049999999988,
+    "p99": 17622.03999999999
+  },
+  "max_same_timestamp_burst": 15,
+  "offered_requests_per_second": 3.3333333333333335,
+  "output": "/home/lidong1/vllm_test/yoco_results/l3-aiperf-mooncake-b200-20260904/traces/toolagent-ctx81920-smoke50.jsonl",
+  "output_length": {
+    "max": 105,
+    "mean": 21.54,
+    "p50": 20.5,
+    "p95": 60.19999999999993,
+    "p99": 92.74999999999994
+  },
+  "output_sha256": "bdcbfc5600e3a64cb7de7745d9fee42a8c1b1fa2bec30e037d310cd4560e40c1",
+  "scaled_duration_ms": 15000.0,
+  "schema_version": 1,
+  "source": "/home/lidong1/vllm_test/yoco_results/l3-aiperf-mooncake-b200-20260904/traces/toolagent_trace.jsonl",
+  "source_sha256": "48a2db1a13d3bc05e6330140c64f604ba366df20d3c9e128b5c35a01c1fa5f71",
+  "source_window_duration_ms": 15000.0,
+  "total_input_tokens": 307452,
+  "total_output_tokens": 1077
+}

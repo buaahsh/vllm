@@ -1,0 +1,29 @@
+{
+  "name": "pd-fast-r1-smoke50",
+  "finished": 1788852928.0815334,
+  "client_exit": 0,
+  "client_audit_exit": 0,
+  "token_accounting_pass": true,
+  "services": {
+    "p": {
+      "scrape_errors": 0,
+      "max_gap_seconds": 1.195861577987671,
+      "counter_resets": []
+    },
+    "d": {
+      "scrape_errors": 0,
+      "max_gap_seconds": 1.1958749294281006,
+      "counter_resets": []
+    },
+    "proxy": {
+      "scrape_errors": 0,
+      "max_gap_seconds": 1.1958799362182617,
+      "counter_resets": []
+    }
+  },
+  "transfer_pass": true,
+  "proxy_pass": true,
+  "server_pass": true,
+  "drained": true,
+  "passed": true
+}

@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "sha256": "680e526d49545258c0ca5b635d0004a44cce2ce990d533ac32024cefee1f0170",
+  "rows": 3643,
+  "duration_seconds": 599.999,
+  "offered_request_s": 6.071676786127977,
+  "input_tokens": 30518473,
+  "output_tokens": 643375,
+  "max_context": 80172
+}

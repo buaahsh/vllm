@@ -1,0 +1,62 @@
+[
+  {
+    "topology": "standalone",
+    "output_token_throughput": {
+      "old": 1037.273758345514,
+      "current": 1038.8265576010442,
+      "percent": 0.14970004235015377
+    },
+    "input_token_throughput": {
+      "old": 49208.93778700654,
+      "current": 49282.60358771374,
+      "percent": 0.14970004235013157
+    },
+    "ttft_p95_ms": {
+      "old": 2656.2040862,
+      "current": 2671.7832406999996,
+      "percent": 0.5865194839861587
+    },
+    "itl_p95_ms": {
+      "old": 311.55606862499997,
+      "current": 298.651455875,
+      "percent": -4.141987285611959
+    },
+    "e2e_p95_ms": {
+      "old": 61470.51500589994,
+      "current": 60059.988558599995,
+      "percent": -2.2946390593353017
+    },
+    "vs_qwen_output_percent": 11.746260041166412,
+    "vs_align_output_percent": 69.5136393406284
+  },
+  {
+    "topology": "pd",
+    "output_token_throughput": {
+      "old": 1045.682139148978,
+      "current": 1046.777869161762,
+      "percent": 0.10478614597699831
+    },
+    "input_token_throughput": {
+      "old": 49607.836809099885,
+      "current": 49659.8189493947,
+      "percent": 0.10478614597699831
+    },
+    "ttft_p95_ms": {
+      "old": 3895.1433301999996,
+      "current": 6489.541539199944,
+      "percent": 66.60597541777065
+    },
+    "itl_p95_ms": {
+      "old": 22.583175941516597,
+      "current": 22.587565544642857,
+      "percent": 0.019437492483898033
+    },
+    "e2e_p95_ms": {
+      "old": 14174.089144999998,
+      "current": 15467.12618679999,
+      "percent": 9.122540634338527
+    },
+    "vs_qwen_output_percent": 0.5618328296998376,
+    "vs_align_output_percent": 26.61141744756741
+  }
+]

@@ -1,0 +1,573 @@
+{
+  "old": {
+    "means": {
+      "p": {
+        "vllm:time_to_first_token_seconds": {
+          "mean_seconds": 1.7426025725484025,
+          "count": 3644.0
+        },
+        "vllm:request_time_per_output_token_seconds": {
+          "mean_seconds": 0.0,
+          "count": 3644.0
+        },
+        "vllm:e2e_request_latency_seconds": {
+          "mean_seconds": 1.7426025725484025,
+          "count": 3644.0
+        },
+        "vllm:request_queue_time_seconds": {
+          "mean_seconds": 0.47741428684314424,
+          "count": 3644.0
+        },
+        "vllm:request_inference_time_seconds": {
+          "mean_seconds": 0.8772854877957352,
+          "count": 3644.0
+        },
+        "vllm:request_prefill_time_seconds": {
+          "mean_seconds": 0.8772854877957352,
+          "count": 3644.0
+        },
+        "vllm:request_decode_time_seconds": {
+          "mean_seconds": 0.0,
+          "count": 3644.0
+        },
+        "http_request_duration_highr_seconds": {
+          "mean_seconds": 1.7608651435395841,
+          "count": 3648.0
+        },
+        "http_request_duration_seconds": {
+          "mean_seconds": 1.7608651435395841,
+          "count": 3648.0
+        }
+      },
+      "d": {
+        "vllm:time_to_first_token_seconds": {
+          "mean_seconds": 2.1278772055693715,
+          "count": 3643.0
+        },
+        "vllm:inter_token_latency_seconds": {
+          "mean_seconds": 0.01927589642815426,
+          "count": 639732.0
+        },
+        "vllm:request_time_per_output_token_seconds": {
+          "mean_seconds": 0.019545000463676087,
+          "count": 3643.0
+        },
+        "vllm:e2e_request_latency_seconds": {
+          "mean_seconds": 5.512711692373405,
+          "count": 3643.0
+        },
+        "vllm:request_queue_time_seconds": {
+          "mean_seconds": 1.8415433517783766,
+          "count": 3643.0
+        },
+        "vllm:request_inference_time_seconds": {
+          "mean_seconds": 3.427630492896118,
+          "count": 3643.0
+        },
+        "vllm:request_prefill_time_seconds": {
+          "mean_seconds": 0.042670906353164124,
+          "count": 3643.0
+        },
+        "vllm:request_decode_time_seconds": {
+          "mean_seconds": 3.3849595865429536,
+          "count": 3643.0
+        },
+        "http_request_duration_highr_seconds": {
+          "mean_seconds": 5.514170484168427,
+          "count": 3645.0
+        },
+        "http_request_duration_seconds": {
+          "mean_seconds": 5.514170484168427,
+          "count": 3645.0
+        }
+      },
+      "proxy": {
+        "yoco_pd_proxy_prefill_seconds": {
+          "mean_seconds": 1.7975701417501952,
+          "count": 3643.0
+        }
+      }
+    },
+    "queues": {
+      "p/vllm:num_requests_running": 10.0,
+      "p/vllm:num_requests_waiting": 28.0,
+      "d/vllm:num_requests_running": 42.0,
+      "d/vllm:num_requests_waiting": 37.0,
+      "proxy/yoco_pd_proxy_inflight": 77.0,
+      "proxy/yoco_pd_proxy_prefill_pending": 40.0
+    },
+    "transfer": {
+      "d": {
+        "count": 0,
+        "total_bytes": 0,
+        "duration_sum_s": 0,
+        "duration_p50_s": null,
+        "duration_p95_s": null,
+        "duration_p99_s": null,
+        "descriptors": 0,
+        "failures": {},
+        "final_queues": {
+          "handle_new_engine_id": 0,
+          "receive_kv_from_single_worker": 0,
+          "reqs_need_send": 0,
+          "_pending_bootstrap_queries": 0,
+          "finished_sending_reqs": 0,
+          "finished_recving_reqs": 0
+        }
+      },
+      "p": {
+        "count": 1720,
+        "total_bytes": 352621297664,
+        "duration_sum_s": 16.361913724802434,
+        "duration_p50_s": 0.00803831173107028,
+        "duration_p95_s": 0.018751325225457548,
+        "duration_p99_s": 0.02497194447554646,
+        "descriptors": 9193594,
+        "failures": {},
+        "final_queues": {
+          "send_kv_to_decode": 0,
+          "reqs_need_send": 0,
+          "_pending_bootstrap_queries": 0,
+          "finished_sending_reqs": 0,
+          "finished_recving_reqs": 0
+        }
+      }
+    },
+    "cache_hit_fraction": {
+      "p": 0.0,
+      "d": 0.004910273943564743,
+      "proxy": null
+    },
+    "gpu_telemetry": {
+      "0": {
+        "samples": 118,
+        "utilization_mean": 82.4322033898305,
+        "utilization_p95": 100.0,
+        "power_mean_watts": 721.4566101694916,
+        "max_memory_mib": 76262.0
+      },
+      "1": {
+        "samples": 118,
+        "utilization_mean": 80.82203389830508,
+        "utilization_p95": 100.0,
+        "power_mean_watts": 729.0105084745768,
+        "max_memory_mib": 76198.0
+      },
+      "2": {
+        "samples": 118,
+        "utilization_mean": 0.0,
+        "utilization_p95": 0.0,
+        "power_mean_watts": 193.3578813559322,
+        "max_memory_mib": 0.0
+      },
+      "3": {
+        "samples": 118,
+        "utilization_mean": 0.0,
+        "utilization_p95": 0.0,
+        "power_mean_watts": 194.19203389830508,
+        "max_memory_mib": 0.0
+      },
+      "4": {
+        "samples": 118,
+        "utilization_mean": 62.355932203389834,
+        "utilization_p95": 100.0,
+        "power_mean_watts": 755.8341525423732,
+        "max_memory_mib": 166748.0
+      },
+      "5": {
+        "samples": 118,
+        "utilization_mean": 99.09322033898304,
+        "utilization_p95": 100.0,
+        "power_mean_watts": 816.3110169491522,
+        "max_memory_mib": 154664.0
+      },
+      "6": {
+        "samples": 118,
+        "utilization_mean": 89.07627118644068,
+        "utilization_p95": 99.0,
+        "power_mean_watts": 828.0183050847453,
+        "max_memory_mib": 73530.0
+      },
+      "7": {
+        "samples": 118,
+        "utilization_mean": 84.52542372881356,
+        "utilization_p95": 99.0,
+        "power_mean_watts": 820.0868644067797,
+        "max_memory_mib": 73080.0
+      }
+    },
+    "buckets": [
+      {
+        "planned_start_seconds": 0,
+        "requests": 536,
+        "ttft_p50_ms": 1830.754575,
+        "ttft_p95_ms": 2938.362126
+      },
+      {
+        "planned_start_seconds": 100,
+        "requests": 573,
+        "ttft_p50_ms": 2051.847514,
+        "ttft_p95_ms": 4085.6602778
+      },
+      {
+        "planned_start_seconds": 200,
+        "requests": 575,
+        "ttft_p50_ms": 2024.0001519999998,
+        "ttft_p95_ms": 3705.8069406
+      },
+      {
+        "planned_start_seconds": 300,
+        "requests": 719,
+        "ttft_p50_ms": 2301.070461,
+        "ttft_p95_ms": 3899.7236340000004
+      },
+      {
+        "planned_start_seconds": 400,
+        "requests": 591,
+        "ttft_p50_ms": 2255.860881,
+        "ttft_p95_ms": 3814.5642605
+      },
+      {
+        "planned_start_seconds": 500,
+        "requests": 649,
+        "ttft_p50_ms": 2153.80691,
+        "ttft_p95_ms": 4207.5985088
+      }
+    ],
+    "post_timing_cleanup": {
+      "control_requests": 1,
+      "started": 1788787004.5130115,
+      "finished": 1788787004.575875,
+      "passed": true,
+      "scope": "Outside AIPerf timing; local producer request without KV transfer."
+    },
+    "evidence_sha256": {
+      "cases/pd-fast-r1-long600s/d-before.prom": "c4d3a969342edbd3f625118a0aeef9338fb1354129e911c87fea836c88972c95",
+      "cases/pd-fast-r1-long600s/p-after.prom": "53762aaa85352d0d164d7a90e5ff6af57135e9286b33abc4e727267772daabbf",
+      "cases/pd-fast-r1-long600s/p-before.prom": "5cda82f8b137dc3c7f00a9ec3040bfc43148f6b12c5cfc4c57e2fe6d93e5e3da",
+      "cases/pd-fast-r1-long600s/d-after.prom": "e9aa96b3fc69efb5a5d4a9c9d0a774dd59b5a699a531ce4d3c48aa86a8be8872",
+      "cases/pd-fast-r1-long600s/proxy-before.prom": "31dee464543c22c85628275d0148249c7a92d97a4792ac5e194a973405b2084e",
+      "cases/pd-fast-r1-long600s/proxy-after.prom": "416b392bbe8627242d8c4360b9907ff219e677939294bbf2bfc58049c7214c53"
+    }
+  },
+  "current": {
+    "means": {
+      "p": {
+        "vllm:time_to_first_token_seconds": {
+          "mean_seconds": 2.2339309662024354,
+          "count": 3644.0
+        },
+        "vllm:request_time_per_output_token_seconds": {
+          "mean_seconds": 0.0,
+          "count": 3644.0
+        },
+        "vllm:e2e_request_latency_seconds": {
+          "mean_seconds": 2.2339309662024354,
+          "count": 3644.0
+        },
+        "vllm:request_queue_time_seconds": {
+          "mean_seconds": 0.7986620496232656,
+          "count": 3644.0
+        },
+        "vllm:request_inference_time_seconds": {
+          "mean_seconds": 0.8983367857422054,
+          "count": 3644.0
+        },
+        "vllm:request_prefill_time_seconds": {
+          "mean_seconds": 0.8983367857422054,
+          "count": 3644.0
+        },
+        "vllm:request_decode_time_seconds": {
+          "mean_seconds": 0.0,
+          "count": 3644.0
+        },
+        "http_request_duration_highr_seconds": {
+          "mean_seconds": 2.250039537920537,
+          "count": 3648.0
+        },
+        "http_request_duration_seconds": {
+          "mean_seconds": 2.250039537920537,
+          "count": 3648.0
+        }
+      },
+      "d": {
+        "vllm:time_to_first_token_seconds": {
+          "mean_seconds": 2.6265224621186634,
+          "count": 3643.0
+        },
+        "vllm:inter_token_latency_seconds": {
+          "mean_seconds": 0.018808189066225518,
+          "count": 639732.0
+        },
+        "vllm:request_time_per_output_token_seconds": {
+          "mean_seconds": 0.019417126281857613,
+          "count": 3643.0
+        },
+        "vllm:e2e_request_latency_seconds": {
+          "mean_seconds": 5.929293002527296,
+          "count": 3643.0
+        },
+        "vllm:request_queue_time_seconds": {
+          "mean_seconds": 2.338577175198464,
+          "count": 3643.0
+        },
+        "vllm:request_inference_time_seconds": {
+          "mean_seconds": 3.345008349788255,
+          "count": 3643.0
+        },
+        "vllm:request_prefill_time_seconds": {
+          "mean_seconds": 0.042180897766683836,
+          "count": 3643.0
+        },
+        "vllm:request_decode_time_seconds": {
+          "mean_seconds": 3.302827452021571,
+          "count": 3643.0
+        },
+        "http_request_duration_highr_seconds": {
+          "mean_seconds": 5.930376178740852,
+          "count": 3645.0
+        },
+        "http_request_duration_seconds": {
+          "mean_seconds": 5.930376178740852,
+          "count": 3645.0
+        }
+      },
+      "proxy": {
+        "yoco_pd_proxy_prefill_seconds": {
+          "mean_seconds": 2.2885198434934964,
+          "count": 3643.0
+        }
+      }
+    },
+    "queues": {
+      "p/vllm:num_requests_running": 10.0,
+      "p/vllm:num_requests_waiting": 81.0,
+      "d/vllm:num_requests_running": 46.0,
+      "d/vllm:num_requests_waiting": 91.0,
+      "proxy/yoco_pd_proxy_inflight": 112.0,
+      "proxy/yoco_pd_proxy_prefill_pending": 91.0
+    },
+    "transfer": {
+      "d": {
+        "count": 0,
+        "total_bytes": 0,
+        "duration_sum_s": 0,
+        "duration_p50_s": null,
+        "duration_p95_s": null,
+        "duration_p99_s": null,
+        "descriptors": 0,
+        "failures": {},
+        "final_queues": {
+          "handle_new_engine_id": 0,
+          "receive_kv_from_single_worker": 0,
+          "reqs_need_send": 0,
+          "_pending_bootstrap_queries": 0,
+          "finished_sending_reqs": 0,
+          "finished_recving_reqs": 0
+        }
+      },
+      "p": {
+        "count": 1694,
+        "total_bytes": 352621297664,
+        "duration_sum_s": 16.204842718318105,
+        "duration_p50_s": 0.008133281953632832,
+        "duration_p95_s": 0.018884276039898396,
+        "duration_p99_s": 0.02577817413955925,
+        "descriptors": 9209588,
+        "failures": {},
+        "final_queues": {
+          "send_kv_to_decode": 0,
+          "reqs_need_send": 0,
+          "_pending_bootstrap_queries": 0,
+          "finished_sending_reqs": 0,
+          "finished_recving_reqs": 0
+        }
+      }
+    },
+    "cache_hit_fraction": {
+      "p": 0.0,
+      "d": 0.004910273943564743,
+      "proxy": null
+    },
+    "gpu_telemetry": {
+      "0": {
+        "samples": 118,
+        "utilization_mean": 82.13559322033899,
+        "utilization_p95": 98.0,
+        "power_mean_watts": 657.8093220338983,
+        "max_memory_mib": 118648.0
+      },
+      "1": {
+        "samples": 118,
+        "utilization_mean": 84.52542372881356,
+        "utilization_p95": 98.0,
+        "power_mean_watts": 578.8394067796609,
+        "max_memory_mib": 112190.0
+      },
+      "2": {
+        "samples": 118,
+        "utilization_mean": 0.0,
+        "utilization_p95": 0.0,
+        "power_mean_watts": 193.1865254237288,
+        "max_memory_mib": 0.0
+      },
+      "3": {
+        "samples": 118,
+        "utilization_mean": 0.0,
+        "utilization_p95": 0.0,
+        "power_mean_watts": 194.1689830508475,
+        "max_memory_mib": 0.0
+      },
+      "4": {
+        "samples": 118,
+        "utilization_mean": 71.47457627118644,
+        "utilization_p95": 100.0,
+        "power_mean_watts": 787.8512711864407,
+        "max_memory_mib": 165708.0
+      },
+      "5": {
+        "samples": 118,
+        "utilization_mean": 97.55932203389831,
+        "utilization_p95": 100.0,
+        "power_mean_watts": 824.0705084745764,
+        "max_memory_mib": 154664.0
+      },
+      "6": {
+        "samples": 118,
+        "utilization_mean": 31.38135593220339,
+        "utilization_p95": 96.14999999999999,
+        "power_mean_watts": 392.47271186440673,
+        "max_memory_mib": 131232.0
+      },
+      "7": {
+        "samples": 118,
+        "utilization_mean": 7.3474576271186445,
+        "utilization_p95": 52.599999999999966,
+        "power_mean_watts": 252.62406779661018,
+        "max_memory_mib": 68600.0
+      }
+    },
+    "buckets": [
+      {
+        "planned_start_seconds": 0,
+        "requests": 536,
+        "ttft_p50_ms": 1750.096188,
+        "ttft_p95_ms": 2953.49712325
+      },
+      {
+        "planned_start_seconds": 100,
+        "requests": 573,
+        "ttft_p50_ms": 2574.75135,
+        "ttft_p95_ms": 13366.937427399998
+      },
+      {
+        "planned_start_seconds": 200,
+        "requests": 575,
+        "ttft_p50_ms": 2139.423289,
+        "ttft_p95_ms": 5555.9047357
+      },
+      {
+        "planned_start_seconds": 300,
+        "requests": 719,
+        "ttft_p50_ms": 2327.838731,
+        "ttft_p95_ms": 3795.9523173000002
+      },
+      {
+        "planned_start_seconds": 400,
+        "requests": 591,
+        "ttft_p50_ms": 2266.89324,
+        "ttft_p95_ms": 3850.1847135
+      },
+      {
+        "planned_start_seconds": 500,
+        "requests": 649,
+        "ttft_p50_ms": 2199.716664,
+        "ttft_p95_ms": 4138.357965600001
+      }
+    ],
+    "post_timing_cleanup": {
+      "control_requests": 1,
+      "started": 1788853586.3624718,
+      "finished": 1788853586.4274068,
+      "passed": true,
+      "scope": "Outside AIPerf timing; local producer request without KV transfer."
+    },
+    "evidence_sha256": {
+      "cases/pd-fast-r1-long600s/d-before.prom": "21d1eddfa6e923b9ae8478cf9550137f0057eb09c03bf2781f755fd03f397989",
+      "cases/pd-fast-r1-long600s/p-after.prom": "4fb2f2759aa3494f55ee22fd9c8b653d1bd55d5b328d3db2389fed1ef0b0cffd",
+      "cases/pd-fast-r1-long600s/p-before.prom": "b0dfc1abce2af1a691a3a5e5cf0b92adb8f1b79f5c59be8cb39ea242493dc1b2",
+      "cases/pd-fast-r1-long600s/d-after.prom": "bb383d06c6cb4d5ad2effba4677b28f7b51a61d82e0628efb4b0efc4a085d19f",
+      "cases/pd-fast-r1-long600s/proxy-before.prom": "a65040061b706139f38da8f40cd298c0187ce5ee9d2ade43c2d9cdbe1c75acf4",
+      "cases/pd-fast-r1-long600s/proxy-after.prom": "0b6e7ef0d692da5616d734d41a3b7e13cd886e8385aa43766694dc7cf97d3326"
+    }
+  },
+  "conclusion": "Observed regression is concentrated before first token with larger P and D wait queues; transfer bytes/cache hit ratios match and transfer latency remains millisecond-scale. Not a causal kernel attribution.",
+  "limitations": [
+    "Shared node and different run times; other-GPU workloads changed.",
+    "P means include one post-timing cleanup request (3644 vs 3643 trace requests).",
+    "D waiting can include remote-prefill/KV wait; P and D means are not additive.",
+    "No per-kernel controlled ABBA or new profiling run performed."
+  ],
+  "prefill_queue_peak_samples": [
+    {
+      "seconds_since_first_send": 178.31788849830627,
+      "p_running": 1.0,
+      "p_waiting": 0.0,
+      "d_waiting": 43.0,
+      "gpu4": [
+        "4, 165708, 0, 248.47, 37"
+      ]
+    },
+    {
+      "seconds_since_first_send": 183.5086588859558,
+      "p_running": 1.0,
+      "p_waiting": 0.0,
+      "d_waiting": 85.0,
+      "gpu4": [
+        "4, 165708, 0, 264.33, 39"
+      ]
+    },
+    {
+      "seconds_since_first_send": 186.68382024765015,
+      "p_running": 1.0,
+      "p_waiting": 64.0,
+      "d_waiting": 91.0,
+      "gpu4": []
+    },
+    {
+      "seconds_since_first_send": 187.6905448436737,
+      "p_running": 6.0,
+      "p_waiting": 81.0,
+      "d_waiting": 91.0,
+      "gpu4": []
+    },
+    {
+      "seconds_since_first_send": 188.70736002922058,
+      "p_running": 3.0,
+      "p_waiting": 76.0,
+      "d_waiting": 82.0,
+      "gpu4": [
+        "4, 165708, 100, 912.27, 45"
+      ]
+    },
+    {
+      "seconds_since_first_send": 193.89555597305298,
+      "p_running": 2.0,
+      "p_waiting": 54.0,
+      "d_waiting": 60.0,
+      "gpu4": [
+        "4, 165708, 100, 977.65, 52"
+      ]
+    },
+    {
+      "seconds_since_first_send": 199.12009072303772,
+      "p_running": 2.0,
+      "p_waiting": 47.0,
+      "d_waiting": 53.0,
+      "gpu4": [
+        "4, 165708, 100, 966.08, 53"
+      ]
+    }
+  ],
+  "cache_timestamp_note": "See PD_SPIKE_CACHE_TIMESTAMPS.json: a Decode slot-mapping Triton specialization was written at 07:38:43 UTC; timestamps alone do not explain the later Prefill pause or exclude other JIT/host interference."
+}

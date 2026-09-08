@@ -1,0 +1,7 @@
+{
+  "checked_files": 268,
+  "missing": [],
+  "mismatches": [],
+  "passed": true,
+  "scope": "Immutable run inventory in PVC archive; local publisher logs outside inventory are not included."
+}

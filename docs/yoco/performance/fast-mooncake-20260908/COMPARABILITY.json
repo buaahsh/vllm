@@ -1,0 +1,76 @@
+{
+  "cases": [
+    {
+      "topology": "standalone",
+      "trace_equal": true,
+      "client_command_equal": true,
+      "server_command_equal": {
+        "standalone": true
+      },
+      "server_environment_equal": {
+        "standalone": true
+      },
+      "devices_equal": {
+        "standalone": true
+      },
+      "salt_isolated": true
+    },
+    {
+      "topology": "pd",
+      "trace_equal": true,
+      "client_command_equal": true,
+      "server_command_equal": {
+        "p": true,
+        "d": true,
+        "proxy": true
+      },
+      "server_environment_equal": {
+        "p": true,
+        "d": true,
+        "proxy": true
+      },
+      "devices_equal": {
+        "p": true,
+        "d": true
+      },
+      "salt_isolated": true
+    }
+  ],
+  "software_equal": [
+    {
+      "torch": true,
+      "torch_file": true,
+      "transformers": true,
+      "transformers_file": true,
+      "triton": true,
+      "cuda": true,
+      "flashinfer": true
+    },
+    {
+      "torch": true,
+      "torch_file": true,
+      "transformers": true,
+      "transformers_file": true,
+      "triton": true,
+      "cuda": true,
+      "flashinfer": true
+    },
+    {
+      "torch": true,
+      "torch_file": true,
+      "transformers": true,
+      "transformers_file": true,
+      "triton": true,
+      "cuda": true,
+      "flashinfer": true
+    }
+  ],
+  "runtime_changes": [
+    "runtime-vllm/vllm/model_executor/layers/fused_moe/experts/yoco_configs/README.md",
+    "runtime-vllm/vllm/model_executor/layers/fused_moe/experts/yoco_configs/align_moe_NVIDIA_B200.experimental.json",
+    "runtime-vllm/vllm/v1/attention/backends/flash_attn.py"
+  ],
+  "current_commit": "416b83d83504af902b8da248452a19cc5d56b5db",
+  "source_sha256": "63cf3965d8e03ab2aa15302ef67ded5c4bcbb476a9f66c02d4e128f4fff2fa83",
+  "passed": true
+}

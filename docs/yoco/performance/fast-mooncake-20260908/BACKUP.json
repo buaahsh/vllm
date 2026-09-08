@@ -1,0 +1,20 @@
+{
+  "finished": 1788854281.2639525,
+  "started": 1788854254.9242969,
+  "archive": "/mnt/pvc/lidong1/fast-mooncake-20260908/results.tar",
+  "bytes": 237875200,
+  "sha256": "728fc215fb5f567089fc1d3e923d8d9f7b11c00fe8a91c8b4433878f9f0ee530",
+  "independent_readback_sha256": "728fc215fb5f567089fc1d3e923d8d9f7b11c00fe8a91c8b4433878f9f0ee530",
+  "sha_readback_pass": true,
+  "members": 292,
+  "result_files": 268,
+  "exclusions": [
+    "runtime-vllm (current-source.tar overlay plus prior compiled runtime)",
+    "cache",
+    "__pycache__"
+  ],
+  "current_source_archive": "current-source.tar",
+  "current_source_archive_sha256": "7a8feb11842e67418f8318d429c858869ef8fd773bab595e8334d7802d406ef1",
+  "runtime_archive": "/mnt/pvc/lidong1/yoco-align-fast-vllm-vllm-train-results-20260907/results.tar",
+  "runtime_archive_sha256": "dc6b968b46eb42eac992605ddacdb0f1f788e56792b75bda645996274675b4ba"
+}

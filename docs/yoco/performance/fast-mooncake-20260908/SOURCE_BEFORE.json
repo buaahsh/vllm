@@ -1,0 +1,9 @@
+{
+  "timestamp": 1788851145.4883583,
+  "commit": "416b83d83504af902b8da248452a19cc5d56b5db",
+  "runtime": "/data/fast-mooncake-20260908/runtime-vllm",
+  "binary_source": "/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/runtime-vllm",
+  "checked": 3662,
+  "git_checked": 2303,
+  "mismatches": []
+}

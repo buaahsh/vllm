@@ -1,0 +1,33 @@
+{
+  "timestamp": 1788851145.4884613,
+  "indices": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "gpu_csv": "2, GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7, NVIDIA B200, 0 MiB, 0 %\n3, GPU-7d5a27ae-f576-89e7-835b-64d8602e70b0, NVIDIA B200, 0 MiB, 0 %\n4, GPU-4e279853-e2ff-de3e-70a8-d3623fd038b3, NVIDIA B200, 0 MiB, 0 %\n5, GPU-14379c29-e601-fc6d-b27c-4fd778ab772a, NVIDIA B200, 0 MiB, 0 %\n",
+  "devices": [
+    {
+      "index": 2,
+      "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+      "before": "2, GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7, NVIDIA B200, 0, 0"
+    },
+    {
+      "index": 3,
+      "uuid": "GPU-7d5a27ae-f576-89e7-835b-64d8602e70b0",
+      "before": "3, GPU-7d5a27ae-f576-89e7-835b-64d8602e70b0, NVIDIA B200, 0, 0"
+    },
+    {
+      "index": 4,
+      "uuid": "GPU-4e279853-e2ff-de3e-70a8-d3623fd038b3",
+      "before": "4, GPU-4e279853-e2ff-de3e-70a8-d3623fd038b3, NVIDIA B200, 0, 0"
+    },
+    {
+      "index": 5,
+      "uuid": "GPU-14379c29-e601-fc6d-b27c-4fd778ab772a",
+      "before": "5, GPU-14379c29-e601-fc6d-b27c-4fd778ab772a, NVIDIA B200, 0, 0"
+    }
+  ],
+  "holder_cmdline": "sleep infinity "
+}

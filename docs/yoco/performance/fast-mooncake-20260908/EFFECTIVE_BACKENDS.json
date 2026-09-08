@@ -1,0 +1,15 @@
+{
+  "proxy": [],
+  "p": [
+    "(EngineCore pid=69686) INFO 09-08 07:31:15 [yoco.py:357] YOCO Fast pure Prefill selected FlashInfer CUTLASS BF16 MoE; unmatched configurations keep the configured backend",
+    "(EngineCore pid=69686) INFO 09-08 07:33:49 [gpu_model_runner.py:6476] Graph capturing finished in 77 secs, took 0.39 GiB"
+  ],
+  "d": [
+    "(EngineCore pid=69679) INFO 09-08 07:31:16 [yoco.py:357] YOCO Fast high-throughput Decode selected FlashInfer CUTLASS BF16 MoE with autotune; unmatched configurations keep the configured backend",
+    "(EngineCore pid=69679) INFO 09-08 07:34:07 [gpu_model_runner.py:6476] Graph capturing finished in 76 secs, took 0.39 GiB"
+  ],
+  "standalone": [
+    "(EngineCore pid=67710) INFO 09-08 07:11:20 [yoco.py:352] YOCO Fast standalone uses FlashInfer CUTLASS prefill for M>=1024",
+    "(EngineCore pid=67710) INFO 09-08 07:13:55 [gpu_model_runner.py:6476] Graph capturing finished in 79 secs, took 0.36 GiB"
+  ]
+}

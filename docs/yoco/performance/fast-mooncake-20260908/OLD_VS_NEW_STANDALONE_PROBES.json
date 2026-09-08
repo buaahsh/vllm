@@ -1,0 +1,25 @@
+{
+  "rows": [
+    {
+      "input_length": 511,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.08732566237449646
+    },
+    {
+      "input_length": 512,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.058883339166641235
+    },
+    {
+      "input_length": 513,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.07540948688983917
+    },
+    {
+      "input_length": 4097,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.022350430488586426
+    }
+  ],
+  "note": "Four functional probes; selected token log-prob only, no global quality claim."
+}

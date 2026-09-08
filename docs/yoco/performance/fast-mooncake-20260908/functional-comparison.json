@@ -1,0 +1,25 @@
+{
+  "rows": [
+    {
+      "input_length": 511,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.15985816717147827
+    },
+    {
+      "input_length": 512,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.11693418025970459
+    },
+    {
+      "input_length": 513,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.1240386813879013
+    },
+    {
+      "input_length": 4097,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.0
+    }
+  ],
+  "note": "YOCO Fast; functional diagnostic only, no bitwise guarantee."
+}

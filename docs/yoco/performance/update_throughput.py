@@ -192,6 +192,16 @@ def read_row(source, case, mode):
 
 
 def render(current):
+    fast_reports = sorted(
+        {
+            str(Path(row["source"]).parent / "REPORT.md")
+            for row in current.values()
+            if row["mode"] == "fast"
+        }
+    )
+    fast_report_links = "、".join(
+        f"[Fast报告{index + 1}]({path})" for index, path in enumerate(fast_reports)
+    )
     lines = [
         "# YOCO / Qwen3 持续吞吐对照表",
         "",
@@ -269,8 +279,7 @@ def render(current):
         "```",
         "",
         "原始报告：[Align](align-4gpu-1p1d-20260906/REPORT.md)、"
-        "[Qwen3](qwen3-compare-b200-20260907/REPORT.md)、"
-        "[Fast](fast-compare-b200-20260907/REPORT.md)。",
+        "[Qwen3](qwen3-compare-b200-20260907/REPORT.md)、" + fast_report_links + "。",
         "",
         "对比图：[吞吐](throughput/figures/throughput.png)、"
         "[延迟](throughput/figures/latency.png)、"
@@ -303,7 +312,9 @@ def render(current):
         "manifest",
     ]
     with (STORE / "current.csv").open("w", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=fields, extrasaction="ignore")
+        writer = csv.DictWriter(
+            stream, fieldnames=fields, extrasaction="ignore", lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(current[key] for key in sorted(current))
 

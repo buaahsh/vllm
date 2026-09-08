@@ -1,0 +1,20 @@
+{
+  "source_url": "https://raw.githubusercontent.com/kvcache-ai/Mooncake/main/FAST25-release/traces/toolagent_trace.jsonl",
+  "current_run_downloaded": false,
+  "source_reused_from": "/home/lidong1/vllm_test/yoco_results/l3-aiperf-mooncake-b200-20260904/traces/toolagent_trace.jsonl",
+  "source_sha256": "48a2db1a13d3bc05e6330140c64f604ba366df20d3c9e128b5c35a01c1fa5f71",
+  "frozen_source_copy": "traces/source-toolagent_trace.jsonl",
+  "frozen_window": "traces/toolagent-ctx81920-t300-900s-f1.jsonl",
+  "frozen_window_sha256": "680e526d49545258c0ca5b635d0004a44cce2ce990d533ac32024cefee1f0170",
+  "source_rows": 23608,
+  "retained_requests": 3643,
+  "filters": {
+    "end_ms": 900000.0,
+    "limit": null,
+    "max_model_len": 81920,
+    "max_output_length": null,
+    "start_ms": 300000.0,
+    "timestamp_speedup": 1.0
+  },
+  "preparation_script_sha256": "b6f201de4bd7ccbf37fdaa5bc72e9db7f280d81ee51fb07ce6e4ea106cf53c21"
+}

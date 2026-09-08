@@ -1,0 +1,31 @@
+{
+  "before": {
+    "name": "yoco-align-fast-vllm-vllm-train-master-0",
+    "uid": "505f46a3-597a-40c3-8260-d213fae60136",
+    "node": "slc01-cl02-hgx-0228",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "master",
+        "restartCount": 0,
+        "ready": true,
+        "containerID": "containerd://3858cf578aa707858d457e28ac5921a31a5767799ede0f3849bcd4f1ff3611df"
+      }
+    ]
+  },
+  "after": {
+    "name": "yoco-align-fast-vllm-vllm-train-master-0",
+    "uid": "505f46a3-597a-40c3-8260-d213fae60136",
+    "node": "slc01-cl02-hgx-0228",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "master",
+        "restartCount": 0,
+        "ready": true,
+        "containerID": "containerd://3858cf578aa707858d457e28ac5921a31a5767799ede0f3849bcd4f1ff3611df"
+      }
+    ]
+  },
+  "unchanged": true
+}
