@@ -1,0 +1,19 @@
+diff --git a/llm/kernel/align_moe_backward.py b/llm/kernel/align_moe_backward.py
+index f8a3b909..539f7d7e 100644
+--- a/llm/kernel/align_moe_backward.py
++++ b/llm/kernel/align_moe_backward.py
+@@ -22,8 +22,12 @@ def _count_routes(
+     ids, counts, ROUTES: tl.constexpr, EXPERTS: tl.constexpr, BLOCK: tl.constexpr
+ ):
+     offsets = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+-    expert = tl.load(ids + offsets, offsets < ROUTES, other=EXPERTS).to(tl.int32)
+-    histogram = tl.histogram(expert, EXPERTS)
++    valid = offsets < ROUTES
++    expert = tl.load(ids + offsets, valid, other=0).to(tl.int32)
++    # Do not rely on an out-of-range sentinel being ignored: Triton 3.7.1
++    # on SM100 counts EXPERTS as bin 0, inflating the packing offsets and
++    # making _route_map read past order. Exclude padded lanes explicitly.
++    histogram = tl.histogram(expert, EXPERTS, mask=valid)
+     tl.atomic_add(counts + tl.arange(0, EXPERTS), histogram, sem="relaxed")
+ 
+ 

@@ -1,0 +1,10 @@
+{
+  "archive": "/mnt/pvc/lidong1/align-backward-fix-20260908/results.tar.gz",
+  "bytes": 83930,
+  "sha256": "68525aaa692a65c91bacf7e49c41b83f9d6e0852455448a706a6bdbb4b95b99f",
+  "remote_readback_sha256": "68525aaa692a65c91bacf7e49c41b83f9d6e0852455448a706a6bdbb4b95b99f",
+  "files": 110,
+  "local_archive": "/home/lidong1/vllm_test/yoco_results/align-backward-fix-20260908/results.tar.gz",
+  "referenced_runtime_archive": "/mnt/pvc/lidong1/yoco-align-fast-vllm-vllm-train-results-20260907/results.tar",
+  "referenced_runtime_sha256": "dc6b968b46eb42eac992605ddacdb0f1f788e56792b75bda645996274675b4ba"
+}

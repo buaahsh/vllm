@@ -1,0 +1,94 @@
+========= COMPUTE-SANITIZER
+========= Program hit CUDA_ERROR_NOT_PERMITTED (error 800) due to "operation not permitted" on CUDA API call to cuMemCreate.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: c10::cuda::CUDACachingAllocator::Native::(anonymous namespace)::ExpandableSegment::map(c10::cuda::CUDACachingAllocator::Native::(anonymous namespace)::SegmentRange) [0x237e7] in libc10_cuda.so
+=========         Host Frame: c10::cuda::CUDACachingAllocator::Native::(anonymous namespace)::ExpandableSegment::map(c10::cuda::CUDACachingAllocator::Native::(anonymous namespace)::SegmentRange) [0x2395a] in libc10_cuda.so
+=========         Host Frame: c10::cuda::CUDACachingAllocator::Native::DeviceCachingAllocator::map_block(c10::cuda::CUDACachingAllocator::Native::(anonymous namespace)::Block*, unsigned long, std::shared_ptr<c10::GatheredContext> const&) [0x2ed88] in libc10_cuda.so
+=========         Host Frame: c10::cuda::CUDACachingAllocator::Native::DeviceCachingAllocator::alloc_block(c10::cuda::CUDACachingAllocator::Native::(anonymous namespace)::AllocParams&, bool, std::shared_ptr<c10::GatheredContext> const&, std::unique_lock<std::recursive_mutex>&) [0x2f72d] in libc10_cuda.so
+=========         Host Frame: c10::cuda::CUDACachingAllocator::Native::DeviceCachingAllocator::malloc(unsigned long, CUstream_st*) [0x425d1] in libc10_cuda.so
+=========         Host Frame: c10::cuda::CUDACachingAllocator::Native::NativeCachingAllocator::malloc(void**, signed char, unsigned long, CUstream_st*) [0x44931] in libc10_cuda.so
+=========         Host Frame: c10::cuda::CUDACachingAllocator::Native::NativeCachingAllocator::allocate(unsigned long) [0x450be] in libc10_cuda.so
+=========         Host Frame: at::detail::empty_generic(c10::ArrayRef<long>, c10::Allocator*, c10::DispatchKeySet, c10::ScalarType, std::optional<c10::MemoryFormat>) [0x183037f] in libtorch_cpu.so
+=========         Host Frame: at::detail::empty_cuda(c10::ArrayRef<long>, c10::ScalarType, std::optional<c10::Device>, std::optional<c10::MemoryFormat>) [0xe18cd8] in libtorch_cuda.so
+=========         Host Frame: at::detail::empty_cuda(c10::ArrayRef<long>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat>) [0xe18edd] in libtorch_cuda.so
+=========         Host Frame: at::native::empty_cuda(c10::ArrayRef<long>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat>) [0x1154463] in libtorch_cuda.so
+=========         Host Frame: at::(anonymous namespace)::(anonymous namespace)::wrapper_CUDA_memory_format_empty(c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat>) [0x37a60fe] in libtorch_cuda.so
+=========         Host Frame: c10::impl::wrap_kernel_functor_unboxed_<c10::impl::detail::WrapFunctionIntoFunctor_<c10::CompileTimeFunctionPointer<at::Tensor (c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat>), &at::(anonymous namespace)::(anonymous namespace)::wrapper_CUDA_memory_format_empty>, at::Tensor, c10::guts::typelist::typelist<c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat> > >, at::Tensor (c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat>)>::call(c10::OperatorKernel*, c10::DispatchKeySet, c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat>) [0x37a61fc] in libtorch_cuda.so
+=========         Host Frame: at::_ops::empty_memory_format::redispatch(c10::DispatchKeySet, c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat>) [0x293f599] in libtorch_cpu.so
+=========         Host Frame: c10::impl::wrap_kernel_functor_unboxed_<c10::impl::detail::WrapFunctionIntoFunctor_<c10::CompileTimeFunctionPointer<at::Tensor (c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat>), &at::(anonymous namespace)::empty_memory_format>, at::Tensor, c10::guts::typelist::typelist<c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat> > >, at::Tensor (c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat>)>::call(c10::OperatorKernel*, c10::DispatchKeySet, c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat>) [0x2db0019] in libtorch_cpu.so
+=========         Host Frame: at::_ops::empty_memory_format::call(c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>, std::optional<c10::MemoryFormat>) [0x2a127ea] in libtorch_cpu.so
+=========         Host Frame: at::native::zeros_symint(c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>) [0x2080737] in libtorch_cpu.so
+=========         Host Frame: c10::impl::wrap_kernel_functor_unboxed_<c10::impl::detail::WrapFunctionIntoFunctor_<c10::CompileTimeFunctionPointer<at::Tensor (c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>), &at::(anonymous namespace)::(anonymous namespace)::wrapper_CompositeExplicitAutograd__zeros>, at::Tensor, c10::guts::typelist::typelist<c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool> > >, at::Tensor (c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>)>::call(c10::OperatorKernel*, c10::DispatchKeySet, c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>) [0x3057566] in libtorch_cpu.so
+=========         Host Frame: at::_ops::zeros::redispatch(c10::DispatchKeySet, c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>) [0x25ab184] in libtorch_cpu.so
+=========         Host Frame: c10::impl::wrap_kernel_functor_unboxed_<c10::impl::detail::WrapFunctionIntoFunctor_<c10::CompileTimeFunctionPointer<at::Tensor (c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>), &at::(anonymous namespace)::zeros>, at::Tensor, c10::guts::typelist::typelist<c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool> > >, at::Tensor (c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>)>::call(c10::OperatorKernel*, c10::DispatchKeySet, c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>) [0x2db204f] in libtorch_cpu.so
+=========         Host Frame: at::_ops::zeros::call(c10::ArrayRef<c10::SymInt>, std::optional<c10::ScalarType>, std::optional<c10::Layout>, std::optional<c10::Device>, std::optional<bool>) [0x267952d] in libtorch_cpu.so
+=========         Host Frame: torch::autograd::THPVariable_zeros(_object*, _object*, _object*) [0x58c8eb] in libtorch_python.so
+=========         Host Frame:  [0x181fce] in python
+=========         Host Frame: _PyObject_MakeTpCall [0x148ffd] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x1d733e] in python
+=========         Host Frame: _PyObject_Call_Prepend [0x14a849] in python
+=========         Host Frame:  [0x1a36a7] in python
+=========         Host Frame: _PyObject_MakeTpCall [0x148ffd] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x1d733e] in python
+=========         Host Frame: _PyObject_Call_Prepend [0x14a849] in python
+=========         Host Frame:  [0x1a36a7] in python
+=========         Host Frame: PyObject_Call [0x14b0ab] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x1db50f] in python
+=========         Host Frame: _PyObject_Call_Prepend [0x14a849] in python
+=========         Host Frame:  [0x1a36a7] in python
+=========         Host Frame: _PyObject_MakeTpCall [0x148ffd] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x1d733e] in python
+=========         Host Frame: _PyObject_Call_Prepend [0x14a849] in python
+=========         Host Frame:  [0x1a36a7] in python
+=========         Host Frame: _PyObject_MakeTpCall [0x148ffd] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x1d733e] in python
+=========         Host Frame: _PyObject_Call_Prepend [0x14a849] in python
+=========         Host Frame:  [0x1a36a7] in python
+=========         Host Frame: _PyObject_MakeTpCall [0x148ffd] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x1d733e] in python
+=========         Host Frame: PyEval_EvalCode [0x1d582a] in python
+=========         Host Frame:  [0x1d33bb] in python
+=========         Host Frame:  [0x181e4c] in python
+=========         Host Frame: PyObject_Vectorcall [0x149934] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x1d733e] in python
+=========         Host Frame: PyEval_EvalCode [0x1d582a] in python
+=========         Host Frame:  [0x2088d1] in python
+=========         Host Frame:  [0x2b4922] in python
+=========         Host Frame: _PyRun_SimpleFileObject [0x2b4689] in python
+=========         Host Frame: _PyRun_AnyFileObject [0x2b44be] in python
+=========         Host Frame: Py_RunMain [0x2bc524] in python
+=========         Host Frame: Py_BytesMain [0x2bc00c] in python
+=========         Host Frame:  [0x2a1c9] in libc.so.6
+=========         Host Frame: __libc_start_main [0x2a28a] in libc.so.6
+=========         Host Frame: _start [0x257444] in python
+=========         Host Frame: test_counts_and_packing_match_cpu_oracle in test_align_moe_route_map.py:30
+=========         Host Frame: pytest_pyfunc_call in python.py:195
+=========         Host Frame: _multicall in _callers.py:121
+=========         Host Frame: _hookexec in _manager.py:120
+=========         Host Frame: __call__ in _hooks.py:512
+=========         Host Frame: runtest in python.py:1772
+=========         Host Frame: pytest_runtest_call in runner.py:172
+=========         Host Frame: _multicall in _callers.py:121
+=========         Host Frame: _hookexec in _manager.py:120
+=========         Host Frame: __call__ in _hooks.py:512
+=========         Host Frame: <lambda> in runner.py:240
+=========         Host Frame: from_call in runner.py:340
+=========         Host Frame: call_and_report in runner.py:239
+=========         Host Frame: runtestprotocol in runner.py:134
+=========         Host Frame: pytest_runtest_protocol in runner.py:115
+=========         Host Frame: _multicall in _callers.py:121
+=========         Host Frame: _hookexec in _manager.py:120
+=========         Host Frame: __call__ in _hooks.py:512
+=========         Host Frame: pytest_runtestloop in main.py:364
+=========         Host Frame: _multicall in _callers.py:121
+=========         Host Frame: _hookexec in _manager.py:120
+=========         Host Frame: __call__ in _hooks.py:512
+=========         Host Frame: _main in main.py:339
+=========         Host Frame: wrap_session in main.py:285
+=========         Host Frame: pytest_cmdline_main in main.py:332
+=========         Host Frame: _multicall in _callers.py:121
+=========         Host Frame: _hookexec in _manager.py:120
+=========         Host Frame: __call__ in _hooks.py:512
+=========         Host Frame: main in __init__.py:174
+========= 
+========= ERROR SUMMARY: 1 error

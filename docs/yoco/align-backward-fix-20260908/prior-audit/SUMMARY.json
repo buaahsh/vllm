@@ -1,0 +1,41 @@
+{
+  "date": "2026-09-07",
+  "commits": {
+    "llm_train": "cc700436e03fd6592090ff4ede747cac794d6458",
+    "vllm": "3a0dba165aa0b453b8cb98f0a3fc4a5b92b74735",
+    "nnscaler": "119636742ed29505ee58ccc440284c7c667f9458"
+  },
+  "verdict": {
+    "align_fa2_forward_bitwise_in_tested_matrix": true,
+    "default_fast_fa4_bitwise": false,
+    "full_training_stack_passed": false
+  },
+  "real_l3_align": {
+    "shape": [8, 154880],
+    "dtype": "bfloat16",
+    "teacher_forcing_vs_vllm_decode": {
+      "equal": true,
+      "different": 0,
+      "max_abs": 0.0
+    },
+    "teacher_forcing_vs_native_cache": {
+      "equal": true,
+      "different": 0,
+      "max_abs": 0.0
+    }
+  },
+  "real_l3_fast_negative_control": {
+    "shape": [8, 154880],
+    "dtype": "float32",
+    "equal_to_llm_train_align": false,
+    "different": 909286,
+    "total": 1239040,
+    "different_percent": 73.386331,
+    "max_abs": 0.6875
+  },
+  "backward_failure": {
+    "test": "test_experts_exact_across_batch_and_backward",
+    "location": "llm/kernel/align_moe_backward.py::_route_map",
+    "error": "CUDA illegal memory access"
+  }
+}

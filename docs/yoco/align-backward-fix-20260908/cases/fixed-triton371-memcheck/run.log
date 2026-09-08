@@ -1,0 +1,4 @@
+Running 49 items in this shard
+.................................................                        [100%]
+- generated xml file: /data/align-backward-fix-20260908/cases/fixed-triton371-memcheck/junit.xml -
+49 passed, 20 warnings in 64.91s (0:01:04)

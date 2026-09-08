@@ -1,0 +1,30 @@
+{
+  "command": [
+    "/data/yoco-align-invariant-20260905/.venv/bin/python",
+    "-u",
+    "/data/align-backward-fix-20260908/native_probe_bootstrap.py",
+    "/data/align-backward-fix-20260908/run_tests.py",
+    "tests/test_align_probabilities.py",
+    "-q",
+    "-x",
+    "--disable-warnings",
+    "--junitxml=/data/align-backward-fix-20260908/cases/fixed-triton371-probability/junit.xml",
+    "-o",
+    "cache_dir=/data/align-backward-fix-20260908/cases/fixed-triton371-probability/pytest-cache"
+  ],
+  "cwd": "/data/align-backward-fix-20260908/runtime-train/llm",
+  "expected_exit": 0,
+  "env": {
+    "CUDA_VISIBLE_DEVICES": "2",
+    "PYTHONPATH": "/data/align-backward-fix-20260908/deps/triton371:/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/native-deps:/data/yoco-align-fast-aiperf-matched-20260905/historical-deps:/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/runtime-vllm:/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/runtime-vllm/tools/yoco_alignment:/data/align-backward-fix-20260908/runtime-train/llm:/data/yoco-align-prob/nnscaler:/data/align-backward-fix-20260908",
+    "ALIGN_TEST_TRAIN_ROOT": "/data/align-backward-fix-20260908/runtime-train",
+    "OMP_NUM_THREADS": "8",
+    "TORCHINDUCTOR_COMPILE_THREADS": "2",
+    "TRITON_CACHE_DIR": "/data/align-backward-fix-20260908/cache/triton371",
+    "TORCHINDUCTOR_CACHE_DIR": "/data/align-backward-fix-20260908/cache/inductor371",
+    "PYTORCH_ALLOC_CONF": "expandable_segments:True"
+  },
+  "started": 1788840063.221941,
+  "exit_code": 0,
+  "finished": 1788840149.8180282
+}

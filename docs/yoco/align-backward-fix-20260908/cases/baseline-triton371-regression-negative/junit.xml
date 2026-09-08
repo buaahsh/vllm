@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.074" timestamp="2026-09-08T04:13:00.851374" hostname="yoco-align-fast-vllm-vllm-train-master-0"><testcase classname="tests.test_align_moe_route_map" name="test_counts_and_packing_match_cpu_oracle[mixed-dtype0-136]" time="0.866"><failure message="assert False&#10; +  where False = &lt;built-in method equal of type object at 0x781a759e5120&gt;(tensor([889,   1,   2,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,\n          1,   1,   1,   1,   1,   2,   ...1,   1,   1,   2,   1,\n          1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,\n          1,   2]), tensor([1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1,\n        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ... 1, 1,\n        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1,\n        1, 1, 1, 1, 1, 1, 1, 2]))&#10; +    where &lt;built-in method equal of type object at 0x781a759e5120&gt; = torch.equal">routes = 136, dtype = torch.int32, routing = 'mixed'
+
+    @pytest.mark.parametrize("routes", [0, 1, 8, 136, 1023, 1024, 1025, 4104])
+    @pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+    @pytest.mark.parametrize("routing", ["mixed", "first", "last"])
+    def test_counts_and_packing_match_cpu_oracle(routes, dtype, routing):
+        from kernel.align_moe_backward import _count_routes, _route_map
+    
+        experts = 128
+        # Include empty experts, highly skewed routing, and both histogram endpoints.
+        if routing == "mixed":
+            ids_cpu = ((torch.arange(routes) * 37 + 127) % experts).to(dtype)
+        else:
+            ids_cpu = torch.full((routes,), 0 if routing == "first" else 127, dtype=dtype)
+        ids = ids_cpu.cuda()
+        expected_counts = torch.bincount(ids_cpu.long(), minlength=experts)
+        counts = torch.zeros(experts, device="cuda", dtype=torch.int32)
+        _count_routes[(max(1, triton.cdiv(routes, 1024)),)](
+            ids, counts, routes, experts, BLOCK=1024
+        )
+        # Checking before launching _route_map makes the original bug fail with
+        # a useful assertion instead of poisoning the process's CUDA context.
+        actual_counts = counts.cpu().long()
+&gt;       assert torch.equal(actual_counts, expected_counts)
+E       assert False
+E        +  where False = &lt;built-in method equal of type object at 0x781a759e5120&gt;(tensor([889,   1,   2,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,\n          1,   1,   1,   1,   1,   2,   ...1,   1,   1,   2,   1,\n          1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,\n          1,   2]), tensor([1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1,\n        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ... 1, 1,\n        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1,\n        1, 1, 1, 1, 1, 1, 1, 2]))
+E        +    where &lt;built-in method equal of type object at 0x781a759e5120&gt; = torch.equal
+
+tests/test_align_moe_route_map.py:37: AssertionError</failure></testcase></testsuite></testsuites>

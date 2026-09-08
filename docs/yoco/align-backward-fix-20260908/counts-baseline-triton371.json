@@ -1,0 +1,88 @@
+{
+  "torch": "2.11.0a0+eb65b36914.nv26.02",
+  "triton": "3.7.1",
+  "device": "NVIDIA B200",
+  "rows": [
+    {
+      "routes": 1,
+      "sum": 1024,
+      "expected": 1,
+      "equal": false,
+      "different": 1,
+      "first_bin": 1023,
+      "expected_first": 0
+    },
+    {
+      "routes": 8,
+      "sum": 1024,
+      "expected": 8,
+      "equal": false,
+      "different": 1,
+      "first_bin": 1016,
+      "expected_first": 0
+    },
+    {
+      "routes": 17,
+      "sum": 1024,
+      "expected": 17,
+      "equal": false,
+      "different": 1,
+      "first_bin": 1007,
+      "expected_first": 0
+    },
+    {
+      "routes": 128,
+      "sum": 1024,
+      "expected": 128,
+      "equal": false,
+      "different": 1,
+      "first_bin": 896,
+      "expected_first": 0
+    },
+    {
+      "routes": 136,
+      "sum": 1024,
+      "expected": 136,
+      "equal": false,
+      "different": 1,
+      "first_bin": 888,
+      "expected_first": 0
+    },
+    {
+      "routes": 1023,
+      "sum": 1024,
+      "expected": 1023,
+      "equal": false,
+      "different": 1,
+      "first_bin": 7,
+      "expected_first": 6
+    },
+    {
+      "routes": 1024,
+      "sum": 1024,
+      "expected": 1024,
+      "equal": true,
+      "different": 0,
+      "first_bin": 6,
+      "expected_first": 6
+    },
+    {
+      "routes": 1025,
+      "sum": 2048,
+      "expected": 1025,
+      "equal": false,
+      "different": 1,
+      "first_bin": 1029,
+      "expected_first": 6
+    },
+    {
+      "routes": 4104,
+      "sum": 5120,
+      "expected": 4104,
+      "equal": false,
+      "different": 1,
+      "first_bin": 1044,
+      "expected_first": 28
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+Running 1 items in this shard
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_________________ test_experts_exact_across_batch_and_backward _________________
+
+ops = <module 'arch.align' from '/data/align-backward-fix-20260908/baseline-train/llm/arch/align.py'>
+
+    def test_experts_exact_across_batch_and_backward(ops):
+        x = torch.randn(17, 64, device='cuda', dtype=torch.bfloat16, requires_grad=True)
+        w13 = (torch.randn(128, 128, 64, device='cuda') * 0.03).requires_grad_()
+        w2 = (torch.randn(128, 64, 64, device='cuda') * 0.03).requires_grad_()
+        logits = torch.randn(17, 128, device='cuda', requires_grad=True)
+        weights, ids, _ = ops.align_routing(logits, 8)
+        weights.retain_grad()
+        out = ops.align_experts(x, w13, w2, weights, ids, 3.0)
+        assert torch.equal(out[:1], ops.align_experts(x[:1], w13, w2, weights[:1], ids[:1], 3.0))
+        grad = torch.randn_like(out)
+>       out.backward(grad)
+
+tests/test_align.py:233: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/local/lib/python3.12/dist-packages/torch/_tensor.py:631: in backward
+    torch.autograd.backward(
+/usr/local/lib/python3.12/dist-packages/torch/autograd/__init__.py:381: in backward
+    _engine_run_backward(
+/usr/local/lib/python3.12/dist-packages/torch/autograd/graph.py:865: in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+/usr/local/lib/python3.12/dist-packages/torch/autograd/function.py:317: in apply
+    return user_fn(self, *args)
+arch/align.py:424: in backward
+    grouped = grouped_experts_backward(
+kernel/align_moe_backward.py:163: in grouped_experts_backward
+    _route_map[(experts, triton.cdiv(max(padded_counts), 128))](
+../../deps/triton371/triton/runtime/jit.py:370: in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+../../deps/triton371/triton/runtime/jit.py:761: in run
+    kernel.run(grid_0, grid_1, grid_2, stream, kernel.function, kernel.packed_metadata, launch_metadata,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <triton.backends.nvidia.driver.CudaLauncher object at 0x7883801d1940>
+gridX = 128, gridY = 7, gridZ = 1, stream = 0, function = 132505715476768
+kernel_metadata = (4, 1, 0)
+launch_metadata = <triton.compiler.compiler.LazyDict object at 0x78836bf27f50>
+launch_enter_hook = <triton.knobs.HookChain object at 0x7886dcff9dc0>
+launch_exit_hook = <triton.knobs.HookChain object at 0x7886dcff9a00>
+args = (<[AcceleratorError("CUDA error: an illegal memory access was encountered\nSearch for `cudaErrorIllegalAddress' in htt...TORCH_USE_CUDA_DSA` to enable device-side assertions.\n") raised in repr()] Tensor object at 0x78836bfb0fa0>, 128, 128)
+allocate_scratch = <function CudaLauncher.__call__.<locals>.allocate_scratch at 0x78836bfb5300>
+global_scratch = None, profile_scratch = None
+
+    def __call__(self, gridX, gridY, gridZ, stream, function, kernel_metadata, launch_metadata, launch_enter_hook,
+                 launch_exit_hook, *args):
+    
+        def allocate_scratch(size, align, allocator):
+            if size > 0:
+                grid_size = gridX * gridY * gridZ
+                alloc_size = grid_size * self.num_ctas * size
+                alloc_fn = allocator.get()
+                return alloc_fn(alloc_size, align, stream)
+            return None
+    
+        global_scratch = allocate_scratch(self.global_scratch_size, self.global_scratch_align, _allocation._allocator)
+        profile_scratch = allocate_scratch(self.profile_scratch_size, self.profile_scratch_align,
+                                           _allocation._profile_allocator)
+    
+>       self.launch(gridX, gridY, gridZ, stream, function, self.launch_cooperative_grid, self.launch_pdl,
+                    kernel_metadata, launch_metadata, launch_enter_hook, launch_exit_hook, global_scratch,
+                    profile_scratch, self.arg_annotations, self.kernel_signature, args)
+E       RuntimeError: Triton Error [CUDA]: an illegal memory access was encountered
+
+../../deps/triton371/triton/backends/nvidia/driver.py:328: RuntimeError
+---------------------------- Captured stdout setup -----------------------------
+WARNING 09-08 03:52:05 [config.py:70] Support for Transformers v4 is deprecated. The Transformers v4 codepath will become unmaintained in vLLM v0.22.0 and will be removed in vLLM v0.24.0. Please upgrade to Transformers v5: pip install --upgrade transformers
+=============================== warnings summary ===============================
+tests/test_align.py::test_experts_exact_across_batch_and_backward
+  /data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/runtime-vllm/vllm/__init__.py:7: RuntimeWarning: Failed to read commit hash:
+  No module named 'vllm._version'
+    from .version import __version__, __version_tuple__  # isort:skip
+
+tests/test_align.py::test_experts_exact_across_batch_and_backward
+  /usr/local/lib/python3.12/dist-packages/torchao/dtypes/uintx/__init__.py:1: DeprecationWarning: Importing from torchao.dtypes.uintx.dyn_int8_act_int4_wei_cpu_layout is deprecated. Please use 'from torchao.prototype.dtypes import Int8DynamicActInt4WeightCPULayout' instead. This import path will be removed in a future release of torchao. See https://github.com/pytorch/ao/issues/2752 for more details.
+    from .dyn_int8_act_int4_wei_cpu_layout import (
+
+tests/test_align.py::test_experts_exact_across_batch_and_backward
+  /usr/local/lib/python3.12/dist-packages/torchao/dtypes/uintx/__init__.py:10: DeprecationWarning: Importing from torchao.dtypes.uintx.marlin_qqq_tensor is deprecated. Please use 'from torchao.prototype.dtypes import MarlinQQQLayout, MarlinQQQTensor' instead. This import path will be removed in a future release of torchao. See https://github.com/pytorch/ao/issues/2752 for more details.
+    from .marlin_qqq_tensor import (
+
+tests/test_align.py::test_experts_exact_across_batch_and_backward
+  /usr/local/lib/python3.12/dist-packages/torchao/dtypes/uintx/__init__.py:30: DeprecationWarning: Importing from torchao.dtypes.uintx.uintx_layout is deprecated. Please use 'from torchao.prototype.dtypes import UintxLayout, UintxTensor' instead. This import path will be removed in a future release of torchao. See https://github.com/pytorch/ao/issues/2752 for more details.
+    from .uintx_layout import (
+
+tests/test_align.py::test_experts_exact_across_batch_and_backward
+  /usr/local/lib/python3.12/dist-packages/torchao/dtypes/__init__.py:24: DeprecationWarning: Importing BlockSparseLayout from torchao.dtypes is deprecated. Please use 'from torchao.prototype.dtypes import BlockSparseLayout' instead. This import path will be removed in a future torchao release. Please check issue: https://github.com/pytorch/ao/issues/2752 for more details. 
+    from .uintx.block_sparse_layout import BlockSparseLayout
+
+tests/test_align.py::test_experts_exact_across_batch_and_backward
+  /usr/local/lib/python3.12/dist-packages/torchao/dtypes/__init__.py:25: DeprecationWarning: Importing from torchao.dtypes is deprecated. Please use 'from torchao.prototype.dtypes import CutlassInt4PackedLayout' instead. This import path will be removed in a future torchao release. Please check issue: https://github.com/pytorch/ao/issues/2752 for more details. 
+    from .uintx.cutlass_int4_packed_layout import CutlassInt4PackedLayout
+
+tests/test_align.py: 14 warnings
+  /usr/local/lib/python3.12/dist-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: /data/align-backward-fix-20260908/cases/baseline-triton371-original-failure/junit.xml -
+=========================== short test summary info ============================
+FAILED tests/test_align.py::test_experts_exact_across_batch_and_backward - Ru...
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 20 warnings in 68.26s (0:01:08)

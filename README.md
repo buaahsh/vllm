@@ -23,6 +23,10 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 本分支 `fhb-dev-9-8` 包含 YOCO 的 `--align` 和 `--fast`。Align 的前向一致性结论限于已验证的配置与输入范围；Fast 优先性能，不保证 bitwise。上游发行版不包含本分支的开发改动。
 
+### Align backward 越界修复（2026-09-08）
+
+训练侧已修复 `_route_map` 的CUDA非法访问：旧padding计数在Triton3.7.1会把136条路由计为1024条；现在给histogram显式传入有效位置mask。两种Triton版本各通过84项相关回归与5项概率/CE检查，显存检查49项通过，NNScaler各完成12步SGD。vLLM前向实现未改，性能表沿用原测量。[报告与失败/修复证据](docs/yoco/align-backward-fix-20260908/REPORT.md)。
+
 ### Align GEMM B200 联动验证（2026-09-06）
 
 本地开发为 vLLM / llm-train 增加共享 MoE launch 配置，固定 K=32、split-K=1 和原 BF16 舍入边界。B200 上725项整模型字节比较通过，最大差0，覆盖最长8192-token、B1–256 decode、ragged prefill、带梯度训练的完整 logits/log-prob/CE，以及缓存/chunked/mixed 和实际16K/32K行合批。结论限于已测配置与输入。

@@ -1,0 +1,6 @@
+{
+  "same_uid": true,
+  "same_node": true,
+  "same_restart_counts": true,
+  "gpu2_idle": true
+}

@@ -1,0 +1,116 @@
+/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/runtime-vllm/vllm/__init__.py:7: RuntimeWarning: Failed to read commit hash:
+No module named 'vllm._version'
+  from .version import __version__, __version_tuple__  # isort:skip
+WARNING 09-08 04:10:15 [config.py:70] Support for Transformers v4 is deprecated. The Transformers v4 codepath will become unmaintained in vLLM v0.22.0 and will be removed in vLLM v0.24.0. Please upgrade to Transformers v5: pip install --upgrade transformers
+Find unknown pytorch operation: torch.Tensor.bfloat16
+Find unknown pytorch operation: torch.square
+Following returns of nodes are not used by any other nodes.
+Please consider to remove them in the user defined model.
+FullTensor(id=558, shape=(8,), req_grad=False):
+	File "/data/align-backward-fix-20260908/check_training_stability.py", line 50, in forward,  loss, _ = inner_chunk_linear_cross_entropy(
+	inner_chunk_linear_cross_entropy (cid=153)
+
+/usr/local/lib/python3.12/dist-packages/torch/distributed/c10d_logger.py:83: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  return func(*args, **kwargs)
+[rank0]:[W908 04:10:39.324120730 ProcessGroupNCCL.cpp:5178] Guessing device ID based on global rank. This can cause a hang if rank to GPU mapping is heterogeneous. You can specify device_id in init_process_group()
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO ENV/Plugin: Could not find: libnccl-env.so
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Bootstrap: Using eth0:10.45.18.178<0>
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO cudaDriverVersion 13010
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO NCCL version 2.29.2+cuda13.1
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO NCCL git version stable 07fa371c7
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Comm config Blocking set to 1
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO NET/Plugin: Loaded net plugin NCCL RDMA Plugin v11 (v11)
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO NET/Plugin: Loaded collnet plugin SHARP (v11)
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Successfully loaded external network plugin /opt/hpcx/nccl_rdma_sharp_plugin/lib/libnccl-net.so
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Plugin Path : /opt/hpcx/nccl_rdma_sharp_plugin/lib/libnccl-net.so
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO P2P plugin v11 IBext_v11
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO NET/IB : Using [0]mlx5_0:1/IB/SHARP [1]mlx5_1:1/IB/SHARP [2]mlx5_2:1/IB/SHARP [3]mlx5_3:1/IB/SHARP [4]mlx5_4:1/IB/SHARP [5]mlx5_7:1/IB/SHARP [6]mlx5_8:1/IB/SHARP [7]mlx5_9:1/IB/SHARP [8]mlx5_10:1/IB/SHARP [9]mlx5_11:1/IB/SHARP [10]mlx5_12:1/IB/SHARP [11]mlx5_13:1/IB/SHARP [12]mlx5_bond_0:1/RoCE [RO]; OOB eth0:10.45.18.178<0>
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Initialized NET plugin IBext_v11
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Assigned NET plugin IBext_v11 to comm
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Using network IBext_v11
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO DMA-BUF is available on GPU device 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO [Rank 0] ncclCommInitRankConfig comm 0x744e7a80 rank 0 nranks 1 cudaDev 0 nvmlDev 2 busId 4c000 commId 0xd901b71d17cb2725 - Init START
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO RAS client listening socket at ::1<28028>
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Bootstrap timings total 0.000629 (create 0.000028, send 0.000107, recv 0.000128, ring 0.000001, delay 0.000001)
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO MNNVL busId 0x4c000 fabric UUID 0.0 cliqueId 0x0 state 3 healthMask 0x80
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO ncclTopoGetCpuAffinity: Affinity for GPU 2 is 28-55. (GPU affinity = 28-55 ; CPU affinity = 0-111).
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO comm 0x744e7a80 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 00/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 01/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 02/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 03/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 04/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 05/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 06/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 07/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 08/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 09/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 10/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 11/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 12/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 13/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 14/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 15/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 16/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 17/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 18/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 19/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 20/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 21/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 22/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 23/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 24/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 25/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 26/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 27/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 28/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 29/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 30/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 31/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 32/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 33/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 34/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 35/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 36/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 37/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 38/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 39/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 40/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 41/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 42/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 43/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 44/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 45/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 46/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 47/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 48/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 49/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 50/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 51/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 52/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 53/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 54/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 55/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 56/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 57/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 58/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 59/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 60/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 61/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 62/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Channel 63/64 : 0
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47] -1/-1/-1->0->-1 [48] -1/-1/-1->0->-1 [4
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO P2P Chunksize set to 524288
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO PROFILER/Plugin: Could not find: libnccl-profiler.so
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0 isAllCudaP2p 1
+yoco-align-fast-vllm-vllm-train-master-0:63083:63186 [0] NCCL INFO [Proxy Service] Device 0 CPU core 29
+yoco-align-fast-vllm-vllm-train-master-0:63083:63187 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 32
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO TUNER/Plugin: Could not find: libnccl-tuner.so
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO CC Off, workFifoBytes 1048576
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO ncclCommInitRankConfig comm 0x744e7a80 rank 0 nranks 1 cudaDev 0 nvmlDev 2 busId 4c000 commId 0xd901b71d17cb2725 - Init COMPLETE
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Init timings - ncclCommInitRankConfig: rank 0 nranks 1 total 0.55 (kernels 0.28, alloc 0.22, bootstrap 0.00, allgathers 0.00, topo 0.03, graphs 0.00, connections 0.02, rest 0.00)
+{"training_steps": 12, "loss_history": [6.209746360778809, 4.910215377807617, 3.6331398487091064, 2.4364442825317383, 1.4395930767059326, 0.7911845445632935, 0.46277928352355957, 0.30779650807380676, 0.22641141712665558, 0.178195059299469, 0.1464015394449234, 0.1236179992556572, 0.10695929825305939], "eager_loss": 6.209746360778809, "compiled_loss": 6.209746360778809, "loss_after_update": 4.910215377807617, "gradient_tensors": 36, "forward_exact": true, "finite_gradients": true}
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO comm 0x744e7a80 rank 0 nranks 1 cudaDev 0 busId 4c000 - Destroy COMPLETE
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO Unloading plugin libnccl-net.so
+yoco-align-fast-vllm-vllm-train-master-0:63083:63083 [0] NCCL INFO ENV/Plugin: Closing env plugin ncclEnvDefault

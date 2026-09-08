@@ -1,0 +1,17 @@
+{
+  "python": "3.12.3 (main, Jan 22 2026, 20:57:42) [GCC 13.3.0]",
+  "torch": "2.11.0a0+eb65b36914.nv26.02",
+  "cuda": "13.1",
+  "triton": "3.8.0",
+  "flash_attention": "2.7.4.post1+nv26.2.44259020",
+  "gpu_uuid": "3c98295b-46bd-92b3-ef14-82b5e35524f7",
+  "env": {
+    "CUDA_VISIBLE_DEVICES": "2",
+    "PYTHONPATH": "/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/native-deps:/data/yoco-align-fast-aiperf-matched-20260905/historical-deps:/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/runtime-vllm:/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/runtime-vllm/tools/yoco_alignment:/data/align-backward-fix-20260908/runtime-train/llm:/data/yoco-align-prob/nnscaler:/data/align-backward-fix-20260908",
+    "OMP_NUM_THREADS": "8",
+    "TORCHINDUCTOR_COMPILE_THREADS": "2",
+    "TRITON_CACHE_DIR": "/data/align-backward-fix-20260908/cache/triton380",
+    "TORCHINDUCTOR_CACHE_DIR": "/data/align-backward-fix-20260908/cache/inductor380",
+    "PYTORCH_ALLOC_CONF": "expandable_segments:True"
+  }
+}
