@@ -1,0 +1,15 @@
+{
+  "source_url": "https://raw.githubusercontent.com/kvcache-ai/Mooncake/main/FAST25-release/traces/toolagent_trace.jsonl",
+  "source_sha256": "48a2db1a13d3bc05e6330140c64f604ba366df20d3c9e128b5c35a01c1fa5f71",
+  "source_rows": 23608,
+  "context_compatible_rows": 23492,
+  "retained_fraction": 0.9950864113859709,
+  "frozen_rows": 3643,
+  "frozen_sha256": "680e526d49545258c0ca5b635d0004a44cce2ce990d533ac32024cefee1f0170",
+  "context_limit": 81920,
+  "window_seconds": [
+    300,
+    900
+  ],
+  "timestamp_speedup": 1
+}

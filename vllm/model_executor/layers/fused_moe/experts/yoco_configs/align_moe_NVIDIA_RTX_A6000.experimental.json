@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "environment": {
+    "device_name": "NVIDIA RTX A6000",
+    "torch_version": "2.11.0+cu130",
+    "cuda_version": "13.0",
+    "triton_version": "3.6.0"
+  },
+  "w13_shape": [
+    128,
+    7680,
+    1024
+  ],
+  "w2_shape": [
+    128,
+    1024,
+    3840
+  ],
+  "top_k": 8,
+  "configs": {
+    "512": {
+      "w13": {
+        "num_warps": 8,
+        "num_stages": 3,
+        "BLOCK_SIZE_M": 128,
+        "BLOCK_SIZE_N": 64,
+        "BLOCK_SIZE_K": 32,
+        "GROUP_SIZE_M": 8,
+        "SPLIT_K": 1
+      },
+      "w2": {
+        "num_warps": 8,
+        "num_stages": 3,
+        "BLOCK_SIZE_M": 128,
+        "BLOCK_SIZE_N": 256,
+        "BLOCK_SIZE_K": 32,
+        "GROUP_SIZE_M": 8,
+        "SPLIT_K": 1
+      }
+    },
+    "1024": {
+      "w13": {
+        "num_warps": 8,
+        "num_stages": 3,
+        "BLOCK_SIZE_M": 128,
+        "BLOCK_SIZE_N": 256,
+        "BLOCK_SIZE_K": 32,
+        "GROUP_SIZE_M": 8,
+        "SPLIT_K": 1
+      },
+      "w2": {
+        "num_warps": 8,
+        "num_stages": 3,
+        "BLOCK_SIZE_M": 128,
+        "BLOCK_SIZE_N": 256,
+        "BLOCK_SIZE_K": 32,
+        "GROUP_SIZE_M": 8,
+        "SPLIT_K": 1
+      }
+    },
+    "2048": {
+      "w13": {
+        "num_warps": 8,
+        "num_stages": 3,
+        "BLOCK_SIZE_M": 128,
+        "BLOCK_SIZE_N": 256,
+        "BLOCK_SIZE_K": 32,
+        "GROUP_SIZE_M": 8,
+        "SPLIT_K": 1
+      },
+      "w2": {
+        "num_warps": 8,
+        "num_stages": 3,
+        "BLOCK_SIZE_M": 128,
+        "BLOCK_SIZE_N": 256,
+        "BLOCK_SIZE_K": 32,
+        "GROUP_SIZE_M": 8,
+        "SPLIT_K": 1
+      }
+    }
+  }
+}

@@ -1,6 +1,13 @@
 # YOCO Align 与 Fast 开发记录
 
-这些文件保存 2026-09-05 与 2026-09-06 的实现说明与测量结果。发布到 `fhb-dev` 时补充了类型标注、
+- [2026-09-07 四卡 Align 1P1D 与 llm-train 实测](align-4gpu-1p1d-20260907/REPORT.md) · [PDF](align-4gpu-1p1d-20260907/REPORT.pdf)：四卡B200 Job已完成实测。真实1P1D输出字节105项、与llm-train单条/packed的前向和CE字节72项，原始Align与GEMM候选均通过；同卡1P1D输出吞吐631.87→826.76 tok/s（+30.84%）。ITL P95 55.25→59.82 ms。同GPU单实例对照有5/3643条600秒超时。当前1×trace为共享节点过载诊断，非容量验收；当前P跳过前缀缓存读取，收尾控制请求单独记在计时之外。
+
+- [Align MoE GEMM 本地实验](align-gemm-local-20260906.md)：两端共享配置与 A6000 算子初筛的历史阶段。
+- [Align GEMM B200 数值验收](align-gemm-b200-20260906/VALIDATION.md)：725项整模型字节检查，含两端前向及缓存/混合批次；实验默认关闭。
+- [Align GEMM B200 完整报告](align-gemm-b200-20260906/REPORT.md)：同卡开源 trace 输出吞吐+5.74%，两端均有5个超时；训练整步基本持平。
+- [后续 Align 小批次优化与 1P1D 进度](align-1p1d-b200-20260906/REPORT.md)：补齐2/4/16行配置，开源trace形状诊断；记录申请四卡前的阶段；后续实测见四卡报告。
+
+这些文件保存 2026-09-05 至 2026-09-07 的实现说明与测量结果。发布到 `fhb-dev` 时补充了类型标注、
 格式和基准脚本 API 整理；推理库与实测版本的可执行 AST 一致（忽略仅供类型检查的标注）。
 
 - [2026-09-06 Fast decode 优化](fast-decode-optimization-20260906/REPORT.md)：同卡配对测量、固定前缀数值检查与 AIPerf。
@@ -17,3 +24,7 @@
 
 2026-09-05 的主要收益是 Prefill；2026-09-06 的后续工作针对 decode，结果见新报告。
 Fast 不提供 bitwise 保证；Align 的前向一致性结论限于报告明确列出的配置和验证矩阵。
+
+## 持续吞吐表
+
+[Fast / Align GEMM / Qwen3 对照表](performance/THROUGHPUT.md)按模式、拓扑逐行更新；保留实际测量日期、失败和证据，不要求每次同时重测三种模式。[报告与维护方法](performance/README.md)。

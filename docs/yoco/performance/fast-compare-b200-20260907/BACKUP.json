@@ -1,0 +1,18 @@
+{
+  "finished": 1788787374.2876787,
+  "started": 1788787351.4895947,
+  "archive": "/mnt/pvc/lidong1/fast-compare-b200-20260907/results.tar",
+  "bytes": 201656320,
+  "sha256": "b7881086ae0b12e0fad329f751705004604daa9530c9abf361ed36f4c54af4d5",
+  "independent_readback_sha256": "b7881086ae0b12e0fad329f751705004604daa9530c9abf361ed36f4c54af4d5",
+  "sha_readback_pass": true,
+  "members": 259,
+  "result_files": 235,
+  "exclusions": [
+    "runtime-vllm (immutable runtime archived in prior Align results)",
+    "cache",
+    "__pycache__"
+  ],
+  "runtime_archive": "/mnt/pvc/lidong1/yoco-align-fast-vllm-vllm-train-results-20260907/results.tar",
+  "runtime_archive_sha256": "dc6b968b46eb42eac992605ddacdb0f1f788e56792b75bda645996274675b4ba"
+}

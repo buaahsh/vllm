@@ -1,0 +1,89 @@
+{
+  "model": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+  "files": {
+    "chat_template.jinja": {
+      "bytes": 4665,
+      "mtime_ns": 1784993972653549103
+    },
+    "config.json": {
+      "bytes": 1493,
+      "mtime_ns": 1784993970338260948
+    },
+    "generation_config.json": {
+      "bytes": 171,
+      "mtime_ns": 1784993970343823429
+    },
+    "model-00001-of-00014.safetensors": {
+      "bytes": 5055609960,
+      "mtime_ns": 1784993980201228292
+    },
+    "model-00002-of-00014.safetensors": {
+      "bytes": 5159412552,
+      "mtime_ns": 1784993987575473609
+    },
+    "model-00003-of-00014.safetensors": {
+      "bytes": 4253859952,
+      "mtime_ns": 1784993993517386143
+    },
+    "model-00004-of-00014.safetensors": {
+      "bytes": 5146829056,
+      "mtime_ns": 1784994000646817035
+    },
+    "model-00005-of-00014.safetensors": {
+      "bytes": 4253859952,
+      "mtime_ns": 1784994006444071422
+    },
+    "model-00006-of-00014.safetensors": {
+      "bytes": 5146829056,
+      "mtime_ns": 1784994013431235159
+    },
+    "model-00007-of-00014.safetensors": {
+      "bytes": 4253859952,
+      "mtime_ns": 1784994019753347743
+    },
+    "model-00008-of-00014.safetensors": {
+      "bytes": 5146829056,
+      "mtime_ns": 1784994026950041163
+    },
+    "model-00009-of-00014.safetensors": {
+      "bytes": 4266443448,
+      "mtime_ns": 1784994033258394698
+    },
+    "model-00010-of-00014.safetensors": {
+      "bytes": 5159412552,
+      "mtime_ns": 1784994040796778101
+    },
+    "model-00011-of-00014.safetensors": {
+      "bytes": 4279026952,
+      "mtime_ns": 1784994046958087113
+    },
+    "model-00012-of-00014.safetensors": {
+      "bytes": 5159412552,
+      "mtime_ns": 1784994054201820107
+    },
+    "model-00013-of-00014.safetensors": {
+      "bytes": 4279026952,
+      "mtime_ns": 1784994060191498123
+    },
+    "model-00014-of-00014.safetensors": {
+      "bytes": 3152444640,
+      "mtime_ns": 1784994064412599517
+    },
+    "model.safetensors.index.json": {
+      "bytes": 30163,
+      "mtime_ns": 1784994064424808987
+    },
+    "special_tokens_map.json": {
+      "bytes": 134,
+      "mtime_ns": 1784993972664745544
+    },
+    "tokenizer.json": {
+      "bytes": 20219241,
+      "mtime_ns": 1784993972540042848
+    },
+    "tokenizer_config.json": {
+      "bytes": 5144,
+      "mtime_ns": 1784993972659285783
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "pd-candidate-fixed-long600s",
+  "finished": 1788770980.1056366,
+  "client_exit": 0,
+  "client_audit_exit": 1,
+  "token_accounting_pass": true,
+  "services": {
+    "p": {
+      "scrape_errors": 0,
+      "max_gap_seconds": 1.2939841747283936,
+      "counter_resets": []
+    },
+    "d": {
+      "scrape_errors": 0,
+      "max_gap_seconds": 1.293959617614746,
+      "counter_resets": []
+    },
+    "proxy": {
+      "scrape_errors": 0,
+      "max_gap_seconds": 1.2939646244049072,
+      "counter_resets": []
+    }
+  },
+  "transfer_pass": true,
+  "proxy_pass": true,
+  "server_pass": true,
+  "drained": true,
+  "passed": false
+}

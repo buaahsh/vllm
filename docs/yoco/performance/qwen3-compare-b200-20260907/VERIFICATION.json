@@ -1,0 +1,42 @@
+{
+  "timestamp": 1788779286.0115116,
+  "cases": [
+    {
+      "name": "standalone-qwen3-r1-smoke50",
+      "completed": 50,
+      "errors": 0,
+      "client_pass": true,
+      "server_pass": true
+    },
+    {
+      "name": "pd-qwen3-r1-smoke50",
+      "completed": 50,
+      "errors": 0,
+      "client_pass": true,
+      "server_pass": true
+    },
+    {
+      "name": "standalone-qwen3-r1-long600s",
+      "completed": 3643,
+      "errors": 0,
+      "client_pass": false,
+      "server_pass": true
+    },
+    {
+      "name": "pd-qwen3-r1-long600s",
+      "completed": 3643,
+      "errors": 0,
+      "client_pass": true,
+      "server_pass": true
+    }
+  ],
+  "distinct_cache_salts": true,
+  "post_probes_start_after_aiperf_complete": true,
+  "post_probes_generated_tokens_same": true,
+  "qwen_pd_logprob_invariance_pass": false,
+  "numerics_issue": "NUMERICS_OPEN_ISSUE.md",
+  "source_hardware_pod_audits_pass": true,
+  "pdf_pages": 3,
+  "pdf_visual_review": "All three pages rendered and reviewed; no clipping or table overflow.",
+  "passed": true
+}

@@ -1,0 +1,11 @@
+{
+  "standalone": [
+    "(EngineCore pid=19508) INFO 09-07 12:29:02 [yoco.py:352] YOCO Fast standalone uses FlashInfer CUTLASS prefill for M>=1024"
+  ],
+  "p": [
+    "(EngineCore pid=58564) INFO 09-07 13:01:51 [yoco.py:357] YOCO Fast pure Prefill selected FlashInfer CUTLASS BF16 MoE; unmatched configurations keep the configured backend"
+  ],
+  "d": [
+    "(EngineCore pid=58571) INFO 09-07 13:01:51 [yoco.py:357] YOCO Fast high-throughput Decode selected FlashInfer CUTLASS BF16 MoE with autotune; unmatched configurations keep the configured backend"
+  ]
+}

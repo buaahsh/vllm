@@ -1,0 +1,19 @@
+{
+  "name": "standalone-qwen3-r1-long600s",
+  "finished": 1788777726.1292057,
+  "client_exit": 0,
+  "client_audit_exit": 1,
+  "token_accounting_pass": true,
+  "services": {
+    "standalone": {
+      "scrape_errors": 0,
+      "max_gap_seconds": 1.7043356895446777,
+      "counter_resets": []
+    }
+  },
+  "transfer_pass": true,
+  "proxy_pass": true,
+  "server_pass": true,
+  "drained": true,
+  "passed": false
+}

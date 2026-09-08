@@ -1,0 +1,126 @@
+apiVersion: batch.volcano.sh/v1alpha1
+kind: Job
+metadata:
+  name: yoco-align-fast-vllm-vllm-train
+  namespace: bonete01
+  labels:
+    amlt-version: 11.6.0
+    created-by: sc-bb4698149-microsoft.com
+    created-by-name: li-dong--non-ea-sc-alt
+spec:
+  maxRetry: 3
+  minAvailable: 1
+  plugins:
+    env: []
+    pytorch: []
+    ssh: []
+    svc: []
+  priorityClassName: high
+  queue: bonete01
+  schedulerName: volcano
+  tasks:
+  - maxRetry: 3
+    minAvailable: 1
+    name: master
+    replicas: 1
+    template:
+      metadata:
+        labels:
+          amlt-version: 11.6.0
+          app: multinoderun
+          created-by: sc-bb4698149-microsoft.com
+          created-by-name: li-dong--non-ea-sc-alt
+          role: master
+      spec:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values:
+                  - slc01-cl02-hgx-0242
+        containers:
+        - args:
+          - sleep infinity
+          command:
+          - /bin/bash
+          - -lc
+          env:
+          - name: NPROC_PER_NODE
+            value: '0'
+          - name: OMP_NUM_THREADS
+            value: '8'
+          - name: NCCL_DEBUG
+            value: INFO
+          - name: PYTHONUNBUFFERED
+            value: '1'
+          - name: KUBERNETES_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: KUBERNETES_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: VOLCANO_JOB_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.labels['volcano.sh/job-name']
+          - name: JOB_EXECUTION_MODE
+            value: Basic
+          - name: AMLT_PERSISTENT_VOLUME_NAME
+            value: pvc-vast-bonete01
+          - name: AMLT_PERSISTENT_VOLUME_MOUNT_DIR
+            value: /mnt/pvc
+          - name: AMLT_JOB_NAME
+            value: yoco-align-fast-vllm-vllm-train
+          image: registry.hub.docker.com/donglixp/pytorch@sha256:cdbdc71b773142a98a303d488816d2faf6b9d85d179a4639b92263fca6da4769
+          imagePullPolicy: IfNotPresent
+          name: master
+          ports:
+          - containerPort: 23456
+            name: torch
+            protocol: TCP
+          resources:
+            limits:
+              cpu: '48'
+              memory: 959Gi
+              nvidia.com/gpu: '4'
+              rdma/rdma_shared_device_a: '1'
+            requests:
+              cpu: '48'
+              memory: 959Gi
+              nvidia.com/gpu: '4'
+              rdma/rdma_shared_device_a: '1'
+          securityContext:
+            capabilities:
+              add:
+              - SYS_ADMIN
+            privileged: true
+          volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /mnt/pvc
+            name: persistent-pvc
+        priorityClassName: high
+        restartPolicy: Never
+        shareProcessNamespace: true
+        tolerations:
+        - effect: NoSchedule
+          key: nvidia.com/gpu
+          operator: Exists
+        - effect: NoSchedule
+          key: rdma
+          operator: Exists
+        volumes:
+        - emptyDir:
+            medium: Memory
+            sizeLimit: 100Gi
+          name: dshm
+        - name: persistent-pvc
+          persistentVolumeClaim:
+            claimName: pvc-vast-bonete01
+        nodeSelector:
+          nvidia.com/gpu.product: NVIDIA-B200

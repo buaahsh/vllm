@@ -1,0 +1,22 @@
+{
+  "utc": "2026-09-07T09:22:19.632061+00:00",
+  "checks": {
+    "original_uid": true,
+    "original_node": true,
+    "running": true,
+    "ready": true,
+    "no_restart": true,
+    "four_gpu_request": true,
+    "four_gpu_limit": true,
+    "old_job_absent": true
+  },
+  "passed": true,
+  "job": "yoco-align-fast-vllm-vllm-train",
+  "pod": "yoco-align-fast-vllm-vllm-train-master-0",
+  "uid": "505f46a3-597a-40c3-8260-d213fae60136",
+  "node": "slc01-cl02-hgx-0228",
+  "phase": "Running",
+  "restart_counts": {
+    "master": 0
+  }
+}

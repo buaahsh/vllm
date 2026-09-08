@@ -1,0 +1,11 @@
+{
+  "source": "/data/yoco-align-4gpu-1p1d-20260906",
+  "archive": "/mnt/pvc/lidong1/yoco-align-fast-vllm-vllm-train-results-20260907/results.tar",
+  "bytes": 5272207360,
+  "sha256": "dc6b968b46eb42eac992605ddacdb0f1f788e56792b75bda645996274675b4ba",
+  "write_sha256": "dc6b968b46eb42eac992605ddacdb0f1f788e56792b75bda645996274675b4ba",
+  "full_readback_matches_write": true,
+  "started": 1788772735.3434398,
+  "finished": 1788772775.7519608,
+  "tar_listing_passed": true
+}

@@ -1,0 +1,10 @@
+{
+  "timestamp": 1788779347.9803834,
+  "checked_files": 214,
+  "mismatches": [],
+  "missing": [],
+  "pvc_archive": "/mnt/pvc/lidong1/qwen3-compare-b200-20260907/results.tar",
+  "pvc_sha256": "b59be83bedd307c4d93bf04f710e2f42aecfdcc1875f91c4c4fc011a30f56094",
+  "pvc_readback_pass": true,
+  "passed": true
+}

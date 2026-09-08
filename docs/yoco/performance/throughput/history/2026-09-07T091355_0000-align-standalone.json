@@ -1,0 +1,215 @@
+{
+  "key": "align/standalone",
+  "mode": "align",
+  "label": "YOCO Align GEMM",
+  "topology": "standalone",
+  "case": "standalone-candidate-fixed-long600s",
+  "measured_at_utc": "2026-09-07T09:13:55+00:00",
+  "started_at_unix": 1788771361.469521,
+  "source": "align-4gpu-1p1d-20260906/pd-tail-fix/trace-comparison.json",
+  "source_sha256": "7ffbda527111eb876ae90da7e4e1fb617911c890be8dfdfb09a2391ad9980a70",
+  "manifest": "align-4gpu-1p1d-20260906/pd-tail-fix/cases/standalone-candidate-fixed-long600s/manifest.json",
+  "manifest_sha256": "218eca154bc765016305dda4d2abe910c89a5c7e14a92c663ccac57445ec7721",
+  "runtime_manifest": null,
+  "runtime_manifest_sha256": null,
+  "trace_sha256": "680e526d49545258c0ca5b635d0004a44cce2ce990d533ac32024cefee1f0170",
+  "active_gpus": 1,
+  "allocated_gpus": 4,
+  "devices": {
+    "standalone": {
+      "index": 5,
+      "uuid": "GPU-14379c29-e601-fc6d-b27c-4fd778ab772a",
+      "before": "5, GPU-14379c29-e601-fc6d-b27c-4fd778ab772a, NVIDIA B200, 0, 0"
+    }
+  },
+  "serving": {
+    "standalone": {
+      "command": [
+        "/data/yoco-align-invariant-20260905/.venv/bin/python",
+        "/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/serve.py",
+        "serve",
+        "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+        "--align",
+        "--served-model-name",
+        "yoco-align-1p1d",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8674",
+        "--trust-remote-code",
+        "--dtype",
+        "bfloat16",
+        "--attention-config.backend",
+        "FLASH_ATTN",
+        "--attention-config.flash_attn_version",
+        "4",
+        "--moe-backend",
+        "triton",
+        "--kernel-config",
+        "{\"enable_flashinfer_autotune\": false}",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "1",
+        "--gpu-memory-utilization",
+        "0.85",
+        "--max-model-len",
+        "81920",
+        "--max-num-batched-tokens",
+        "32768",
+        "--max-num-seqs",
+        "256",
+        "--enable-prefix-caching",
+        "--enable-chunked-prefill",
+        "--kv-sharing-fast-prefill",
+        "--enable-prompt-tokens-details",
+        "--worker-extension-cls",
+        "pd_observer.PDObserver",
+        "--compilation-config",
+        "{\"cudagraph_mode\": \"FULL_AND_PIECEWISE\", \"cudagraph_capture_sizes\": [1, 2, 4, 8, 16, 32, 64, 128, 256]}"
+      ],
+      "align_profile": "/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/profile-with-decode-gaps.experimental.json"
+    }
+  },
+  "output_tok_s": 612.8277120601364,
+  "input_tok_s": 29389.123195022188,
+  "output_tok_s_per_active_gpu": 612.8277120601364,
+  "planned": 3643,
+  "completed": 3638,
+  "errors": 5,
+  "ttft_p95_ms": 89295.66483714999,
+  "itl_p95_ms": 725.7044095,
+  "e2e_p95_ms": 282746.0296802498,
+  "schedule_lag_p99_ms": 295920.39216896,
+  "concurrency_max": 512.0,
+  "client_pass": false,
+  "server_pass": true,
+  "drained": true,
+  "token_accounting_pass": false,
+  "limitations": [
+    "请求/长度未全通过",
+    "客户端负载门槛失败"
+  ],
+  "diagnostic": true,
+  "source_metrics": {
+    "request_throughput": {
+      "unit": "requests/sec",
+      "avg": 3.516665115296537
+    },
+    "input_token_throughput": {
+      "unit": "tokens/sec",
+      "avg": 29389.123195022188
+    },
+    "output_token_throughput": {
+      "unit": "tokens/sec",
+      "avg": 612.8277120601364
+    },
+    "request_latency": {
+      "unit": "ms",
+      "avg": 118469.08105822127,
+      "p1": 1978.66927266,
+      "p5": 5636.872282,
+      "p10": 14073.330027300004,
+      "p25": 69667.39177275,
+      "p50": 84894.609228,
+      "p75": 177049.57060175,
+      "p90": 250710.2479087,
+      "p95": 282746.0296802498,
+      "p99": 367184.5882981101,
+      "min": 1496.622292,
+      "max": 574081.3278869999,
+      "std": 89187.21396694287,
+      "count": 3638,
+      "sum": 430990516.88980895
+    },
+    "time_to_first_token": {
+      "unit": "ms",
+      "avg": 55524.31324548653,
+      "p1": 1500.4279603599998,
+      "p5": 2342.612643,
+      "p10": 3487.5411534,
+      "p25": 36325.5041825,
+      "p50": 68053.92444,
+      "p75": 74240.2474505,
+      "p90": 83522.1387871,
+      "p95": 89295.66483714999,
+      "p99": 94550.18838544999,
+      "min": 358.836025,
+      "max": 97560.221487,
+      "std": 29717.92365573863,
+      "count": 3638,
+      "sum": 201997451.58708
+    },
+    "inter_token_latency": {
+      "unit": "ms",
+      "avg": 386.5813900583154,
+      "p1": 47.67903329999999,
+      "p5": 117.875822,
+      "p10": 168.758009625,
+      "p25": 308.7432325,
+      "p50": 386.0921252967245,
+      "p75": 431.46401557599995,
+      "p90": 558.6952215,
+      "p95": 725.7044095,
+      "p99": 1010.1945841000014,
+      "min": 2.90928062474645,
+      "max": 1148.345938,
+      "std": 172.49577269778806,
+      "count": 3621,
+      "sum": 1399811.2134011602
+    },
+    "benchmark_duration": {
+      "unit": "sec",
+      "avg": 1034.4872291840002
+    },
+    "total_usage_prompt_tokens": {
+      "unit": "tokens",
+      "avg": 30403131.0
+    },
+    "total_usage_completion_tokens": {
+      "unit": "tokens",
+      "avg": 633972.0
+    },
+    "effective_concurrency": {
+      "unit": "requests",
+      "avg": 419.7364683347707,
+      "p50": 512.0,
+      "p90": 512.0,
+      "p95": 512.0,
+      "p99": 512.0,
+      "min": 0.0,
+      "max": 512.0,
+      "std": 155.93770070327656
+    },
+    "replay_sched_lag_p99": {
+      "unit": "ms",
+      "avg": 295920.39216896
+    },
+    "replay_sched_degraded": {
+      "unit": "count",
+      "avg": 1.0
+    },
+    "error_request_count": {
+      "unit": "requests",
+      "avg": 5.0
+    },
+    "error_summary": [
+      {
+        "error_details": {
+          "type": "TimeoutError",
+          "message": "TimeoutError()",
+          "cause": "CancelledError()",
+          "cause_chain": [
+            "TimeoutError",
+            "CancelledError"
+          ]
+        },
+        "count": 5
+      }
+    ],
+    "request_error_rate": {
+      "unit": "%",
+      "avg": 0.1372495196266813
+    }
+  }
+}

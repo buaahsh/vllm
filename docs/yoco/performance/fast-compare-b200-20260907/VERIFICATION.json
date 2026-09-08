@@ -1,0 +1,128 @@
+{
+  "timestamp": 1788787229.4803846,
+  "historical_rows_unchanged": true,
+  "historical_rows": 4,
+  "only_added": [
+    "fast/standalone",
+    "fast/pd"
+  ],
+  "current_rows": 6,
+  "history_records": 6,
+  "throughput_matches_raw_aiperf": true,
+  "all_four_fast_cases_passed": true,
+  "final_gpu_source_audit": true,
+  "pod_identity_pass": true,
+  "figures_visually_checked": [
+    "throughput",
+    "latency",
+    "fast-relative",
+    "completion"
+  ],
+  "links": [
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "qwen3-compare-b200-20260907/cases/standalone-qwen3-r1-long600s/COMPLETE.json",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "align-4gpu-1p1d-20260906/pd-tail-fix/cases/standalone-candidate-fixed-long600s/COMPLETE.json",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "fast-compare-b200-20260907/cases/standalone-fast-r1-long600s/COMPLETE.json",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "qwen3-compare-b200-20260907/cases/pd-qwen3-r1-long600s/COMPLETE.json",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "align-4gpu-1p1d-20260906/pd-tail-fix/cases/pd-candidate-fixed-long600s/COMPLETE.json",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "fast-compare-b200-20260907/cases/pd-fast-r1-long600s/COMPLETE.json",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "throughput/history/",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "throughput/current.json",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "throughput/current.csv",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "align-4gpu-1p1d-20260906/REPORT.md",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "qwen3-compare-b200-20260907/REPORT.md",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "fast-compare-b200-20260907/REPORT.md",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "throughput/figures/throughput.png",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "throughput/figures/latency.png",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "throughput/figures/fast-relative.png",
+      "exists": true
+    },
+    {
+      "doc": "THROUGHPUT.md",
+      "target": "throughput/figures/completion.png",
+      "exists": true
+    },
+    {
+      "doc": "fast-compare-b200-20260907/REPORT.md",
+      "target": "../THROUGHPUT.md",
+      "exists": true
+    },
+    {
+      "doc": "fast-compare-b200-20260907/REPORT.md",
+      "target": "figures/throughput.png",
+      "exists": true
+    },
+    {
+      "doc": "fast-compare-b200-20260907/REPORT.md",
+      "target": "figures/latency.png",
+      "exists": true
+    },
+    {
+      "doc": "fast-compare-b200-20260907/REPORT.md",
+      "target": "figures/fast-relative.png",
+      "exists": true
+    },
+    {
+      "doc": "fast-compare-b200-20260907/REPORT.md",
+      "target": "figures/completion.png",
+      "exists": true
+    }
+  ]
+}

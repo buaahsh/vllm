@@ -49,3 +49,28 @@ require an additional copy.
 
 Set `additional_config.yoco_fast_decode_cutlass=false` to disable the new
 CUTLASS decode selection while retaining Triton tuning and the prefill policy.
+
+## Experimental Align MoE GEMM profiles
+
+`align_moe_NVIDIA_RTX_A6000.experimental.json` records local L3-shaped BF16
+expert measurements on A6000. It is not a B200 profile or an end-to-end result.
+No Align profile is enabled by default. Inference and the corresponding
+llm-train adapter share `yoco_align_moe.py`; set
+`VLLM_YOCO_ALIGN_MOE_CONFIG` to the same profile path in both processes.
+
+The loader checks GPU and software versions, exact token-row sizes, K=32,
+split-K=1, and a common W13/W2 M tile. Other sizes retain the baseline launch.
+These constraints alone do not prove bitwise equality; hardware-specific
+byte comparisons remain required. See the local experiment documentation in
+`docs/yoco/align-gemm-local-20260906.md`.
+
+`align_moe_NVIDIA_B200.experimental.json` is a separately measured B200 profile
+for the recorded CUDA13.1 / Triton3.8.0 / NVIDIA Torch environment. Its sixteen
+exact row sizes were checked against the canonical K=32, split-K=1 launch.
+The follow-up adds rows 2, 4 and 16 to cover all configured decode graph sizes;
+the original thirteen entries are unchanged. See
+`docs/yoco/align-1p1d-b200-20260906/REPORT.md` for the additional kernel and
+serving checks, plus the still-pending two-GPU 1P1D measurement.
+Full-model decode/prefill/training and serving-path checks are documented in
+`docs/yoco/align-gemm-b200-20260906/VALIDATION.md`. The profile remains opt-in;
+kernel speedups do not imply end-to-end or training-step speedups.

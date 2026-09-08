@@ -386,6 +386,10 @@ class MooncakeConnector(KVConnectorBase_V1, SupportsHMA):
     # Scheduler Side Methods
     ############################################################
 
+    def on_new_request(self, request: "Request") -> None:
+        assert self.connector_scheduler is not None
+        self.connector_scheduler.on_new_request(request)
+
     def get_num_new_matched_tokens(
         self, request: "Request", num_computed_tokens: int
     ) -> tuple[int, bool]:
@@ -501,6 +505,10 @@ class MooncakeConnectorScheduler:
             vllm_config.kv_transfer_config.kv_role == "kv_consumer"
         )
         logger.info("Initializing Mooncake Transfer Engine Scheduler %s", engine_id)
+        self._use_yoco_final_prompt_block_split = (
+            vllm_config.model_config.hf_config.model_type == "yoco"
+            and vllm_config.cache_config.kv_sharing_fast_prefill
+        )
 
         self._is_hma_required = (
             not vllm_config.scheduler_config.disable_hybrid_kv_cache_manager
@@ -545,6 +553,52 @@ class MooncakeConnectorScheduler:
             for i, blocks in enumerate(block_ids)
         ]
 
+    def _remote_prefill_token_count(self, num_prompt_tokens: int) -> int:
+        if self._use_yoco_final_prompt_block_split:
+            return max(0, (num_prompt_tokens - 1) // self.block_size * self.block_size)
+        return num_prompt_tokens
+
+    def _truncate_request_for_remote_prefill(self, request: "Request") -> None:
+        """Retain P's prefix at the same boundary where D starts its tail.
+
+        Computing the tail on P can evict sliding-window blocks that D still
+        needs when it replays that tail. This follows the NIXL YOCO contract.
+        """
+        params = request.kv_transfer_params
+        if params is None or params.get("_p_side_truncated"):
+            return
+        target = self._remote_prefill_token_count(request.num_prompt_tokens)
+        # Keep sub-block producer requests valid; D recomputes them locally
+        # and sends an empty receive notification to release P's allocation.
+        if target == 0 or target == request.num_prompt_tokens:
+            return
+        remove = request.num_prompt_tokens - target
+        if request.prompt_token_ids is not None:
+            del request.prompt_token_ids[-remove:]
+        elif request.prompt_embeds is not None:
+            request.prompt_embeds = request.prompt_embeds[:-remove]
+        else:
+            return
+        del request._all_token_ids[-remove:]
+        request.num_prompt_tokens = target
+        request.max_tokens = 1
+        params["_p_side_truncated"] = True
+
+    def on_new_request(self, request: "Request") -> None:
+        params = request.kv_transfer_params
+        if (
+            self._use_yoco_final_prompt_block_split
+            and params is not None
+            and params.get("do_remote_decode")
+        ):
+            self._truncate_request_for_remote_prefill(request)
+            if params.get("_p_side_truncated"):
+                # Replaying a cached producer tail can require SWA blocks
+                # already evicted after the previous prefill. Match NIXL's
+                # correctness policy until that retained-history contract is
+                # supported explicitly by the cache manager.
+                request.skip_reading_prefix_cache = True
+
     def get_num_new_matched_tokens(
         self, request: "Request", num_computed_tokens: int
     ) -> tuple[int, bool]:
@@ -578,7 +632,9 @@ class MooncakeConnectorScheduler:
             # Remote prefill: get all prompt blocks from remote.
             assert not self.is_kv_producer
             token_ids = request.prompt_token_ids or []
-            count = len(token_ids) - num_computed_tokens
+            count = (
+                self._remote_prefill_token_count(len(token_ids)) - num_computed_tokens
+            )
             if count > 0:
                 return count, True
 
@@ -1599,7 +1655,10 @@ class MooncakeConnectorWorker:
             pull_meta = pull_metas[req_id]
             # No race because we are in async loop.
             pull_meta.pull_tasks_count -= 1
-            if pull_meta.pull_tasks_count == 0:
+            if pull_meta.pull_tasks_count == 0 and any(pull_meta.local_block_ids):
+                # Empty pulls only release P's allocation after a local cache
+                # hit or early abort. D never waited for remote KV in these
+                # cases, so no scheduler receive-completion event is needed.
                 self.finished_recving_reqs.add(pull_meta.d_req_id)
 
         if ok_reqs:

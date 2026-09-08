@@ -1,0 +1,191 @@
+{
+  "groups": {
+    "before_reference": {
+      "runs": [
+        "before-reference"
+      ],
+      "comparisons": 167,
+      "all_bitwise": true,
+      "maximum_abs_difference": 0
+    },
+    "before_native": {
+      "runs": [
+        "before-native",
+        "before-native-8192",
+        "before-native-8192-b3"
+      ],
+      "comparisons": 116,
+      "all_bitwise": true,
+      "maximum_abs_difference": 0
+    },
+    "candidate_reference": {
+      "runs": [
+        "candidate-reference"
+      ],
+      "comparisons": 191,
+      "all_bitwise": true,
+      "maximum_abs_difference": 0
+    },
+    "candidate_native": {
+      "runs": [
+        "candidate-native",
+        "candidate-native-8192-tail"
+      ],
+      "comparisons": 116,
+      "all_bitwise": true,
+      "maximum_abs_difference": 0
+    }
+  },
+  "canonical_comparisons": 590,
+  "all_bitwise": true,
+  "maximum_abs_difference": 0,
+  "sequence_lengths": [
+    33,
+    129,
+    512,
+    1024,
+    2048,
+    4096,
+    8192
+  ],
+  "decode_physical_batches": [
+    1,
+    8,
+    32,
+    64,
+    128,
+    256
+  ],
+  "prefill_and_train_physical_batches": [
+    1,
+    3
+  ],
+  "train_grad_enabled": true,
+  "full_nnscaler": false,
+  "limits": "Tested B200/TP1/BF16 matrix. Includes full train gradients-enabled forward to8192, decode B1-256, cached/chunked/mixed serving, and16384/32768 physical prefill rows. No arbitrary-input or full production NNScaler guarantee.",
+  "serving_groups": {
+    "before-serving-probe": {
+      "comparisons": 60,
+      "all_bitwise": true,
+      "cases": 20,
+      "prefix_hits": [
+        128,
+        496,
+        2032,
+        8176
+      ]
+    },
+    "candidate-serving-probe": {
+      "comparisons": 60,
+      "all_bitwise": true,
+      "cases": 20,
+      "prefix_hits": [
+        128,
+        496,
+        2032,
+        8176
+      ]
+    },
+    "candidate-large-prefill-r1": {
+      "comparisons": 15,
+      "all_bitwise": true,
+      "cases": [
+        {
+          "batch": 2,
+          "physical_tokens": 16384,
+          "position": 0,
+          "config_selections": {
+            "32768": 80,
+            "1": 80,
+            "16384": 30,
+            "32": 30
+          },
+          "selections_delta": 30,
+          "prompt_lengths": [
+            8192,
+            8224
+          ],
+          "tail_tokens": 32
+        },
+        {
+          "batch": 2,
+          "physical_tokens": 16384,
+          "position": 1,
+          "config_selections": {
+            "32768": 80,
+            "1": 80,
+            "16384": 60,
+            "32": 60
+          },
+          "selections_delta": 30,
+          "prompt_lengths": [
+            8224,
+            8192
+          ],
+          "tail_tokens": 32
+        },
+        {
+          "batch": 4,
+          "physical_tokens": 32768,
+          "position": 0,
+          "config_selections": {
+            "32768": 110,
+            "1": 80,
+            "16384": 60,
+            "32": 60,
+            "64": 30
+          },
+          "selections_delta": 30,
+          "prompt_lengths": [
+            8192,
+            8224,
+            8208,
+            8208
+          ],
+          "tail_tokens": 64
+        },
+        {
+          "batch": 4,
+          "physical_tokens": 32768,
+          "position": 2,
+          "config_selections": {
+            "32768": 140,
+            "1": 80,
+            "16384": 60,
+            "32": 60,
+            "64": 60
+          },
+          "selections_delta": 30,
+          "prompt_lengths": [
+            8224,
+            8208,
+            8192,
+            8208
+          ],
+          "tail_tokens": 64
+        },
+        {
+          "batch": 4,
+          "physical_tokens": 32768,
+          "position": 3,
+          "config_selections": {
+            "32768": 170,
+            "1": 80,
+            "16384": 60,
+            "32": 60,
+            "64": 90
+          },
+          "selections_delta": 30,
+          "prompt_lengths": [
+            8224,
+            8208,
+            8208,
+            8192
+          ],
+          "tail_tokens": 64
+        }
+      ]
+    }
+  },
+  "total_model_comparisons": 725
+}

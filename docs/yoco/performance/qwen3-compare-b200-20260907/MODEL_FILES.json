@@ -1,0 +1,114 @@
+{
+  "model": "/mnt/pvc/lidong1/models/Qwen3-30B-A3B-Instruct-2507",
+  "files": {
+    ".gitattributes": {
+      "bytes": 1570,
+      "mtime_ns": 1787729048565340796
+    },
+    "LICENSE": {
+      "bytes": 11343,
+      "mtime_ns": 1787729048581449811
+    },
+    "README.md": {
+      "bytes": 15418,
+      "mtime_ns": 1787729048570813513
+    },
+    "config.json": {
+      "bytes": 963,
+      "mtime_ns": 1787729048534509568
+    },
+    "config_1m.json": {
+      "bytes": 77313,
+      "mtime_ns": 1787729048393869516
+    },
+    "generation_config.json": {
+      "bytes": 239,
+      "mtime_ns": 1787729048468219108
+    },
+    "merges.txt": {
+      "bytes": 1671839,
+      "mtime_ns": 1787729048588279001
+    },
+    "model-00001-of-00016.safetensors": {
+      "bytes": 3998893112,
+      "mtime_ns": 1787729074931221562
+    },
+    "model-00002-of-00016.safetensors": {
+      "bytes": 3999974192,
+      "mtime_ns": 1787729075175958874
+    },
+    "model-00003-of-00016.safetensors": {
+      "bytes": 3997360832,
+      "mtime_ns": 1787729075631702607
+    },
+    "model-00004-of-00016.safetensors": {
+      "bytes": 3999975056,
+      "mtime_ns": 1787729077455742065
+    },
+    "model-00005-of-00016.safetensors": {
+      "bytes": 3999975400,
+      "mtime_ns": 1787729076900930583
+    },
+    "model-00006-of-00016.safetensors": {
+      "bytes": 3999975400,
+      "mtime_ns": 1787729075368881823
+    },
+    "model-00007-of-00016.safetensors": {
+      "bytes": 3999975472,
+      "mtime_ns": 1787729077224494802
+    },
+    "model-00008-of-00016.safetensors": {
+      "bytes": 3997362064,
+      "mtime_ns": 1787729077396543834
+    },
+    "model-00009-of-00016.safetensors": {
+      "bytes": 3999975408,
+      "mtime_ns": 1787729095330342847
+    },
+    "model-00010-of-00016.safetensors": {
+      "bytes": 3999975400,
+      "mtime_ns": 1787729097805335173
+    },
+    "model-00011-of-00016.safetensors": {
+      "bytes": 3999975408,
+      "mtime_ns": 1787729101046236644
+    },
+    "model-00012-of-00016.safetensors": {
+      "bytes": 3987924896,
+      "mtime_ns": 1787729100979332025
+    },
+    "model-00013-of-00016.safetensors": {
+      "bytes": 3999975088,
+      "mtime_ns": 1787729101696607603
+    },
+    "model-00014-of-00016.safetensors": {
+      "bytes": 3999975400,
+      "mtime_ns": 1787729102310300596
+    },
+    "model-00015-of-00016.safetensors": {
+      "bytes": 3999975400,
+      "mtime_ns": 1787729101631951918
+    },
+    "model-00016-of-00016.safetensors": {
+      "bytes": 1085307128,
+      "mtime_ns": 1787729087380084626
+    },
+    "model.safetensors.index.json": {
+      "bytes": 1699758,
+      "mtime_ns": 1787729087889503444
+    },
+    "tokenizer.json": {
+      "bytes": 11422654,
+      "mtime_ns": 1787729088618513974
+    },
+    "tokenizer_config.json": {
+      "bytes": 9377,
+      "mtime_ns": 1787729088957443350
+    },
+    "vocab.json": {
+      "bytes": 2776833,
+      "mtime_ns": 1787729089333501823
+    }
+  },
+  "note": "Weights are read from the same existing model directory; full multi-GB weights are not rehashed. Config/tokenizer/index are SHA256 recorded."
+}

@@ -1,0 +1,466 @@
+{
+  "pd_measured": false,
+  "pd_blocker": "Allocated GPUs 2/3/4 retain existing services; only GPU5 is idle.",
+  "new_profile_sha256": "7b5f496599475ce9f044af9557cdc482b6d6abe54e7fd67f268a3fe7982672dc",
+  "added_rows": [
+    2,
+    4,
+    16
+  ],
+  "kernel_screen_cases": 36,
+  "shared_entry_cases": 18,
+  "model_byte_comparisons": 288,
+  "all_model_comparisons_equal": true,
+  "actual_request_counts_identical": true,
+  "smoke_audits": [
+    {
+      "aiperf_version": "0.12.0",
+      "bad_http": 0,
+      "cancelled": 0,
+      "case_dir": "/data/yoco-align-1p1d-b200-20260906/cases/standalone-shape-smoke50",
+      "client_gates": {
+        "command_exit_zero": true,
+        "concurrency_ceiling_not_reached": true,
+        "http_2xx_only": true,
+        "no_context_skips": true,
+        "no_error_summary": true,
+        "not_cancelled": true,
+        "planned_equals_completed": true,
+        "record_count_matches_completed": true,
+        "schedule_lag_within_limit": true,
+        "schedule_not_degraded": true,
+        "zero_osl_mismatch": true
+      },
+      "client_pass": true,
+      "completed": 50,
+      "context_skips": 0,
+      "e2e_p95_ms": 4541.886178799997,
+      "e2e_p99_ms": 5250.730088309999,
+      "effective_concurrency_max": 17.0,
+      "input_token_throughput": 18899.774060362077,
+      "itl_p95_ms": 34.47709388198632,
+      "itl_p99_ms": 63.57436314691226,
+      "manual_review_required": [
+        "server metrics continuity and counter resets",
+        "server running/waiting and complete drain",
+        "GPU Xid/ECC and competing traffic",
+        "declared latency SLO",
+        "P/D transfer/bootstrap/revoke and queues when applicable"
+      ],
+      "osl_mismatch": 0.0,
+      "output_token_throughput": 66.19487568539378,
+      "planned": 50,
+      "records": 50,
+      "request_throughput": 3.073114005821438,
+      "schedule_degraded": 0.0,
+      "schedule_lag_p99_ms": 1.9764608,
+      "ttft_p95_ms": 2714.8701169,
+      "ttft_p99_ms": 2714.96779958
+    },
+    {
+      "aiperf_version": "0.12.0",
+      "bad_http": 0,
+      "cancelled": 0,
+      "case_dir": "/data/yoco-align-1p1d-b200-20260906/cases/gaps-smoke50",
+      "client_gates": {
+        "command_exit_zero": true,
+        "concurrency_ceiling_not_reached": true,
+        "http_2xx_only": true,
+        "no_context_skips": true,
+        "no_error_summary": true,
+        "not_cancelled": true,
+        "planned_equals_completed": true,
+        "record_count_matches_completed": true,
+        "schedule_lag_within_limit": true,
+        "schedule_not_degraded": true,
+        "zero_osl_mismatch": true
+      },
+      "client_pass": true,
+      "completed": 50,
+      "context_skips": 0,
+      "e2e_p95_ms": 2448.131689699998,
+      "e2e_p99_ms": 3117.267621989999,
+      "effective_concurrency_max": 15.0,
+      "input_token_throughput": 19825.899736569612,
+      "itl_p95_ms": 22.99579562105263,
+      "itl_p99_ms": 23.000637364631576,
+      "manual_review_required": [
+        "server metrics continuity and counter resets",
+        "server running/waiting and complete drain",
+        "GPU Xid/ECC and competing traffic",
+        "declared latency SLO",
+        "P/D transfer/bootstrap/revoke and queues when applicable"
+      ],
+      "osl_mismatch": 0.0,
+      "output_token_throughput": 69.43855329814268,
+      "planned": 50,
+      "records": 50,
+      "request_throughput": 3.2237025672303936,
+      "schedule_degraded": 0.0,
+      "schedule_lag_p99_ms": 4.14372096,
+      "ttft_p95_ms": 1552.491789,
+      "ttft_p99_ms": 1552.5682337899998
+    }
+  ],
+  "trace_performance_causally_comparable": false,
+  "comparison_limit": "Smoke warmup/order differs; throughput/latency differences are not attributable to the new rows.",
+  "eager_shape_calls": 640,
+  "eager_shape_hits": 30,
+  "eager_row_weighted_hit_fraction": 1.051812272545596e-05,
+  "kernel_measurements": [
+    {
+      "tokens": 2,
+      "skew": false,
+      "selected": [
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 128,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        },
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 64,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        }
+      ],
+      "byte_equal": true,
+      "grad_enabled_forward": true,
+      "single_token_positions": 2,
+      "timings": {
+        "vllm_experts": {
+          "before_us": 120.37439942359924,
+          "after_us": 113.11360001564026,
+          "speedup": 1.0641903308439926,
+          "samples": {
+            "baseline": [
+              120.35520076751709,
+              120.3935980796814
+            ],
+            "candidate": [
+              113.2863998413086,
+              112.94080018997192
+            ]
+          }
+        },
+        "train_experts_forward": {
+          "before_us": 120.42239904403687,
+          "after_us": 113.37600350379944,
+          "speedup": 1.062150678472286,
+          "samples": {
+            "baseline": [
+              120.29759883880615,
+              120.54719924926758
+            ],
+            "candidate": [
+              113.76960277557373,
+              112.98240423202515
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tokens": 2,
+      "skew": true,
+      "selected": [
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 128,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        },
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 64,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        }
+      ],
+      "byte_equal": true,
+      "grad_enabled_forward": true,
+      "single_token_positions": 2,
+      "timings": {
+        "vllm_experts": {
+          "before_us": 113.07040452957153,
+          "after_us": 91.36320054531097,
+          "speedup": 1.2375924207415985,
+          "samples": {
+            "baseline": [
+              112.79040575027466,
+              113.35040330886841
+            ],
+            "candidate": [
+              91.36000275611877,
+              91.36639833450317
+            ]
+          }
+        },
+        "train_experts_forward": {
+          "before_us": 112.881600856781,
+          "after_us": 91.1952018737793,
+          "speedup": 1.2378019735404198,
+          "samples": {
+            "baseline": [
+              112.95679807662964,
+              112.80640363693237
+            ],
+            "candidate": [
+              90.88960289955139,
+              91.5008008480072
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tokens": 4,
+      "skew": false,
+      "selected": [
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 128,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        },
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 64,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        }
+      ],
+      "byte_equal": true,
+      "grad_enabled_forward": true,
+      "single_token_positions": 3,
+      "timings": {
+        "vllm_experts": {
+          "before_us": 174.3391990661621,
+          "after_us": 161.78719997406006,
+          "speedup": 1.0775833878954242,
+          "samples": {
+            "baseline": [
+              174.55040216445923,
+              174.127995967865
+            ],
+            "candidate": [
+              161.1807942390442,
+              162.39360570907593
+            ]
+          }
+        },
+        "train_experts_forward": {
+          "before_us": 174.35199618339539,
+          "after_us": 161.92479729652405,
+          "speedup": 1.0767467311638135,
+          "samples": {
+            "baseline": [
+              173.9743947982788,
+              174.72959756851196
+            ],
+            "candidate": [
+              162.0319962501526,
+              161.8175983428955
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tokens": 4,
+      "skew": true,
+      "selected": [
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 128,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        },
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 64,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        }
+      ],
+      "byte_equal": true,
+      "grad_enabled_forward": true,
+      "single_token_positions": 3,
+      "timings": {
+        "vllm_experts": {
+          "before_us": 152.29920148849487,
+          "after_us": 116.95200204849243,
+          "speedup": 1.3022368050214843,
+          "samples": {
+            "baseline": [
+              152.13760137557983,
+              152.4608016014099
+            ],
+            "candidate": [
+              117.09120273590088,
+              116.81280136108398
+            ]
+          }
+        },
+        "train_experts_forward": {
+          "before_us": 152.69280076026917,
+          "after_us": 116.74399971961975,
+          "speedup": 1.3079284685036188,
+          "samples": {
+            "baseline": [
+              152.65920162200928,
+              152.72639989852905
+            ],
+            "candidate": [
+              116.27199649810791,
+              117.21600294113159
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tokens": 16,
+      "skew": false,
+      "selected": [
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 64,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        },
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 64,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        }
+      ],
+      "byte_equal": true,
+      "grad_enabled_forward": true,
+      "single_token_positions": 3,
+      "timings": {
+        "vllm_experts": {
+          "before_us": 403.3344030380249,
+          "after_us": 360.14559268951416,
+          "speedup": 1.1199204189227558,
+          "samples": {
+            "baseline": [
+              402.8287887573242,
+              403.8400173187256
+            ],
+            "candidate": [
+              359.9967956542969,
+              360.29438972473145
+            ]
+          }
+        },
+        "train_experts_forward": {
+          "before_us": 403.0464172363281,
+          "after_us": 359.66559648513794,
+          "speedup": 1.1206143183421848,
+          "samples": {
+            "baseline": [
+              402.8128147125244,
+              403.28001976013184
+            ],
+            "candidate": [
+              360.0543975830078,
+              359.27679538726807
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tokens": 16,
+      "skew": true,
+      "selected": [
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 64,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        },
+        {
+          "num_warps": 4,
+          "num_stages": 3,
+          "BLOCK_SIZE_M": 16,
+          "BLOCK_SIZE_N": 64,
+          "BLOCK_SIZE_K": 32,
+          "GROUP_SIZE_M": 8,
+          "SPLIT_K": 1
+        }
+      ],
+      "byte_equal": true,
+      "grad_enabled_forward": true,
+      "single_token_positions": 3,
+      "timings": {
+        "vllm_experts": {
+          "before_us": 151.33919715881348,
+          "after_us": 86.19999885559082,
+          "speedup": 1.7556751643622304,
+          "samples": {
+            "baseline": [
+              150.95679759979248,
+              151.72159671783447
+            ],
+            "candidate": [
+              86.35519742965698,
+              86.04480028152466
+            ]
+          }
+        },
+        "train_experts_forward": {
+          "before_us": 151.25280022621155,
+          "after_us": 86.47519946098328,
+          "speedup": 1.7490887696009914,
+          "samples": {
+            "baseline": [
+              151.07840299606323,
+              151.42719745635986
+            ],
+            "candidate": [
+              86.0863983631134,
+              86.86400055885315
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

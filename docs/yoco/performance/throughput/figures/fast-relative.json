@@ -1,0 +1,26 @@
+[
+  {
+    "topology": "standalone",
+    "reference": "qwen3",
+    "fast_relative_pct": 11.579225892750976,
+    "reference_complete": true
+  },
+  {
+    "topology": "standalone",
+    "reference": "align",
+    "fast_relative_pct": 69.26025666471931,
+    "reference_complete": false
+  },
+  {
+    "topology": "pd",
+    "reference": "qwen3",
+    "fast_relative_pct": 0.45656826343580814,
+    "reference_complete": true
+  },
+  {
+    "topology": "pd",
+    "reference": "align",
+    "fast_relative_pct": 26.47888509839811,
+    "reference_complete": true
+  }
+]

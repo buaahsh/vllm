@@ -1,0 +1,27 @@
+{
+  "checks": {
+    "p/command": true,
+    "p/environment": true,
+    "d/command": true,
+    "d/environment": true,
+    "proxy/command": true,
+    "proxy/environment": true,
+    "p/uuid": true,
+    "p/profile_changed": true,
+    "p/profile_hash": true,
+    "d/uuid": true,
+    "d/profile_changed": true,
+    "d/profile_hash": true,
+    "single/uuid_matches_decode": true,
+    "paired_client_command": true,
+    "single/shared_client_command": true
+  },
+  "passed": true,
+  "trace_sha256": "680e526d49545258c0ca5b635d0004a44cce2ce990d533ac32024cefee1f0170",
+  "cache_salts": [
+    "align-1p1d-20260906-pd-before-fixed-r1-long600s-r1",
+    "align-1p1d-20260906-pd-candidate-fixed-long600s",
+    "align-1p1d-20260906-standalone-candidate-fixed-long600s"
+  ],
+  "single_difference": "Single uses one engine on D GPU with budget32768, no connector; current P skips prefix-cache reads."
+}

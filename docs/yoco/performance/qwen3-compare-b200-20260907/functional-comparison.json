@@ -1,0 +1,25 @@
+{
+  "rows": [
+    {
+      "input_length": 511,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.388683557510376
+    },
+    {
+      "input_length": 512,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.23701930046081543
+    },
+    {
+      "input_length": 513,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.3592822551727295
+    },
+    {
+      "input_length": 4097,
+      "same_output_tokens": true,
+      "max_logprob_difference": 0.15947586297988892
+    }
+  ],
+  "note": "Ordinary Qwen; functional diagnostic only, no bitwise guarantee."
+}

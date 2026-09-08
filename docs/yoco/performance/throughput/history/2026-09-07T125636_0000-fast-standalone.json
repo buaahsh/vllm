@@ -1,0 +1,191 @@
+{
+  "key": "fast/standalone",
+  "mode": "fast",
+  "label": "YOCO Fast",
+  "topology": "standalone",
+  "case": "standalone-fast-r1-long600s",
+  "measured_at_utc": "2026-09-07T12:56:36+00:00",
+  "started_at_unix": 1788785076.080547,
+  "source": "fast-compare-b200-20260907/standalone-summary.json",
+  "source_sha256": "6b06eb726d78862bbf408ebf0bc5cc7329fe8cc064b9e57ac033a07a88b7510f",
+  "manifest": "fast-compare-b200-20260907/cases/standalone-fast-r1-long600s/manifest.json",
+  "manifest_sha256": "17bb3997e62ee644f39aae33a38a730e407c98d4f407e87b8f25fb1703e77028",
+  "runtime_manifest": "fast-compare-b200-20260907/ALIGN_RUNTIME_SHA256.json",
+  "runtime_manifest_sha256": "932034b91d79f05808dfe334cfb1edd6fffed057ae96b384958e94bffda6d826",
+  "trace_sha256": "680e526d49545258c0ca5b635d0004a44cce2ce990d533ac32024cefee1f0170",
+  "active_gpus": 1,
+  "allocated_gpus": 4,
+  "devices": {
+    "standalone": {
+      "index": 5,
+      "uuid": "GPU-14379c29-e601-fc6d-b27c-4fd778ab772a",
+      "before": "5, GPU-14379c29-e601-fc6d-b27c-4fd778ab772a, NVIDIA B200, 0, 0"
+    }
+  },
+  "serving": {
+    "standalone": {
+      "command": [
+        "/data/yoco-align-invariant-20260905/.venv/bin/python",
+        "/data/fast-compare-b200-20260907/serve.py",
+        "serve",
+        "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+        "--fast",
+        "--served-model-name",
+        "yoco-fast-l3",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8694",
+        "--trust-remote-code",
+        "--dtype",
+        "bfloat16",
+        "--attention-config.backend",
+        "FLASH_ATTN",
+        "--attention-config.flash_attn_version",
+        "4",
+        "--moe-backend",
+        "triton",
+        "--kernel-config",
+        "{\"enable_flashinfer_autotune\": false}",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "1",
+        "--gpu-memory-utilization",
+        "0.85",
+        "--max-model-len",
+        "81920",
+        "--max-num-batched-tokens",
+        "32768",
+        "--max-num-seqs",
+        "256",
+        "--enable-prefix-caching",
+        "--enable-chunked-prefill",
+        "--kv-sharing-fast-prefill",
+        "--enable-prompt-tokens-details",
+        "--worker-extension-cls",
+        "pd_observer.PDObserver",
+        "--compilation-config",
+        "{\"cudagraph_mode\": \"FULL_AND_PIECEWISE\", \"cudagraph_capture_sizes\": [1, 2, 4, 8, 16, 32, 64, 128, 256]}"
+      ],
+      "align_profile": null
+    }
+  },
+  "output_tok_s": 1037.273758345514,
+  "input_tok_s": 49208.93778700654,
+  "output_tok_s_per_active_gpu": 1037.273758345514,
+  "planned": 3643,
+  "completed": 3643,
+  "errors": 0,
+  "ttft_p95_ms": 2656.2040862,
+  "itl_p95_ms": 311.55606862499997,
+  "e2e_p95_ms": 61470.51500589994,
+  "schedule_lag_p99_ms": 3.0852249599999966,
+  "concurrency_max": 212.0,
+  "client_pass": true,
+  "server_pass": true,
+  "drained": true,
+  "token_accounting_pass": true,
+  "limitations": [],
+  "diagnostic": true,
+  "source_metrics": {
+    "request_throughput": {
+      "unit": "requests/sec",
+      "avg": 5.873383798955053
+    },
+    "input_token_throughput": {
+      "unit": "tokens/sec",
+      "avg": 49208.93778700654
+    },
+    "output_token_throughput": {
+      "unit": "tokens/sec",
+      "avg": 1037.273758345514
+    },
+    "request_latency": {
+      "unit": "ms",
+      "avg": 16889.979970318418,
+      "p1": 634.80853238,
+      "p5": 1086.0666073,
+      "p10": 1499.3877384,
+      "p25": 2268.6066195,
+      "p50": 4518.012710999999,
+      "p75": 27141.7107845,
+      "p90": 50187.822966000014,
+      "p95": 61470.51500589994,
+      "p99": 88314.61766581987,
+      "min": 215.570372,
+      "max": 218228.77509699998,
+      "std": 22888.775485952072,
+      "count": 3643,
+      "sum": 61530197.03187
+    },
+    "time_to_first_token": {
+      "unit": "ms",
+      "avg": 1620.5404770477628,
+      "p1": 376.20301304000003,
+      "p5": 640.5396043,
+      "p10": 882.0281946,
+      "p25": 1287.8162475,
+      "p50": 1551.4964949999999,
+      "p75": 1956.1592945,
+      "p90": 2356.064265,
+      "p95": 2656.2040862,
+      "p99": 3203.48165906,
+      "min": 145.293053,
+      "max": 4588.229187,
+      "std": 589.1024007821865,
+      "count": 3643,
+      "sum": 5903628.957885
+    },
+    "inter_token_latency": {
+      "unit": "ms",
+      "avg": 99.07792134032084,
+      "p1": 13.252573374999999,
+      "p5": 22.012882659375,
+      "p10": 28.228351999999997,
+      "p25": 47.548270065789474,
+      "p50": 81.82783420893719,
+      "p75": 110.53746152152094,
+      "p90": 162.88748434,
+      "p95": 311.55606862499997,
+      "p99": 475.94783537499995,
+      "min": 2.672527247464503,
+      "max": 514.9967,
+      "std": 90.10119692736,
+      "count": 3626,
+      "sum": 359256.54278000334
+    },
+    "benchmark_duration": {
+      "unit": "sec",
+      "avg": 620.24059264
+    },
+    "total_usage_prompt_tokens": {
+      "unit": "tokens",
+      "avg": 30522126.0
+    },
+    "total_usage_completion_tokens": {
+      "unit": "tokens",
+      "avg": 643375.0
+    },
+    "effective_concurrency": {
+      "unit": "requests",
+      "avg": 99.34698711475491,
+      "p50": 104.0,
+      "p90": 160.0,
+      "p95": 176.0,
+      "p99": 197.0,
+      "min": 0.0,
+      "max": 212.0,
+      "std": 46.44007679513693
+    },
+    "replay_sched_lag_p99": {
+      "unit": "ms",
+      "avg": 3.0852249599999966
+    },
+    "replay_sched_degraded": {
+      "unit": "count",
+      "avg": 0.0
+    },
+    "error_summary": []
+  }
+}

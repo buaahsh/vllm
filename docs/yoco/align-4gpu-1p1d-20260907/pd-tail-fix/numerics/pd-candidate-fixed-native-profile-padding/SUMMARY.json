@@ -1,0 +1,19 @@
+{
+  "comparisons": 72,
+  "all_equal": true,
+  "profile_selected_m": {
+    "64": 120,
+    "256": 40,
+    "1024": 40,
+    "4096": 80,
+    "32": 120
+  },
+  "causal_suffix_padding": true,
+  "positions_per_sequence": 8,
+  "sequences": 9,
+  "grad_enabled": true,
+  "model_training": true,
+  "reference": "/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/numerics/pd-candidate-fixed",
+  "profile": "/data/yoco-align-4gpu-1p1d-20260906/pd-tail-fix/profile-with-decode-gaps.experimental.json",
+  "scope": "Native single-rank forward and token CE; individual and packed nine sequences. No backward/optimizer equality claim."
+}

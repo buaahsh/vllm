@@ -1,0 +1,14 @@
+{
+  "archive": "/mnt/pvc/lidong1/yoco-align-fast-vllm-vllm-train-migration-20260907/old-data.tar",
+  "bytes": 321290403840,
+  "sha256": "a61bc7fa991a92b85bedc6212f8418f1e586fef8c5cf564c07aa7c32957003e2",
+  "readback_verified": true,
+  "tar_list_verified": true,
+  "index": "/mnt/pvc/lidong1/yoco-align-fast-vllm-vllm-train-migration-20260907/verified-contents.txt",
+  "index_sha256": "e1790cfdbffb623993d1bbae01793e7b277e287240e09134d5597d6c44ac00d5",
+  "readback_evidence": "backup-source.py passed its complete readback SHA256 assertion at line22; line23 hit a concurrent index-file name collision. Retained first-readback-stage.log proves that code path. Independent tar index verification completed here with exit0 and unchanged archive size/mtime.",
+  "excluded": [
+    "obsolete private-restore process environment snapshot"
+  ],
+  "completed": 1788764222.5066822
+}

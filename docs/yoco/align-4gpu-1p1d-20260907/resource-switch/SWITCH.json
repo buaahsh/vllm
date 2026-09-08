@@ -1,0 +1,9 @@
+{
+  "started": 1788763363.7359421,
+  "deletion_requested": 1788764230.3201113,
+  "old_uid": "0921e658-e4ab-4981-bb98-81b33b659b32",
+  "old_job": "yoco-align-prob-b200-20260901",
+  "new_job": "yoco-align-fast-vllm-vllm-train",
+  "old_pod_deleted": 1788764237.0737216,
+  "new_job_created": 1788764237.7573886
+}

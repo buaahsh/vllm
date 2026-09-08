@@ -21,7 +21,29 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 ## YOCO Align 与 Fast 开发
 
-本分支 `fhb-dev` 包含 YOCO 的 `--align` 和 `--fast`。Align 的前向一致性结论限于已验证的配置与输入范围；Fast 优先性能，不保证 bitwise。上游发行版不包含本分支的开发改动。
+本分支 `fhb-dev-9-8` 包含 YOCO 的 `--align` 和 `--fast`。Align 的前向一致性结论限于已验证的配置与输入范围；Fast 优先性能，不保证 bitwise。上游发行版不包含本分支的开发改动。
+
+### Align GEMM B200 联动验证（2026-09-06）
+
+本地开发为 vLLM / llm-train 增加共享 MoE launch 配置，固定 K=32、split-K=1 和原 BF16 舍入边界。B200 上725项整模型字节比较通过，最大差0，覆盖最长8192-token、B1–256 decode、ragged prefill、带梯度训练的完整 logits/log-prob/CE，以及缓存/chunked/mixed 和实际16K/32K行合批。结论限于已测配置与输入。
+
+同卡 Mooncake FAST’25 开源 trace（600秒、3643请求）中，输出吞吐580.56→613.87 tok/s（+5.74%），ITL P95降低38.77%，E2E P95降低6.51%。两端都只有3638/3643成功，均有5个超时并触及512并发上限；这是过载诊断，不是容量验证通过。512/2048-token训练整步吞吐变化为−0.50%/−0.15%，基本持平。
+
+实验默认关闭。两端用 `VLLM_YOCO_ALIGN_MOE_CONFIG` 指向同一份已验证的 B200 profile；文件在 `vllm/model_executor/layers/fused_moe/experts/yoco_configs/align_moe_NVIDIA_B200.experimental.json`，加载器检查GPU和软件版本。
+
+- [B200 完整报告、开源 trace 与训练结果](docs/yoco/align-gemm-b200-20260906/REPORT.md)
+- [逐字节验收范围与中止记录](docs/yoco/align-gemm-b200-20260906/VALIDATION.md)
+- [后续小批次优化与 1P1D 进度](docs/yoco/align-1p1d-b200-20260906/REPORT.md)：新增 2/4/16 行配置，真实专家入口在分散路由下加速 6.4%–12.0%，完整模型输出字节检查通过；该阶段的后续实测见下方四卡报告。
+
+### Align 四卡 1P1D 联动实测（2026-09-07）
+
+四卡B200 Job已完成实测。真实1P1D输出字节105项、与llm-train单条/packed的前向和CE字节72项，原始Align与GEMM候选均通过；同卡1P1D输出吞吐631.87→826.76 tok/s（+30.84%）。ITL P95 55.25→59.82 ms。同GPU单实例对照有5/3643条600秒超时。当前1×trace为共享节点过载诊断，非容量验收；当前P跳过前缀缓存读取，收尾控制请求单独记在计时之外。
+
+[报告与原始汇总](docs/yoco/align-4gpu-1p1d-20260907/REPORT.md) · [PDF](docs/yoco/align-4gpu-1p1d-20260907/REPORT.pdf)。
+
+### 持续吞吐对照（2026-09-07）
+
+[三模式持续表](docs/yoco/performance/THROUGHPUT.md)保留每行的测量时间和证据；每次只重测本次修改涉及的模式。本轮只重测 Fast，单卡 / 1P1D 输出吞吐为 **1037.27 / 1045.68 tok/s**；历史 Qwen3 为 929.63 / 1040.93，Align GEMM 为 612.83 / 826.76。所有数据均为同物理 B200、固定 1× 开源 trace、不同时间的共享节点诊断，不能据此比较峰值能力。Align 单卡有 5 个超时，Fast/Qwen3 的单卡与 P/D log-prob 差异待定位。详见[报告及更新规则](docs/yoco/performance/README.md)。
 
 ### Fast decode 优化（2026-09-06）
 

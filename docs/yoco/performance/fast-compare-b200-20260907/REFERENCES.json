@@ -1,0 +1,29 @@
+{
+  "qwen3": {
+    "local_backup_proof": "/home/lidong1/vllm_test/yoco_results/qwen3-compare-b200-20260907/BACKUP.json",
+    "proof_sha256": "cabcbf6dab9fe10b665a9a33089f7cfd3c93cdff8278928e2bd4abd867d75af9",
+    "backup": {
+      "finished": 1788779311.8760855,
+      "started": 1788779287.9696589,
+      "archive": "/mnt/pvc/lidong1/qwen3-compare-b200-20260907/results.tar",
+      "bytes": 204308480,
+      "sha256": "b59be83bedd307c4d93bf04f710e2f42aecfdcc1875f91c4c4fc011a30f56094",
+      "independent_readback_sha256": "b59be83bedd307c4d93bf04f710e2f42aecfdcc1875f91c4c4fc011a30f56094",
+      "sha_readback_pass": true,
+      "members": 234,
+      "result_files": 214,
+      "exclusions": [
+        "runtime-vllm (immutable runtime archived in prior Align results)",
+        "cache",
+        "__pycache__"
+      ],
+      "runtime_archive": "/mnt/pvc/lidong1/yoco-align-fast-vllm-vllm-train-results-20260907/results.tar",
+      "runtime_archive_sha256": "dc6b968b46eb42eac992605ddacdb0f1f788e56792b75bda645996274675b4ba"
+    }
+  },
+  "align": {
+    "local_report": "/home/lidong1/vllm_test/yoco_results/align-4gpu-1p1d-20260906/REPORT.md",
+    "runtime_archive": "/mnt/pvc/lidong1/yoco-align-fast-vllm-vllm-train-results-20260907/results.tar",
+    "runtime_archive_sha256": "dc6b968b46eb42eac992605ddacdb0f1f788e56792b75bda645996274675b4ba"
+  }
+}

@@ -82,6 +82,7 @@ if TYPE_CHECKING:
     VLLM_MAIN_CUDA_VERSION: str = "13.0"
     VLLM_FLOAT32_MATMUL_PRECISION: Literal["highest", "high", "medium"] = "highest"
     VLLM_BATCH_INVARIANT: bool = False
+    VLLM_YOCO_ALIGN_MOE_CONFIG: str | None = None
     VLLM_TRITON_ATTN_USE_TD: bool | None = None
     MAX_JOBS: str | None = None
     NVCC_THREADS: str | None = None
@@ -526,6 +527,9 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Enable batch-invariant mode: deterministic results regardless of
     # batch composition. Requires NVIDIA GPU with compute capability >= 9.0.
     "VLLM_BATCH_INVARIANT": lambda: bool(int(os.getenv("VLLM_BATCH_INVARIANT", "0"))),
+    # Experimental, environment-matched YOCO Align MoE launch configuration.
+    # No profile is selected by default; both inference and training use this path.
+    "VLLM_YOCO_ALIGN_MOE_CONFIG": lambda: os.getenv("VLLM_YOCO_ALIGN_MOE_CONFIG"),
     # Use tensor descriptors for Q/K/V loads and output stores in the
     # Triton unified-attention kernel.  Enables HW 2D block reads on
     # Intel Xe2/Xe3; the non-TD branch is dead-code-eliminated at Triton

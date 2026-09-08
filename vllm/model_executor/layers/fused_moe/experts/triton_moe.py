@@ -244,6 +244,34 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
                 use_tuned_config=self.moe_config.use_tuned_config,
             )
 
+        align_configs = None
+        if (
+            getattr(self, "yoco_align_weighted_swiglu", False)
+            and not self.quant_config.is_quantized
+            and self.quant_config.weight_quant_dtype is None
+            and hidden_states.dtype == w1.dtype == w2.dtype == torch.bfloat16
+            and expert_map is None
+            and global_num_experts == E
+            and self.w1_bias is None
+            and self.w2_bias is None
+            and self._lora_context is None
+            and not apply_router_weight_on_input
+        ):
+            from vllm.model_executor.layers.yoco_align_moe import (
+                get_yoco_align_moe_configs,
+            )
+
+            align_configs = get_yoco_align_moe_configs(
+                num_tokens,
+                w1.shape,
+                w2.shape,
+                top_k_num,
+                config,
+                device_index=hidden_states.device.index or 0,
+            )
+            if align_configs is not None:
+                config = align_configs[0]
+
         if hidden_states.dtype == torch.bfloat16:
             compute_type = tl.bfloat16
         elif hidden_states.dtype == torch.float16:
@@ -410,9 +438,10 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
             quantization_emulation=self.quantization_emulation,
         )
 
-        w2_config = config
+        w2_config = config if align_configs is None else align_configs[1]
         if (
-            getattr(self, "yoco_separate_w2_config", False)
+            align_configs is None
+            and getattr(self, "yoco_separate_w2_config", False)
             and not self.quant_config.is_quantized
             and self.quant_config.weight_quant_dtype is None
             and hidden_states.dtype == torch.bfloat16

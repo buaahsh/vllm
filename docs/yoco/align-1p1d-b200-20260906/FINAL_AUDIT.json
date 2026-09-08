@@ -1,0 +1,29 @@
+{
+  "completed_utc": "2026-09-07T03:46:24.253554+00:00",
+  "single_gpu_work_complete": true,
+  "pd_test_completed": false,
+  "reason": "Only allocated GPU5 is idle; GPU2/3/4 retain existing services.",
+  "source_files_verified": 3660,
+  "train_source_files_verified": 117,
+  "protected_processes_unchanged": true,
+  "source_mismatches": [],
+  "train_source_mismatches": [],
+  "gpu5_final_memory_mib": 0,
+  "allocated_uuids": [
+    "GPU-14379c29-e601-fc6d-b27c-4fd778ab772a",
+    "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+    "GPU-4e279853-e2ff-de3e-70a8-d3623fd038b3",
+    "GPU-7d5a27ae-f576-89e7-835b-64d8602e70b0"
+  ],
+  "ecc": {
+    "volatile/sram_uncorrectable_parity": "0",
+    "volatile/sram_uncorrectable_secded": "0",
+    "volatile/dram_uncorrectable": "0",
+    "aggregate/sram_uncorrectable_parity": "0",
+    "aggregate/sram_uncorrectable_secded": "0",
+    "aggregate/dram_uncorrectable": "0"
+  },
+  "kernel_access_returncode": 0,
+  "kernel_gpu_errors": [],
+  "profile_sha256": "7b5f496599475ce9f044af9557cdc482b6d6abe54e7fd67f268a3fe7982672dc"
+}

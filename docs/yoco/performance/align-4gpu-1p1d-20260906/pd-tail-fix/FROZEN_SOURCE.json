@@ -1,0 +1,12 @@
+{
+  "source_files": 3778,
+  "intentional_changes": {
+    "runtime-vllm/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_connector.py": {
+      "before": "d657d8ea0444b17edb7a3baab2cd5f0d50c86b45228e89febaa9baa7799affac",
+      "after": "8271e0d8660e6ed2b341c3665e17d308367f9085b25b9cf3a15023b662e047c5"
+    }
+  },
+  "added": [
+    "runtime-vllm/tests/v1/kv_connector/unit/test_mooncake_yoco_tail.py"
+  ]
+}
