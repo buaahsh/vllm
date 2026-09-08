@@ -1,0 +1,19 @@
+{
+  "mode": "fast-baseline-b",
+  "batch": 1,
+  "isl": 65536,
+  "osl": 16384,
+  "input_sha256": "c508fa00cb10a2c008d8e266d1840b1bf6284200cad307b282fbd04b2cd51956",
+  "diagnostic": true,
+  "base_commit": "99bfbead2f967676c2054891de974987ed10dd82",
+  "backend_sha256": "d0ae6405956ebd367b60e1e0537bfde3bc1a3679444de9f4de80955247964a43",
+  "source_sha256": "a0ff0962e322acf9ae83e88788b346886fc017eb247f990e8e9a4f94158c2563",
+  "manifest_sha256": "8d19b3c6f4fe187df3f66149f649945d70b0cc4f8e7c2a25928ad93c20892ea7",
+  "evidence_repo_path": "docs/yoco/fast-low-concurrency-20260908/cases/fast-baseline-b/results.json",
+  "measurement_started_utc": "2026-09-08T05:55:13.629767+00:00",
+  "source": "fast-baseline-b/results.json",
+  "output_tok_s": 76.60157944041069,
+  "tpot_ms": 12.998175699629224,
+  "ttft_ms": 934.2918395996094,
+  "seconds": 213.88592924177647
+}

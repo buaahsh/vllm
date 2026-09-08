@@ -23,6 +23,19 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 本分支 `fhb-dev-9-8` 包含 YOCO 的 `--align` 和 `--fast`。Align 的前向一致性结论限于已验证的配置与输入范围；Fast 优先性能，不保证 bitwise。上游发行版不包含本分支的开发改动。
 
+### Fast 低并发 W2 优化（2026-09-08 UTC）
+
+修复了 Fast 沿用 YOCO FA4 强制单 split 的限制：Fast 恢复后端 split-KV 自动调度，Align 保留原规则。同物理 B200、BF16 TP1，完整 W2（65,536 输入 + 16,384 输出）实测：
+
+| 并发 | 旧 Fast tok/s | 修复 Fast tok/s | Qwen3 tok/s | Fast 加速 | 修复 Fast 比 Qwen 低 |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 76.60 | 154.25 | 163.10 | 2.014× | 5.42% |
+| 2 | 142.99 | 253.09 | 264.08 | 1.770× | 4.16% |
+
+每个点为一次完整请求测量，包含 prefill 与调度；共享节点、固定形状合成输入，属于诊断结果。36项配置/分派回归通过；48个固定前缀位置的平均/最大KL为0.000841/0.006718，Top-1相同47/48，完整W2的B1生成序列发生变化，Fast不保证bitwise。此轮没有修改llm-train或共享Align kernel。
+
+[完整报告与图表](docs/yoco/fast-low-concurrency-20260908/REPORT.md) · [低并发W2持续表](docs/yoco/performance/LOW_CONCURRENCY.md)。W2组独立记录，原Mooncake开源trace表保留历史测量值。
+
 ### Align backward 越界修复（2026-09-08）
 
 训练侧已修复 `_route_map` 的CUDA非法访问：旧padding计数在Triton3.7.1会把136条路由计为1024条；现在给histogram显式传入有效位置mask。两种Triton版本各通过84项相关回归与5项概率/CE检查，显存检查49项通过，NNScaler各完成12步SGD。vLLM前向实现未改，性能表沿用原测量。[报告与失败/修复证据](docs/yoco/align-backward-fix-20260908/REPORT.md)。

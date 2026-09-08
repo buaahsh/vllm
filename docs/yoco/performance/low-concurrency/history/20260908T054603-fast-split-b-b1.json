@@ -1,0 +1,19 @@
+{
+  "mode": "fast-split-b",
+  "batch": 1,
+  "isl": 65536,
+  "osl": 16384,
+  "input_sha256": "c508fa00cb10a2c008d8e266d1840b1bf6284200cad307b282fbd04b2cd51956",
+  "diagnostic": true,
+  "base_commit": "99bfbead2f967676c2054891de974987ed10dd82",
+  "backend_sha256": "101147c63b6d860261d60dd69c556c3f0c687d0882dea92491f75e19c5966634",
+  "source_sha256": "b02fe06da8119df72b5b46c8d0b727bc3a6e5790f6564e659abe1dfb84c05637",
+  "manifest_sha256": "1450c87860b974753289e959fe2aecd1516d54cdb472e31936bfcb5baf6e4f88",
+  "evidence_repo_path": "docs/yoco/fast-low-concurrency-20260908/cases/fast-split-b/results.json",
+  "measurement_started_utc": "2026-09-08T05:46:03.104447+00:00",
+  "source": "fast-split-b/results.json",
+  "output_tok_s": 154.2528752426459,
+  "tpot_ms": 6.426988039769449,
+  "ttft_ms": 918.9887046813965,
+  "seconds": 106.21520003583282
+}

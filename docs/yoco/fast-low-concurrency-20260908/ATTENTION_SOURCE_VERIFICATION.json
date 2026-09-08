@@ -1,0 +1,11 @@
+{
+  "base_commit": "99bfbead2f967676c2054891de974987ed10dd82",
+  "file": "vllm/v1/attention/backends/flash_attn.py",
+  "baseline_sha256": "d0ae6405956ebd367b60e1e0537bfde3bc1a3679444de9f4de80955247964a43",
+  "candidate_sha256": "101147c63b6d860261d60dd69c556c3f0c687d0882dea92491f75e19c5966634",
+  "remote_actual": {
+    "runtime-vllm": "d0ae6405956ebd367b60e1e0537bfde3bc1a3679444de9f4de80955247964a43",
+    "candidate-vllm": "101147c63b6d860261d60dd69c556c3f0c687d0882dea92491f75e19c5966634"
+  },
+  "matched": true
+}

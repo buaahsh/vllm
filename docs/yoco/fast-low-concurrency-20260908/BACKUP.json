@@ -1,0 +1,9 @@
+{
+  "local_archive": "/home/lidong1/vllm_test/yoco_results/fast-low-concurrency-20260908/results.tar.gz",
+  "pvc_archive": "/mnt/pvc/lidong1/fast-low-concurrency-20260908/results.tar.gz",
+  "bytes": 31598233,
+  "files": 132,
+  "sha256": "4f2c334de3c8e4b2ab421bf0d8b1e37e1f81cbd46933e4b975e2a67d40b130aa",
+  "pvc_readback_sha256": "4f2c334de3c8e4b2ab421bf0d8b1e37e1f81cbd46933e4b975e2a67d40b130aa",
+  "report_published_separately": true
+}

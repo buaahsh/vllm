@@ -787,8 +787,13 @@ class FlashAttentionImpl(AttentionImpl):
                 or is_l3_tp4_fa4_on_sm100
             )
         )
+        # Legacy Align reproduces the training FA4 reduction order. Fast
+        # should use the backend's split-KV scheduling: forcing one split
+        # serializes long-context decode on a small batch's few query tiles.
         self.force_single_split = (
-            model_type == "yoco" and self.vllm_flash_attn_version == 4
+            model_type == "yoco"
+            and self.yoco_execution_mode == "align"
+            and self.vllm_flash_attn_version == 4
         )
         dcp_a2a = (
             vllm_config is not None

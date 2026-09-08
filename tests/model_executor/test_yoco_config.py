@@ -241,6 +241,42 @@ def test_yoco_execution_mode_controls_triton_decode(
     assert impl.use_triton_yoco_decode is use_triton_decode
     assert impl.yoco_triton_decode_min_batch_size == min_batch_size
 
+    if impl.vllm_flash_attn_version == 4:
+        # Exercise the forwarded scheduling argument, so Fast cannot silently
+        # reintroduce Align's single-split policy in the paged attention call.
+        calls = []
+        monkeypatch.setattr(
+            flash_attn, "flash_attn_varlen_func", lambda **kwargs: calls.append(kwargs)
+        )
+        query = torch.zeros(1, 16, 128, dtype=torch.bfloat16)
+        key = torch.zeros(1, 2, 128, dtype=torch.bfloat16)
+        cache = torch.zeros(2, 2, 16, 2, 128, dtype=torch.bfloat16)
+        output = torch.empty_like(query)
+        layer = SimpleNamespace(_k_scale=torch.ones(()), _v_scale=torch.ones(()))
+        metadata = flash_attn.FlashAttentionMetadata(
+            num_actual_tokens=1,
+            max_query_len=1,
+            query_start_loc=torch.tensor([0, 1], dtype=torch.int32),
+            max_seq_len=32,
+            seq_lens=torch.tensor([32], dtype=torch.int32),
+            block_table=torch.tensor([[0, 1]], dtype=torch.int32),
+            slot_mapping=torch.tensor([31]),
+            use_cascade=False,
+            common_prefix_len=0,
+            cu_prefix_query_lens=None,
+            prefix_kv_lens=None,
+            suffix_kv_lens=None,
+        )
+        for splits in (0, 4):
+            metadata.max_num_splits = splits
+            assert (
+                impl.forward(layer, query, key, key, cache, metadata, output) is output
+            )
+            assert calls[-1]["num_splits"] == (
+                1 if execution_mode == "align" else splits
+            )
+        assert len(calls) == 2
+
 
 def test_yoco_align_respects_batch_invariant_attention_selection(monkeypatch):
     from vllm.v1.attention.backends import flash_attn

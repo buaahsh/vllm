@@ -1,0 +1,20 @@
+{
+  "started": 1788845447.5322962,
+  "command": [
+    "/data/yoco-align-invariant-20260905/.venv/bin/python",
+    "/data/fast-low-concurrency-20260908/probe_decode.py",
+    "--mode",
+    "fast",
+    "--output",
+    "/data/fast-low-concurrency-20260908/fast-split-a"
+  ],
+  "gpu": {
+    "index": 2,
+    "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+    "before": "2, GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7, NVIDIA B200, 0, 0"
+  },
+  "source": {
+    "vllm/v1/attention/backends/flash_attn.py": "101147c63b6d860261d60dd69c556c3f0c687d0882dea92491f75e19c5966634",
+    "tests/model_executor/test_yoco_config.py": "6fdc1c5fe713a9eabadd43d4f8b1296eed5257aa05c092652b997f629c69c67f"
+  }
+}

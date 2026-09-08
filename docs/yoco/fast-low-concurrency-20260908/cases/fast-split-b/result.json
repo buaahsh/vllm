@@ -1,0 +1,23 @@
+{
+  "label": "fast-split-b",
+  "started": 1788846039.4866023,
+  "command": [
+    "/data/yoco-align-invariant-20260905/.venv/bin/python",
+    "/data/fast-low-concurrency-20260908/validate_model.py",
+    "--mode",
+    "fast",
+    "--output",
+    "/data/fast-low-concurrency-20260908/fast-split-b"
+  ],
+  "gpu": {
+    "index": 2,
+    "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+    "before": "2, GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7, NVIDIA B200, 0, 0"
+  },
+  "variant": "split",
+  "pid": 65169,
+  "start_ticks": "460975191",
+  "exit_code": 0,
+  "expected_exit": 0,
+  "finished": 1788846608.4704623
+}

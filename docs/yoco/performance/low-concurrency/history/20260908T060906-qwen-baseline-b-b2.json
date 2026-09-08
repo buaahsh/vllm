@@ -1,0 +1,19 @@
+{
+  "mode": "qwen-baseline-b",
+  "batch": 2,
+  "isl": 65536,
+  "osl": 16384,
+  "input_sha256": "ea2d5aaa08bcbaff93a5ea67538fbc55a568755779e518af4eee6b1048113a66",
+  "diagnostic": true,
+  "base_commit": "99bfbead2f967676c2054891de974987ed10dd82",
+  "backend_sha256": "d0ae6405956ebd367b60e1e0537bfde3bc1a3679444de9f4de80955247964a43",
+  "source_sha256": "66390e13c997d11d8be2a2f3047d8c6fc751888652365bb38c434736c613a9d8",
+  "manifest_sha256": "5067c502b64d9692ae3d207daffc79f874b8d17d2897b1138df60cf97d5e9576",
+  "evidence_repo_path": "docs/yoco/fast-low-concurrency-20260908/cases/qwen-baseline-b/results.json",
+  "measurement_started_utc": "2026-09-08T06:09:06.301891+00:00",
+  "source": "qwen-baseline-b/results.json",
+  "output_tok_s": 264.07509516730744,
+  "tpot_ms": 7.400775688517275,
+  "ttft_ms": 2828.3023834228516,
+  "seconds": 124.08591570984572
+}

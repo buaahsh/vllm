@@ -1,5 +1,7 @@
 # YOCO Align 与 Fast 开发记录
 
+- [2026-09-08 Fast 低并发 W2 优化](fast-low-concurrency-20260908/REPORT.md)：恢复FA4 split-KV自动调度；完整W2并发1/2吞吐提升2.014×/1.770×，与Qwen差距缩小至5.42%/4.16%。固定形状同卡诊断，Fast非bitwise。见[独立低并发表](performance/LOW_CONCURRENCY.md)。
+
 - [2026-09-08 Align backward 路由越界修复](align-backward-fix-20260908/REPORT.md)：复现并修复Triton3.7.1下的CUDA非法访问；两版本回归、显存检查及NNScaler连续训练通过。旧报告保留历史测量值。
 
 - [2026-09-07 四卡 Align 1P1D 与 llm-train 实测](align-4gpu-1p1d-20260907/REPORT.md) · [PDF](align-4gpu-1p1d-20260907/REPORT.pdf)：四卡B200 Job已完成实测。真实1P1D输出字节105项、与llm-train单条/packed的前向和CE字节72项，原始Align与GEMM候选均通过；同卡1P1D输出吞吐631.87→826.76 tok/s（+30.84%）。ITL P95 55.25→59.82 ms。同GPU单实例对照有5/3643条600秒超时。当前1×trace为共享节点过载诊断，非容量验收；当前P跳过前缀缓存读取，收尾控制请求单独记在计时之外。

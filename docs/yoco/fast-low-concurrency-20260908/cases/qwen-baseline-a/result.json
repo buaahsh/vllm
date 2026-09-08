@@ -1,0 +1,26 @@
+{
+  "command": [
+    "/data/yoco-align-invariant-20260905/.venv/bin/python",
+    "/data/fast-low-concurrency-20260908/probe_decode.py",
+    "--mode",
+    "qwen",
+    "--output",
+    "/data/fast-low-concurrency-20260908/qwen-baseline-a"
+  ],
+  "started": 1788845008.9234092,
+  "gpu": {
+    "index": 2,
+    "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+    "before": "2, GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7, NVIDIA B200, 0, 0"
+  },
+  "environment": {
+    "CUDA_VISIBLE_DEVICES": "2",
+    "PYTHONPATH": "/data/fast-low-concurrency-20260908:/data/fast-low-concurrency-20260908/runtime-vllm:/data/fast-low-concurrency-20260908/runtime-vllm/tools/yoco_alignment:/data/yoco-align-fast-aiperf-matched-20260905/historical-deps",
+    "LD_LIBRARY_PATH": "/usr/local/lib/python3.12/dist-packages/nvidia/nvshmem/lib:/usr/local/lib/python3.12/dist-packages/torch/lib:/usr/local/lib/python3.12/dist-packages/torch_tensorrt/lib:/usr/local/cuda/compat/lib:/usr/local/nvidia/lib:/usr/local/nvidia/lib64",
+    "OMP_NUM_THREADS": "8"
+  },
+  "pid": 64368,
+  "start_ticks": "460872110",
+  "exit_code": 0,
+  "finished": 1788845396.162908
+}

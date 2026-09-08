@@ -1,0 +1,266 @@
+{
+  "passed": true,
+  "audited_utc": "2026-09-08T06:18:30.946059+00:00",
+  "sources": {
+    "base_commit": "99bfbead2f967676c2054891de974987ed10dd82",
+    "local": {
+      "vllm/v1/attention/backends/flash_attn.py": "101147c63b6d860261d60dd69c556c3f0c687d0882dea92491f75e19c5966634",
+      "tests/model_executor/test_yoco_config.py": "a2b9082c5305729ec50a80b23e9a96b6a8e76f80ce79da613edd7e4aa6adb7a6"
+    },
+    "remote": {
+      "runtime-vllm/vllm/v1/attention/backends/flash_attn.py": "d0ae6405956ebd367b60e1e0537bfde3bc1a3679444de9f4de80955247964a43",
+      "candidate-vllm/vllm/v1/attention/backends/flash_attn.py": "101147c63b6d860261d60dd69c556c3f0c687d0882dea92491f75e19c5966634",
+      "candidate-vllm/tests/model_executor/test_yoco_config.py": "a2b9082c5305729ec50a80b23e9a96b6a8e76f80ce79da613edd7e4aa6adb7a6"
+    },
+    "early_candidate_manifest_test_sha_superseded": true
+  },
+  "unit": {
+    "candidate_passed": 36,
+    "negative_control_failures": {
+      "test_yoco_execution_mode_controls_triton_decode[fast-4-9-False-0]": "assert 1 == 0",
+      "test_yoco_execution_mode_controls_triton_decode[fast-4-10-True-224]": "assert 1 == 0"
+    },
+    "negative_control_passed": 3
+  },
+  "cases": {
+    "fast-baseline-a": {
+      "sample_count": 12,
+      "completed": true,
+      "error_lines": 0
+    },
+    "qwen-baseline-a": {
+      "sample_count": 12,
+      "completed": true,
+      "error_lines": 0
+    },
+    "fast-split-a": {
+      "sample_count": 12,
+      "completed": true,
+      "error_lines": 0
+    },
+    "fast-split-b": {
+      "sample_count": 14,
+      "completed": true,
+      "error_lines": 0
+    },
+    "fast-baseline-b": {
+      "sample_count": 14,
+      "completed": true,
+      "error_lines": 0
+    },
+    "qwen-baseline-b": {
+      "sample_count": 14,
+      "completed": true,
+      "error_lines": 0
+    }
+  },
+  "config_differences_from_old_fast_b": {
+    "fast-baseline-a": {
+      "worker_extension_cls": {
+        "baseline": "validate_model.ValidationWorker",
+        "case": "probe_decode.AuditWorker"
+      },
+      "profiler_config": {
+        "baseline": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/data/fast-low-concurrency-20260908/fast-baseline-b/profile",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": false,
+          "ignore_frontend": true,
+          "delay_iterations": 16,
+          "max_iterations": 12
+        },
+        "case": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/data/fast-low-concurrency-20260908/fast-baseline-a/profile",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": false,
+          "ignore_frontend": true,
+          "delay_iterations": 16,
+          "max_iterations": 12
+        }
+      }
+    },
+    "qwen-baseline-a": {
+      "model": {
+        "baseline": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+        "case": "/mnt/pvc/lidong1/models/Qwen3-30B-A3B-Instruct-2507"
+      },
+      "worker_extension_cls": {
+        "baseline": "validate_model.ValidationWorker",
+        "case": "probe_decode.AuditWorker"
+      },
+      "profiler_config": {
+        "baseline": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/data/fast-low-concurrency-20260908/fast-baseline-b/profile",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": false,
+          "ignore_frontend": true,
+          "delay_iterations": 16,
+          "max_iterations": 12
+        },
+        "case": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/data/fast-low-concurrency-20260908/qwen-baseline-a/profile",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": false,
+          "ignore_frontend": true,
+          "delay_iterations": 16,
+          "max_iterations": 12
+        }
+      },
+      "fast": {
+        "baseline": true,
+        "case": null
+      },
+      "kv_sharing_fast_prefill": {
+        "baseline": true,
+        "case": null
+      }
+    },
+    "fast-split-a": {
+      "worker_extension_cls": {
+        "baseline": "validate_model.ValidationWorker",
+        "case": "probe_decode.AuditWorker"
+      },
+      "profiler_config": {
+        "baseline": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/data/fast-low-concurrency-20260908/fast-baseline-b/profile",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": false,
+          "ignore_frontend": true,
+          "delay_iterations": 16,
+          "max_iterations": 12
+        },
+        "case": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/data/fast-low-concurrency-20260908/fast-split-a/profile",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": false,
+          "ignore_frontend": true,
+          "delay_iterations": 16,
+          "max_iterations": 12
+        }
+      }
+    },
+    "fast-split-b": {
+      "profiler_config": {
+        "baseline": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/data/fast-low-concurrency-20260908/fast-baseline-b/profile",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": false,
+          "ignore_frontend": true,
+          "delay_iterations": 16,
+          "max_iterations": 12
+        },
+        "case": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/data/fast-low-concurrency-20260908/fast-split-b/profile",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": false,
+          "ignore_frontend": true,
+          "delay_iterations": 16,
+          "max_iterations": 12
+        }
+      }
+    },
+    "fast-baseline-b": {},
+    "qwen-baseline-b": {
+      "model": {
+        "baseline": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+        "case": "/mnt/pvc/lidong1/models/Qwen3-30B-A3B-Instruct-2507"
+      },
+      "profiler_config": {
+        "baseline": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/data/fast-low-concurrency-20260908/fast-baseline-b/profile",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": false,
+          "ignore_frontend": true,
+          "delay_iterations": 16,
+          "max_iterations": 12
+        },
+        "case": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/data/fast-low-concurrency-20260908/qwen-baseline-b/profile",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": false,
+          "ignore_frontend": true,
+          "delay_iterations": 16,
+          "max_iterations": 12
+        }
+      },
+      "fast": {
+        "baseline": true,
+        "case": null
+      },
+      "kv_sharing_fast_prefill": {
+        "baseline": true,
+        "case": null
+      }
+    }
+  },
+  "complete_w2_same_input_hash": true,
+  "full_w2_fast_output_hash_equal": {
+    "1": [
+      false
+    ],
+    "2": [
+      true,
+      true
+    ]
+  },
+  "quality": {
+    "positions": 48,
+    "mean_kl": 0.0008410310124327525,
+    "max_kl": 0.006718033824050849,
+    "top1_equal": 47,
+    "all_finite": true,
+    "physical_batches_equal": true,
+    "passed": true
+  },
+  "pod_preserved": {
+    "uid": "505f46a3-597a-40c3-8260-d213fae60136",
+    "node": "slc01-cl02-hgx-0228",
+    "restarts": {
+      "master": 0
+    }
+  },
+  "gpu2_memory_after_mib": 0,
+  "benchmark_processes_after": 0,
+  "telemetry": {
+    "samples": 319,
+    "errors": 0,
+    "active_gpu6_or_gpu7_rows": 605,
+    "gpu2_active_clock_by_case": {
+      "fast-split-b": {
+        "samples_with_nonzero_utilization": 53,
+        "sm_mhz_min": 1530,
+        "sm_mhz_median": 1965,
+        "sm_mhz_max": 1965
+      },
+      "fast-baseline-b": {
+        "samples_with_nonzero_utilization": 94,
+        "sm_mhz_min": 1515,
+        "sm_mhz_median": 1965.0,
+        "sm_mhz_max": 1965
+      },
+      "qwen-baseline-b": {
+        "samples_with_nonzero_utilization": 53,
+        "sm_mhz_min": 1522,
+        "sm_mhz_median": 1965,
+        "sm_mhz_max": 1965
+      }
+    }
+  },
+  "limits": [
+    "Same GPU, shared node; not an exclusive-node capacity measurement.",
+    "One complete W2 run per mode/concurrency, fixed synthetic token IDs.",
+    "Fast is not bitwise; full W2 B1 greedy sequence changed.",
+    "YOCO uses KV-sharing fast-prefill; Qwen uses its standard path.",
+    "No new llm-train or Align kernel changes or expanded bitwise claim."
+  ]
+}

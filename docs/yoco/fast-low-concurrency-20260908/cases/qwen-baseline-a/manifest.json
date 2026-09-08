@@ -1,0 +1,55 @@
+{
+  "mode": "qwen",
+  "config": {
+    "model": "/mnt/pvc/lidong1/models/Qwen3-30B-A3B-Instruct-2507",
+    "trust_remote_code": true,
+    "dtype": "bfloat16",
+    "skip_tokenizer_init": true,
+    "tensor_parallel_size": 1,
+    "max_model_len": 81920,
+    "max_num_batched_tokens": 32768,
+    "max_num_seqs": 256,
+    "gpu_memory_utilization": 0.72,
+    "enable_prefix_caching": false,
+    "enable_chunked_prefill": true,
+    "seed": 0,
+    "disable_log_stats": false,
+    "attention_config": {
+      "backend": "FLASH_ATTN",
+      "flash_attn_version": 4
+    },
+    "kernel_config": {
+      "moe_backend": "triton",
+      "enable_flashinfer_autotune": false
+    },
+    "compilation_config": {
+      "cudagraph_mode": "FULL_AND_PIECEWISE",
+      "cudagraph_capture_sizes": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256
+      ]
+    },
+    "worker_extension_cls": "probe_decode.AuditWorker",
+    "profiler_config": {
+      "profiler": "torch",
+      "torch_profiler_dir": "/data/fast-low-concurrency-20260908/qwen-baseline-a/profile",
+      "torch_profiler_with_stack": false,
+      "torch_profiler_record_shapes": false,
+      "ignore_frontend": true,
+      "delay_iterations": 16,
+      "max_iterations": 12
+    }
+  },
+  "torch": "2.11.0a0+eb65b36914.nv26.02",
+  "triton": "3.8.0",
+  "cuda": "13.1",
+  "vllm_source": "/data/fast-low-concurrency-20260908/runtime-vllm/vllm/__init__.py",
+  "results": []
+}

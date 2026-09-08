@@ -1,0 +1,355 @@
+{
+  "mode": "fast",
+  "config": {
+    "model": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+    "trust_remote_code": true,
+    "dtype": "bfloat16",
+    "skip_tokenizer_init": true,
+    "tensor_parallel_size": 1,
+    "max_model_len": 81920,
+    "max_num_batched_tokens": 32768,
+    "max_num_seqs": 256,
+    "gpu_memory_utilization": 0.72,
+    "enable_prefix_caching": false,
+    "enable_chunked_prefill": true,
+    "seed": 0,
+    "disable_log_stats": false,
+    "attention_config": {
+      "backend": "FLASH_ATTN",
+      "flash_attn_version": 4
+    },
+    "kernel_config": {
+      "moe_backend": "triton",
+      "enable_flashinfer_autotune": false
+    },
+    "compilation_config": {
+      "cudagraph_mode": "FULL_AND_PIECEWISE",
+      "cudagraph_capture_sizes": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256
+      ]
+    },
+    "worker_extension_cls": "validate_model.ValidationWorker",
+    "profiler_config": {
+      "profiler": "torch",
+      "torch_profiler_dir": "/data/fast-low-concurrency-20260908/fast-baseline-b/profile",
+      "torch_profiler_with_stack": false,
+      "torch_profiler_record_shapes": false,
+      "ignore_frontend": true,
+      "delay_iterations": 16,
+      "max_iterations": 12
+    },
+    "fast": true,
+    "kv_sharing_fast_prefill": true
+  },
+  "source": "/data/fast-low-concurrency-20260908/runtime-vllm/vllm/__init__.py",
+  "torch": "2.11.0a0+eb65b36914.nv26.02",
+  "triton": "3.8.0",
+  "cuda": "13.1",
+  "results": [
+    {
+      "name": "b1-s128-o128",
+      "batch": 1,
+      "isl": 128,
+      "osl": 128,
+      "input_sha256": "67cba2771efdcbe192a992dcfcb0555b85307b40b53dcefa2b73ebd5cf697362",
+      "samples": [
+        {
+          "repeat": 0,
+          "seconds": 0.7786655826494098,
+          "completed": 1,
+          "errors": 0,
+          "output_tokens": 128,
+          "output_tok_s": 164.38379048998158,
+          "ttft_ms": 32.94038772583008,
+          "tpot_ms": 5.867737829391881,
+          "output_sha256": [
+            "54d64600df56622d0c77a9c01fad8031a657e9ec1812fca5ac7f7c1bf6e7974a"
+          ]
+        },
+        {
+          "repeat": 1,
+          "seconds": 0.777824392542243,
+          "completed": 1,
+          "errors": 0,
+          "output_tokens": 128,
+          "output_tok_s": 164.56156585890102,
+          "ttft_ms": 32.351016998291016,
+          "tpot_ms": 5.868120749635021,
+          "output_sha256": [
+            "54d64600df56622d0c77a9c01fad8031a657e9ec1812fca5ac7f7c1bf6e7974a"
+          ]
+        },
+        {
+          "repeat": 2,
+          "seconds": 0.7778214495629072,
+          "completed": 1,
+          "errors": 0,
+          "output_tokens": 128,
+          "output_tok_s": 164.56218849702452,
+          "ttft_ms": 32.45115280151367,
+          "tpot_ms": 5.867829018338459,
+          "output_sha256": [
+            "54d64600df56622d0c77a9c01fad8031a657e9ec1812fca5ac7f7c1bf6e7974a"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "b2-s128-o128",
+      "batch": 2,
+      "isl": 128,
+      "osl": 128,
+      "input_sha256": "77bb33f557e001a9d53a8adbf353e84516341d89848ddae3e92862405ecf4c80",
+      "samples": [
+        {
+          "repeat": 0,
+          "seconds": 0.9142084466293454,
+          "completed": 2,
+          "errors": 0,
+          "output_tokens": 256,
+          "output_tok_s": 280.0236652197462,
+          "ttft_ms": 37.72330284118652,
+          "tpot_ms": 6.8992226509245365,
+          "output_sha256": [
+            "54d64600df56622d0c77a9c01fad8031a657e9ec1812fca5ac7f7c1bf6e7974a",
+            "1377610e2d3ba0ad4946870a8a497a9f6c142e2e7540d3c98917092eda9b8fc0"
+          ]
+        },
+        {
+          "repeat": 1,
+          "seconds": 0.9142748229205608,
+          "completed": 2,
+          "errors": 0,
+          "output_tokens": 256,
+          "output_tok_s": 280.0033355203124,
+          "ttft_ms": 37.773966789245605,
+          "tpot_ms": 6.898072782874577,
+          "output_sha256": [
+            "54d64600df56622d0c77a9c01fad8031a657e9ec1812fca5ac7f7c1bf6e7974a",
+            "1377610e2d3ba0ad4946870a8a497a9f6c142e2e7540d3c98917092eda9b8fc0"
+          ]
+        },
+        {
+          "repeat": 2,
+          "seconds": 0.9146374315023422,
+          "completed": 2,
+          "errors": 0,
+          "output_tokens": 256,
+          "output_tok_s": 279.89232802281657,
+          "ttft_ms": 37.79315948486328,
+          "tpot_ms": 6.900959464860714,
+          "output_sha256": [
+            "54d64600df56622d0c77a9c01fad8031a657e9ec1812fca5ac7f7c1bf6e7974a",
+            "1377610e2d3ba0ad4946870a8a497a9f6c142e2e7540d3c98917092eda9b8fc0"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "b1-s65536-o128",
+      "batch": 1,
+      "isl": 65536,
+      "osl": 128,
+      "input_sha256": "c508fa00cb10a2c008d8e266d1840b1bf6284200cad307b282fbd04b2cd51956",
+      "samples": [
+        {
+          "repeat": 0,
+          "seconds": 2.5060871774330735,
+          "completed": 1,
+          "errors": 0,
+          "output_tokens": 128,
+          "output_tok_s": 51.07563741302384,
+          "ttft_ms": 931.8640232086182,
+          "tpot_ms": 12.389242634411872,
+          "output_sha256": [
+            "5a9cbcff5152641434e31f221a53decb7357e511461f97478e949926f4851d18"
+          ]
+        },
+        {
+          "repeat": 1,
+          "seconds": 2.515070466324687,
+          "completed": 1,
+          "errors": 0,
+          "output_tokens": 128,
+          "output_tok_s": 50.893206259563954,
+          "ttft_ms": 939.2421245574951,
+          "tpot_ms": 12.403963522354918,
+          "output_sha256": [
+            "5a9cbcff5152641434e31f221a53decb7357e511461f97478e949926f4851d18"
+          ]
+        },
+        {
+          "repeat": 2,
+          "seconds": 2.5081953508779407,
+          "completed": 1,
+          "errors": 0,
+          "output_tokens": 128,
+          "output_tok_s": 51.032707621914824,
+          "ttft_ms": 933.0391883850098,
+          "tpot_ms": 12.393249206127614,
+          "output_sha256": [
+            "5a9cbcff5152641434e31f221a53decb7357e511461f97478e949926f4851d18"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "b2-s65536-o128",
+      "batch": 2,
+      "isl": 65536,
+      "osl": 128,
+      "input_sha256": "ea2d5aaa08bcbaff93a5ea67538fbc55a568755779e518af4eee6b1048113a66",
+      "samples": [
+        {
+          "repeat": 0,
+          "seconds": 3.537800989113748,
+          "completed": 2,
+          "errors": 0,
+          "output_tokens": 256,
+          "output_tok_s": 72.3613342830034,
+          "ttft_ms": 1659.8718166351318,
+          "tpot_ms": 14.7012574121532,
+          "output_sha256": [
+            "132d820039a4d03fc1e92e5c08eeb640a087d1dd0f4bff64555215f1bd5645b7",
+            "3ee6888d3f7383ad96885c6ab391dfab8faf90eccaceef0c7406f74f61ce2b7f"
+          ]
+        },
+        {
+          "repeat": 1,
+          "seconds": 3.538918445818126,
+          "completed": 2,
+          "errors": 0,
+          "output_tokens": 256,
+          "output_tok_s": 72.3384853082756,
+          "ttft_ms": 1653.7389755249023,
+          "tpot_ms": 14.759823907254718,
+          "output_sha256": [
+            "132d820039a4d03fc1e92e5c08eeb640a087d1dd0f4bff64555215f1bd5645b7",
+            "3ee6888d3f7383ad96885c6ab391dfab8faf90eccaceef0c7406f74f61ce2b7f"
+          ]
+        },
+        {
+          "repeat": 2,
+          "seconds": 3.5428285067901015,
+          "completed": 2,
+          "errors": 0,
+          "output_tokens": 256,
+          "output_tok_s": 72.25864856550534,
+          "ttft_ms": 1657.5822830200195,
+          "tpot_ms": 14.763004766175833,
+          "output_sha256": [
+            "132d820039a4d03fc1e92e5c08eeb640a087d1dd0f4bff64555215f1bd5645b7",
+            "3ee6888d3f7383ad96885c6ab391dfab8faf90eccaceef0c7406f74f61ce2b7f"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "b1-s65536-o16384",
+      "batch": 1,
+      "isl": 65536,
+      "osl": 16384,
+      "input_sha256": "c508fa00cb10a2c008d8e266d1840b1bf6284200cad307b282fbd04b2cd51956",
+      "samples": [
+        {
+          "repeat": 0,
+          "seconds": 213.88592924177647,
+          "completed": 1,
+          "errors": 0,
+          "output_tokens": 16384,
+          "output_tok_s": 76.60157944041069,
+          "ttft_ms": 934.2918395996094,
+          "tpot_ms": 12.998175699629224,
+          "output_sha256": [
+            "e548bd6a2544dae33746b0f665f7ff4976d0bcdefc2be1494e1360ce2c29f339"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "b2-s65536-o16384",
+      "batch": 2,
+      "isl": 65536,
+      "osl": 16384,
+      "input_sha256": "ea2d5aaa08bcbaff93a5ea67538fbc55a568755779e518af4eee6b1048113a66",
+      "samples": [
+        {
+          "repeat": 0,
+          "seconds": 229.16611829120666,
+          "completed": 2,
+          "errors": 0,
+          "output_tokens": 32768,
+          "output_tok_s": 142.9879785211571,
+          "ttft_ms": 1658.355951309204,
+          "tpot_ms": 13.885991465361034,
+          "output_sha256": [
+            "3f44fd7507924d0a51b7d1091149dd9e947cadeafda95e99774fe4e7b1cd8e47",
+            "60b57ae498abc05a0741965a8a9c8c07f26ac021479dfbde69cd7ccde967151f"
+          ]
+        }
+      ]
+    }
+  ],
+  "quality": [
+    {
+      "name": "fixed-b1-s128",
+      "batch": 1,
+      "context": 128,
+      "forced_tokens_equal": true,
+      "input_sha256": "67cba2771efdcbe192a992dcfcb0555b85307b40b53dcefa2b73ebd5cf697362",
+      "audit": [
+        {
+          "rows": 8,
+          "all_finite": true
+        }
+      ]
+    },
+    {
+      "name": "fixed-b2-s128",
+      "batch": 2,
+      "context": 128,
+      "forced_tokens_equal": true,
+      "input_sha256": "77bb33f557e001a9d53a8adbf353e84516341d89848ddae3e92862405ecf4c80",
+      "audit": [
+        {
+          "rows": 16,
+          "all_finite": true
+        }
+      ]
+    },
+    {
+      "name": "fixed-b1-s65536",
+      "batch": 1,
+      "context": 65536,
+      "forced_tokens_equal": true,
+      "input_sha256": "c508fa00cb10a2c008d8e266d1840b1bf6284200cad307b282fbd04b2cd51956",
+      "audit": [
+        {
+          "rows": 8,
+          "all_finite": true
+        }
+      ]
+    },
+    {
+      "name": "fixed-b2-s65536",
+      "batch": 2,
+      "context": 65536,
+      "forced_tokens_equal": true,
+      "input_sha256": "ea2d5aaa08bcbaff93a5ea67538fbc55a568755779e518af4eee6b1048113a66",
+      "audit": [
+        {
+          "rows": 16,
+          "all_finite": true
+        }
+      ]
+    }
+  ]
+}
