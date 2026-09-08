@@ -23,6 +23,6 @@
 
 ## 低并发 W2 组
 
-2026-09-08 UTC建立的 [W2表](LOW_CONCURRENCY.md) 对照本轮旧Fast、恢复split-KV后的Fast和Qwen3。工作负载为65,536输入、16,384输出，并发1/2；同物理B200、BF16 TP1，每点一次完整测量，共享节点诊断。此轮修改与文档发布在vLLM仓库。
+2026-09-08 UTC建立的 [W2表](LOW_CONCURRENCY.md) 对照本轮旧Fast、恢复split-KV后的Fast和Qwen3。工作负载为65,536输入、16,384输出，并发1/2；同物理B200、BF16 TP1，每点一次完整测量，共享节点诊断。Fast代码修改在vLLM仓库；本轮报告、W2表及原始汇总同步保存到vLLM与llm-train的`fhb-dev-9-8`分支。训练仓库同时记录配套vLLM版本。
 
 机器可读当前值在 [low-concurrency/current.json](low-concurrency/current.json)，各行实际测量时间与源码、结果SHA256保存在 [low-concurrency/history](low-concurrency/history/)。更新时只替换实际重测的模式/并发行，保留其他行时间；不能混入Mooncake表。原始证据与PVC归档见 [报告](../fast-low-concurrency-20260908/REPORT.md)。
