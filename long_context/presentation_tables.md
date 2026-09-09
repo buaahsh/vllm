@@ -2,7 +2,8 @@
 
 ```text
 Node: assuring-owl-b200g4-dev-d5aab19e-master-0
-Image: buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-multigpu-20260804
+Revision: a9cd5c20724c994be085058ca26187b2353d4ac5
+Image: buaahsh/pytorch:26.02-b200-vllm-yoco-20260805
 Precision: BF16 only
 Production mode: FlashInfer, Triton MoE, async scheduling, 32K prefill budget
 ```
@@ -35,17 +36,43 @@ scaled sweep; batch 1 above is the final hybrid gate.
 
 | Deployment | Workload | Selected batch | Selected output tok/s | Mean TTFT (s) | Mean TPOT/ITL (ms) | Max-throughput batch | Max-throughput output tok/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 B200 | W1 | 16 | 903.60 | 1.653 | 17.68 | 16 | 903.60 |
-| 1 B200 | W2 | 16 | 740.59 | 9.991 | 20.97 | 24 | 811.35 |
-| 1 B200 | W3 | 16 | 642.13 | 1.294 | 20.97 | 24 | 690.70 |
-| 4 B200 | W1 | 64 | 3,721.44 | 2.069 | 17.16 | 96 | 4,836.23 |
-| 4 B200 | W2 | 64 | 3,295.66 | 13.767 | 18.55 | 96 | 3,612.73 |
-| 4 B200 | W3 | 64 | 2,568.58 | 1.097 | 21.51 | 96 | 2,813.92 |
-| 8 B200 | W1 | 128 | 7,042.67 | 2.977 | 18.13 | 192 | 8,318.24 |
-| 8 B200 | W2 | 128 | 5,803.94 | 18.989 | 20.87 | 192 | 6,704.27 |
-| 8 B200 | W3 | 128 | 4,321.22 | 1.881 | 23.67 | 192 | 4,792.22 |
+| 1 B200 | W1 | 16 | 1,001.13 | 1.597 | 15.96 | 16 | 1,001.13 |
+| 1 B200 | W2 | 16 | 807.51 | 9.148 | 19.23 | 24 | 871.01 |
+| 1 B200 | W3 | 16 | 707.80 | 1.031 | 19.47 | 24 | 741.01 |
+| 4 B200 | W1 | 64 | 4,504.14 | 1.982 | 14.18 | 96 | 5,076.77 |
+| 4 B200 | W2 | 64 | 3,550.13 | 12.209 | 17.26 | 96 | 3,800.12 |
+| 4 B200 | W3 | 64 | 2,797.76 | 1.399 | 18.55 | 96 | 3,017.81 |
+| 8 B200 | W1 | 192 | 9,908.14 | 4.150 | 19.31 | 192 | 9,908.14 |
+| 8 B200 | W2 | 128 | 6,590.00 | 18.015 | 18.30 | 192 | 7,202.03 |
+| 8 B200 | W3 | 128 | 4,633.41 | 1.407 | 23.15 | 192 | 4,970.24 |
 
-## 3. Attention backend probe
+The Router-cache update improves selected-knee output rate by 10.8%, 9.0%,
+and 10.2% on DP1 W1/W2/W3, and by 21.0%, 7.7%, and 8.9% on DP4 W1/W2/W3.
+The refreshed max-throughput probes likewise use measured end-to-end results
+rather than extrapolation from the Router microbenchmark. At DP8 batch 128,
+W1 falls 4.3% while W2 and W3 improve by 13.5% and 7.2%. Batch 192 improves
+over the prior maximum by 19.1%, 7.4%, and 3.7% on W1/W2/W3. W1 moves its knee
+to batch 192: output rate rises 47.0% over batch 128 for only 2.0% higher TPOT.
+
+## 3. vLLM versus llm-train KL validation
+
+vLLM greedily generated one complete 24-token sentence, retaining all 154,880
+log-probabilities at every step. The same prompt plus generated prefix was then
+scored by the BF16 llm-train `YOCO-MoE-30B-A3B-v2` implementation after loading
+all 266 exported parameters. The checkpoint's `universal_loop=3` is applied;
+using the preset dataclass default of one would compare a different model.
+
+> “The calm ocean at sunrise was a serene sight, with the gentle waves
+> reflecting the soft hues of the morning sky.”
+
+| Tokens | Mean KL vLLM→train | Max KL vLLM→train | Mean KL train→vLLM | Mean JS | Max generated-token logprob delta | Top-1 match |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 24 | **0.003206** | **0.013188** | **0.003210** | **0.000800** | **0.076111** | **100%** |
+
+The small non-zero divergence is consistent with different optimized BF16
+execution paths; greedy token selection agrees at every compared step.
+
+## 4. Attention backend probe
 
 Each row is one request with the listed context and exactly 256 output tokens.
 The backend A/B used the same pre-hybrid N1280 table in both modes; the final
@@ -66,7 +93,7 @@ not change the relative attention decision.
 FA4 decode TPOT is 13.7%, 40.1%, 74.4%, and 109.1% slower than FlashInfer at
 8K, 32K, 64K, and 96K respectively. Use FlashInfer.
 
-## 4. Prefill token-budget probe
+## 5. Prefill token-budget probe
 
 Attention is FlashInfer and output length is 256 in every row.
 
@@ -81,7 +108,7 @@ The 32K budget lowers TTFT by 13.6% at 64K and 13.3% at 96K. Keep 32K for
 these latency-oriented workloads; consider 8K only when high-concurrency
 prefill fairness matters more than single-request latency.
 
-## 5. Agentic prefix-cache and warmup probe
+## 6. Agentic prefix-cache and warmup probe
 
 Trace: 40 turns, average 2,925 new input tokens plus 325 output tokens per
 turn, ending at 130K tokens.
@@ -97,7 +124,7 @@ turn, ending at 130K tokens.
 
 Full warmup removes the late-JIT tail: maximum TTFT falls by 88.4%.
 
-## 6. DP1 hybrid N1280 MoE probe
+## 7. DP1 hybrid N1280 MoE probe
 
 Exact BF16 shape: E=128, N=1,280, K=3,072, top-k=8. M=1/2/4/8 use the
 runtime fallback configuration verbatim, so they are neutral by construction.
@@ -117,7 +144,7 @@ runtime fallback configuration verbatim, so they are neutral by construction.
 The hybrid improves final batch-1 output throughput versus the all-tuned table
 by 0.5% on W1, 0.5% on W2, and 1.9% on W3.
 
-## 7. Scheduler and DP8 MoE end-to-end gate
+## 8. Scheduler and DP8 MoE end-to-end gate
 
 W2, batch 8, eight B200s. These are same-node, same-image controlled rows.
 
@@ -131,7 +158,25 @@ W2, batch 8, eight B200s. These are same-node, same-image controlled rows.
 Keep async scheduling. Reject the generated DP8/N160 table despite its
 kernel-only gains; it regressed two clean end-to-end runs.
 
-## 8. Decision summary
+## 9. DP8 expert-parallel ablation
+
+Same image, node, warmup, cache isolation, and workload definitions as the
+DP8 results above. `DP+EP` adds `--enable-expert-parallel` with vLLM's
+`allgather_reducescatter` backend. Runtime logs confirm `DP*_EP*` workers and
+EP ranks. DeepEP is excluded because its binary cannot load against the
+installed NVSHMEM.
+
+| Workload | Batch | DP output tok/s | DP+EP output tok/s | Change | DP TTFT (s) | DP+EP TTFT (s) | DP TPOT/ITL (ms) | DP+EP TPOT/ITL (ms) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| W1 | 128 | 6,742.24 | 7,429.77 | **+10.2%** | 3.258 | 3.898 | 18.93 | 17.17 |
+| W1 | 192 | **9,908.14** | 9,492.48 | **-4.2%** | 4.150 | 5.033 | 19.31 | 20.15 |
+| W2 | 128 | **6,590.00** | 6,304.96 | **-4.3%** | 18.015 | 22.494 | 18.30 | 18.91 |
+| W3 | 128 | **4,633.41** | 4,276.76 | **-7.7%** | 1.407 | 1.875 | 23.15 | 23.89 |
+
+EP helps W1 at batch 128, but regresses the selected W1 batch-192 knee and
+both selected mixed/prefill knees. Keep DP-only for the production profile.
+
+## 10. Decision summary
 
 | Probe | Evidence | Decision |
 | --- | --- | --- |
@@ -142,8 +187,10 @@ kernel-only gains; it regressed two clean end-to-end runs.
 | DP1 MoE | Hybrid is fallback-identical at M=1–8 and up to 19.7% faster above it | **Package the hybrid N1280 table** |
 | Scheduler | Async/Gloo is 50.9% faster than sync/NCCL on the controlled DP8 row | **Keep async scheduling** |
 | DP8 MoE | Generated N160 regresses end-to-end output rate by 10.8–12.1% | **Keep the N160 runtime fallback** |
-| Batch knees | Selected knees are 16 / 64 / 128 for 1 / 4 / 8 B200s | **Use 24 / 96 / 192 only for max-throughput traffic** |
+| DP8 EP | EP regresses the selected W1/W2/W3 knees by 4.2%, 4.3%, and 7.7% | **Keep DP-only with the current all-gather/reduce-scatter backend** |
+| Batch knees | DP1 uses 16; DP4 uses 64; DP8 uses 192 for W1 and 128 for W2/W3 | **Use DP1 24 and DP4 96 only for max-throughput traffic** |
 
 Raw JSON and logs are retained under
-`long_context/raw/presentation-new-node-20260804` in the benchmark workspace;
-the complete scaled batch tables remain in `long_context/README.md`.
+`long_context/raw/presentation-new-node-20260804` and
+`long_context/raw/router-cache-20260805`; the complete historical scaled batch
+tables remain in `long_context/README.md`.

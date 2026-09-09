@@ -9,7 +9,9 @@ original acceptance report remains below for historical comparison.
 
 ```text
 Git branch: shaohanh/yoco-b200-longctx-multigpu-20260804
-Docker image: buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-multigpu-20260804
+Git revision: a9cd5c20724c994be085058ca26187b2353d4ac5
+Docker image: buaahsh/pytorch:26.02-b200-vllm-yoco-20260805
+Docker digest: sha256:bd9c576c664e09ca664f04b7f89bf3e0b8e46cc38c1864a8f81c4e3bf20b8dd9
 Model: /mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf
 Precision: BF16 only
 ```
@@ -17,7 +19,10 @@ Precision: BF16 only
 The production decision is FlashInfer attention, Triton MoE, TP=1, DP=1/4/8,
 32K maximum batched prefill tokens, prefix caching, chunked prefill, YOCO
 KV-sharing fast prefill, and `FULL_AND_PIECEWISE` CUDA graphs. Async scheduling
-is enabled. The observed local fused-MoE width is N1280 at DP1, N320 at DP4,
+is enabled. Expert parallelism is disabled: the controlled DP8 ablation
+regressed the selected W1/W2/W3 knees by 4.2%, 4.3%, and 7.7% with the
+all-gather/reduce-scatter backend. The observed local fused-MoE width is N1280
+at DP1, N320 at DP4,
 and N160 at DP8, so the multigpu modes must not be interpreted as isolated
 full-model replicas. In the final cold-start logs, the DP1 worker loads about
 60.62 GiB while each DP4 worker loads about 18.43 GiB. The optional DeepEP
@@ -99,58 +104,16 @@ details are intentionally kept out of the minimal inference commands.
 
 ### Start inference
 
-Set the common paths once:
+The 2026-08-05 image contains the merged YOCO runtime plus the normalized
+Router-weight cache from `4364a96501`. Set the deployment size to 1, 4, or 8
+and use the same compact command for all three modes:
 
 ```bash
-IMAGE=buaahsh/pytorch:26.02-b200-vllm-yoco-longctx-multigpu-20260804
+IMAGE=buaahsh/pytorch:26.02-b200-vllm-yoco-20260805
 MODEL=/mnt/msranlphot/shaohanh/exp/sft/30A3B-65k-muon-xiangyang_ssb_sp-rl-bx9k-hf-v1_from6ksft/0000-0800-hf
+DP_SIZE=${DP_SIZE:-8}  # 1, 4, or 8
 mkdir -p "$PWD/yoco-results"
-```
-
-One GPU:
-
-```bash
-docker run --rm --name yoco-long-dp1 --network host --ipc host \
-  --gpus '"device=0"' \
-  -v /mnt/msranlphot:/mnt/msranlphot:ro \
-  -v "$PWD/yoco-results:/results" \
-  "$IMAGE" vllm serve "$MODEL" \
-  --served-model-name yoco-v2-long --host 0.0.0.0 --port 8001 \
-  --trust-remote-code --dtype bfloat16 \
-  --attention-backend FLASHINFER --moe-backend triton \
-  --tensor-parallel-size 1 --data-parallel-size 1 \
-  --gpu-memory-utilization 0.85 --max-model-len 131072 \
-  --max-num-batched-tokens 32768 --max-num-seqs 128 \
-  --enable-prefix-caching --enable-chunked-prefill --kv-sharing-fast-prefill \
-  --enable-auto-tool-choice --tool-call-parser agens --reasoning-parser agens \
-  --async-scheduling \
-  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
-```
-
-Four GPUs:
-
-```bash
-docker run --rm --name yoco-long-dp4 --network host --ipc host \
-  --gpus '"device=0,1,2,3"' \
-  -v /mnt/msranlphot:/mnt/msranlphot:ro \
-  -v "$PWD/yoco-results:/results" \
-  "$IMAGE" vllm serve "$MODEL" \
-  --served-model-name yoco-v2-long --host 0.0.0.0 --port 8001 \
-  --trust-remote-code --dtype bfloat16 \
-  --attention-backend FLASHINFER --moe-backend triton \
-  --tensor-parallel-size 1 --data-parallel-size 4 \
-  --gpu-memory-utilization 0.85 --max-model-len 131072 \
-  --max-num-batched-tokens 32768 --max-num-seqs 128 \
-  --enable-prefix-caching --enable-chunked-prefill --kv-sharing-fast-prefill \
-  --enable-auto-tool-choice --tool-call-parser agens --reasoning-parser agens \
-  --async-scheduling \
-  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
-```
-
-One eight-GPU B200 node:
-
-```bash
-docker run --rm --name yoco-long-dp8 --network host --ipc host \
+docker run --rm --name "yoco-long-dp${DP_SIZE}" --network host --ipc host \
   --gpus all \
   -v /mnt/msranlphot:/mnt/msranlphot:ro \
   -v "$PWD/yoco-results:/results" \
@@ -158,7 +121,7 @@ docker run --rm --name yoco-long-dp8 --network host --ipc host \
   --served-model-name yoco-v2-long --host 0.0.0.0 --port 8001 \
   --trust-remote-code --dtype bfloat16 \
   --attention-backend FLASHINFER --moe-backend triton \
-  --tensor-parallel-size 1 --data-parallel-size 8 \
+  --tensor-parallel-size 1 --data-parallel-size "$DP_SIZE" \
   --gpu-memory-utilization 0.85 --max-model-len 131072 \
   --max-num-batched-tokens 32768 --max-num-seqs 128 \
   --enable-prefix-caching --enable-chunked-prefill --kv-sharing-fast-prefill \
@@ -235,6 +198,54 @@ throughput, mean/P95 TTFT, and mean TPOT. The W3 JSON additionally reports
 logical incremental prefill throughput, generation throughput, prefix-cache
 hit rate, queue depth, KV use, and GPU telemetry.
 
+### Validate vLLM against llm-train
+
+For the distribution-level check, start the DP1 command above with the extra
+flag `--max-logprobs 154880`. Then run
+`tools/yoco_serving/capture_kl_reference.py` against the service to greedily
+generate a sentence while retaining the complete output distribution at every
+step:
+
+```bash
+python tools/yoco_serving/capture_kl_reference.py \
+  --tokenizer "$MODEL" \
+  --output yoco-results/kl/vllm-reference-24.npz
+```
+
+Score the saved prompt and generated prefix from the `llm/` directory of
+`llm-train` using its `compare_vllm_logprobs.py` helper and the same exported
+checkpoint:
+
+```bash
+python compare_vllm_logprobs.py \
+  --model-dir "$MODEL" \
+  --reference /path/to/vllm-reference-24.npz \
+  --output /path/to/report-24.json
+```
+
+The current llm-train checkout requires NNScaler branch `li/ep-cp`. The
+scorer loads all 266 parameters and takes architecture fields from the export;
+in particular, this checkpoint has `universal_loop=3`. The model head has
+154,880 rows although the tokenizer length is 154,860, so both capture and KL
+must use the model vocabulary rather than `len(tokenizer)`.
+
+The 24-token greedy completion was:
+
+> “The calm ocean at sunrise was a serene sight, with the gentle waves
+> reflecting the soft hues of the morning sky.”
+
+| Metric | Result |
+| --- | ---: |
+| Mean KL, vLLM to llm-train | 0.0032059455 |
+| Max KL, vLLM to llm-train | 0.0131883621 |
+| Mean KL, llm-train to vLLM | 0.0032098759 |
+| Mean Jensen-Shannon divergence | 0.0008002063 |
+| Max generated-token logprob delta | 0.0761106 |
+| Top-1 agreement | 100% |
+
+The reference NPZ and detailed per-token JSON are archived under
+`long_context/raw/router-cache-20260805/kl/`.
+
 ### Scaled end-to-end results
 
 The tables in this subsection are generated from the detailed JSON described
@@ -251,7 +262,7 @@ are:
 | --- | ---: | ---: | ---: | --- |
 | One B200 | 16 | 16 | 16 | W2/W3 batch 24 |
 | Four B200s | 64 | 64 | 64 | Batch 96 |
-| One eight-B200 node | 128 | 128 | 128 | Batch 192 |
+| One eight-B200 node | 192 | 128 | 128 | Batch 192 |
 
 These are starting points, not hard request limits. Use the detailed TTFT and
 TPOT/ITL columns in the report to choose a lower batch for latency-sensitive

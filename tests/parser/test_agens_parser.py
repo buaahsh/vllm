@@ -97,6 +97,24 @@ def test_agens_reasoning_parser_declares_text_end_marker():
     assert AgensReasoningParser.additional_stop_strings == ("<|end|>",)
 
 
+def test_streaming_strips_delayed_reasoning_end_text():
+    class FakeReasoningParser:
+        reasoning_end_str = "</think>"
+
+    parser = _make_agens_parser()
+    parser._reasoning_parser = FakeReasoningParser()
+    parser._pending_reasoning_end_text = None
+
+    assert parser._split_delayed_reasoning_end('answer"</') == (
+        'answer"',
+        "</think>",
+    )
+    assert parser._strip_delayed_reasoning_end_text("t") == ""
+    end_text = FakeReasoningParser.reasoning_end_str
+    assert parser._strip_delayed_reasoning_end_text(end_text[3:]) == ""
+    assert parser._strip_delayed_reasoning_end_text("\nHello") == "\nHello"
+
+
 def test_responses_emits_compound_reasoning_and_tool_delta():
     processor = SimpleStreamingEventProcessor()
     delta = DeltaMessage(
