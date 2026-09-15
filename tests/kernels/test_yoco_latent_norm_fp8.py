@@ -10,17 +10,13 @@ import torch
 
 from vllm.config import VllmConfig, set_current_vllm_config
 from vllm.config.quantization import resolve_quantization_config
-from vllm.distributed import (
-    cleanup_dist_env_and_memory,
-    init_distributed_environment,
-    initialize_model_parallel,
-)
 from vllm.model_executor.layers.linear import ReplicatedLinear
 from vllm.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
 from vllm.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8_packed_for_deepgemm,
 )
-from vllm.model_executor.models.yoco import RMSNorm, YOCOLatentOutputTransform
+from vllm.model_executor.layers.yoco_moe import YOCOLatentOutputTransform
+from vllm.model_executor.layers.yoco_ops.norm import RMSNorm
 from vllm.platforms import current_platform
 from vllm.utils.deep_gemm import is_deep_gemm_e8m0_used
 from vllm.utils.torch_utils import set_default_torch_dtype
@@ -45,7 +41,9 @@ def inputs(rows, dtype, magnitude=1.0):
 
 
 def reference(x, norm):
-    return per_token_group_quant_fp8_packed_for_deepgemm(norm(x), 128, use_ue8m0=True)
+    return per_token_group_quant_fp8_packed_for_deepgemm(
+        norm(x), 128, eps=1e-4, use_ue8m0=True
+    )
 
 
 def equal(actual, expected):
@@ -94,25 +92,8 @@ def test_norm_fp8_graph_reads_updated_input_and_affine_weight():
         equal(actual, reference(x, norm))
 
 
-@pytest.fixture(scope="module")
-def parallel_group(tmp_path_factory):
-    path = tmp_path_factory.mktemp("lnorm-tp") / "init"
-    with set_current_vllm_config(VllmConfig()):
-        try:
-            init_distributed_environment(
-                world_size=1,
-                rank=0,
-                local_rank=0,
-                distributed_init_method=f"file://{path}",
-            )
-            initialize_model_parallel(tensor_model_parallel_size=1)
-            yield
-        finally:
-            cleanup_dist_env_and_memory()
-
-
 @pytest.fixture
-def projection(parallel_group):
+def projection(dist_init):
     runtime = VllmConfig()
     runtime.model_config = SimpleNamespace(
         dtype=torch.bfloat16, hf_text_config=SimpleNamespace(model_type="yoco")

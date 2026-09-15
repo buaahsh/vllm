@@ -124,6 +124,20 @@ class FixFunctionalizationPass(VllmInductorPass):
                     5: "scale_out",
                 }
                 self.defunctionalize(graph, node, mutated_args)
+            elif (
+                hasattr(
+                    torch.ops.vllm,
+                    "flashinfer_fused_add_rms_norm_nvfp4_quant",
+                )
+                and at_target
+                == torch.ops.vllm.flashinfer_fused_add_rms_norm_nvfp4_quant.default
+            ):
+                mutated_args = {
+                    1: "result",
+                    2: "result_block_scale",
+                    3: "residual",
+                }
+                self.defunctionalize(graph, node, mutated_args)
             # For some reason we need to specify the args for both
             # silu_and_mul and silu_and_mul_quant. The kwargs
             # pathway gets the wrong answer.
@@ -276,9 +290,11 @@ class FixFunctionalizationPass(VllmInductorPass):
         """
         Replace mutated getitem users of the auto-functionalized node with the
         mutated arguments.
-        :param node: The auto-functionalized node
-        :param mutated_args: The mutated arguments, indexed by getitem index.
-        If the value of an arg is a string, `node.kwargs[arg]` is used.
+
+        Args:
+            node: The auto-functionalized node
+            mutated_args: The mutated arguments, indexed by getitem index.
+                If the value of an arg is a string, `node.kwargs[arg]` is used.
         """
         for idx, user in self.getitem_users(node).items():
             # Some functionalized nodes may return both a result at getitem[0]
@@ -317,10 +333,11 @@ class FixFunctionalizationPass(VllmInductorPass):
         as node.kwargs cannot be used.
         See https://github.com/pytorch/pytorch/blob/a00faf440888ffb724bad413f329a49e2b6388e7/torch/_inductor/lowering.py#L351
 
-        :param graph: Graph to insert the defunctionalized node into
-        :param node: The auto-functionalized node to defunctionalize
-        :param args: If we cannot use kwargs, specify args directly.
-        If an arg is a string, `node.kwargs[arg]` is used.
+        Args:
+            graph: Graph to insert the defunctionalized node into
+            node: The auto-functionalized node to defunctionalize
+            args: If we cannot use kwargs, specify args directly.
+                If an arg is a string, `node.kwargs[arg]` is used.
         """  # noqa: E501
         assert is_func(node, auto_functionalized), (
             f"node must be auto-functionalized, is {node} instead"

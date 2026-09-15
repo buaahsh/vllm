@@ -31,7 +31,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def dense_down():
     runtime = VllmConfig()
     runtime.model_config = SimpleNamespace(
@@ -44,6 +44,7 @@ def dense_down():
             weight_shape=(3072, 1280),
             input_dtype=torch.bfloat16,
             out_dtype=torch.bfloat16,
+            group_quant_eps=1e-4,
         )
         kernel = DeepGemmFp8BlockScaledMMKernel(config)
         torch.manual_seed(9220)
@@ -75,7 +76,7 @@ def assert_small_error(actual, expected):
 
 
 @pytest.mark.parametrize("rows", [1, 2, 3, 8, 16, 17, 128, 513])
-@pytest.mark.parametrize("magnitude", [1.0, 16.0])
+@pytest.mark.parametrize("magnitude", [0.003, 1.0, 16.0])
 def test_shared_swiglu_quantization_and_dense_gemm(dense_down, rows, magnitude):
     layer, method, act = dense_down
     torch.manual_seed(9221 + rows)
@@ -85,7 +86,7 @@ def test_shared_swiglu_quantization_and_dense_gemm(dense_down, rows, magnitude):
     assert_small_error(actual, expected)
     # Fake tensor metadata includes the noncontiguous, TMA-aligned scale stride.
     torch.library.opcheck(
-        torch.ops.vllm.silu_mul_quant_fp8_packed.default,
+        torch.ops.vllm.yoco_silu_mul_quant_fp8_packed.default,
         (x, 10.0),
         test_utils=("test_schema", "test_faketensor"),
     )
@@ -194,11 +195,11 @@ def test_shared_expert_uses_component_precision(dense_down, monkeypatch, precisi
     from functools import partial
 
     from tests.model_executor.test_yoco_fast_precision import quant_config
+    from vllm.model_executor.layers import yoco_moe as yoco
     from vllm.model_executor.layers.linear import (
         MergedColumnParallelLinear,
         RowParallelLinear,
     )
-    from vllm.model_executor.models import yoco
 
     monkeypatch.setattr(yoco, "get_tensor_model_parallel_world_size", lambda: 1)
     monkeypatch.setattr(
@@ -242,3 +243,27 @@ def test_shared_expert_uses_component_precision(dense_down, monkeypatch, precisi
             x = torch.randn(rows, 3072)
             expected = shared.down_proj(shared.act_fn(shared.gate_up_proj(x)[0]))[0]
             assert_small_error(shared(x), expected)
+
+
+@pytest.mark.parametrize("model_type", ["yoco", "qwen3_moe"])
+def test_linear_factory_keeps_yoco_amax_floor_scoped(model_type):
+    from vllm.model_executor.kernels.linear import init_fp8_linear_kernel
+
+    runtime = VllmConfig()
+    runtime.model_config = SimpleNamespace(
+        dtype=torch.bfloat16, hf_text_config=SimpleNamespace(model_type=model_type)
+    )
+    runtime.compilation_config.custom_ops = ["all"]
+    with set_current_vllm_config(runtime):
+        kernel = init_fp8_linear_kernel(
+            activation_quant_key=kFp8Dynamic128Sym,
+            weight_quant_key=kFp8Static128BlockSym,
+            input_dtype=torch.bfloat16,
+            out_dtype=torch.bfloat16,
+            weight_shape=(128, 128),
+            force_kernel=DeepGemmFp8BlockScaledMMKernel,
+        )
+        tiny = torch.full((2, 128), 1e-10, dtype=torch.bfloat16, device="cuda")
+        quantized, _ = kernel.quant_fp8(tiny)
+    # The old YOCO/training floor flushes these groups; upstream keeps them.
+    assert bool((quantized.float() == 0).all()) == (model_type == "yoco")

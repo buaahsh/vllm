@@ -11,17 +11,12 @@ import torch.nn.functional as F
 
 from vllm.config import VllmConfig, set_current_vllm_config
 from vllm.config.quantization import resolve_quantization_config
-from vllm.distributed import (
-    cleanup_dist_env_and_memory,
-    init_distributed_environment,
-    initialize_model_parallel,
-)
 from vllm.model_executor.layers.linear import ReplicatedLinear
 from vllm.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
 from vllm.model_executor.layers.quantization.online.fp8 import (
     Fp8PerBlockOnlineLinearMethod,
 )
-from vllm.model_executor.models.yoco import _maybe_build_yoco_quant_config
+from vllm.model_executor.models.yoco_config import _maybe_build_yoco_quant_config
 from vllm.platforms import current_platform
 from vllm.utils.deep_gemm import is_deep_gemm_e8m0_used
 from vllm.utils.torch_utils import set_default_torch_dtype
@@ -30,23 +25,6 @@ pytestmark = pytest.mark.skipif(
     not current_platform.is_device_capability(100) or not is_deep_gemm_e8m0_used(),
     reason="requires B200 DeepGEMM UE8M0",
 )
-
-
-@pytest.fixture(scope="module", autouse=True)
-def single_rank_parallel_group(tmp_path_factory):
-    store = tmp_path_factory.mktemp("latent-fp8-tp") / "init"
-    with set_current_vllm_config(VllmConfig()):
-        try:
-            init_distributed_environment(
-                world_size=1,
-                rank=0,
-                local_rank=0,
-                distributed_init_method=f"file://{store}",
-            )
-            initialize_model_parallel(tensor_model_parallel_size=1)
-            yield
-        finally:
-            cleanup_dist_env_and_memory()
 
 
 def _quantized_reference(x, weight):
@@ -80,7 +58,7 @@ def _assert_gemm_matches(actual, expected):
 @pytest.fixture(
     params=[(3072, 1024, "fc1_latent_proj"), (1024, 3072, "fc2_latent_proj")]
 )
-def latent_linear(request):
+def latent_linear(request, dist_init):
     k, n, name = request.param
     runtime = VllmConfig()
     runtime.model_config = SimpleNamespace(

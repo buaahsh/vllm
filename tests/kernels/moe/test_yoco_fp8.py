@@ -11,12 +11,18 @@ from tests.kernels.moe.utils import (
     make_test_weights,
     modular_triton_fused_moe,
 )
+from vllm.config.yoco import YocoMoEPolicy
 from vllm.model_executor.layers.fused_moe.activation import MoEActivation
 from vllm.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
 from vllm.model_executor.layers.fused_moe.experts import triton_moe
+from vllm.model_executor.layers.yoco_ops import triton_moe as yoco_triton_moe
+from vllm.platforms import current_platform
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA FP8")
+@pytest.mark.skipif(
+    not current_platform.is_cuda() or not current_platform.has_device_capability(89),
+    reason="requires CUDA E4M3 tensor cores (SM89+)",
+)
 @pytest.mark.parametrize("tokens", [1, 7, 33])
 @pytest.mark.parametrize("block_shape", [None, [128, 128]])
 def test_fp8_triton_weights_before_quantization(
@@ -32,10 +38,17 @@ def test_fp8_triton_weights_before_quantization(
         block_shape=block_shape,
     )
     quant = fp8_w8a8_moe_quant_config(w1_scale=s1, w2_scale=s2, block_shape=block_shape)
-    config = make_dummy_moe_config(experts, topk, hidden, intermediate)
+    config = make_dummy_moe_config(
+        num_experts=experts,
+        experts_per_token=topk,
+        hidden_dim=hidden,
+        intermediate_size=intermediate,
+    )
+    config.swiglu_limit = 10.0
+    config.apply_router_weight_before_w2 = True
+    config.yoco = YocoMoEPolicy(enabled=True)
+    quant.gemm1_clamp_limit = 10.0
     moe = modular_triton_fused_moe(config, quant)
-    moe.fused_experts.swiglu_limit = 10.0
-    moe.fused_experts.apply_router_weight_before_w2 = True
     x = (
         torch.randn(tokens, hidden, device="cuda", dtype=torch.bfloat16) * 32
     ).contiguous()
@@ -60,8 +73,9 @@ def test_fp8_triton_weights_before_quantization(
         observed["w2_input"] = a.clone()
         return quantize(a, *args, **kwargs)
 
-    monkeypatch.setattr(triton_moe, "invoke_fused_moe_triton_kernel", observe_gemm)
-    monkeypatch.setattr(triton_moe, "moe_kernel_quantize_input", observe_quantize)
+    for module in (triton_moe, yoco_triton_moe):
+        monkeypatch.setattr(module, "invoke_fused_moe_triton_kernel", observe_gemm)
+        monkeypatch.setattr(module, "moe_kernel_quantize_input", observe_quantize)
     output = moe.apply(
         hidden_states=x,
         w1=w1,
@@ -82,7 +96,8 @@ def test_fp8_triton_weights_before_quantization(
     assert torch.isfinite(output).all()
 
     # An ordinary FP8 MoE without the YOCO flag retains epilogue weighting.
-    moe.fused_experts.apply_router_weight_before_w2 = False
+    config.apply_router_weight_before_w2 = False
+    config.yoco = YocoMoEPolicy()
     moe.apply(
         hidden_states=x,
         w1=w1,
@@ -95,3 +110,28 @@ def test_fp8_triton_weights_before_quantization(
         apply_router_weight_on_input=False,
     )
     assert observed["weight_in_epilogue"] is True
+
+
+@pytest.mark.skipif(
+    not current_platform.is_cuda() or not current_platform.has_device_capability(89),
+    reason="requires CUDA E4M3 tensor cores (SM89+)",
+)
+def test_moe_input_floor_is_scoped_without_mutating_shared_quant_config():
+    from vllm.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+    from vllm.model_executor.layers.fused_moe.prepare_finalize.no_dp_ep import (
+        _quantize_input,
+    )
+
+    quant = fp8_w8a8_moe_quant_config(
+        w1_scale=torch.ones(1, 2, 1, device="cuda"),
+        w2_scale=torch.ones(1, 1, 1, device="cuda"),
+        block_shape=[128, 128],
+    )
+    tiny = torch.full((2, 128), 1e-10, dtype=torch.bfloat16, device="cuda")
+    for enabled in (True, False):
+        config = make_dummy_moe_config(hidden_dim=128, intermediate_size=128)
+        config.yoco = YocoMoEPolicy(enabled=enabled)
+        experts = TritonExperts(config, quant)
+        quantized, _ = _quantize_input(tiny, experts.quant_config)
+        assert bool((quantized.float() == 0).all()) == enabled
+    assert quant.group_quant_eps == 1e-10

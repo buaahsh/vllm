@@ -37,7 +37,9 @@ def test_latent_linear_precision_and_explicit_ignore(
         "get_current_vllm_config",
         lambda: SimpleNamespace(model_config=SimpleNamespace(dtype=torch.bfloat16)),
     )
-    args = deepcopy(resolve_quantization_config(preset, None))
+    args = deepcopy(
+        resolve_quantization_config(preset, {} if preset == "mxfp8" else None)
+    )
     assert args is not None
     prefix = f"model.layers.0.mlp.{projection}"
     if ignored:
@@ -108,7 +110,9 @@ def test_fp8_backend_respects_expert_precision(
 
 
 @pytest.mark.parametrize("quantized_head", [False, True])
-def test_fp8_model_keeps_only_unquantized_fast_lm_head(monkeypatch, quantized_head):
+def test_fp8_model_keeps_only_unquantized_fast_lm_head(
+    monkeypatch, quantized_head, default_vllm_config
+):
     class DummyModel(torch.nn.Module):
         execution_mode = "fast"
         make_empty_intermediate_tensors = None

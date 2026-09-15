@@ -9,7 +9,7 @@ import regex as re
 import torch
 
 from vllm.model_executor.layers import yoco_bf16_math as math16
-from vllm.model_executor.models.yoco import RMSNorm
+from vllm.model_executor.layers.yoco_ops.norm import RMSNorm
 from vllm.platforms import current_platform
 from vllm.v1.sample.yoco_bf16 import YocoBf16GreedySampler
 

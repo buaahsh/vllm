@@ -3,8 +3,8 @@
 """Agens unified parser, adapted from vLLM's DelegatingParser."""
 # Reason: preserve trailing and explicitly empty reasoning at the tool boundary.
 
+from vllm.entrypoints.generate.base.protocol import DeltaMessage
 from vllm.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from vllm.entrypoints.openai.engine.protocol import DeltaMessage
 from vllm.entrypoints.openai.responses.protocol import ResponsesRequest
 from vllm.parser.abstract_parser import DelegatingParser
 from vllm.reasoning.agens_reasoning_parser import AgensReasoningParser
@@ -69,6 +69,8 @@ class AgensParser(DelegatingParser):
         delta_token_ids: list[int],
         request: ChatCompletionRequest | ResponsesRequest,
         prompt_token_ids: list[int] | None = None,
+        *,
+        finished: bool = False,
     ) -> DeltaMessage | None:
         delta_text = self._strip_delayed_reasoning_end_text(delta_text)
         state = self._stream_state
@@ -100,6 +102,7 @@ class AgensParser(DelegatingParser):
             delta_token_ids,
             request,
             prompt_token_ids=prompt_token_ids,
+            finished=finished,
         )
         if isinstance(request, ResponsesRequest):
             if reasoning_delta is None:

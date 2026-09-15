@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+from copy import copy
 from dataclasses import replace
 
 import torch
@@ -95,8 +96,9 @@ class TritonOrDeepGemmExperts(FallbackExperts):
             _w1=replace(self.quant_config._w1, scale=cache[0]),
             _w2=replace(self.quant_config._w2, scale=cache[1]),
         )
-        self.fallback_experts = TritonExperts(self.moe_config, quant)
-        self.fallback_experts.yoco_fp8_decode_aligned = True
+        fallback_config = copy(self.moe_config)
+        fallback_config.yoco = replace(self.moe_config.yoco, fp8_decode_aligned=True)
+        self.fallback_experts = TritonExperts(fallback_config, quant)
         self._yoco_fp8_decode_limit = max_tokens
         return True
 

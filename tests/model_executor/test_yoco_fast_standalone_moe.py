@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+from dataclasses import replace
 from math import prod
 from types import SimpleNamespace
 
 import pytest
 import torch
 
+from vllm.config.yoco import YocoMoEPolicy
 from vllm.model_executor.layers.fused_moe.activation import MoEActivation
 from vllm.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
     FlashInferExperts,
 )
-from vllm.model_executor.models import yoco
+from vllm.model_executor.models import yoco_config as yoco
 
 
 def configs():
@@ -124,7 +126,12 @@ def test_standalone_gates(monkeypatch, case):
 
 def fake_experts(max_tokens):
     return SimpleNamespace(
-        yoco_triton_fallback_max_tokens=max_tokens,
+        moe_config=SimpleNamespace(
+            yoco=replace(
+                YocoMoEPolicy.for_mode("fast"), triton_fallback_max_tokens=max_tokens
+            ),
+            swiglu_limit=10.0,
+        ),
         quant_config=SimpleNamespace(weight_quant_dtype=None),
         quant_dtype=None,
         out_dtype=torch.bfloat16,
@@ -165,17 +172,17 @@ def test_large_fallback_borrows_workspace_and_preserves_fast_policy(monkeypatch)
 
     calls = []
     fallback = SimpleNamespace(apply=lambda *args: calls.append(args))
-    monkeypatch.setattr(triton_moe, "TritonExperts", lambda *args: fallback)
+
+    def make_fallback(config, quant):
+        fallback.moe_config = config
+        return fallback
+
+    monkeypatch.setattr(triton_moe, "TritonExperts", make_fallback)
     experts = fake_experts(1023)
     experts.num_experts = 128
     experts.w1_bias = experts.w2_bias = None
-    experts.moe_config = object()
     experts._yoco_triton_fallback = None
     experts._yoco_triton_workspace13 = experts._yoco_triton_workspace2 = None
-    experts.swiglu_limit = 10.0
-    experts.yoco_fast_w13_config = experts.yoco_separate_w2_config = (
-        experts.yoco_fast_moe_sum
-    ) = True
     output = torch.empty(64, 64, dtype=torch.bfloat16)
     w1 = torch.empty(128, 128, 64, dtype=torch.bfloat16)
     w2 = torch.empty(128, 64, 64, dtype=torch.bfloat16)
@@ -202,9 +209,12 @@ def test_large_fallback_borrows_workspace_and_preserves_fast_policy(monkeypatch)
     assert calls[0][11] is work13 and calls[0][12] is work2
     assert experts._yoco_triton_workspace13 is None
     assert experts._yoco_triton_workspace2 is None
-    assert fallback.yoco_swapped_w13
-    assert fallback.yoco_fast_w13_config and fallback.yoco_separate_w2_config
-    assert fallback.yoco_fast_moe_sum
+    assert fallback.moe_config.yoco.swapped_w13
+    assert (
+        fallback.moe_config.yoco.fast_w13_config
+        and fallback.moe_config.yoco.separate_w2_config
+    )
+    assert fallback.moe_config.yoco.fast_moe_sum
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
@@ -225,13 +235,19 @@ def test_hybrid_clamp_and_aliased_workspace_against_reference(monkeypatch, rows)
     )
     torch.manual_seed(20260905)
     experts, hidden, ffn, top_k = 128, 128, 128, 8
-    config = make_dummy_moe_config(experts, top_k, hidden, ffn)
-    hybrid = FlashInferExperts(config, FUSED_MOE_UNQUANTIZED_CONFIG)
-    hybrid.yoco_triton_fallback_max_tokens = 1023
-    hybrid.swiglu_limit = 0.5
-    hybrid.yoco_fast_w13_config = hybrid.yoco_separate_w2_config = (
-        hybrid.yoco_fast_moe_sum
-    ) = True
+    config = make_dummy_moe_config(
+        num_experts=experts,
+        experts_per_token=top_k,
+        hidden_dim=hidden,
+        intermediate_size=ffn,
+    )
+    config.yoco = replace(
+        YocoMoEPolicy.for_mode("fast"), triton_fallback_max_tokens=1023
+    )
+    config.swiglu_limit = 0.5
+    hybrid = FlashInferExperts(
+        config, replace(FUSED_MOE_UNQUANTIZED_CONFIG, gemm1_clamp_limit=0.5)
+    )
     x = torch.randn(rows, hidden, device="cuda", dtype=torch.bfloat16) * 3
     w13 = (
         torch.randn(experts, 2 * ffn, hidden, device="cuda", dtype=torch.bfloat16)

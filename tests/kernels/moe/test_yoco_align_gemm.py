@@ -8,10 +8,12 @@ import pytest
 import torch
 
 from tests.kernels.moe.utils import make_dummy_moe_config
+from vllm.config.yoco import YocoMoEPolicy
 from vllm.model_executor.layers.fused_moe.activation import MoEActivation
 from vllm.model_executor.layers.fused_moe.config import FUSED_MOE_UNQUANTIZED_CONFIG
 from vllm.model_executor.layers.fused_moe.experts import triton_moe
 from vllm.model_executor.layers.yoco_align_moe import envs
+from vllm.model_executor.layers.yoco_ops import triton_moe as yoco_triton_moe
 from vllm.platforms import current_platform
 from vllm.triton_utils import triton
 
@@ -56,12 +58,15 @@ def test_modular_align_gemm_stages_and_single_token(
     )
     probs = torch.rand(rows, 8, device="cuda")
     probs /= probs.sum(-1, keepdim=True)
-    expert = triton_moe.TritonExperts(
-        make_dummy_moe_config(128, 8, 1024, 3840), FUSED_MOE_UNQUANTIZED_CONFIG
+    moe_config = make_dummy_moe_config(
+        num_experts=128,
+        experts_per_token=8,
+        hidden_dim=1024,
+        intermediate_size=3840,
     )
-    expert.yoco_align_weighted_swiglu = True
-    expert.yoco_align_moe_sum = True
-    expert.swiglu_limit = 0.5 if skew else 10.0
+    moe_config.yoco = YocoMoEPolicy.for_mode("align")
+    moe_config.swiglu_limit = 0.5 if skew else 10.0
+    expert = triton_moe.TritonExperts(moe_config, FUSED_MOE_UNQUANTIZED_CONFIG)
     cfg = dict(
         BLOCK_SIZE_M=128,
         BLOCK_SIZE_N=64,
@@ -95,7 +100,7 @@ def test_modular_align_gemm_stages_and_single_token(
         original(*args, **kwargs)
         snapshots.append((args[0].clone(), args[2].clone(), args[11].copy()))
 
-    monkeypatch.setattr(triton_moe, "invoke_fused_moe_triton_kernel", traced)
+    monkeypatch.setattr(yoco_triton_moe, "invoke_fused_moe_triton_kernel", traced)
 
     def run(inputs, route_ids, routing_weights):
         m = len(inputs)

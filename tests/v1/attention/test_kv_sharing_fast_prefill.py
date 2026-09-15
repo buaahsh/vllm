@@ -49,6 +49,7 @@ def _make_common_metadata(query_len: int) -> CommonAttentionMetadata:
         slot_mapping=torch.arange(query_len, dtype=torch.int64),
         logits_indices_padded=torch.tensor([query_len - 1], dtype=torch.int64),
         num_logits_indices=1,
+        max_logits_per_req=1,
     )
 
 

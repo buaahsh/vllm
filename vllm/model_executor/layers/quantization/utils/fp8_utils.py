@@ -14,6 +14,7 @@ import vllm.envs as envs
 from vllm import _custom_ops as ops
 from vllm.logger import init_logger
 from vllm.model_executor.layers.quantization.utils.quant_utils import (
+    amax_for_moe_activation_quant,
     get_fp8_min_max,
 )
 from vllm.model_executor.layers.quantization.utils.w8a8_utils import (
@@ -33,9 +34,14 @@ from vllm.utils.deep_gemm import (
     is_deep_gemm_e8m0_used,
     transform_sf_into_required_layout,
 )
-from vllm.utils.torch_utils import direct_register_custom_op
+from vllm.utils.platform_utils import get_device_name_as_file_name
 
 logger = init_logger(__name__)
+
+# Pre-fill value for scale parameters whose shards load independently. The
+# shards are combined with .max(), so an unloaded shard must never win; the
+# smallest representable float32 guarantees that.
+FP8_SCALE_SENTINEL = torch.finfo(torch.float32).min
 
 
 def is_fp8(x: torch.dtype | torch.Tensor) -> bool:
@@ -44,37 +50,19 @@ def is_fp8(x: torch.dtype | torch.Tensor) -> bool:
     return x == torch.float8_e4m3fn or x == torch.float8_e4m3fnuz
 
 
-def _triton_per_token_group_quant_fp8_impl(
-    x: torch.Tensor,
-    group_size: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    return per_token_group_quant_fp8(
-        x, group_size, column_major_scales=False, use_ue8m0=False
+def get_fp8_block_weight_scale(layer: torch.nn.Module) -> torch.Tensor | None:
+    """Return the block-FP8 weight scale for supported quant methods."""
+    # Local import avoids a circular import: quark_w8a8_fp8 imports this module.
+    from vllm.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8 import (
+        QuarkW8A8Fp8PerBlock,
     )
 
-
-def _triton_per_token_group_quant_fp8_fake(
-    x: torch.Tensor,
-    group_size: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    M, N = x.shape
-    x_fp8 = torch.empty((M, N), dtype=current_platform.fp8_dtype(), device=x.device)
-    out_bs = torch.empty(
-        (
-            M,
-            (N + group_size - 1) // group_size,
-        ),
-        dtype=torch.float32,
-        device=x.device,
-    )
-    return x_fp8, out_bs
-
-
-direct_register_custom_op(
-    "triton_per_token_group_quant_fp8",
-    _triton_per_token_group_quant_fp8_impl,
-    fake_impl=_triton_per_token_group_quant_fp8_fake,
-)
+    if isinstance(
+        getattr(layer, "scheme", None),
+        QuarkW8A8Fp8PerBlock,
+    ):
+        return getattr(layer, "weight_scale", None)
+    return getattr(layer, "weight_scale_inv", None)
 
 
 def input_to_float8(
@@ -154,242 +142,109 @@ def _silu_mul_quant_fp8_packed_kernel(
     input_ptr,
     output_q_ptr,
     output_scale_ptr,
-    row_weights_ptr,
-    negative_row_weights_ptr,
-    row_indices_ptr,
     M,
-    NUM_ROWS,
     input_stride_m,
     output_q_stride_m,
-    output_scale_stride_m,
     output_scale_stride_k,
     clamp_limit,
+    alpha,
+    beta,
     N: tl.constexpr,
-    NUM_GROUPS: tl.constexpr,
+    GROUPS_PER_ROW: tl.constexpr,
+    PACKS_PER_ROW: tl.constexpr,
     fp8_min: tl.constexpr,
     fp8_max: tl.constexpr,
     GROUP_SIZE: tl.constexpr,
+    PACKS_PER_CTA: tl.constexpr,
     BLOCK_M: tl.constexpr,
     HAS_CLAMP: tl.constexpr,
-    HAS_ROW_WEIGHTS: tl.constexpr,
-    HAS_NEGATIVE_ROW_WEIGHTS: tl.constexpr,
-    HAS_ROW_INDICES: tl.constexpr,
-    ROUND_BEFORE_QUANT: tl.constexpr,
-    PACKED_SCALES: tl.constexpr,
 ):
-    N_2: tl.constexpr = N // 2
+    GROUPS_PER_PACK: tl.constexpr = 4
+    hidden_size: tl.constexpr = N // 2
 
-    pid_pack = tl.program_id(0)
-    pid_m = tl.program_id(1)
-    m_offset = pid_m.to(tl.int64) * BLOCK_M
+    pack_tile = tl.program_id(0)
+    row_start = tl.program_id(1).to(tl.int64) * BLOCK_M
+    row_step = tl.num_programs(1).to(tl.int64) * BLOCK_M
 
-    if m_offset >= NUM_ROWS:
-        return
+    groups_per_cta: tl.constexpr = PACKS_PER_CTA * GROUPS_PER_PACK
+    elems_per_cta: tl.constexpr = groups_per_cta * GROUP_SIZE
+    col_start = pack_tile * elems_per_cta
+    col_offsets = tl.arange(0, elems_per_cta)
+    row_offsets = tl.arange(0, BLOCK_M)
+    pack_offsets = tl.arange(0, PACKS_PER_CTA)
 
-    offs_m = tl.arange(0, BLOCK_M)
-    offs_n = tl.arange(0, GROUP_SIZE)
-    logical_rows = m_offset + offs_m
-    row_mask = logical_rows < NUM_ROWS
-    if HAS_ROW_INDICES:
-        rows = tl.load(row_indices_ptr + logical_rows, mask=row_mask, other=-1).to(
-            tl.int64
+    col_mask = (col_start + col_offsets) < (GROUPS_PER_ROW * GROUP_SIZE)
+
+    # persistent with grid_m-stride loop
+    while row_start < M:
+        rows = row_start + row_offsets
+        row_mask = rows < M
+        input_row_start = rows[:, None] * input_stride_m
+        output_row_start = rows[:, None] * output_q_stride_m
+
+        gate_flat = tl.load(
+            input_ptr + input_row_start + col_start + col_offsets[None, :],
+            mask=row_mask[:, None] & col_mask[None, :],
+            other=0.0,
         )
-        row_mask &= (rows >= 0) & (rows < M)
-    else:
-        rows = logical_rows
-
-    base_row_offset = rows[:, None] * input_stride_m
-    base_out_offset = rows[:, None] * output_q_stride_m
-
-    packed_scale = tl.zeros((BLOCK_M,), dtype=tl.int32)
-
-    for pack_idx in tl.static_range(4):
-        group_id = pid_pack * 4 + pack_idx
-
-        if group_id < NUM_GROUPS:
-            n_offset = group_id * GROUP_SIZE
-
-            act_ptrs = input_ptr + base_row_offset + n_offset + offs_n[None, :]
-            act_in = tl.load(act_ptrs, mask=row_mask[:, None], other=0.0)
-
-            mul_ptrs = act_ptrs + N_2
-            mul_in = tl.load(mul_ptrs, mask=row_mask[:, None], other=0.0)
-
-            act_f32 = act_in.to(tl.float32)
-            mul_f32 = mul_in.to(tl.float32)
-
-            if HAS_CLAMP:
-                act_f32 = tl.minimum(act_f32, clamp_limit)
-                mul_f32 = tl.clamp(mul_f32, -clamp_limit, clamp_limit)
-
-            y = (act_f32 * tl.sigmoid(act_f32)) * mul_f32
-            if HAS_ROW_WEIGHTS:
-                row_weights = tl.load(
-                    row_weights_ptr + logical_rows, mask=row_mask, other=0.0
-                ).to(tl.float32)
-                if HAS_NEGATIVE_ROW_WEIGHTS:
-                    negative_row_weights = tl.load(
-                        negative_row_weights_ptr + logical_rows,
-                        mask=row_mask,
-                        other=0.0,
-                    ).to(tl.float32)
-                    y *= tl.where(
-                        y < 0.0,
-                        negative_row_weights[:, None],
-                        row_weights[:, None],
-                    )
-                else:
-                    y *= row_weights[:, None]
-            if ROUND_BEFORE_QUANT:
-                # Shared experts and existing callers retain their BF16
-                # activation boundary. YOCO routed FP8 quantizes directly.
-                y = y.to(tl.bfloat16).to(tl.float32)
-
-            absmax = tl.max(tl.abs(y), axis=1)
-
-            scale_raw = tl.maximum(absmax / fp8_max, 1e-4 / fp8_max)
-            if ROUND_BEFORE_QUANT:
-                exponent = tl.ceil(tl.log2(scale_raw))
-                scale = tl.math.exp2(exponent)
-                exponent_biased = tl.clamp(exponent + 127.0, 0.0, 255.0).to(tl.int32)
-            else:
-                # Same UE8M0 ceiling as llm-train's fused quantizer. Using
-                # exponent bits avoids log2 rounding at power-of-two edges.
-                bits = scale_raw.to(tl.uint32, bitcast=True)
-                exponent_biased = ((bits >> 23) & 255) + ((bits & 0x7FFFFF) != 0).to(
-                    tl.uint32
-                )
-                exponent_biased = tl.minimum(tl.maximum(exponent_biased, 1), 254).to(
-                    tl.int32
-                )
-                scale = (exponent_biased << 23).to(tl.float32, bitcast=True)
-
-            y_q = tl.clamp(y / scale[:, None], fp8_min, fp8_max)
-
-            out_q_ptrs = output_q_ptr + base_out_offset + n_offset + offs_n[None, :]
-            tl.store(
-                out_q_ptrs,
-                y_q.to(output_q_ptr.dtype.element_ty),
-                mask=row_mask[:, None],
-            )
-
-            if PACKED_SCALES:
-                packed_scale = packed_scale | (exponent_biased << (pack_idx * 8))
-            else:
-                tl.store(
-                    output_scale_ptr
-                    + rows * output_scale_stride_m
-                    + group_id * output_scale_stride_k,
-                    scale,
-                    mask=row_mask,
-                )
-
-    if PACKED_SCALES:
-        scale_ptrs = output_scale_ptr + pid_pack * output_scale_stride_k + rows
-        tl.store(scale_ptrs, packed_scale, mask=row_mask)
-
-
-def silu_mul_quant_fp8_triton(
-    input: torch.Tensor,
-    group_size: int = 128,
-    output_q: torch.Tensor | None = None,
-    clamp_limit: float | None = None,
-    row_weights: torch.Tensor | None = None,
-    negative_row_weights: torch.Tensor | None = None,
-    row_indices: torch.Tensor | None = None,
-    *,
-    round_before_quant: bool = True,
-    packed_scales: bool = True,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Quantize dense rows, or only the routed rows of a padded MoE buffer.
-
-    With row_indices, weights are in routing order and each valid index must
-    identify a unique input/output row. Invalid indices are skipped. Padding
-    in output_q is untouched; consumers must ignore these unreferenced rows.
-    """
-    assert input.dim() == 2
-    assert input.is_contiguous()
-
-    M, N = input.shape
-    N_2 = N // 2
-
-    assert N_2 % group_size == 0
-
-    fp8_dtype = torch.float8_e4m3fn
-    finfo = torch.finfo(fp8_dtype)
-    fp8_min, fp8_max = finfo.min, finfo.max
-
-    num_groups_per_row = N_2 // group_size
-    num_packed_groups = (num_groups_per_row + 3) // 4
-    tma_aligned_M = ((M + 3) // 4) * 4
-
-    if output_q is None:
-        output_q = torch.empty((M, N_2), dtype=fp8_dtype, device=input.device)
-    num_rows = M
-    if row_indices is not None:
-        assert row_indices.dim() == 1 and row_indices.is_contiguous()
-        assert row_indices.dtype in (torch.int32, torch.int64)
-        num_rows = row_indices.numel()
-    if row_weights is not None:
-        assert row_weights.dim() == 1
-        assert row_weights.numel() == num_rows
-        assert row_weights.is_contiguous()
-    if negative_row_weights is not None:
-        assert row_weights is not None
-        assert negative_row_weights.shape == row_weights.shape
-        assert negative_row_weights.is_contiguous()
-
-    if packed_scales:
-        output_scale = torch.zeros(
-            (num_packed_groups, tma_aligned_M),
-            dtype=torch.int32,
-            device=input.device,
-        ).T[:M, :]
-    else:
-        output_scale = torch.empty(
-            (M, num_groups_per_row), dtype=torch.float32, device=input.device
+        up_flat = tl.load(
+            input_ptr
+            + input_row_start
+            + hidden_size
+            + col_start
+            + col_offsets[None, :],
+            mask=row_mask[:, None] & col_mask[None, :],
+            other=0.0,
         )
 
-    BLOCK_M = 8
-    grid = (num_packed_groups, triton.cdiv(num_rows, BLOCK_M))
+        gate = tl.reshape(gate_flat, (BLOCK_M, groups_per_cta, GROUP_SIZE)).to(
+            tl.float32
+        )
+        up = tl.reshape(up_flat, (BLOCK_M, groups_per_cta, GROUP_SIZE)).to(tl.float32)
 
-    num_warps = max(4, group_size // 32)
-    num_stages = 2
+        if HAS_CLAMP:
+            gate = tl.minimum(gate, clamp_limit)
+            up = tl.clamp(up, -clamp_limit, clamp_limit)
 
-    has_clamp = clamp_limit is not None
-    has_row_weights = row_weights is not None
-    has_negative_row_weights = negative_row_weights is not None
-    _silu_mul_quant_fp8_packed_kernel[grid](
-        input,
-        output_q,
-        output_scale,
-        row_weights if has_row_weights else input,
-        negative_row_weights if has_negative_row_weights else input,
-        row_indices if row_indices is not None else input,
-        M,
-        num_rows,
-        input.stride(0),
-        output_q.stride(0),
-        output_scale.stride(0),
-        output_scale.stride(1),
-        clamp_limit if has_clamp else 0.0,
-        N=N,
-        NUM_GROUPS=num_groups_per_row,
-        fp8_min=fp8_min,
-        fp8_max=fp8_max,
-        GROUP_SIZE=group_size,
-        BLOCK_M=BLOCK_M,
-        HAS_CLAMP=has_clamp,
-        HAS_ROW_WEIGHTS=has_row_weights,
-        HAS_NEGATIVE_ROW_WEIGHTS=has_negative_row_weights,
-        HAS_ROW_INDICES=row_indices is not None,
-        ROUND_BEFORE_QUANT=round_before_quant,
-        PACKED_SCALES=packed_scales,
-        num_warps=num_warps,
-        num_stages=num_stages,
-    )
+        # Unified gated activation: silu == swigluoai with alpha=1, beta=0.
+        #   glu = gate * sigmoid(alpha * gate); y = (up + beta) * glu
+        glu = gate / (1.0 + tl.exp(-gate * alpha))
+        y = (up + beta) * glu
+        # Round through bf16 to match unfused precision path
+        y = y.to(tl.bfloat16).to(tl.float32)
 
-    return output_q, output_scale
+        absmax = tl.max(tl.abs(y), axis=2)
+        scale_raw = tl.maximum(absmax / fp8_max, 1e-10)
+        exponent = tl.ceil(tl.log2(scale_raw))
+        scale = tl.math.exp2(exponent)
+
+        y_q = tl.clamp(y / scale[:, :, None], fp8_min, fp8_max)
+
+        y_q_flat = tl.reshape(y_q, (BLOCK_M, elems_per_cta))
+        tl.store(
+            output_q_ptr + output_row_start + col_start + col_offsets[None, :],
+            y_q_flat.to(output_q_ptr.dtype.element_ty),
+            mask=row_mask[:, None] & col_mask[None, :],
+        )
+
+        scale_byte = tl.clamp(exponent + 127.0, 0.0, 255.0).to(tl.int32)
+        scale_bytes = tl.reshape(scale_byte, (BLOCK_M, PACKS_PER_CTA, GROUPS_PER_PACK))
+        shifts = tl.arange(0, GROUPS_PER_PACK) * 8
+        packed_scale = tl.sum(scale_bytes << shifts[None, None, :], axis=2)
+
+        scale_pack = pack_tile * PACKS_PER_CTA + pack_offsets
+        scale_ptrs = (
+            output_scale_ptr
+            + scale_pack[None, :] * output_scale_stride_k
+            + rows[:, None]
+        )
+        tl.store(
+            scale_ptrs,
+            packed_scale,
+            mask=row_mask[:, None] & (scale_pack[None, :] < PACKS_PER_ROW),
+        )
+
+        row_start += row_step
 
 
 def silu_mul_quant_fp8_packed_triton(
@@ -397,48 +252,75 @@ def silu_mul_quant_fp8_packed_triton(
     group_size: int = 128,
     output_q: torch.Tensor | None = None,
     clamp_limit: float | None = None,
-    row_weights: torch.Tensor | None = None,
-    negative_row_weights: torch.Tensor | None = None,
-    row_indices: torch.Tensor | None = None,
-    *,
-    round_before_quant: bool = True,
+    alpha: float = 1.0,
+    beta: float = 0.0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    return silu_mul_quant_fp8_triton(
+    assert input.dim() == 2
+    assert input.is_contiguous()
+
+    M, N = input.shape
+    hidden_size = N // 2
+
+    assert hidden_size % group_size == 0
+
+    fp8_dtype = torch.float8_e4m3fn
+    finfo = torch.finfo(fp8_dtype)
+    fp8_min, fp8_max = finfo.min, finfo.max
+
+    groups_per_row = hidden_size // group_size
+    groups_per_pack = 4  # pack 4 UE8M0 scales to a single INT32
+    packs_per_row = triton.cdiv(groups_per_row, groups_per_pack)
+
+    if output_q is None:
+        output_q = torch.empty((M, hidden_size), dtype=fp8_dtype, device=input.device)
+
+    aligned_m = triton.cdiv(M, 4) * 4
+    output_scale_packed = torch.empty(
+        (packs_per_row, aligned_m),
+        dtype=torch.int32,
+        device=input.device,
+    ).T[:M, :]
+
+    # Tuned for group_size=32 (MXFP8) and group_size=128 (DeepSeek-V4)
+    num_warps = 4
+    num_stages = 2
+    if group_size < 128:
+        BM = 1
+        packs_per_cta = 8
+    else:
+        BM = 1 if M < 512 else 4
+        packs_per_cta = 2 if M < 512 else 1
+
+    grid_n = triton.cdiv(packs_per_row, packs_per_cta)
+    grid_m = min(triton.cdiv(M, BM), 4096)
+    grid = (grid_n, grid_m)
+
+    has_clamp = clamp_limit is not None
+    _silu_mul_quant_fp8_packed_kernel[grid](
         input,
-        group_size,
         output_q,
-        clamp_limit,
-        row_weights,
-        negative_row_weights,
-        row_indices,
-        round_before_quant=round_before_quant,
-        packed_scales=True,
+        output_scale_packed,
+        M,
+        input.stride(0),
+        output_q.stride(0),
+        output_scale_packed.stride(1),
+        clamp_limit if has_clamp else 0.0,
+        alpha,
+        beta,
+        N=N,
+        GROUPS_PER_ROW=groups_per_row,
+        PACKS_PER_ROW=packs_per_row,
+        fp8_min=fp8_min,
+        fp8_max=fp8_max,
+        GROUP_SIZE=group_size,
+        PACKS_PER_CTA=packs_per_cta,
+        BLOCK_M=BM,
+        HAS_CLAMP=has_clamp,
+        num_warps=num_warps,
+        num_stages=num_stages,
     )
 
-
-def _silu_mul_quant_fp8_packed(
-    input: torch.Tensor, clamp_limit: float
-) -> tuple[torch.Tensor, torch.Tensor]:
-    # Shared with routed MoE: retain the BF16 activation rounding boundary.
-    return silu_mul_quant_fp8_packed_triton(input, clamp_limit=clamp_limit)
-
-
-def _silu_mul_quant_fp8_packed_fake(
-    input: torch.Tensor, clamp_limit: float
-) -> tuple[torch.Tensor, torch.Tensor]:
-    rows, width = input.shape
-    groups = (width // 2 // 128 + 3) // 4
-    aligned_rows = ((rows + 3) // 4) * 4
-    quantized = input.new_empty((rows, width // 2), dtype=torch.float8_e4m3fn)
-    scales = input.new_empty((groups, aligned_rows), dtype=torch.int32).T[:rows]
-    return quantized, scales
-
-
-direct_register_custom_op(
-    "silu_mul_quant_fp8_packed",
-    _silu_mul_quant_fp8_packed,
-    fake_impl=_silu_mul_quant_fp8_packed_fake,
-)
+    return output_q, output_scale_packed
 
 
 @triton.jit
@@ -452,9 +334,13 @@ def _silu_mul_per_token_group_quant_fp8_colmajor(
     y_s_col_stride: tl.int64,
     # Information for float8
     eps,
+    clamp_limit,
+    alpha,
+    beta,
     fp8_min: tl.constexpr,
     fp8_max: tl.constexpr,
     use_ue8m0: tl.constexpr,
+    HAS_CLAMP: tl.constexpr,
     # Meta-parameters
     GROUP_SIZE: tl.constexpr,
     BLOCK_M: tl.constexpr,
@@ -486,11 +372,24 @@ def _silu_mul_per_token_group_quant_fp8_colmajor(
     act_in = tl.load(act_in_ptrs)
     mul_in = tl.load(act_in_ptrs + N_2)
 
-    # silu & mul
+    # silu & mul — match C++ silu_and_mul: clamp in fp32 then store back to the
+    # input dtype, run silu in fp32 then narrow, and do the mul at input
+    # precision so HAS_CLAMP True/False share the same multiplication path.
+    if HAS_CLAMP:
+        act_in = tl.minimum(act_in.to(tl.float32), clamp_limit).to(
+            y_ptr.dtype.element_ty
+        )
+        mul_in = tl.clamp(mul_in.to(tl.float32), -clamp_limit, clamp_limit).to(
+            y_ptr.dtype.element_ty
+        )
+    # Unified gated activation: silu == swigluoai with alpha=1, beta=0.
+    #   glu = gate * sigmoid(alpha * gate); y = (up + beta) * glu
+    # Keep glu/up at input precision (narrow before the mul) so the alpha=1,
+    # beta=0 defaults match the C++ silu_and_mul path bit-for-bit.
     act_in = act_in.to(tl.float32)
-    one_f32 = tl.cast(1, tl.float32)
-    silu_out = (act_in / (one_f32 + tl.exp(-act_in))).to(y_ptr.dtype.element_ty)
-    y = (silu_out * mul_in).to(tl.float32)
+    glu = (act_in / (1.0 + tl.exp(-act_in * alpha))).to(y_ptr.dtype.element_ty)
+    up = (mul_in.to(tl.float32) + beta).to(y_ptr.dtype.element_ty)
+    y = (glu * up).to(tl.float32)
 
     # quant
     _absmax = tl.maximum(tl.max(tl.abs(y), axis=1), eps)
@@ -517,11 +416,16 @@ def silu_mul_per_token_group_quant_fp8_colmajor(
     output: torch.Tensor | None = None,  # [M, N // 2]
     use_ue8m0: bool | None = None,
     eps: float = 1e-10,
+    clamp_limit: float | None = None,
+    group_size: int = 128,
+    alpha: float = 1.0,
+    beta: float = 0.0,
 ):
     """
-    silu+mul + block-fp8 quant with group size 128.
+    Gated activation + block-fp8 quant. ``alpha``/``beta`` select the gate
+    (silu: alpha=1, beta=0; swigluoai: alpha, beta from config).
     """
-    GROUP_SIZE = 128
+    GROUP_SIZE = group_size
     assert input.ndim == 2
     if output is not None:
         assert output.ndim == 2
@@ -559,6 +463,7 @@ def silu_mul_per_token_group_quant_fp8_colmajor(
     assert N_2 % BLOCK_N == 0
     grid = (M // BLOCK_M, N_2 // BLOCK_N)
 
+    has_clamp = clamp_limit is not None
     _silu_mul_per_token_group_quant_fp8_colmajor[grid](
         input,
         output,
@@ -567,9 +472,13 @@ def silu_mul_per_token_group_quant_fp8_colmajor(
         N,
         output_scales.stride(-1),
         eps,
+        clamp_limit if has_clamp else 0.0,
+        alpha,
+        beta,
         fp8_min,
         fp8_max,
         use_ue8m0,
+        has_clamp,
         GROUP_SIZE,
         BLOCK_M,
         BLOCK_N,
@@ -645,7 +554,7 @@ def _per_token_group_quant_fp8_colmajor(
 def per_token_group_quant_fp8(
     x: torch.Tensor,
     group_size: int,
-    eps: float = 1e-4,
+    eps: float = 1e-10,
     dtype: torch.dtype | None = None,
     column_major_scales: bool = False,
     tma_aligned_scales: bool = False,
@@ -708,9 +617,11 @@ def per_token_group_quant_fp8(
         shape = x.shape[:-1] + (x.shape[-1] // group_size,)
         x_s = torch.empty(shape, device=x.device, dtype=torch.float32)
 
-    # prefer CUDA kernel if available
+    # prefer CUDA/XPU kernel if available
     # TODO(bnell): this causes some fp8 moe test to fail.
-    if current_platform.is_cuda() and x.is_contiguous():
+    if (
+        current_platform.is_cuda_alike() or current_platform.is_xpu()
+    ) and x.is_contiguous():
         torch.ops._C.per_token_group_fp8_quant(
             x,
             x_q,
@@ -772,7 +683,7 @@ def per_token_group_quant_fp8(
 def per_token_group_quant_fp8_packed_for_deepgemm(
     x: torch.Tensor,
     group_size: int,
-    eps: float = 1e-4,
+    eps: float = 1e-10,
     use_ue8m0: bool | None = None,
     out_q: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -799,8 +710,7 @@ def per_token_group_quant_fp8_packed_for_deepgemm(
     )
     assert x.stride(-1) == 1, "`x` groups must be contiguous"
 
-    finfo = torch.finfo(dtype)
-    fp8_min, fp8_max = finfo.min, finfo.max
+    fp8_min, fp8_max = get_fp8_min_max()
 
     # compute DeepGEMM-style packed scale tensor shape.
     hidden_dim = x.shape[-1]
@@ -816,10 +726,10 @@ def per_token_group_quant_fp8_packed_for_deepgemm(
         dtype=torch.int32,
     )
 
-    # CUDA kernel path only (DeepGEMM + E8M0 is CUDA-specific).
-    assert current_platform.is_cuda(), (
-        "per_token_group_quant_fp8_packed_for_deepgemm is only valid on CUDA "
-        "platforms using DeepGEMM."
+    # Native kernel (libtorch stable); used with DeepGEMM on CUDA and
+    # available on ROCm for the same packed UE8M0 scale layout.
+    assert current_platform.is_cuda_alike(), (
+        "per_token_group_quant_fp8_packed_for_deepgemm requires a CUDA or ROCm GPU."
     )
 
     x_contiguous = x.contiguous()
@@ -942,7 +852,7 @@ def get_w8a8_block_fp8_configs(
 
     # First look up if an optimized configuration is available in the configs
     # directory
-    device_name = current_platform.get_device_name().replace(" ", "_")
+    device_name = get_device_name_as_file_name()
     json_file_name = f"N={N},K={K},device_name={device_name},dtype=fp8_w8a8,block_shape=[{block_n},{block_k}].json"  # noqa: E501
 
     config_file_path = os.path.join(
@@ -990,17 +900,50 @@ def w8a8_triton_block_scaled_mm(
     Returns:
         torch.Tensor: The result of matmul.
     """
+
+    _on_gfx1250 = False
+    if current_platform.is_rocm():
+        from vllm.platforms.rocm import on_gfx1250
+
+        _on_gfx1250 = on_gfx1250()
+
+    if _on_gfx1250:
+        # Torch upcast reference: dequantize A,B to fp32 and matmul in fp32.
+        # Avoids the gfx1250 native-fp8 block GEMM NaN bug. Correct but slow.
+        _bn, _bk = block_size[0], block_size[1]
+        _As = (
+            _upcast_e8m0_to_fp32(As)
+            if As.dtype == torch.float8_e8m0fnu
+            else As.to(torch.float32)
+        )
+        _Bs = (
+            _upcast_e8m0_to_fp32(Bs)
+            if Bs.dtype == torch.float8_e8m0fnu
+            else Bs.to(torch.float32)
+        )
+        _K = A.shape[-1]
+        _N = B.shape[0]
+        _Af = A.to(torch.float32).reshape(-1, _K)
+        _Asf = (
+            _As.to(torch.float32)
+            .reshape(-1, _As.shape[-1])
+            .repeat_interleave(_bk, dim=1)[:, :_K]
+        )
+        _Bf = B.to(torch.float32)
+        _Bsf = _Bs.repeat_interleave(_bn, dim=0).repeat_interleave(_bk, dim=1)[:_N, :_K]
+        _out = (_Af * _Asf) @ (_Bf * _Bsf).t()
+        return _out.to(output_dtype).reshape(*A.shape[:-1], _N)
+
     assert len(block_size) == 2
     block_n, block_k = block_size[0], block_size[1]
 
-    # Triton cannot currently bind E8M0 scale tensors directly. On ROCm,
-    # DeepSeek-V4 checkpoints store block scales in exponent-only E8M0 format,
-    # so decode them to fp32 before launching the kernel.
-    if current_platform.is_rocm():
-        if As.dtype == torch.float8_e8m0fnu:
-            As = _upcast_e8m0_to_fp32(As).contiguous()
-        if Bs.dtype == torch.float8_e8m0fnu:
-            Bs = _upcast_e8m0_to_fp32(Bs).contiguous()
+    # Triton cannot currently bind E8M0 scale tensors directly. Checkpoints
+    # with exponent-only UE8M0 scales (e.g. DeepSeek-V4) are decoded to fp32
+    # before launching the kernel.
+    if As.dtype == torch.float8_e8m0fnu:
+        As = _upcast_e8m0_to_fp32(As).contiguous()
+    if Bs.dtype == torch.float8_e8m0fnu:
+        Bs = _upcast_e8m0_to_fp32(Bs).contiguous()
 
     assert A.shape[-1] == B.shape[-1]
     assert A.shape[:-1] == As.shape[:-1] and A.is_contiguous()
@@ -1136,6 +1079,32 @@ def _upcast_e8m0_to_fp32(scale: torch.Tensor) -> torch.Tensor:
     return fp32_bits.view(torch.float32)
 
 
+def deepgemm_post_process_weight_scale_block(
+    ws: torch.Tensor,
+    mn: int,
+    k: int,
+    quant_block_shape: tuple[int, ...],
+    num_groups: int,
+    is_sfa: bool = False,
+) -> torch.Tensor:
+    if ws.dtype in (torch.float8_e8m0fnu, torch.uint8):
+        ws = _upcast_e8m0_to_fp32(ws)
+    else:
+        assert ws.dtype == torch.float32, (
+            f"Expected tensor scales dtype to be torch.float32 or "
+            f"torch.float8_e8m0fnu or torch.uint8, got {ws.dtype} instead"
+        )
+
+    return transform_sf_into_required_layout(
+        sf=ws,
+        mn=mn,
+        k=k,
+        recipe=(1, quant_block_shape[0], quant_block_shape[1]),
+        num_groups=num_groups,
+        is_sfa=is_sfa,
+    )
+
+
 def deepgemm_post_process_fp8_weight_block(
     wq: torch.Tensor,
     ws: torch.Tensor,
@@ -1149,14 +1118,10 @@ def deepgemm_post_process_fp8_weight_block(
         f"to be torch.float8_e4m3fn, got {wq.dtype} instead."
     )
 
-    if ws.dtype == torch.float8_e8m0fnu:
-        # Scales already in E8M0 from checkpoint — upcast to fp32
-        # and skip requantization (weights already have power-of-two scales).
-        ws = _upcast_e8m0_to_fp32(ws)
-    else:
+    if ws.dtype not in (torch.float8_e8m0fnu, torch.uint8):
         assert ws.dtype == torch.float32, (
             f"Expected tensor scales dtype to be torch.float32 or "
-            f"torch.float8_e8m0fnu, got {ws.dtype} instead"
+            f"torch.float8_e8m0fnu or torch.uint8, got {ws.dtype} instead"
         )
         if use_e8m0:
             requant_weight_ue8m0_inplace(wq, ws, block_size=quant_block_shape)
@@ -1164,23 +1129,19 @@ def deepgemm_post_process_fp8_weight_block(
     if is_bmm:
         # Reshape 2D weight/scale to 3D for grouped BMM (einsum):
         # wq: (g*r, d) -> (g, r, d)
-        # ws: (g*r/128, d/128) -> (g, r/128, d/128)
+        # Scale dimensions follow quant_block_shape.
         g = bmm_batch_size
         assert wq.ndim == 2 and ws.ndim == 2
         d = wq.size(1)
         r = wq.size(0) // g
         wq = wq.view(g, r, d)
         ws = ws.view(g, r // quant_block_shape[0], d // quant_block_shape[1])
-        # Pre-transform scale with recipe=(1, 128, 128) to broadcast + pack
-        # into TMA-aligned UE8M0 (INT32) layout. At runtime fp8_einsum uses
-        # recipe=(1, 1, 128) which sees INT dtype and skips re-transform.
-        dg_ws = transform_sf_into_required_layout(
-            sf=ws,
+        dg_ws = deepgemm_post_process_weight_scale_block(
+            ws=ws,
             mn=r,
             k=d,
-            recipe=(1, quant_block_shape[0], quant_block_shape[1]),
+            quant_block_shape=quant_block_shape,
             num_groups=g,
-            is_sfa=False,
         )
         return wq, dg_ws
 
@@ -1190,21 +1151,12 @@ def deepgemm_post_process_fp8_weight_block(
         wq = wq.unsqueeze(0)
         ws = ws.unsqueeze(0)
 
-    # From https://github.com/deepseek-ai/DeepGEMM/blob/c9f8b34dcdacc20aa746b786f983492c51072870/csrc/utils/layout.hpp#L46
-    recipe = (1, 128, 128)
-
-    # Ref : https://github.com/deepseek-ai/DeepGEMM/blob/c9f8b34dcdacc20aa746b786f983492c51072870/csrc/apis/gemm.hpp
-    # DeepGemm uses the `transform_sf_into_required_layout` function to
-    # represent scales in the correct format.
-    dg_ws = transform_sf_into_required_layout(
-        sf=ws,
+    dg_ws = deepgemm_post_process_weight_scale_block(
+        ws=ws,
         mn=wq.size(1),
         k=wq.size(2),
-        recipe=recipe,
+        quant_block_shape=quant_block_shape,
         num_groups=wq.size(0),
-        # is the scale factors for A in (Refers to the argument A in A @ B).
-        # Weights are B.
-        is_sfa=False,
     )
 
     if original_ndim == 2:
@@ -1305,6 +1257,35 @@ def validate_fp8_block_shape(
                 )
 
 
+def validate_fp8_block_shape_moe(
+    intermediate_size_per_partition: int,
+    block_size: list[int],
+) -> None:
+    """Validate fused MoE block quantization shapes for tensor parallelism."""
+    from vllm.distributed import get_tensor_model_parallel_world_size
+
+    tp_size = get_tensor_model_parallel_world_size()
+    block_n, block_k = block_size[0], block_size[1]
+
+    # NOTE: To ensure proper alignment of the block-wise quantization
+    # scales, the output_size of the weights for both the gate and up
+    # layers must be divisible by block_n.
+    # Required by column parallel or enabling merged weights
+    if intermediate_size_per_partition % block_n != 0:
+        raise ValueError(
+            f"The output_size of gate's and up's weight = "
+            f"{intermediate_size_per_partition} is not divisible by "
+            f"weight quantization block_n = {block_n}."
+        )
+    if tp_size > 1 and intermediate_size_per_partition % block_k != 0:
+        # Required by row parallel
+        raise ValueError(
+            f"The input_size of down's weight = "
+            f"{intermediate_size_per_partition} is not divisible by "
+            f"weight quantization block_k = {block_k}."
+        )
+
+
 def create_fp8_weight_parameter(
     output_size_per_partition: int,
     input_size_per_partition: int,
@@ -1395,7 +1376,7 @@ def process_fp8_weight_tensor_strategy(
         requantize_with_max_scale,
     )
 
-    if current_platform.is_fp8_fnuz():
+    if current_platform.is_fp8_fnuz() and weight.dtype == torch.float8_e4m3fn:
         weight, weight_scale, input_scale = normalize_e4m3fn_to_e4m3fnuz(
             weight=weight, weight_scale=weight_scale, input_scale=input_scale
         )
@@ -1421,7 +1402,7 @@ def process_fp8_weight_channel_strategy(
         normalize_e4m3fn_to_e4m3fnuz,
     )
 
-    if current_platform.is_fp8_fnuz():
+    if current_platform.is_fp8_fnuz() and weight.dtype == torch.float8_e4m3fn:
         weight, weight_scale, input_scale = normalize_e4m3fn_to_e4m3fnuz(
             weight=weight, weight_scale=weight_scale, input_scale=input_scale
         )
@@ -1438,10 +1419,29 @@ def process_fp8_weight_block_strategy(
         normalize_e4m3fn_to_e4m3fnuz,
     )
 
-    if current_platform.is_fp8_fnuz():
-        weight, weight_scale, _ = normalize_e4m3fn_to_e4m3fnuz(
-            weight=weight, weight_scale=weight_scale
-        )
+    if current_platform.is_fp8_fnuz() and weight.dtype == torch.float8_e4m3fn:
+        if weight_scale.dtype == torch.float8_e8m0fnu:
+            # UE8M0 scales: e8m0 stores exponent-only values (2^(exp-127)),
+            # so doubling the dequant scale == incrementing the exponent byte
+            # by 1. Convert the OCP E4M3 weight bytes to FNUZ in place by
+            # reinterpreting and patching the NaN sentinel (-128 in int8),
+            # then double the UE8M0 exponent so the dequantized magnitudes
+            # match.
+            weight_as_int8 = weight.view(torch.int8)
+            ROCM_FP8_NAN_AS_INT = -128
+            weight_as_int8[weight_as_int8 == ROCM_FP8_NAN_AS_INT] = 0
+            weight = weight_as_int8.view(torch.float8_e4m3fnuz)
+            exp_bytes = weight_scale.view(torch.uint8)
+            weight_scale = (
+                (exp_bytes.to(torch.int16) + 1)
+                .clamp(max=254)
+                .to(torch.uint8)
+                .view(torch.float8_e8m0fnu)
+            )
+        else:
+            weight, weight_scale, _ = normalize_e4m3fn_to_e4m3fnuz(
+                weight=weight, weight_scale=weight_scale
+            )
 
     weight = _maybe_pad_fp8_weight(weight)
     return weight, weight_scale
@@ -1483,6 +1483,7 @@ def process_fp8_weight_tensor_strategy_moe(
 def process_fp8_input_tensor_strategy_moe(
     w13_input_scale: torch.Tensor,
     w2_input_scale: torch.Tensor,
+    enable_eplb: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Process moe input scales for tensor-wise quantization strategy."""
 
@@ -1493,4 +1494,7 @@ def process_fp8_input_tensor_strategy_moe(
             "for each layer."
         )
 
-    return w13_input_scale.max(), w2_input_scale.max()
+    return (
+        amax_for_moe_activation_quant(w13_input_scale, enable_eplb),
+        amax_for_moe_activation_quant(w2_input_scale, enable_eplb),
+    )

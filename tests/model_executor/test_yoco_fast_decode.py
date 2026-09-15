@@ -3,6 +3,7 @@
 import ast
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ import pytest
 import torch
 
 from vllm.config import CUDAGraphMode
+from vllm.config.yoco import YocoMoEPolicy
 from vllm.model_executor.layers.fused_moe.experts import yoco_flashinfer_decode
 from vllm.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
     FlashInferExperts,
@@ -25,7 +27,13 @@ def test_yoco_decode_cutlass_rows_and_gates(rows, monkeypatch):
         cudagraph_runtime_mode=CUDAGraphMode.FULL, batch_descriptor=descriptor
     )
     monkeypatch.setattr(flashinfer_cutlass_moe, "get_forward_context", lambda: context)
-    experts = SimpleNamespace(yoco_fast_decode_cutlass=True, tp_size=1, ep_size=1)
+    experts = SimpleNamespace(
+        moe_config=SimpleNamespace(
+            yoco=YocoMoEPolicy(enabled=True, fast_decode_cutlass=True)
+        ),
+        tp_size=1,
+        ep_size=1,
+    )
     x = torch.empty(rows, 1024, device="meta", dtype=torch.bfloat16)
     w1 = torch.empty(128, 7680, 1024, device="meta", dtype=torch.bfloat16)
     w2 = torch.empty(128, 1024, 3840, device="meta", dtype=torch.bfloat16)
@@ -49,7 +57,9 @@ def test_yoco_decode_cutlass_rows_and_gates(rows, monkeypatch):
     experts.tp_size = 2
     assert not check(experts, x, w1, w2)
     experts.tp_size = 1
-    experts.yoco_fast_decode_cutlass = False
+    experts.moe_config.yoco = replace(
+        experts.moe_config.yoco, fast_decode_cutlass=False
+    )
     assert not check(experts, x, w1, w2)
 
 

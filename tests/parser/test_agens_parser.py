@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+from vllm.entrypoints.generate.base.protocol import (
+    DeltaFunctionCall,
+    DeltaMessage,
+    DeltaToolCall,
+)
 from vllm.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatMessage,
 )
 from vllm.entrypoints.openai.chat_completion.serving import (
     _convert_reasoning_output_field,
-)
-from vllm.entrypoints.openai.engine.protocol import (
-    DeltaFunctionCall,
-    DeltaMessage,
-    DeltaToolCall,
 )
 from vllm.entrypoints.openai.responses.protocol import ResponsesRequest
 from vllm.entrypoints.openai.responses.streaming_events import (
@@ -217,3 +217,9 @@ def test_tool_parser_merges_same_index_deltas(monkeypatch):
     assert result.tool_calls[0].function.arguments == '{"city":"Seattle"}'
     assert result.tool_calls[1].function is not None
     assert result.tool_calls[1].function.name == "get_time"
+
+
+def test_agens_final_delta_uses_current_parser_protocol():
+    request = ChatCompletionRequest(messages=[{"role": "user", "content": "hi"}])
+    message = _make_agens_parser().parse_delta("done", [], request, finished=True)
+    assert message is not None and message.content == "done"

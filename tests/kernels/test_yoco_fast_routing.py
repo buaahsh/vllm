@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from vllm.model_executor.models import yoco
+from vllm.model_executor.layers.yoco_ops import routing as yoco
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 

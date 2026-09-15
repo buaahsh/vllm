@@ -12,7 +12,8 @@ from vllm.model_executor.layers.linear import ReplicatedLinear
 from vllm.model_executor.layers.quantization.online.fp8 import (
     Fp8PerBlockOnlineLinearMethod,
 )
-from vllm.model_executor.models.yoco import RMSNorm, YOCOLatentOutputTransform
+from vllm.model_executor.layers.yoco_moe import YOCOLatentOutputTransform
+from vllm.model_executor.layers.yoco_ops.norm import RMSNorm
 
 
 @pytest.mark.parametrize(

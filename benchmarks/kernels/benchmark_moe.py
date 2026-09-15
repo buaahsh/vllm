@@ -256,7 +256,7 @@ def benchmark_config(
                     num_experts=num_experts,
                     experts_per_token=topk,
                     hidden_dim=hidden_size,
-                    intermediate_size_per_partition=shard_intermediate_size,
+                    intermediate_size=shard_intermediate_size,
                     num_local_experts=num_experts,
                     num_logical_experts=num_experts,
                     activation=MoEActivation.SILU,
@@ -277,7 +277,6 @@ def benchmark_config(
                     moe_config=moe_config,
                     quant_config=quant_config,
                 ),
-                inplace=not disable_inplace(),
             )
 
         with override_config(config):
@@ -285,7 +284,6 @@ def benchmark_config(
                 x, input_gating, topk, renormalize=not use_deep_gemm
             )
 
-            inplace = not disable_inplace()
             if use_deep_gemm:
                 return deep_gemm_experts.apply(
                     x,
@@ -304,7 +302,6 @@ def benchmark_config(
                 w2,
                 topk_weights,
                 topk_ids,
-                inplace=inplace,
                 quant_config=quant_config,
             )
 
@@ -400,16 +397,19 @@ def get_configs_compute_bound(use_fp16, block_quant_shape) -> list[dict[str, int
         config = dict(zip(keys, config_values))
         configs.append(config)
 
-    # Remove configs that are not compatible with fp8 block quantization
-    # BLOCK_SIZE_K must be a multiple of block_k
-    # BLOCK_SIZE_N must be a multiple of block_n
+    # Drop configs incompatible with fp8 block quantization. A tile must align
+    # to the quant-block scale grid, i.e. tile and block must divide one
+    # another. The kernel indexes scales per element (offs_bn // group_n,
+    # k_start // group_k), so a tile narrower than the block (e.g. N=64 with
+    # block_n=128) is valid -- and often faster at small batch. An exact
+    # multiple was required before, which dropped those smaller tiles entirely.
     if block_quant_shape is not None and not use_fp16:
         block_n, block_k = block_quant_shape[0], block_quant_shape[1]
         for config in configs[:]:
-            if (
-                config["BLOCK_SIZE_K"] % block_k != 0
-                or config["BLOCK_SIZE_N"] % block_n != 0
-            ):
+            bn, bk = config["BLOCK_SIZE_N"], config["BLOCK_SIZE_K"]
+            n_aligned = bn % block_n == 0 or block_n % bn == 0
+            k_aligned = bk % block_k == 0 or block_k % bk == 0
+            if not (n_aligned and k_aligned):
                 configs.remove(config)
     return configs
 
@@ -835,6 +835,7 @@ def get_model_params(config):
         "DeepseekV2ForCausalLM",
         "DeepseekV3ForCausalLM",
         "DeepseekV32ForCausalLM",
+        "DeepseekV4ForCausalLM",
         "GlmMoeDsaForCausalLM",
         "Glm4MoeForCausalLM",
         "Glm4MoeLiteForCausalLM",
@@ -846,6 +847,7 @@ def get_model_params(config):
         intermediate_size = config.moe_intermediate_size
         hidden_size = config.hidden_size
     elif architecture in (
+        "BailingMoeV3ForCausalLM",
         "Qwen2MoeForCausalLM",
         "Qwen3MoeForCausalLM",
         "Qwen3NextForCausalLM",
@@ -864,6 +866,12 @@ def get_model_params(config):
         topk = text_config.num_experts_per_tok
         intermediate_size = text_config.moe_intermediate_size
         hidden_size = text_config.hidden_size
+    elif architecture == "DiffusionGemmaForBlockDiffusion":
+        text_config = config.get_text_config()
+        E = text_config.num_experts
+        topk = text_config.top_k_experts
+        intermediate_size = text_config.moe_intermediate_size
+        hidden_size = text_config.hidden_size
     elif architecture == "HunYuanMoEV1ForCausalLM":
         E = config.num_experts
         topk = config.moe_topk[0]
@@ -879,6 +887,20 @@ def get_model_params(config):
         topk = config.moe_top_k
         intermediate_size = config.moe_ffn_dim
         hidden_size = config.hidden_size
+
+    elif architecture in (
+        "KimiK3ForConditionalGeneration",
+        "KimiLinearForCausalLM",
+    ):
+        # Kimi K3 (multimodal) nests its MoE params in a KimiLinearConfig
+        # text_config and uses ``num_experts_per_token`` rather than the more
+        # common ``num_experts_per_tok``. get_text_config() returns the config
+        # itself for the text-only KimiLinearForCausalLM.
+        text_config = config.get_text_config()
+        E = text_config.num_experts
+        topk = text_config.num_experts_per_token
+        intermediate_size = text_config.moe_intermediate_size
+        hidden_size = text_config.hidden_size
     elif architecture == "PixtralForConditionalGeneration":
         # Pixtral can contain different LLM architectures,
         # recurse to get their parameters

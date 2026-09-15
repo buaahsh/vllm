@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import enum
+import os
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
@@ -460,7 +461,7 @@ class LMCacheMPConnectorMetadata(KVConnectorMetadata):
         return self.__str__()
 
 
-class LMCacheMPConnector(KVConnectorBase_V1):
+class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
     """
     The connector for LMCache multi-process mode.
 
@@ -701,9 +702,9 @@ class LMCacheMPConnector(KVConnectorBase_V1):
             - Applies to both sync- and async-loading requests.
             - Async loading: failed blocks may be reported in any forward pass
               up to and including the pass where the request ID is returned by
-              `get_finished()`. Even if failures occur, the request must still
-              be reported via `get_finished()`, and the failed block IDs must
-              appear here no later than that same pass.
+              `get_transfer_results()`. Even if failures occur, the request
+              must still be reported as finished receiving, and the failed
+              block IDs must appear here no later than that same pass.
             - Sync loading: failed blocks should be reported in the forward
               pass in which they are detected.
         """
@@ -834,8 +835,12 @@ class LMCacheMPConnector(KVConnectorBase_V1):
         if new_block_ids:
             tracker.append_block_ids(new_block_ids)
 
-        # Update the state of the tracker
-        condition = tracker.needs_retrieve()
+        # num_external_tokens > 0 means this connector is chosen for loading.
+        # When non-chosen (num_external_tokens == 0, e.g. in MultiConnector),
+        # force condition=False so the state goes to READY and all lookup locks
+        # are released — end_session does NOT release lookup locks, so without
+        # this they would leak until TTL expiry (10 minutes).
+        condition = tracker.needs_retrieve() and num_external_tokens > 0
         if tracker.state == LMCacheMPRequestState.PREFETCHING:
             # If need to retrieve, change to WAITING_FOR_LOAD
             # Otherwise, change to READY
@@ -1188,3 +1193,38 @@ class LMCacheMPConnector(KVConnectorBase_V1):
                 "[KVConnector] Cleaned up request_tracker for request %s",
                 request_id,
             )
+
+
+# At module load time, prefer the external LMCacheMPConnector shipped with the
+# ``lmcache`` package. This avoids forcing users to set
+# ``kv_connector_module_path`` when they only configure ``kv_connector``. If
+# the external module is unavailable (e.g. older lmcache version that does
+# not ship this submodule, or any import error), fall back to the builtin
+# implementation defined above.
+def _resolve_lmcache_mp_connector() -> type[KVConnectorBase_V1]:
+    if os.environ.get("LMCACHE_USE_UPSTREAM_MP"):
+        logger.info(
+            "Force use builtin LMCacheMPConnectorUpstream in vLLM.",
+        )
+        return LMCacheMPConnectorUpstream
+
+    try:
+        from lmcache.integration.vllm.lmcache_mp_connector import (
+            LMCacheMPConnector as _ExternalLMCacheMPConnector,
+        )
+
+        logger.info(
+            "Using external LMCacheMPConnector from "
+            "lmcache.integration.vllm.lmcache_mp_connector"
+        )
+        return _ExternalLMCacheMPConnector
+    except ImportError as e:
+        logger.info(
+            "External LMCacheMPConnector is not available (%s), "
+            "falling back to builtin implementation in vLLM.",
+            e,
+        )
+        return LMCacheMPConnectorUpstream
+
+
+LMCacheMPConnector = _resolve_lmcache_mp_connector()

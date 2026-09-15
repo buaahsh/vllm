@@ -13,11 +13,13 @@ from vllm.model_executor.layers.yoco_fast import (
     refresh_yoco_weight_cache,
     yoco_fast_linear_fusion,
 )
-from vllm.model_executor.models.yoco import _maybe_build_yoco_quant_config
+from vllm.model_executor.models.yoco_config import _maybe_build_yoco_quant_config
 
 
 def quant_config(name, ignore=(), overrides=None):
-    args = resolve_quantization_config(name, overrides)
+    args = resolve_quantization_config(
+        name, {} if name == "mxfp8" and overrides is None else overrides
+    )
     if args is None:
         return None
     args = deepcopy(args)
@@ -104,12 +106,12 @@ def test_cache_refresh_preserves_storage_and_rejects_graph_incompatible_change()
 
 @pytest.mark.parametrize("reload_stage", ["none", "before_cache", "after_cache"])
 def test_router_cache_refresh_uses_the_shared_storage_contract(reload_stage):
+    from vllm.model_executor.layers.yoco_moe import YOCOMoE
     from vllm.model_executor.model_loader.reload.layerwise import (
         finalize_layerwise_reload,
         initialize_layerwise_reload,
         record_metadata_for_reloading,
     )
-    from vllm.model_executor.models.yoco import YOCOMoE
 
     module = YOCOMoE.__new__(YOCOMoE)
     torch.nn.Module.__init__(module)

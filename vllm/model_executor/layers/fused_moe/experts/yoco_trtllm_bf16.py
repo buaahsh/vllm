@@ -186,7 +186,7 @@ class YocoTrtLlmBf16Experts(mk.FusedMoEExpertsModular):
         assert activation == MoEActivation.SILU
         assert hidden_states.dtype == w1.dtype == w2.dtype == torch.bfloat16
 
-        limit = float(getattr(self, "swiglu_limit", 0.0) or 0.0)
+        limit = float(self.moe_config.swiglu_limit or 0.0)
         assert limit > 0
         alpha, beta, clamp_limit = self._activation_params(limit, hidden_states.device)
 

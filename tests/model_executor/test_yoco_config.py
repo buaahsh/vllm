@@ -38,6 +38,51 @@ def _make_vllm_config(
     )
 
 
+def test_yoco_backend_resolution_defers_startup_changes(monkeypatch):
+    from vllm.model_executor.models import yoco_config
+    from vllm.utils import flashinfer
+
+    config = SimpleNamespace(
+        hidden_size=3072,
+        num_experts=128,
+        num_experts_per_tok=8,
+        moe_intermediate_size=3840,
+        moe_latent_dim=1024,
+        swiglu_limit=10.0,
+    )
+    kernel = SimpleNamespace(moe_backend="triton", enable_flashinfer_autotune=False)
+    engine = SimpleNamespace(
+        additional_config={"yoco_fast_decode_trtllm_moe": False},
+        kv_transfer_config=SimpleNamespace(
+            kv_connector="MooncakeConnector", kv_role="kv_consumer"
+        ),
+        kernel_config=kernel,
+        scheduler_config=SimpleNamespace(max_num_seqs=128, max_num_batched_tokens=8192),
+        compilation_config=SimpleNamespace(max_cudagraph_capture_size=64),
+    )
+    monkeypatch.setattr(
+        yoco_config.current_platform,
+        "get_device_capability",
+        lambda: SimpleNamespace(major=10),
+    )
+    monkeypatch.setattr(flashinfer, "has_flashinfer_cutlass_fused_moe", lambda: True)
+    before = vars(kernel).copy()
+
+    decision = yoco_config.resolve_yoco_fast_moe_backend(
+        execution_mode="fast",
+        quant_config=None,
+        tp_size=1,
+        config=config,
+        vllm_config=engine,
+    )
+
+    assert vars(kernel) == before
+    assert decision.backend == "flashinfer_cutlass"
+    assert decision.enable_flashinfer_autotune is True
+    decision.apply(engine)
+    assert kernel.enable_flashinfer_autotune is True
+
+
 def test_yoco_defaults_to_triton_moe() -> None:
     vllm_config = _make_vllm_config(cudagraph_mode=CUDAGraphMode.FULL)
 
@@ -247,11 +292,13 @@ def test_yoco_execution_mode_controls_triton_decode(
         # reintroduce Align's single-split policy in the paged attention call.
         calls = []
         monkeypatch.setattr(
-            flash_attn, "flash_attn_varlen_func", lambda **kwargs: calls.append(kwargs)
+            flash_attn,
+            "_FA4_DENSE_ATTENTION_KERNEL",
+            lambda **kwargs: calls.append(kwargs),
         )
         query = torch.zeros(1, 16, 128, dtype=torch.bfloat16)
         key = torch.zeros(1, 2, 128, dtype=torch.bfloat16)
-        cache = torch.zeros(2, 2, 16, 2, 128, dtype=torch.bfloat16)
+        cache = torch.zeros(2, 2, 16, 256, dtype=torch.bfloat16)
         output = torch.empty_like(query)
         layer = SimpleNamespace(_k_scale=torch.ones(()), _v_scale=torch.ones(()))
         metadata = flash_attn.FlashAttentionMetadata(
@@ -415,7 +462,7 @@ def test_yoco_sm100_fast_decode_dispatch(
     )
     monkeypatch.setattr(
         flash_attn,
-        "flash_attn_varlen_func",
+        "_FA4_DENSE_ATTENTION_KERNEL",
         lambda **kwargs: calls.append(("fa4", kwargs["window_size"])),
     )
 
@@ -446,7 +493,7 @@ def test_yoco_sm100_fast_decode_dispatch(
     query = torch.empty(batch_size, num_heads, head_size)
     key = torch.empty(batch_size, num_kv_heads, head_size)
     value = torch.empty_like(key)
-    kv_cache = torch.empty(2, 33, 16, num_kv_heads, head_size)
+    kv_cache = torch.empty(33, num_kv_heads, 16, 2 * head_size)
     output = torch.empty_like(query)
     layer = SimpleNamespace(
         _q_scale=torch.tensor(1.0),
@@ -459,3 +506,27 @@ def test_yoco_sm100_fast_decode_dispatch(
     assert calls[0][0] == expected_kernel
     if expected_kernel == "triton" and sliding_window is None:
         assert calls[0][1] == (-1, -1)
+
+
+@pytest.mark.parametrize("model_type", ["yoco", "llama"])
+@pytest.mark.parametrize("feature", ["none", "transfer", "dp", "bf16"])
+def test_yoco_specialized_features_select_retained_runner(
+    monkeypatch, model_type, feature
+):
+    from vllm.config.yoco import yoco_v1_runner_features
+
+    monkeypatch.setenv("VLLM_YOCO_BF16_SAMPLING", "1" if feature == "bf16" else "0")
+    runtime = SimpleNamespace(
+        model_config=SimpleNamespace(
+            hf_text_config=SimpleNamespace(model_type=model_type)
+        ),
+        kv_transfer_config=object() if feature == "transfer" else None,
+        cache_config=SimpleNamespace(kv_sharing_fast_prefill=True),
+        parallel_config=SimpleNamespace(data_parallel_size=2 if feature == "dp" else 1),
+        additional_config={"yoco_execution_mode": "fast"},
+    )
+    reasons = yoco_v1_runner_features(runtime)
+    assert bool(reasons) == (model_type == "yoco" and feature != "none")
+    if feature == "bf16":
+        runtime.additional_config["yoco_execution_mode"] = "align"
+        assert yoco_v1_runner_features(runtime) == []

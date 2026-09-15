@@ -310,7 +310,7 @@ def main() -> None:
                 "--compare-routing-mode requires logits, not --routing-capture"
             )
 
-        from vllm.model_executor.models.yoco import _yoco_topk_routing_impl
+        from vllm.model_executor.layers.yoco_ops.routing import _yoco_topk_routing_impl
 
         routed_output = torch.empty_like(trtllm_outputs[True])
         logits_output = torch.empty_like(trtllm_outputs[True])

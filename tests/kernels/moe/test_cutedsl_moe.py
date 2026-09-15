@@ -6,7 +6,7 @@ import pytest
 
 from vllm.platforms import current_platform
 
-if not current_platform.has_device_capability(100):
+if not current_platform.is_device_capability_family(100):
     pytest.skip(
         reason="Nvfp4 Requires compute capability of 10 or above.",
         allow_module_level=True,
@@ -453,11 +453,15 @@ def test_flashinfer_cutedsl_moe_masked(
     )
 
     # reference
-    a_fp4, a_scale_interleaved = fp4_quantize(hidden_states, input_global_scale)
+    # input_global_scale is per-expert ([num_experts]); fp4_quantize and
+    # dequantize_nvfp4_to_dtype are non-grouped APIs that expect [1] or
+    # [num_tokens]. Use a single element since all values are uniform here.
+    a_global = input_global_scale[:1].contiguous()
+    a_fp4, a_scale_interleaved = fp4_quantize(hidden_states, a_global)
     a_in_dtype = dequantize_nvfp4_to_dtype(
         a_fp4,
         a_scale_interleaved,
-        input_global_scale,
+        a_global,
         dtype=hidden_states.dtype,
         device=hidden_states.device,
         block_size=16,

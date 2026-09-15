@@ -5,7 +5,8 @@ import pytest
 import torch
 
 from vllm.model_executor.layers.batch_invariant import linear_batch_invariant
-from vllm.model_executor.models.yoco import RMSClip, RMSNorm, _yoco_align_linear
+from vllm.model_executor.layers.yoco_ops.norm import RMSClip, RMSNorm
+from vllm.model_executor.layers.yoco_ops.projection import _yoco_align_linear
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 

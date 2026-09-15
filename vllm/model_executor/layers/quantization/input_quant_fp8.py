@@ -44,21 +44,25 @@ class QuantFP8(CustomOp):
         tma_aligned_scales: bool = False,
         use_ue8m0: bool | None = None,  # for Torch compile
         compile_native: bool = True,
+        group_quant_eps: float | None = None,
     ):
         """
-        :param static: static or dynamic quantization
-        :param group_shape: quantization group shape (PER_TOKEN, PER_TENSOR,
-            PER_CHANNEL, or arbitrary block size)
-        :param num_token_padding: Pad the token dimension of output to this
-            size
-        :param tma_aligned_scales: For group quantization, output scales in
-            TMA-aligned layout
-        :param column_major_scales: For group quantization, output scales in
-            column major format
-        :param compile_native: Manually compile forward_native if compile mode > None
+        Args:
+            static: static or dynamic quantization
+            group_shape: quantization group shape (PER_TOKEN, PER_TENSOR,
+                PER_CHANNEL, or arbitrary block size)
+            num_token_padding: Pad the token dimension of output to this
+                size
+            tma_aligned_scales: For group quantization, output scales in
+                TMA-aligned layout
+            column_major_scales: For group quantization, output scales in
+                column major format
+            compile_native: Manually compile forward_native if compile mode > None
+            group_quant_eps: Optional minimum group amax; None retains backend defaults.
         """
         super().__init__(compile_native=compile_native)
         self.static = static
+        self.group_quant_eps = group_quant_eps
         self.group_shape = group_shape
         self.use_per_token_if_dynamic = group_shape == GroupShape.PER_TOKEN
         self.num_token_padding = num_token_padding
@@ -93,11 +97,14 @@ class QuantFP8(CustomOp):
             self.is_group_quant
             and self.use_ue8m0
             and self.use_deep_gemm_supported
+            and not self.static
+            and self.group_size == 128
             and (DeepGemmQuantScaleFMT.from_oracle() == DeepGemmQuantScaleFMT.UE8M0)
         ):
             return fp8_utils.per_token_group_quant_fp8_packed_for_deepgemm(
                 x,
                 group_size=self.group_size,
+                eps=self.group_quant_eps if self.group_quant_eps is not None else 1e-10,
                 use_ue8m0=True,
             )
 
@@ -107,6 +114,7 @@ class QuantFP8(CustomOp):
             return fp8_utils.per_token_group_quant_fp8(
                 x,
                 group_size=self.group_size,
+                eps=self.group_quant_eps if self.group_quant_eps is not None else 1e-10,
                 column_major_scales=self.column_major_scales,
                 tma_aligned_scales=self.tma_aligned_scales,
                 dtype=_FP8_DTYPE,
@@ -138,11 +146,6 @@ class QuantFP8(CustomOp):
         scale_ub: torch.Tensor | None = None,
         use_triton: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        if self.is_group_quant and use_triton:
-            assert scale is None, "Dynamic group quantization does not use scale"
-
-            return torch.ops.vllm.triton_per_token_group_quant_fp8(x, self.group_size)
-
         use_aiter_quant = self.use_aiter and scale_ub is None and x.is_contiguous()
         use_aiter_per_tensor_quant = (
             use_aiter_quant and self.group_shape.is_per_tensor()
@@ -151,17 +154,12 @@ class QuantFP8(CustomOp):
 
         use_aiter_per_group_quant = use_aiter_quant and self.group_shape.is_per_group()
 
-        if use_aiter_per_group_quant:
+        if use_aiter_per_group_quant and self.group_quant_eps is None:
             return rocm_aiter_ops.group_fp8_quant(x, self.group_size)
         if use_aiter_per_tensor_quant:
             return rocm_aiter_ops.per_tensor_quant(x, _FP8_DTYPE, scale)
         if use_aiter_per_token_quant:
             return rocm_aiter_ops.per_token_quant(x, _FP8_DTYPE, scale)
-
-        # Fallback to native implementation for group quantization.
-        if self.is_group_quant:
-            assert scale is None, "Dynamic group quantization does not use scale"
-            return self._quantize_group_native(x)
 
         # Fallback to CUDA implementation
         return self.forward_cuda(x, scale, scale_ub)
@@ -173,7 +171,17 @@ class QuantFP8(CustomOp):
         scale_ub: torch.Tensor | None = None,
         use_triton: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # XPU can use same code path as CUDA.
+        if self.is_group_quant and not self.static:
+            from vllm.model_executor.layers.quantization.utils import fp8_utils
+
+            return fp8_utils.per_token_group_quant_fp8(
+                x,
+                group_size=self.group_size,
+                eps=self.group_quant_eps if self.group_quant_eps is not None else 1e-10,
+                column_major_scales=self.column_major_scales,
+                dtype=_FP8_DTYPE,
+                use_ue8m0=self.use_ue8m0,
+            )
         return self.forward_cuda(x, scale, scale_ub, use_triton)
 
     def forward_native(
@@ -239,10 +247,16 @@ class QuantFP8(CustomOp):
 
         x_grouped = x.view(-1, num_groups, self.group_size)
         absmax = x_grouped.abs().max(dim=-1, keepdim=True)[0].float()
+        if self.group_quant_eps is not None:
+            absmax = absmax.clamp_min(self.group_quant_eps)
         scales_raw = absmax / _FP8_MAX
         if self.use_ue8m0:
             scales_raw = torch.exp2(torch.ceil(torch.log2(scales_raw)))
-        scales = (scales_raw).clamp(min=_FP8_MIN_SCALING_FACTOR)
+        scales = (
+            scales_raw
+            if self.group_quant_eps is not None
+            else scales_raw.clamp(min=_FP8_MIN_SCALING_FACTOR)
+        )
 
         x_scaled = x_grouped / scales
         x_quant = x_scaled.clamp(_FP8_MIN, _FP8_MAX).to(_FP8_DTYPE)

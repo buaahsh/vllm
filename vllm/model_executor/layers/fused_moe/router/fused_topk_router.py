@@ -1,20 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from collections.abc import Callable
 import os
+from collections.abc import Callable
 
 import torch
-import triton
-import triton.language as tl
 
 import vllm._custom_ops as ops
+import vllm.envs as envs
 from vllm._aiter_ops import rocm_aiter_ops
 from vllm.distributed.eplb.eplb_state import EplbLayerState
+from vllm.forward_context import get_forward_context, is_forward_context_available
 from vllm.model_executor.layers.fused_moe.config import (
     RoutingMethodType,
     get_routing_method_type,
 )
 from vllm.model_executor.layers.fused_moe.router.base_router import BaseRouter
+from vllm.triton_utils import tl, triton
 
 
 @triton.jit
@@ -101,6 +102,13 @@ def _yoco_native_topk_routing(
     return topk_weights, topk_ids
 
 
+def _get_padding_mask(num_tokens: int) -> torch.Tensor | None:
+    if envs.VLLM_MOE_SKIP_PADDING and is_forward_context_available():
+        is_padding = get_forward_context().is_padding
+        return is_padding[:num_tokens] if is_padding is not None else None
+    return None
+
+
 def vllm_topk_softmax(
     topk_weights: torch.Tensor,
     topk_indices: torch.Tensor,
@@ -114,6 +122,7 @@ def vllm_topk_softmax(
         token_expert_indices,
         gating_output,
         renormalize,
+        is_padding=_get_padding_mask(topk_indices.shape[0]),
     )
 
     return topk_weights, topk_indices
@@ -132,6 +141,7 @@ def vllm_topk_sigmoid(
         token_expert_indices,
         gating_output,
         renormalize,
+        is_padding=_get_padding_mask(topk_indices.shape[0]),
     )
 
     return topk_weights, topk_indices
@@ -185,8 +195,7 @@ def fused_topk(
             # choose a different top-k ordering/numerical path, which is visible
             # in tight KL alignment checks.
             use_yoco_compiled = (
-                renormalize
-                and os.getenv("VLLM_YOCO_COMPILED_TOPK_ROUTING") == "1"
+                renormalize and os.getenv("VLLM_YOCO_COMPILED_TOPK_ROUTING") == "1"
             )
             if use_yoco_compiled:
                 topk_weights, topk_ids_torch = _yoco_native_topk_routing(
@@ -198,9 +207,7 @@ def fused_topk(
                     scores, k=topk, dim=-1, sorted=True
                 )
             if renormalize and not use_yoco_compiled:
-                topk_weights = topk_weights / topk_weights.sum(
-                    dim=-1, keepdim=True
-                )
+                topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
             topk_ids_torch = topk_ids_torch.to(
                 torch.int32 if indices_type is None else indices_type
             )
@@ -241,13 +248,11 @@ class FusedTopKRouter(BaseRouter):
         scoring_func: str = "softmax",
         renormalize: bool = True,
         eplb_state: EplbLayerState | None = None,
-        indices_type_getter: Callable[[], torch.dtype | None] | None = None,
     ):
         super().__init__(
             top_k=top_k,
             global_num_experts=global_num_experts,
             eplb_state=eplb_state,
-            indices_type_getter=indices_type_getter,
         )
         self.renormalize = renormalize
         self.scoring_func = scoring_func

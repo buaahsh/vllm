@@ -214,6 +214,7 @@ class DeepEPLLPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
                 q_dtype,
                 quant_config.per_act_token_quant,
                 quant_config.block_shape,
+                group_quant_eps=quant_config.group_quant_eps,
             )
             x = x.view((num_experts, -1, hidden_dim))
 

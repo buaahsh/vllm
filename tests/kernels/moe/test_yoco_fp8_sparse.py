@@ -5,9 +5,7 @@
 import pytest
 import torch
 
-from vllm.model_executor.layers.quantization.utils.fp8_utils import (
-    silu_mul_quant_fp8_packed_triton,
-)
+from vllm.model_executor.layers.yoco_ops.fp8 import silu_mul_quant_fp8_packed_triton
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 
@@ -109,12 +107,14 @@ def test_deepgemm_sparse_matches_dense_pipeline(
 ):
     from tests.kernels.moe.test_deepgemm import make_block_quant_fp8_weights
     from tests.kernels.moe.utils import make_dummy_moe_config
+    from vllm.config.yoco import YocoMoEPolicy
     from vllm.model_executor.layers.fused_moe.all2all_utils import (
         maybe_make_prepare_finalize,
     )
     from vllm.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
     from vllm.model_executor.layers.fused_moe.experts import deep_gemm_moe
     from vllm.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
+    from vllm.model_executor.layers.yoco_ops import fp8_moe
     from vllm.utils.deep_gemm import is_deep_gemm_e8m0_used
 
     if not is_deep_gemm_e8m0_used():
@@ -125,10 +125,17 @@ def test_deepgemm_sparse_matches_dense_pipeline(
         experts, intermediate, hidden, [128, 128]
     )
     quant = fp8_w8a8_moe_quant_config(w1_scale=s1, w2_scale=s2, block_shape=[128, 128])
-    config = make_dummy_moe_config(experts, topk, hidden, intermediate)
+    config = make_dummy_moe_config(
+        num_experts=experts,
+        experts_per_token=topk,
+        hidden_dim=hidden,
+        intermediate_size=intermediate,
+    )
+    config.swiglu_limit = 10.0
+    config.apply_router_weight_before_w2 = True
+    config.yoco = YocoMoEPolicy(enabled=True)
+    quant.gemm1_clamp_limit = 10.0
     impl = deep_gemm_moe.DeepGemmExperts(config, quant)
-    impl.swiglu_limit = 10.0
-    impl.apply_router_weight_before_w2 = True
     moe = FusedMoEKernel(
         prepare_finalize=maybe_make_prepare_finalize(
             moe=config,
@@ -137,7 +144,6 @@ def test_deepgemm_sparse_matches_dense_pipeline(
             use_monolithic=False,
         ),
         fused_experts=impl,
-        inplace=False,
     )
     x = torch.randn(tokens, hidden, device="cuda", dtype=torch.bfloat16)
     ids = torch.rand(tokens, experts, device="cuda").topk(topk).indices.int()
@@ -160,14 +166,14 @@ def test_deepgemm_sparse_matches_dense_pipeline(
             expert_map=expert_map,
         )
 
-    original_quant = deep_gemm_moe.fused_silu_mul_fp8_quant_packed
+    original_quant = fp8_moe.fused_silu_mul_fp8_quant_packed
 
     def dense_reference(**kwargs):
         indices = kwargs.pop("row_indices")
         for name in ("row_weights", "negative_row_weights"):
             routed = kwargs[name]
             dense = torch.zeros(kwargs["input"].shape[0], device="cuda")
-            deep_gemm_moe._scatter_routed_row_weights(
+            fp8_moe._scatter_routed_row_weights(
                 dense, ids, routed.view_as(weights), indices.view_as(ids)
             )
             kwargs[name] = dense
@@ -176,9 +182,7 @@ def test_deepgemm_sparse_matches_dense_pipeline(
     # The established full-buffer quantizer is the reference; every other
     # stage, including actual W2 GEMM and top-k reduction, is exercised.
     with monkeypatch.context() as context:
-        context.setattr(
-            deep_gemm_moe, "fused_silu_mul_fp8_quant_packed", dense_reference
-        )
+        context.setattr(fp8_moe, "fused_silu_mul_fp8_quant_packed", dense_reference)
         expected = run().clone()
     actual = run().clone()
     assert torch.equal(actual, expected)
@@ -195,9 +199,7 @@ def test_deepgemm_sparse_matches_dense_pipeline(
         captured = run()
     reference_graph = torch.cuda.CUDAGraph()
     with monkeypatch.context() as context:
-        context.setattr(
-            deep_gemm_moe, "fused_silu_mul_fp8_quant_packed", dense_reference
-        )
+        context.setattr(fp8_moe, "fused_silu_mul_fp8_quant_packed", dense_reference)
         with torch.cuda.graph(reference_graph):
             captured_reference = run()
     for _ in range(2):

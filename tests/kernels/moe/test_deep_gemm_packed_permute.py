@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from vllm.model_executor.layers.fused_moe.deep_gemm_utils import (
+from vllm.model_executor.layers.yoco_ops.fp8_permute import (
     compute_aligned_M,
     deepgemm_moe_permute,
 )

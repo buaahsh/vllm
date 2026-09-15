@@ -3,19 +3,22 @@
 """Tests for YOCO-specific behavior in the modular Triton MoE path."""
 
 import contextlib
+from dataclasses import replace
 from types import SimpleNamespace
+from typing import Any
+from unittest.mock import Mock
 
 import pytest
 import torch
 from torch.nn import functional as F
 
 from tests.kernels.moe.utils import make_dummy_moe_config, modular_triton_fused_moe
+from vllm.config.yoco import YocoMoEPolicy
 from vllm.model_executor.layers.fused_moe.activation import MoEActivation
 from vllm.model_executor.layers.fused_moe.config import FUSED_MOE_UNQUANTIZED_CONFIG
 from vllm.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
     make_unquantized_swiglu_params,
 )
-from vllm.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
 from vllm.model_executor.layers.fused_moe.experts.yoco_deep_gemm import (
     yoco_deep_gemm_w2,
     yoco_deep_gemm_w2_workspace_rows,
@@ -34,40 +37,75 @@ from vllm.model_executor.layers.fused_moe.moe_align_block_size import (
     moe_align_block_size,
 )
 from vllm.model_executor.layers.fused_moe.utils import count_expert_num_tokens
+from vllm.model_executor.layers.yoco_ops.triton_moe import _yoco_moe_sum
 from vllm.platforms import current_platform
 from vllm.utils.torch_utils import set_random_seed
 
 
 def test_yoco_flashinfer_autotune_uses_persistent_cache(monkeypatch, tmp_path) -> None:
+    import flashinfer.autotuner as autotuner
+
+    import vllm.distributed.parallel_state as parallel_state
     import vllm.model_executor.warmup.kernel_warmup as warmup
     import vllm.utils.flashinfer as flashinfer_utils
 
     cache = tmp_path / "autotune.json"
     monkeypatch.setenv("VLLM_YOCO_FLASHINFER_AUTOTUNE_CACHE", str(cache))
-    recorded = {}
+    cache.write_bytes(b"cached tactics")
+    recorded: dict[str, Any] = {"active": False}
+    world = SimpleNamespace(
+        rank_in_group=0,
+        world_size=1,
+        broadcast_object=lambda value, src: value,
+        barrier=lambda: None,
+    )
+    monkeypatch.setattr(parallel_state, "get_world_group", lambda: world)
+    tuner = Mock()
+    monkeypatch.setattr(autotuner.AutoTuner, "get", lambda: tuner)
+    monkeypatch.setattr(autotuner, "set_autotune_process_group", lambda group: None)
 
     @contextlib.contextmanager
-    def fake_autotune(*, cache=None):
-        recorded["cache"] = cache
-        yield
+    def fake_autotune(**kwargs):
+        previous = recorded["active"]
+        recorded["active"] = True
+        try:
+            yield
+        finally:
+            recorded["active"] = previous
 
     monkeypatch.setattr(flashinfer_utils, "autotune", fake_autotune)
+    monkeypatch.setattr(
+        flashinfer_utils,
+        "flashinfer_get_hybrid_num_tokens_buckets",
+        lambda num_tokens: (1, num_tokens),
+    )
 
     def dummy_run(num_tokens, **kwargs):
         recorded["num_tokens"] = num_tokens
         recorded["kwargs"] = kwargs
-        assert flashinfer_utils._is_fi_autotuning
+        assert recorded["active"]
 
     runner = SimpleNamespace(
         scheduler_config=SimpleNamespace(max_num_batched_tokens=8192),
+        vllm_config=SimpleNamespace(
+            kernel_config=SimpleNamespace(linear_backend="auto"),
+            attention_config=SimpleNamespace(hisparse_config=None),
+            cache_config=SimpleNamespace(use_replayssm=False),
+        ),
+        get_model=lambda: torch.nn.Identity(),
         _dummy_run=dummy_run,
     )
     warmup.flashinfer_autotune(runner)
 
-    assert recorded["cache"] == str(cache)
+    tuner.load_configs.assert_called_once_with(str(cache))
+    tuner.save_configs.assert_called_once_with(str(cache))
     assert recorded["num_tokens"] == 8192
-    assert recorded["kwargs"] == {"skip_eplb": True, "is_profile": True}
-    assert not flashinfer_utils._is_fi_autotuning
+    assert recorded["kwargs"] == {
+        "skip_eplb": True,
+        "is_profile": True,
+        "randomize_inputs": True,
+    }
+    assert not recorded["active"]
 
 
 def test_yoco_private_trtllm_backend_mapping() -> None:
@@ -79,7 +117,7 @@ def test_yoco_private_trtllm_backend_mapping() -> None:
 
     backend = map_unquantized_backend("yoco_flashinfer_trtllm")
     assert backend == UnquantizedMoeBackend.YOCO_FLASHINFER_TRTLLM
-    assert backend_to_kernel_cls(backend) is YocoTrtLlmBf16Experts
+    assert backend_to_kernel_cls(backend) == [YocoTrtLlmBf16Experts]
 
 
 def test_yoco_private_trtllm_passes_clamp_and_output(monkeypatch) -> None:
@@ -105,7 +143,7 @@ def test_yoco_private_trtllm_passes_clamp_and_output(monkeypatch) -> None:
     experts._swiglu_alpha = None
     experts._swiglu_beta = None
     experts._swiglu_limit_tensor = None
-    experts.swiglu_limit = 10.0
+    experts.moe_config = SimpleNamespace(swiglu_limit=10.0)
 
     output = torch.empty(2, 8, dtype=torch.bfloat16)
     experts.apply(
@@ -191,15 +229,18 @@ def test_yoco_router_weights_are_applied_before_w2(monkeypatch, workspace_init) 
     topk_weights /= topk_weights.sum(dim=-1, keepdim=True)
 
     moe_config = make_dummy_moe_config(
-        num_experts,
-        topk,
-        hidden_size,
-        intermediate_size,
+        num_experts=num_experts,
+        experts_per_token=topk,
+        hidden_dim=hidden_size,
+        intermediate_size=intermediate_size,
+    )
+    moe_config.swiglu_limit = 10.0
+    moe_config.yoco = YocoMoEPolicy(
+        enabled=True,
+        align_weighted_swiglu=True,
+        align_deep_gemm_w2=True,
     )
     moe = modular_triton_fused_moe(moe_config, FUSED_MOE_UNQUANTIZED_CONFIG)
-    moe.fused_experts.swiglu_limit = 10.0
-    moe.fused_experts.yoco_align_weighted_swiglu = True
-    moe.fused_experts.yoco_align_deep_gemm_w2 = True
 
     original_yoco_w2 = yoco_dg.yoco_deep_gemm_w2
 
@@ -254,7 +295,7 @@ def test_yoco_router_weights_are_applied_before_w2(monkeypatch, workspace_init) 
 
     torch.testing.assert_close(actual, expected, rtol=1e-2, atol=1e-2)
 
-    moe.fused_experts.yoco_align_weighted_swiglu = False
+    moe_config.yoco = replace(moe_config.yoco, align_weighted_swiglu=False)
     post_w2_weighted = moe.apply(
         hidden_states,
         w13,
@@ -584,8 +625,9 @@ def test_yoco_moe_sum_dispatch(
     calls: list[str] = []
 
     class FakeExperts:
-        yoco_align_moe_sum = align
-        yoco_fast_moe_sum = fast
+        moe_config = SimpleNamespace(
+            yoco=YocoMoEPolicy(enabled=True, align_moe_sum=align, fast_moe_sum=fast)
+        )
 
         def moe_sum(self, input: torch.Tensor, output: torch.Tensor) -> None:
             calls.append("common")
@@ -596,7 +638,7 @@ def test_yoco_moe_sum_dispatch(
     monkeypatch.setattr(yoco_triton, "yoco_topk8_sum", fake_yoco_sum)
     input = torch.empty(num_tokens, 8, 1)
     output = torch.empty(num_tokens, 1)
-    TritonExperts._yoco_moe_sum(FakeExperts(), input, output)
+    _yoco_moe_sum(FakeExperts(), input, output)
 
     assert calls == (["private"] if expect_private else ["common"])
 
@@ -631,12 +673,18 @@ def test_yoco_deep_gemm_w2_falls_back_when_unsupported(
     topk_weights = torch.rand(num_tokens, topk, device="cuda", dtype=torch.float32)
     topk_weights /= topk_weights.sum(dim=-1, keepdim=True)
     moe_config = make_dummy_moe_config(
-        num_experts, topk, hidden_size, intermediate_size
+        num_experts=num_experts,
+        experts_per_token=topk,
+        hidden_dim=hidden_size,
+        intermediate_size=intermediate_size,
+    )
+    moe_config.swiglu_limit = 10.0
+    moe_config.yoco = YocoMoEPolicy(
+        enabled=True,
+        align_weighted_swiglu=True,
+        align_deep_gemm_w2=True,
     )
     moe = modular_triton_fused_moe(moe_config, FUSED_MOE_UNQUANTIZED_CONFIG)
-    moe.fused_experts.swiglu_limit = 10.0
-    moe.fused_experts.yoco_align_weighted_swiglu = True
-    moe.fused_experts.yoco_align_deep_gemm_w2 = True
 
     actual = moe.apply(
         hidden_states,

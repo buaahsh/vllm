@@ -194,18 +194,26 @@ def flash_attn_varlen_func(
     block_table=None,
     return_softmax_lse=False,
     out=None,
-    # FA3 scheduler metadata; FP8 descales are shared by FA3 and FA4.
+    # FA3 Only
     scheduler_metadata=None,
     q_descale=None,
     k_descale=None,
     v_descale=None,
     num_splits: int = 0,
+    # FA4 Only
+    output_scale=None,
     # Version selector
     fa_version: int = DEFAULT_FA_VERSION,
     s_aux=None,
     cp_world_size=1,
     cp_rank=0,
     cp_tot_seqused_k=None,
+    # FA4 only
+    mask_mod=None,
+    block_sparse_tensors=None,
+    aux_tensors=None,
+    aux_tensor_leading_dims=None,
+    dynamic_causal: "torch.Tensor | None" = None,
 ):
     """dropout_p should be set to 0.0 during evaluation
     Supports multi-query and grouped-query attention (MQA/GQA) by passing in K, V with fewer heads
@@ -269,6 +277,11 @@ def flash_attn_varlen_func(
         "seqused_k must be provided if block_table is provided"
     )
 
+    assert output_scale is None or fa_version == 4, (
+        f"Fused FP8 output (output_scale) is only supported by FA4, "
+        f"got fa_version={fa_version}"
+    )
+
     if softmax_scale is None:
         softmax_scale = q.shape[-1] ** (-0.5)
     # custom op does not support non-tuple input
@@ -297,6 +310,10 @@ def flash_attn_varlen_func(
             raise NotImplementedError("FA2 does not support s_aux")
         if num_splits > 1:
             raise NotImplementedError("FA2 does not support num_splits > 1")
+        if mask_mod is not None:
+            raise NotImplementedError("FA2 does not support mask_mod")
+        if aux_tensors is not None:
+            raise NotImplementedError("FA2 does not support aux_tensors")
         out, softmax_lse = torch.ops._vllm_fa2_C.varlen_fwd(
             q,
             k,
@@ -325,6 +342,10 @@ def flash_attn_varlen_func(
         )
     elif fa_version == 3:
         assert alibi_slopes is None, "Alibi is not supported in FA3"
+        if mask_mod is not None:
+            raise NotImplementedError("FA3 does not support mask_mod")
+        if aux_tensors is not None:
+            raise NotImplementedError("FA3 does not support aux_tensors")
         out, softmax_lse, _, _ = torch.ops._vllm_fa3_C.fwd(
             q,
             k,
@@ -366,22 +387,24 @@ def flash_attn_varlen_func(
         )
     elif fa_version == 4:
         assert alibi_slopes is None, "Alibi is not supported in FA4"
-
-        from vllm.vllm_flash_attn.fa4_compat import fa4_supports_fp8, get_fa4_fwd
-
-        _flash_attn_fwd = get_fa4_fwd()
-        is_fp8 = q.dtype in (torch.float8_e4m3fn, torch.float8_e5m2)
-        fp8_kwargs = {}
-        if is_fp8:
-            if not fa4_supports_fp8():
-                raise NotImplementedError(
-                    "The installed FA4 sources do not support FP8 descales"
-                )
-            fp8_kwargs = dict(
-                q_descale=q_descale, k_descale=k_descale, v_descale=v_descale
+        if block_sparse_tensors is not None:
+            assert block_sparse_tensors.full_block_cnt is not None, (
+                "FA4 block_sparse_tensors must materialize empty full_block_cnt "
+                "instead of passing None"
+            )
+            assert block_sparse_tensors.full_block_idx is not None, (
+                "FA4 block_sparse_tensors must materialize empty full_block_idx "
+                "instead of passing None"
             )
 
-        out, softmax_lse = _flash_attn_fwd(
+        # FA4 only accepts descales for FP8 inputs. The attention backends
+        # initialize these tensors even when the inputs are not quantized.
+        if v.dtype not in (torch.float8_e4m3fn, torch.float8_e5m2):
+            q_descale = k_descale = v_descale = None
+
+        from vllm.vllm_flash_attn.cute.interface import _flash_attn_fwd
+
+        out, softmax_lse, _, _ = _flash_attn_fwd(
             q,
             k,
             v,
@@ -393,6 +416,7 @@ def flash_attn_varlen_func(
             page_table=block_table,
             softmax_scale=softmax_scale,
             causal=causal,
+            dynamic_causal=dynamic_causal,
             softcap=softcap,
             window_size_left=real_window_size[0] if real_window_size[0] >= 0 else None,
             window_size_right=real_window_size[1] if real_window_size[1] >= 0 else None,
@@ -400,11 +424,112 @@ def flash_attn_varlen_func(
             return_lse=return_softmax_lse,
             out=out,
             learnable_sink=s_aux,
-            **fp8_kwargs,
+            mask_mod=mask_mod,
+            block_sparse_tensors=block_sparse_tensors,
+            aux_tensors=aux_tensors,
+            aux_tensor_leading_dims=aux_tensor_leading_dims,
+            q_descale=q_descale,
+            k_descale=k_descale,
+            v_descale=v_descale,
+            output_scale=output_scale,
         )
     else:
         raise ValueError(f"Unsupported FA version: {fa_version}")
     return (out, softmax_lse) if return_softmax_lse else out
+
+
+def compile_flash_attn_varlen_func_from_specs(
+    *,
+    q_shape: tuple[int, ...],
+    k_shape: tuple[int, ...],
+    v_shape: tuple[int, ...],
+    q_dtype: torch.dtype,
+    v_stride: tuple[int, ...] | None = None,
+    k_stride: tuple[int, ...] | None = None,
+    cu_seqlens_q_shape: tuple[int, ...] | None = None,
+    cu_seqlens_k_shape: tuple[int, ...] | None = None,
+    max_seqlen_q: int | None = None,
+    max_seqlen_k: int | None = None,
+    dropout_p: float = 0.0,
+    softmax_scale=None,
+    causal=False,
+    window_size: list[int] | None = None,
+    deterministic=False,
+    return_softmax_lse=False,
+    num_splits: int = 0,
+    fa_version: int = DEFAULT_FA_VERSION,
+    seqused_k_shape: tuple[int, ...] | None = None,
+    page_table_shape: tuple[int, ...] | None = None,
+    softcap: float | None = None,
+) -> None:
+    if fa_version != 4:
+        raise ValueError(
+            f"Compile-only FlashAttention is only supported for FA4, got FA{fa_version}"
+        )
+    if dropout_p != 0.0:
+        raise NotImplementedError("FA4 compile-only wrapper does not support dropout")
+    del deterministic
+
+    from vllm.vllm_flash_attn.cute.interface import (
+        _flash_attn_fwd,
+        _make_compile_only_tensor_spec,
+    )
+
+    real_window_size: tuple[int, int]
+    if window_size is None:
+        real_window_size = (-1, -1)
+    else:
+        assert len(window_size) == 2
+        real_window_size = (window_size[0], window_size[1])
+
+    if softmax_scale is None:
+        softmax_scale = q_shape[-1] ** (-0.5)
+
+    q = _make_compile_only_tensor_spec(q_shape, q_dtype)
+    k = _make_compile_only_tensor_spec(k_shape, q_dtype, stride=k_stride)
+    v = _make_compile_only_tensor_spec(v_shape, q_dtype, stride=v_stride)
+    cu_seqlens_q = _make_compile_only_tensor_spec(cu_seqlens_q_shape, torch.int32, 4)
+    out = _make_compile_only_tensor_spec(
+        (*q_shape[:-1], v_shape[-1]),
+        q_dtype,
+    )
+    lse = None
+    if return_softmax_lse:
+        assert q is not None
+        if cu_seqlens_q_shape is None:
+            lse_shape = (*q.shape[:-3], q.shape[-2], q.shape[-3])
+            lse_stride = None
+        else:
+            lse_shape = (q.shape[-2], q.shape[0])
+            lse_stride = (None, 1)
+        lse = _make_compile_only_tensor_spec(
+            lse_shape,
+            torch.float32,
+            4,
+            stride=lse_stride,
+        )
+
+    _flash_attn_fwd(
+        q=q,
+        k=k,
+        v=v,
+        cu_seqlens_q=cu_seqlens_q,
+        cu_seqlens_k=_make_compile_only_tensor_spec(cu_seqlens_k_shape, torch.int32, 4),
+        seqused_k=_make_compile_only_tensor_spec(seqused_k_shape, torch.int32, 4),
+        page_table=_make_compile_only_tensor_spec(page_table_shape, torch.int32, 4),
+        max_seqlen_q=max_seqlen_q,
+        max_seqlen_k=max_seqlen_k,
+        softmax_scale=softmax_scale,
+        causal=causal,
+        softcap=softcap,
+        window_size_left=real_window_size[0],
+        window_size_right=real_window_size[1],
+        num_splits=num_splits,
+        return_lse=return_softmax_lse,
+        out=out,
+        lse=lse,
+        compile_only=True,
+    )
 
 
 def sparse_attn_func(

@@ -9,15 +9,15 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 
-from vllm.model_executor.models.yoco import (
+from vllm.model_executor.layers.yoco_ops.norm import (
     RMSClip,
     RMSNorm,
-    _yoco_align_linear,
     _yoco_align_rms_clip,
     _yoco_align_rms_norm,
-    _yoco_align_router_linear,
     _yoco_weighted_rms_clip_kernel,
 )
+from vllm.model_executor.layers.yoco_ops.projection import _yoco_align_linear
+from vllm.model_executor.layers.yoco_ops.routing import _yoco_align_router_linear
 from vllm.triton_utils import triton
 
 

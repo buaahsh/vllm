@@ -91,7 +91,9 @@ def test_diff_quant_packed(tokens, heads):
         assert q.shape == (0, heads // 2 * 128)
         return
     ref = torch.ops.vllm.yoco_diff_attention_v3(a, gates).flatten(1)
-    rq, rs = per_token_group_quant_fp8_packed_for_deepgemm(ref, 128, use_ue8m0=True)
+    rq, rs = per_token_group_quant_fp8_packed_for_deepgemm(
+        ref, 128, eps=1e-4, use_ue8m0=True
+    )
     equal_bytes(q, rq)
     torch.testing.assert_close(scales, rs, rtol=0, atol=0)
     assert scales.stride() == rs.stride()

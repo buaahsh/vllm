@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from vllm.model_executor.models.yoco import RMSNorm
+from vllm.model_executor.layers.yoco_ops.norm import RMSNorm
 
 
 @pytest.mark.parametrize("mode", ["align", "fast"])

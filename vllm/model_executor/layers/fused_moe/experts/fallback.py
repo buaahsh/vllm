@@ -92,16 +92,6 @@ class FallbackExperts(mk.FusedMoEExpertsModular, ABC):
             moe_parallel_config
         ) and fallback_cls._supports_parallel_config(moe_parallel_config)
 
-    def supports_expert_map(self) -> bool:
-        assert (
-            self.experts.supports_expert_map()
-            == self.fallback_experts.supports_expert_map()
-        )
-        return (
-            self.experts.supports_expert_map()
-            and self.fallback_experts.supports_expert_map()
-        )
-
     def finalize_weight_and_reduce_impl(self) -> mk.TopKWeightAndReduce:
         e_war = self.experts.finalize_weight_and_reduce_impl()
         fbe_war = self.fallback_experts.finalize_weight_and_reduce_impl()
@@ -161,21 +151,6 @@ class FallbackExperts(mk.FusedMoEExpertsModular, ABC):
         apply_router_weight_on_input: bool,
     ):
         experts = self._select_experts_impl(hidden_states, w1, w2)
-        for attr in (
-            "swiglu_limit",
-            "apply_router_weight_before_w2",
-            "yoco_align_weighted_swiglu",
-            "yoco_direct_fp8_activation",
-            "yoco_align_deep_gemm_w2",
-            "yoco_separate_w2_config",
-            "yoco_fast_w13_config",
-            "yoco_triton_fallback_max_tokens",
-            "yoco_fast_decode_cutlass",
-            "yoco_align_moe_sum",
-            "yoco_fast_moe_sum",
-        ):
-            if hasattr(self, attr):
-                setattr(experts, attr, getattr(self, attr))
         experts.apply(
             output,
             hidden_states,

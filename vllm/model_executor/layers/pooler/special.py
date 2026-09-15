@@ -19,7 +19,7 @@ from .seqwise import (
     pooler_for_classify,
     pooler_for_embed,
 )
-from .tokwise import AllPool, pooler_for_token_classify, pooler_for_token_embed
+from .tokwise import pooler_for_token_classify, pooler_for_token_embed
 
 
 class DispatchPooler(Pooler):
@@ -46,7 +46,6 @@ class DispatchPooler(Pooler):
             {
                 "token_classify": pooler_for_token_classify(
                     pooler_config,
-                    pooling=AllPool(),
                     classifier=classifier,
                 ),
                 "classify": pooler_for_classify(
@@ -102,6 +101,7 @@ class DispatchPooler(Pooler):
                 # portion of the batch. Token offset is computed from the CPU
                 # `num_scheduled_tokens_cpu` to avoid a GPU->CPU sync.
                 group_cursor = group_metadata.pooling_cursor
+                assert group_cursor is not None
                 num_group_tokens = int(group_cursor.num_scheduled_tokens_cpu.sum())
                 group_hidden_states = hidden_states[
                     token_offset : token_offset + num_group_tokens
@@ -162,6 +162,9 @@ class BOSEOSFilter(Pooler):
         self.pooler = pooler
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+
+    def extra_repr(self) -> str:
+        return f"bos_token_id={self.bos_token_id}, eos_token_id={self.eos_token_id}"
 
     def get_supported_tasks(self) -> Set[PoolingTask]:
         return self.pooler.get_supported_tasks()

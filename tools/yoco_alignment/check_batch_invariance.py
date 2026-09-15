@@ -14,15 +14,18 @@ from pathlib import Path
 
 import torch
 
-from vllm.model_executor.models.yoco import (
-    RMSClip,
-    RMSNorm,
+from vllm.model_executor.layers.yoco_moe import (
     YOCOCombinedOutputTransform,
-    _yoco_align_linear,
-    _yoco_align_router_linear,
     _yoco_align_shared_expert_swiglu,
-    _yoco_align_topk_routing,
+)
+from vllm.model_executor.layers.yoco_ops.norm import RMSClip, RMSNorm
+from vllm.model_executor.layers.yoco_ops.projection import (
+    _yoco_align_linear,
     _yoco_diff_attention_v3_dispatch,
+)
+from vllm.model_executor.layers.yoco_ops.routing import (
+    _yoco_align_router_linear,
+    _yoco_align_topk_routing,
 )
 
 

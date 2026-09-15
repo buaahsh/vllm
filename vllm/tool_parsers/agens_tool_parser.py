@@ -6,12 +6,12 @@
 from collections.abc import Sequence
 from typing import Literal, TypedDict
 
-from vllm.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from vllm.entrypoints.openai.engine.protocol import (
+from vllm.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
 )
+from vllm.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 from vllm.tool_parsers.glm47_moe_tool_parser import Glm47MoeModelToolParser
 
 

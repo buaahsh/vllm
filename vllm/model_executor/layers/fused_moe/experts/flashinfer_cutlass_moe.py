@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+from copy import copy
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import torch
@@ -16,6 +18,9 @@ from vllm.model_executor.layers.fused_moe.config import (
 )
 from vllm.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
+)
+from vllm.model_executor.layers.quantization.utils.flashinfer_utils import (
+    activation_to_flashinfer_type,
 )
 from vllm.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
@@ -116,32 +121,33 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
             get_current_vllm_config().compilation_config.max_cudagraph_capture_size
         )
         self.max_batched_tokens = moe_config.max_num_tokens
-        self._unquantized_swiglu_limit: float | None = None
-        self._unquantized_swiglu_alpha: torch.Tensor | None = None
-        self._unquantized_swiglu_beta: torch.Tensor | None = None
-        self._unquantized_swiglu_limit_tensor: torch.Tensor | None = None
         self._yoco_triton_fallback: TritonExperts | None = None
         self._yoco_triton_workspace13: torch.Tensor | None = None
         self._yoco_triton_workspace2: torch.Tensor | None = None
 
-        if quant_config.weight_quant_dtype == "mxfp4":
-            # This value is used specifically for gpt-oss,
-            # Need to revisit this for other models
-            self.gemm1_alpha = torch.tensor(
-                [1.702] * self.num_experts, dtype=torch.float32, device=self.device
+        def _per_expert(value: float | None) -> torch.Tensor | None:
+            if value is None:
+                return None
+            return torch.full(
+                (self.num_experts,),
+                float(value),
+                dtype=torch.float32,
+                device=self.device,
             )
-            self.gemm1_beta = torch.tensor(
-                [1.0] * self.num_experts, dtype=torch.float32, device=self.device
+
+        self.gemm1_clamp_limit = _per_expert(quant_config.gemm1_clamp_limit)
+        self.gemm1_alpha = _per_expert(quant_config.gemm1_alpha)
+        self.gemm1_beta = _per_expert(quant_config.gemm1_beta)
+
+        if (
+            quant_config.weight_quant_dtype == "mxfp4"
+            and quant_config.quant_dtype == "mxfp8"
+        ):
+            self.fake_input_scale = torch.ones(
+                self.num_experts,
+                device=self.device,
+                dtype=torch.float32,
             )
-            self.gemm1_clamp_limit = torch.tensor(
-                [7.0] * self.num_experts, dtype=torch.float32, device=self.device
-            )
-            if quant_config.quant_dtype == "mxfp8":
-                self.fake_input_scale = torch.ones(
-                    self.num_experts,
-                    device=self.device,
-                    dtype=torch.float32,
-                )
 
     @property
     def expects_unquantized_inputs(self) -> bool:
@@ -207,8 +213,10 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
     def _supports_activation(activation: MoEActivation) -> bool:
         return activation in [
             MoEActivation.SILU,
+            MoEActivation.GELU_TANH,
             MoEActivation.RELU2_NO_MUL,
             MoEActivation.SWIGLUOAI,
+            MoEActivation.SWIGLUOAI_UNINTERLEAVE,
         ]
 
     @staticmethod
@@ -222,9 +230,6 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
     @staticmethod
     def activation_format() -> mk.FusedMoEActivationFormat:
         return mk.FusedMoEActivationFormat.Standard
-
-    def supports_expert_map(self) -> bool:
-        return False
 
     def finalize_weight_and_reduce_impl(self) -> mk.TopKWeightAndReduce:
         return TopKWeightAndReduceNoOP()
@@ -258,7 +263,7 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
         - Note: in order for activation chunking to work, the first dimension
           of each tuple must be the number of tokens.
         """
-        fallback_max = int(getattr(self, "yoco_triton_fallback_max_tokens", 0))
+        fallback_max = int(self.moe_config.yoco.triton_fallback_max_tokens)
         if (
             fallback_max > 1
             and M > 0
@@ -305,7 +310,7 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
         expert_tokens_meta: mk.ExpertTokensMetadata | None,
         apply_router_weight_on_input: bool | None,
     ):
-        fallback_max_tokens = int(getattr(self, "yoco_triton_fallback_max_tokens", 0))
+        fallback_max_tokens = int(self.moe_config.yoco.triton_fallback_max_tokens)
         use_yoco_decode = FlashInferExperts._use_yoco_decode_cutlass(
             self, hidden_states, w1, w2
         )
@@ -331,23 +336,25 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
                     "converted [up, gate] W13 layout",
                     fallback_max_tokens,
                 )
+                fallback_config = copy(self.moe_config)
+                fallback_config.yoco = replace(
+                    self.moe_config.yoco,
+                    swapped_w13=True,
+                    fast_w13_config=(
+                        self.moe_config.yoco.fast_w13_config and fallback_max_tokens > 1
+                    ),
+                    separate_w2_config=(
+                        self.moe_config.yoco.separate_w2_config
+                        and fallback_max_tokens > 1
+                    ),
+                    fast_moe_sum=(
+                        self.moe_config.yoco.fast_moe_sum and fallback_max_tokens > 1
+                    ),
+                )
                 self._yoco_triton_fallback = TritonExperts(
-                    self.moe_config, self.quant_config
+                    fallback_config, self.quant_config
                 )
-                self._yoco_triton_fallback.yoco_swapped_w13 = True
-                self._yoco_triton_fallback.swiglu_limit = getattr(
-                    self, "swiglu_limit", None
-                )
-                if fallback_max_tokens > 1:
-                    for name in (
-                        "yoco_fast_w13_config",
-                        "yoco_separate_w2_config",
-                        "yoco_fast_moe_sum",
-                    ):
-                        setattr(
-                            self._yoco_triton_fallback, name, getattr(self, name, False)
-                        )
-                else:
+                if fallback_max_tokens <= 1:
                     routes = fallback_max_tokens * topk_ids.shape[1]
                     self._yoco_triton_workspace13 = torch.empty(
                         routes * (w1.shape[1] // 2),
@@ -388,17 +395,6 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
             )
             return
 
-        from flashinfer.fused_moe.core import ActivationType
-
-        activation_str_to_value_map = {
-            MoEActivation.SILU: ActivationType.Swiglu,  # This is the default
-            MoEActivation.SWIGLUOAI: ActivationType.Swiglu,  # gpt-oss alias
-            MoEActivation.RELU2_NO_MUL: ActivationType.Relu2,
-        }
-        assert activation in activation_str_to_value_map, (
-            f"{activation=} missing from {activation_str_to_value_map.keys()=}"
-        )
-
         quant_scales = None
         fc1_expert_weights = None
         fc2_expert_weights = None
@@ -407,6 +403,15 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
         swiglu_alpha = None
         swiglu_beta = None
         swiglu_limit = None
+        if activation == MoEActivation.SILU:
+            swiglu_limit = self.gemm1_clamp_limit
+        elif activation in (
+            MoEActivation.SWIGLUOAI,
+            MoEActivation.SWIGLUOAI_UNINTERLEAVE,
+        ):
+            swiglu_alpha = self.gemm1_alpha
+            swiglu_beta = self.gemm1_beta
+            swiglu_limit = self.gemm1_clamp_limit
         use_mxfp8_act_scaling = False
         use_w4_group_scaling = False
         # Select quantization metadata based on FP8 format/path
@@ -446,9 +451,6 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
         elif self.weight_quant_dtype == "mxfp4":
             assert self.w1_scale is not None and self.w2_scale is not None
             assert w1.is_contiguous() and w2.is_contiguous()
-            assert self.gemm1_alpha is not None
-            assert self.gemm1_beta is not None
-            assert self.gemm1_clamp_limit is not None
             assert topk_ids.is_contiguous()
 
             fc1_expert_biases = self.w1_bias
@@ -494,26 +496,6 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
             a1q_scale = None
             fc1_expert_weights = w1
             fc2_expert_weights = w2
-            # FlashInfer's BF16 SwiGLU accepts the same clamp expression used
-            # by YOCO when alpha=1 and beta=0. The oracle has already swapped
-            # vLLM's [gate, up] W13 layout to FlashInfer's [up, gate] layout.
-            # Models without an explicit positive swiglu_limit keep the
-            # original all-None parameters and are unaffected.
-            limit = getattr(self, "swiglu_limit", None)
-            if limit is not None and float(limit) > 0:
-                limit_value = float(limit)
-                if self._unquantized_swiglu_limit != limit_value:
-                    self._unquantized_swiglu_limit = limit_value
-                    (
-                        self._unquantized_swiglu_alpha,
-                        self._unquantized_swiglu_beta,
-                        self._unquantized_swiglu_limit_tensor,
-                    ) = make_unquantized_swiglu_params(
-                        self.num_experts, hidden_states.device, limit_value
-                    )
-                swiglu_alpha = self._unquantized_swiglu_alpha
-                swiglu_beta = self._unquantized_swiglu_beta
-                swiglu_limit = self._unquantized_swiglu_limit_tensor
 
         _ = flashinfer_cutlass_fused_moe(
             input=hidden_states,
@@ -534,7 +516,7 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
             tp_rank=self.tp_rank,
             ep_size=self.ep_size,
             ep_rank=self.ep_rank,
-            activation_type=activation_str_to_value_map[activation],
+            activation_type=activation_to_flashinfer_type(activation),
             # Informs FlashInfer to use the block-scale decoding path when True
             use_deepseek_fp8_block_scale=self.use_deepseek_fp8_block_scale,
             use_mxfp8_act_scaling=use_mxfp8_act_scaling,
@@ -544,7 +526,7 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
             # full scheduler range; uncached prefill buckets keep heuristics.
             tune_max_num_tokens=(
                 max(self.max_batched_tokens, self.max_capture_size or 1)
-                if getattr(self, "yoco_fast_decode_cutlass", False)
+                if self.moe_config.yoco.fast_decode_cutlass
                 else max(self.max_capture_size, 1)
             ),
         )
@@ -552,7 +534,7 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
     def _use_yoco_decode_cutlass(
         self, hidden_states: torch.Tensor, w1: torch.Tensor, w2: torch.Tensor
     ) -> bool:
-        if not getattr(self, "yoco_fast_decode_cutlass", False):
+        if not self.moe_config.yoco.fast_decode_cutlass:
             return False
         # The same M can also be a multi-token prefill. Only specialize
         # single-token decode graphs, whose numerical behavior was audited.

@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from collections.abc import Callable
 from functools import partial
 
 import torch
@@ -91,7 +90,7 @@ def grouped_topk(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     if (
         envs.VLLM_USE_FUSED_MOE_GROUPED_TOPK
-        and current_platform.is_cuda()
+        and (current_platform.is_cuda() or current_platform.is_xpu())
         and num_expert_group <= 32
         and topk <= 32
         and e_score_correction_bias is not None
@@ -259,13 +258,11 @@ class GroupedTopKRouter(BaseRouter):
         e_score_correction_bias: torch.Tensor | None = None,
         num_fused_shared_experts: int = 0,
         eplb_state: EplbLayerState | None = None,
-        indices_type_getter: Callable[[], torch.dtype | None] | None = None,
     ):
         super().__init__(
             top_k=top_k,
             global_num_experts=global_num_experts,
             eplb_state=eplb_state,
-            indices_type_getter=indices_type_getter,
         )
         self.num_expert_group = num_expert_group
         self.topk_group = topk_group
@@ -283,6 +280,7 @@ class GroupedTopKRouter(BaseRouter):
             renormalize=self.renormalize,
             num_expert_group=self.num_expert_group,
             has_e_score_bias=self.e_score_correction_bias is not None,
+            routed_scaling_factor=self.routed_scaling_factor,
         )
 
     def _compute_routing(

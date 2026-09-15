@@ -9,14 +9,14 @@ import regex as re
 from transformers import PreTrainedTokenizerBase
 
 from vllm.entrypoints.chat_utils import make_tool_call_id
-from vllm.entrypoints.openai.chat_completion.protocol import (
-    ChatCompletionRequest,
-)
-from vllm.entrypoints.openai.engine.protocol import (
+from vllm.entrypoints.generate.base.protocol import (
     DeltaMessage,
     ExtractedToolCallInformation,
     FunctionCall,
     ToolCall,
+)
+from vllm.entrypoints.openai.chat_completion.protocol import (
+    ChatCompletionRequest,
 )
 from vllm.logger import init_logger
 from vllm.tool_parsers.abstract_tool_parser import (
@@ -47,7 +47,6 @@ class Phi4MiniJsonToolParser(ToolParser):
         # streaming mode
         self.prev_tool_call_arr: list[dict[str, Any]] = []
         self.current_tool_id: int = -1
-        self.current_tool_name_sent: bool = False
         self.streamed_args_for_tool: list[
             str
         ] = []  # map what has been streamed for each tool so far to a list

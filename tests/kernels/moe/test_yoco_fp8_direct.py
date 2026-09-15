@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from vllm.model_executor.layers.quantization.utils.fp8_utils import (
+from vllm.model_executor.layers.yoco_ops.fp8 import (
     silu_mul_quant_fp8_packed_triton,
     silu_mul_quant_fp8_triton,
 )
@@ -132,33 +132,52 @@ def test_direct_quant_graph_replay_routes_and_preserves_shared_boundary():
     assert not torch.equal(default.view(torch.uint8), direct.view(torch.uint8))
 
 
-def test_online_moe_propagates_and_resets_direct_quantization_policy():
-    from types import SimpleNamespace
+def test_backend_policy_preserves_direct_quantization_after_rebuild():
+    from dataclasses import replace
 
-    from vllm.model_executor.layers.quantization.online.moe_base import (
-        OnlineMoEMethodBase,
+    from tests.kernels.moe.utils import make_dummy_moe_config
+    from vllm.config.yoco import YocoMoEPolicy
+    from vllm.model_executor.layers.fused_moe.activation import MoEActivation
+    from vllm.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
+    from vllm.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
+        DeepGemmExperts,
     )
+    from vllm.model_executor.layers.yoco_ops.fp8_moe import _act_mul_quant
+    from vllm.utils.deep_gemm import is_deep_gemm_e8m0_used
 
-    experts = SimpleNamespace()
-    x = torch.empty(1, 128)
-    method = SimpleNamespace(
-        is_monolithic=False,
-        moe_kernel=SimpleNamespace(fused_experts=experts, apply=lambda *a, **kw: x),
+    if not is_deep_gemm_e8m0_used():
+        pytest.skip("requires DeepGEMM UE8M0")
+    torch.manual_seed(9312)
+    rows, width = 31, 1280
+    x = torch.randn(rows, 2 * width, device="cuda", dtype=torch.bfloat16) * 4
+    weights = torch.rand(rows, device="cuda")
+    config = make_dummy_moe_config(hidden_dim=width, intermediate_size=width)
+    config.yoco = YocoMoEPolicy.for_mode("fast")
+    config.apply_router_weight_before_w2 = True
+    quant = fp8_w8a8_moe_quant_config(
+        w1_scale=torch.ones(1, 2 * width // 128, width // 128, device="cuda"),
+        w2_scale=torch.ones(1, width // 128, width // 128, device="cuda"),
+        block_shape=[128, 128],
+        gemm1_clamp_limit=10.0,
     )
-    layer = SimpleNamespace(
-        swiglu_limit=10.0,
-        apply_router_weight_before_w2=True,
-        w13_weight=None,
-        w2_weight=None,
-        activation=None,
-        global_num_experts=128,
-        expert_map=None,
-        apply_router_weight_on_input=False,
+    expected, _ = training_reference(x, weights)
+    rounded, _ = silu_mul_quant_fp8_packed_triton(
+        x,
+        clamp_limit=10.0,
+        row_weights=weights,
+        round_before_quant=True,
     )
-    for enabled in [True, False]:
-        layer.yoco_direct_fp8_activation = enabled
-        OnlineMoEMethodBase.apply(method, layer, x, None, None, None, None)
-        assert experts.yoco_direct_fp8_activation is enabled
-    del layer.yoco_direct_fp8_activation
-    OnlineMoEMethodBase.apply(method, layer, x, None, None, None, None)
-    assert not experts.yoco_direct_fp8_activation
+    assert not torch.equal(expected.view(torch.uint8), rounded.view(torch.uint8))
+    for enabled in (True, False, True):
+        config.yoco = replace(config.yoco, direct_fp8_activation=enabled)
+        # Online quantization/reload constructs another backend with this config.
+        experts = DeepGemmExperts(config, quant)
+        actual, _ = _act_mul_quant(
+            experts,
+            x,
+            torch.empty_like(expected),
+            MoEActivation.SILU,
+            row_weights=weights,
+        )
+        reference = expected if enabled else rounded
+        assert torch.equal(actual.view(torch.uint8), reference.view(torch.uint8))

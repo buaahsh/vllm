@@ -6,6 +6,7 @@ import pytest
 import torch
 
 from tests.kernels.moe.utils import make_dummy_moe_config
+from vllm.config.yoco import YocoMoEPolicy
 from vllm.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
 from vllm.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
     TritonOrDeepGemmExperts,
@@ -38,7 +39,11 @@ def scales():
 
 def make_experts(scales):
     _, _, s1, s2 = scales
-    config = make_dummy_moe_config(128, 8, 1024, 3840)
+    config = make_dummy_moe_config(
+        num_experts=128, experts_per_token=8, hidden_dim=1024, intermediate_size=3840
+    )
+    config.yoco = YocoMoEPolicy.for_mode("fast")
+    config.apply_router_weight_before_w2 = True
     quant = fp8_w8a8_moe_quant_config(w1_scale=s1, w2_scale=s2, block_shape=[128, 128])
     return TritonOrDeepGemmExperts(config, quant)
 
@@ -48,7 +53,9 @@ def test_decode_scale_cache_and_dispatch(scales):
     experts = make_experts(scales)
     assert experts.configure_yoco_fp8_decode()
     fallback = experts.fallback_experts
-    assert fallback.yoco_fp8_decode_aligned
+    assert fallback.moe_config.yoco.fp8_decode_aligned
+    assert fallback.moe_config.yoco.direct_fp8_activation
+    assert experts.experts.moe_config.yoco.direct_fp8_activation
     assert torch.equal(fallback.w1_scale, s1)
     assert torch.equal(fallback.w2_scale, s2)
     assert experts.experts.w1_scale is packed1

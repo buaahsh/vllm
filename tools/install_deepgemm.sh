@@ -6,8 +6,11 @@ set -e
 
 # Default values
 # Keep DEEPGEMM_GIT_REF in sync with cmake/external_projects/deepgemm.cmake
-DEEPGEMM_GIT_REPO="https://github.com/deepseek-ai/DeepGEMM.git"
-DEEPGEMM_GIT_REF="891d57b4db1071624b5c8fa0d1e51cb317fa709f"
+DEEPGEMM_GIT_REPO="https://github.com/vllm-project/DeepGEMM.git"
+# NOTE: This targets the vLLM fork's dev branch tip, which carries the sm120
+# and sm90 paged-MQA ports plus the SwiGLU alpha/beta and SiTU Mega MoE
+# activations
+DEEPGEMM_GIT_REF="ad1f1726aa540a76c1d26d6a120effb8de21eaa4"
 WHEEL_DIR=""
 
 # Parse command line arguments

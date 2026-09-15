@@ -15,6 +15,7 @@ from vllm.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector im
 )
 from vllm.sampling_params import SamplingParams
 from vllm.v1.core.sched.scheduler import Scheduler
+from vllm.v1.kv_cache_interface import KVCacheConfig
 from vllm.v1.request import Request
 
 
@@ -26,7 +27,9 @@ def scheduler(role, yoco=True):
         scheduler_config=SimpleNamespace(disable_hybrid_kv_cache_manager=False),
     )
     return MooncakeConnectorScheduler(
-        config, "test", SimpleNamespace(kv_cache_groups=[])
+        config,
+        "test",
+        KVCacheConfig(num_blocks=0, kv_cache_tensors=[], kv_cache_groups=[]),
     )
 
 
