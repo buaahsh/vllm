@@ -1,0 +1,158 @@
+{
+  "source_snapshot": "dd465efd1235376267aee0275019ce1b2fc277d0",
+  "official_upstream": "ca67438c088d5ada7da901b77f9aeaebc1b9542c",
+  "integration_commit": "f7ab70e649d114a4aebe9bca510e6a50c9bb224e",
+  "runtime_bundle": "model-r11",
+  "runtime_bundle_sha256": "eb69901e48794635fbc2b9d627097e0d34f494b5a4c7bd56bacfeb3d322a0d51",
+  "components": {
+    "vllm/config/yoco.py": 98,
+    "vllm/model_executor/models/yoco.py": 1040,
+    "vllm/model_executor/models/yoco_config.py": 341,
+    "vllm/model_executor/models/yoco_weights.py": 247,
+    "vllm/model_executor/models/yoco_prefill.py": 188,
+    "vllm/model_executor/models/yoco_diagnostics.py": 144,
+    "vllm/model_executor/layers/yoco_attention.py": 686,
+    "vllm/model_executor/layers/yoco_moe.py": 613
+  },
+  "architecture_specific_reuse": "Keep native DeepGEMM and upstream generic factories; V4.1 MXFP8/compressed-cache kernels do not satisfy YOCO numerical/layout contracts",
+  "checks": {
+    "merge_pre_commit": "passed normal commit hooks (190 merge paths)",
+    "manual_python312_mypy": "passed scoped hook",
+    "runtime_manifest_drift": false,
+    "non_yoco_gsm64": {
+      "upstream_correct": 57,
+      "candidate_correct": 57,
+      "total": 64,
+      "invalid": 0,
+      "identical_token_sequences": 33
+    },
+    "fa4_gpu_interface": "26 passed",
+    "fp8_graph": "passed, repeated tokens identical",
+    "fp8_kv_graph": "passed,20 fused layers, fixed scales1",
+    "qwen_controlled": "16 matched input frames with byte-identical logits",
+    "serving_lifecycle": "passed stop-string and client-disconnect drain",
+    "final_status": "complete within documented single-B200 scope"
+  },
+  "precision_reference_limit": "Pre-extraction model on migrated supporting runtime; not original v0.20 whole runtime",
+  "final_code_commit": "aab6d69e6798dc76be4741324a605c15ae8d76f7",
+  "provenance_files": [
+    "runtime-bundles/model-r11-manifest.json",
+    "gpu/prepare-model-r11-request.json",
+    "gpu/fa2-build.json",
+    "source-generated/provenance.json"
+  ],
+  "evidence_files": [
+    "gpu/pre-refactor-eager-byte-comparison.json",
+    "gpu/pre-refactor-graph-byte-comparison.json",
+    "gpu/model-align-graph-reload-r7",
+    "gpu/pd-align-one-b200-r7b",
+    "gpu/fp8-graph-r10",
+    "gpu/fp8-kv-graph-r11",
+    "gpu/fa4-kernels-r11",
+    "gpu/qwen-paired-evaluation.json",
+    "gpu/qwen-controlled-byte-comparison.json",
+    "gpu/serving-lifecycle-candidate-r11b.json",
+    "gpu/fixed-shape-abba.json"
+  ],
+  "artifact_root": "/home/lidong1/vllm_test/work/yoco-migration-20260915",
+  "trace": {
+    "cases": [
+      "trace-before-long-r2",
+      "trace-after-long-r1",
+      "trace-after-long-warm-r2"
+    ],
+    "actual_counts_equal": true,
+    "strict_input_length_gate": false,
+    "text_roundtrip_extra_input_tokens_per_case": 6,
+    "warm_comparison": [
+      {
+        "metric": "request_throughput",
+        "statistic": "avg",
+        "before": 2.802356668273267,
+        "after": 2.8034398508632266,
+        "delta_pct": 0.038652559905116846
+      },
+      {
+        "metric": "input_token_throughput",
+        "statistic": "avg",
+        "before": 23879.853836831535,
+        "after": 23889.08401164107,
+        "delta_pct": 0.038652559905116846
+      },
+      {
+        "metric": "output_token_throughput",
+        "statistic": "avg",
+        "before": 496.37990002831094,
+        "after": 496.57176356652633,
+        "delta_pct": 0.038652559905116846
+      },
+      {
+        "metric": "time_to_first_token",
+        "statistic": "p50",
+        "before": 882.889868,
+        "after": 912.915218,
+        "delta_pct": 3.400803552997611
+      },
+      {
+        "metric": "time_to_first_token",
+        "statistic": "p95",
+        "before": 2395.2606313999995,
+        "after": 2450.9956409999977,
+        "delta_pct": 2.326887056437843
+      },
+      {
+        "metric": "time_to_first_token",
+        "statistic": "p99",
+        "before": 3386.4582306399966,
+        "after": 3279.3715375599995,
+        "delta_pct": -3.162203275123787
+      },
+      {
+        "metric": "inter_token_latency",
+        "statistic": "p50",
+        "before": 33.799642963242114,
+        "after": 34.142182999999996,
+        "delta_pct": 1.0134427666304013
+      },
+      {
+        "metric": "inter_token_latency",
+        "statistic": "p95",
+        "before": 145.84589566666665,
+        "after": 147.431089675,
+        "delta_pct": 1.0868965500107963
+      },
+      {
+        "metric": "inter_token_latency",
+        "statistic": "p99",
+        "before": 160.50850068999998,
+        "after": 162.39441193499982,
+        "delta_pct": 1.174960352188581
+      },
+      {
+        "metric": "request_latency",
+        "statistic": "p50",
+        "before": 2812.452829,
+        "after": 2829.3038779999997,
+        "delta_pct": 0.5991584579212894
+      },
+      {
+        "metric": "request_latency",
+        "statistic": "p95",
+        "before": 17513.997610999995,
+        "after": 17486.990514799996,
+        "delta_pct": -0.15420292271273173
+      },
+      {
+        "metric": "request_latency",
+        "statistic": "p99",
+        "before": 26554.27638743993,
+        "after": 26605.873004439916,
+        "delta_pct": 0.1943062437370413
+      }
+    ],
+    "cache_queries": 15074263,
+    "cache_hits": 5825984,
+    "jit_new_cubins_in_warm_repeat": 0,
+    "qualification": "diagnostic; single shared-node reference plus two candidate runs; no declared SLO"
+  }
+}
