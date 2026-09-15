@@ -446,6 +446,21 @@ class FlashAttentionBackend(AttentionBackend):
         ):
             return "FP8 KV cache requires FA3 on SM90 or FA4 on SM100"
         if (
+            kv_cache_dtype is not None
+            and is_quantized_kv_cache(kv_cache_dtype)
+            and get_flash_attn_version(
+                head_size=head_size,
+                has_sinks=has_sink,
+                kv_cache_block_size=block_size,
+                supports_fa4_hd256=True,
+            )
+            == 4
+        ):
+            if dtype != torch.bfloat16:
+                return "FA4 FP8 requires bfloat16 attention output"
+            if head_size % 16 != 0:
+                return "FA4 FP8 requires head size to be a multiple of 16"
+        if (
             use_mm_prefix
             and get_flash_attn_version(
                 head_size=head_size,

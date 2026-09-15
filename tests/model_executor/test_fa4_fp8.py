@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+import sys
 from types import SimpleNamespace
 
 import pytest
 import torch
 
 try:
-    from vllm.vllm_flash_attn import fa4_compat, flash_attn_interface
+    from vllm.vllm_flash_attn import flash_attn_interface
 except ImportError:
     pytest.skip("requires CUDA FlashAttention extensions", allow_module_level=True)
 
@@ -17,10 +18,13 @@ def test_fa4_forwards_descales_only_for_fp8(monkeypatch, dtype):
 
     def forward(q, k, v, **kwargs):
         calls.append(kwargs)
-        return torch.zeros_like(q, dtype=torch.bfloat16), None
+        return torch.zeros_like(q, dtype=torch.bfloat16), None, None, None
 
-    monkeypatch.setattr(fa4_compat, "get_fa4_fwd", lambda: forward)
-    monkeypatch.setattr(fa4_compat, "fa4_supports_fp8", lambda: True)
+    monkeypatch.setitem(
+        sys.modules,
+        "vllm.vllm_flash_attn.cute.interface",
+        SimpleNamespace(_flash_attn_fwd=forward),
+    )
     q = torch.zeros(1, 8, 128, dtype=dtype)
     kv = torch.zeros(3, 2, 128, dtype=dtype)
     scales = [torch.tensor([[0.25, 0.5]]) * v for v in (1, 2, 3)]
@@ -41,7 +45,7 @@ def test_fa4_forwards_descales_only_for_fp8(monkeypatch, dtype):
         if dtype == torch.float8_e4m3fn:
             assert calls[0][name] is scale
         else:
-            assert name not in calls[0]
+            assert calls[0][name] is None
 
 
 @pytest.mark.parametrize(
@@ -64,7 +68,7 @@ def test_fp8_capability_tracks_selected_version(
     monkeypatch.setattr(
         fa_utils.current_platform, "is_device_capability_family", lambda v: v == family
     )
-    monkeypatch.setattr(fa4_compat, "fa4_supports_fp8", lambda: installed)
+    monkeypatch.setattr(fa_utils, "is_fa_version_supported", lambda _: installed)
     assert fa_utils.flash_attn_supports_fp8(version) == expected
 
 
@@ -84,11 +88,15 @@ def test_fa4_fp8_backend_checks_output_dtype_and_alignment(
     from vllm.v1.attention.backends import flash_attn
 
     monkeypatch.setattr(flash_attn, "get_flash_attn_version", lambda **_: 4)
+    monkeypatch.setattr(
+        flash_attn, "flash_attn_supports_kv_cache_dtype", lambda *_, **__: True
+    )
     actual = flash_attn.FlashAttentionBackend.supports_combination(
         head_size,
         dtype,
         cache_dtype,
         16,
+        False,
         False,
         False,
         False,
@@ -147,7 +155,13 @@ def test_yoco_fp8_decode_keeps_flash_attention(monkeypatch, cache_dtype):
     )
     monkeypatch.setattr(flash_attn, "get_current_vllm_config_or_none", lambda: runtime)
     monkeypatch.setattr(flash_attn, "get_flash_attn_version", lambda **_: 4)
+    monkeypatch.setattr(
+        flash_attn, "is_fa_version_supported", lambda version: version == 4
+    )
     monkeypatch.setattr(flash_attn, "flash_attn_supports_fp8", lambda *_: True)
+    monkeypatch.setattr(
+        flash_attn, "flash_attn_supports_kv_cache_dtype", lambda *_, **__: True
+    )
     monkeypatch.setattr(
         flash_attn.current_platform,
         "get_device_capability",

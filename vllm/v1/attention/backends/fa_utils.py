@@ -287,9 +287,7 @@ def flash_attn_supports_fp8(fa_version: int | None = None) -> bool:
     if fa_version == 3:
         return current_platform.is_device_capability_family(90)
     if fa_version == 4 and current_platform.is_device_capability_family(100):
-        from vllm.vllm_flash_attn.fa4_compat import fa4_supports_fp8
-
-        return fa4_supports_fp8()
+        return is_fa_version_supported(4)
     return False
 
 

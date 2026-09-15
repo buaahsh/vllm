@@ -8,10 +8,10 @@ import pytest
 import torch
 
 from vllm.platforms import current_platform
+from vllm.v1.attention.backends.fa_utils import flash_attn_supports_fp8
 
 try:
     from vllm.vllm_flash_attn import flash_attn_varlen_func
-    from vllm.vllm_flash_attn.fa4_compat import fa4_supports_fp8
 except ImportError:
     pytest.skip("requires CUDA FlashAttention extensions", allow_module_level=True)
 
@@ -113,7 +113,7 @@ def check(case, actual, lse, window):
 @pytest.mark.parametrize("splits", [1, 2])
 @torch.inference_mode()
 def test_fa4_paged_scales_and_split_kv(dtype, window, splits):
-    assert fa4_supports_fp8()
+    assert flash_attn_supports_fp8(4)
     case = make_case(dtype)
     actual, lse = forward(case, window, splits)
     check(case, actual, lse, window)
