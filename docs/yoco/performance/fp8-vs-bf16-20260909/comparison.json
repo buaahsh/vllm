@@ -1,0 +1,850 @@
+{
+  "probes": [
+    {
+      "isl": 128,
+      "osl": 128,
+      "concurrency": 1,
+      "bf16": {
+        "output_tok_s": 159.7174990935376,
+        "min_tok_s": 159.61387441160952,
+        "max_tok_s": 159.79327860497435,
+        "ttft_ms": 36.742170341312885,
+        "tpot_ms": 6.017334649236653,
+        "e2e_ms": 800.9903067722917,
+        "repeats": 3
+      },
+      "fp8": {
+        "output_tok_s": 122.85694684283673,
+        "min_tok_s": 122.83636974507881,
+        "max_tok_s": 122.99584729781758,
+        "ttft_ms": 40.0132080540061,
+        "tpot_ms": 7.88353655604631,
+        "e2e_ms": 1041.3235109299421,
+        "repeats": 3
+      },
+      "fp8_over_bf16": 0.7692140657103971,
+      "change_percent": -23.078593428960293
+    },
+    {
+      "isl": 128,
+      "osl": 128,
+      "concurrency": 2,
+      "bf16": {
+        "output_tok_s": 268.00061766968906,
+        "min_tok_s": 267.89373405779907,
+        "max_tok_s": 268.11943352108625,
+        "ttft_ms": 54.809031542390585,
+        "tpot_ms": 7.060853346419616,
+        "e2e_ms": 951.5998200513422,
+        "repeats": 3
+      },
+      "fp8": {
+        "output_tok_s": 220.63814919348678,
+        "min_tok_s": 220.5959809699977,
+        "max_tok_s": 220.69333885764567,
+        "ttft_ms": 55.83280744031072,
+        "tpot_ms": 8.66234129822747,
+        "e2e_ms": 1155.870113056153,
+        "repeats": 3
+      },
+      "fp8_over_bf16": 0.8232747786627247,
+      "change_percent": -17.67252213372753
+    },
+    {
+      "isl": 128,
+      "osl": 128,
+      "concurrency": 4,
+      "bf16": {
+        "output_tok_s": 412.9599447677492,
+        "min_tok_s": 412.7780154989429,
+        "max_tok_s": 413.5322212760247,
+        "ttft_ms": 110.09219661355019,
+        "tpot_ms": 8.879480344485344,
+        "e2e_ms": 1237.864360678941,
+        "repeats": 3
+      },
+      "fp8": {
+        "output_tok_s": 371.7465171812428,
+        "min_tok_s": 371.6179420679814,
+        "max_tok_s": 372.74266371410135,
+        "ttft_ms": 139.3579887226224,
+        "tpot_ms": 9.728346720308535,
+        "e2e_ms": 1374.1037594154477,
+        "repeats": 3
+      },
+      "fp8_over_bf16": 0.9001999392224709,
+      "change_percent": -9.980006077752911
+    },
+    {
+      "isl": 128,
+      "osl": 128,
+      "concurrency": 8,
+      "bf16": {
+        "output_tok_s": 758.4910246005487,
+        "min_tok_s": 757.2286236039988,
+        "max_tok_s": 760.1723133435413,
+        "ttft_ms": 122.67282046377659,
+        "tpot_ms": 9.637784436491765,
+        "e2e_ms": 1346.9168189913034,
+        "repeats": 3
+      },
+      "fp8": {
+        "output_tok_s": 647.5321739895804,
+        "min_tok_s": 646.4681479813053,
+        "max_tok_s": 647.5522137492657,
+        "ttft_ms": 145.71800315752625,
+        "tpot_ms": 11.28645818387195,
+        "e2e_ms": 1579.2820127680898,
+        "repeats": 3
+      },
+      "fp8_over_bf16": 0.8537110565422925,
+      "change_percent": -14.62889434577075
+    },
+    {
+      "isl": 8192,
+      "osl": 128,
+      "concurrency": 1,
+      "bf16": {
+        "output_tok_s": 137.22985442159984,
+        "min_tok_s": 136.74568484830934,
+        "max_tok_s": 137.36286145226137,
+        "ttft_ms": 154.44003883749247,
+        "tpot_ms": 6.111919168588214,
+        "e2e_ms": 929.5733878389001,
+        "repeats": 3
+      },
+      "fp8": {
+        "output_tok_s": 110.19738543535323,
+        "min_tok_s": 110.10881005339289,
+        "max_tok_s": 110.26563136056481,
+        "ttft_ms": 153.0992705374956,
+        "tpot_ms": 7.912933489117097,
+        "e2e_ms": 1158.092986792326,
+        "repeats": 3
+      },
+      "fp8_over_bf16": 0.8030132065636606,
+      "change_percent": -19.69867934363394
+    }
+  ],
+  "trace": [
+    {
+      "variant": "bf16",
+      "case": "bf16-full-b",
+      "measured_start_utc": "2026-09-09T10:19:08.013415+00:00",
+      "measured_end_utc": "2026-09-09T10:28:16.820538+00:00",
+      "trace_sha256": "5317e2301656c7d5441bbd63e58b7e8b9d3d445e0118729cd7fde0b8717b960c",
+      "gpu_uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+      "cache_salt": "fast-fp8-vs-bf16-20260909-bf16-full-b",
+      "planned": 3643,
+      "completed": 3643,
+      "error_records": 0,
+      "arrival_span_s": 499.99916666666667,
+      "offered_req_s": 7.286012143353572,
+      "offered_input_tok_s": 61037.04772841288,
+      "offered_output_tok_s": 1286.7521445869077,
+      "achieved_req_s": 6.6378427844570265,
+      "achieved_input_tok_s": 55613.79829743218,
+      "achieved_output_tok_s": 1172.2816638622123,
+      "actual_input_tokens": 30522125,
+      "actual_output_tokens": 643375,
+      "benchmark_duration_s": 548.807122176,
+      "overhang_from_first_actual_send_s": 48.80795556386312,
+      "schedule_lag_p99_ms": 5.080202239999996,
+      "schedule_degraded": 0.0,
+      "concurrency_max": 405.0,
+      "client_pass": true,
+      "client_gates": {
+        "command_exit_zero": true,
+        "concurrency_ceiling_not_reached": true,
+        "http_2xx_only": true,
+        "no_context_skips": true,
+        "no_error_summary": true,
+        "not_cancelled": true,
+        "planned_equals_completed": true,
+        "record_count_matches_completed": true,
+        "schedule_lag_within_limit": true,
+        "schedule_not_degraded": true,
+        "zero_osl_mismatch": true
+      },
+      "server_pass": true,
+      "token_accounting_pass": true,
+      "drained": true,
+      "passed": true,
+      "metrics_gates": {
+        "standalone": {
+          "scrape_errors": 0,
+          "max_gap_seconds": 1.2353980541229248,
+          "counter_resets": []
+        }
+      },
+      "queue_maxima": {
+        "vllm:num_requests_running": 256.0,
+        "vllm:num_requests_waiting": 141.0
+      },
+      "prefix_cache_deltas": {
+        "vllm:prefix_cache_queries_total": 30522125.0,
+        "vllm:prefix_cache_hits_total": 11383808.0,
+        "vllm:external_prefix_cache_queries_total": 0.0,
+        "vllm:external_prefix_cache_hits_total": 0.0
+      },
+      "cache_hit_fraction": 0.3729690511391327,
+      "manifest_sha256": "d00e1624bd7d25113110559d54e322d38a370f2b4607105d3910f76e3075e9cb",
+      "diagnostic": true,
+      "newly_compiled_kernels": {
+        "deep_gemm": [],
+        "triton": []
+      },
+      "gpu_telemetry": {
+        "memory_mib": {
+          "mean": 162466.0,
+          "minimum": 162466.0,
+          "maximum": 162466.0
+        },
+        "utilization_percent": {
+          "mean": 92.27619047619048,
+          "minimum": 8.0,
+          "maximum": 100.0
+        },
+        "power_w": {
+          "mean": 874.8779047619048,
+          "minimum": 685.65,
+          "maximum": 991.66
+        },
+        "temperature_c": {
+          "mean": 54.96190476190476,
+          "minimum": 47.0,
+          "maximum": 59.0
+        },
+        "sm_clock_mhz": {
+          "mean": 1752.6285714285714,
+          "minimum": 1492.0,
+          "maximum": 1965.0
+        },
+        "memory_clock_mhz": {
+          "mean": 3996.0,
+          "minimum": 3996.0,
+          "maximum": 3996.0
+        }
+      },
+      "gpu_telemetry_samples": 105,
+      "other_busy_gpus": [
+        0,
+        1,
+        5
+      ],
+      "ttft_p50_ms": 2417.115401,
+      "ttft_p95_ms": 16790.2314905,
+      "ttft_p99_ms": 19662.69100324,
+      "itl_p50_ms": 160.93078996994947,
+      "itl_p95_ms": 337.747677,
+      "itl_p99_ms": 498.015831,
+      "e2e_p50_ms": 14415.328864,
+      "e2e_p95_ms": 104585.33823009991,
+      "e2e_p99_ms": 146677.5066379,
+      "numeric_before_after_pass": true,
+      "actual_backends": [
+        {
+          "name": "model.layers.0.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.1.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.2.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.3.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.4.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.5.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.6.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.7.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.8.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.9.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.10.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.11.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.12.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.13.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.14.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.15.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.16.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.17.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.18.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        },
+        {
+          "name": "model.layers.19.mlp.experts",
+          "method": "UnquantizedFusedMoEMethod",
+          "w13_dtype": "torch.bfloat16",
+          "w2_dtype": "torch.bfloat16",
+          "backend": "None",
+          "kernel": "FlashInferExperts",
+          "primary": "NoneType",
+          "fallback": "NoneType",
+          "weight_before_w2": null
+        }
+      ]
+    },
+    {
+      "variant": "fp8",
+      "case": "fp8-full-b",
+      "measured_start_utc": "2026-09-09T10:47:36.295786+00:00",
+      "measured_end_utc": "2026-09-09T10:57:21.284484+00:00",
+      "trace_sha256": "5317e2301656c7d5441bbd63e58b7e8b9d3d445e0118729cd7fde0b8717b960c",
+      "gpu_uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+      "cache_salt": "fast-fp8-vs-bf16-20260909-fp8-full-b",
+      "planned": 3643,
+      "completed": 3643,
+      "error_records": 0,
+      "arrival_span_s": 499.99916666666667,
+      "offered_req_s": 7.286012143353572,
+      "offered_input_tok_s": 61037.04772841288,
+      "offered_output_tok_s": 1286.7521445869077,
+      "achieved_req_s": 6.227304975422357,
+      "achieved_input_tok_s": 52174.19183995694,
+      "achieved_output_tok_s": 1099.7782977113256,
+      "actual_input_tokens": 30522125,
+      "actual_output_tokens": 643375,
+      "benchmark_duration_s": 584.9886983680001,
+      "overhang_from_first_actual_send_s": 84.98953181584676,
+      "schedule_lag_p99_ms": 6462.3809484799995,
+      "schedule_degraded": 1.0,
+      "concurrency_max": 512.0,
+      "client_pass": false,
+      "client_gates": {
+        "command_exit_zero": true,
+        "concurrency_ceiling_not_reached": false,
+        "http_2xx_only": true,
+        "no_context_skips": true,
+        "no_error_summary": true,
+        "not_cancelled": true,
+        "planned_equals_completed": true,
+        "record_count_matches_completed": true,
+        "schedule_lag_within_limit": false,
+        "schedule_not_degraded": false,
+        "zero_osl_mismatch": true
+      },
+      "server_pass": true,
+      "token_accounting_pass": true,
+      "drained": true,
+      "passed": false,
+      "metrics_gates": {
+        "standalone": {
+          "scrape_errors": 0,
+          "max_gap_seconds": 1.3013451099395752,
+          "counter_resets": []
+        }
+      },
+      "queue_maxima": {
+        "vllm:num_requests_running": 256.0,
+        "vllm:num_requests_waiting": 260.0
+      },
+      "prefix_cache_deltas": {
+        "vllm:prefix_cache_queries_total": 30522125.0,
+        "vllm:prefix_cache_hits_total": 11555504.0,
+        "vllm:external_prefix_cache_queries_total": 0.0,
+        "vllm:external_prefix_cache_hits_total": 0.0
+      },
+      "cache_hit_fraction": 0.3785943475429709,
+      "manifest_sha256": "160599dbdb0d679a83acebfd9642bddd883ef1b7416bfe8bca9a2258d0f44082",
+      "diagnostic": true,
+      "newly_compiled_kernels": {
+        "deep_gemm": [],
+        "triton": []
+      },
+      "gpu_telemetry": {
+        "memory_mib": {
+          "mean": 158462.0,
+          "minimum": 158462.0,
+          "maximum": 158462.0
+        },
+        "utilization_percent": {
+          "mean": 69.8125,
+          "minimum": 0.0,
+          "maximum": 100.0
+        },
+        "power_w": {
+          "mean": 711.0148214285714,
+          "minimum": 441.86,
+          "maximum": 878.47
+        },
+        "temperature_c": {
+          "mean": 49.839285714285715,
+          "minimum": 43.0,
+          "maximum": 55.0
+        },
+        "sm_clock_mhz": {
+          "mean": 1863.3660714285713,
+          "minimum": 1477.0,
+          "maximum": 1965.0
+        },
+        "memory_clock_mhz": {
+          "mean": 3996.0,
+          "minimum": 3996.0,
+          "maximum": 3996.0
+        }
+      },
+      "gpu_telemetry_samples": 112,
+      "other_busy_gpus": [
+        0,
+        1,
+        5
+      ],
+      "ttft_p50_ms": 2336.522203,
+      "ttft_p95_ms": 41866.88635759999,
+      "ttft_p99_ms": 43515.03741436,
+      "itl_p50_ms": 159.50773554607278,
+      "itl_p95_ms": 299.52119419791666,
+      "itl_p99_ms": 497.83408575,
+      "e2e_p50_ms": 24034.112745,
+      "e2e_p95_ms": 127574.18586479999,
+      "e2e_p99_ms": 174764.53175267996,
+      "numeric_before_after_pass": true,
+      "actual_backends": [
+        {
+          "name": "model.layers.0.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.1.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.2.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.3.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.4.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.5.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.6.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.7.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.8.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.9.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.10.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.11.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.12.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.13.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.14.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.15.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.16.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.17.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.18.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        },
+        {
+          "name": "model.layers.19.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true
+        }
+      ]
+    }
+  ],
+  "trace_fp8_over_bf16": 0.9381519233935501,
+  "trace_change_percent": {
+    "achieved_output_tok_s": -6.184807660644987,
+    "achieved_input_tok_s": -6.184807660644987,
+    "achieved_req_s": -6.1848076606449975,
+    "ttft_p95_ms": 149.3526452049723,
+    "itl_p95_ms": -11.318059428750226,
+    "e2e_p95_ms": 21.98094687433332
+  },
+  "token_count_differences": [],
+  "diagnostic": true,
+  "deployment": {
+    "bf16": {
+      "kernel_types": [
+        "FlashInferExperts"
+      ],
+      "linear_methods": {
+        "UnquantizedEmbeddingMethod": 2,
+        "UnquantizedLinearMethod": 161
+      },
+      "model_load_gib": "61.04",
+      "kv_tokens": "1,608,309",
+      "custom_ops": [
+        "none"
+      ]
+    },
+    "fp8": {
+      "kernel_types": [
+        "TritonOrDeepGemmExperts"
+      ],
+      "linear_methods": {
+        "UnquantizedEmbeddingMethod": 2,
+        "Fp8PerBlockOnlineLinearMethod": 82,
+        "UnquantizedLinearMethod": 100
+      },
+      "model_load_gib": "32.07",
+      "kv_tokens": "2,170,169",
+      "custom_ops": [
+        "+quant_fp8",
+        "none"
+      ]
+    }
+  }
+}

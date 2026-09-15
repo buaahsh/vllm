@@ -10,6 +10,7 @@ from typing import ClassVar
 import numpy as np
 import torch
 
+from vllm.forward_context import get_forward_context
 from vllm.model_executor.layers.attention import Attention
 from vllm.platforms import current_platform
 from vllm.utils.torch_utils import (
@@ -228,6 +229,15 @@ class FlashAttentionBackend(AttentionBackend):
     ) -> str | None:
         if has_sink and device_capability < DeviceCapability(9, 0):
             return "sink not supported on compute capability < 9.0"
+        if (
+            kv_cache_dtype is not None
+            and is_quantized_kv_cache(kv_cache_dtype)
+            and get_flash_attn_version() == 4
+        ):
+            if dtype != torch.bfloat16:
+                return "FA4 FP8 requires bfloat16 attention output"
+            if head_size % 16 != 0:
+                return "FA4 FP8 requires head size to be a multiple of 16"
         return None
 
 
@@ -710,7 +720,15 @@ class FlashAttentionImpl(AttentionImpl):
         # Cache the batch invariant result for use in forward passes
         self.batch_invariant_enabled = envs.VLLM_BATCH_INVARIANT
 
-        if is_quantized_kv_cache(self.kv_cache_dtype) and not flash_attn_supports_fp8():
+        if (
+            model_type == "yoco"
+            and self.yoco_execution_mode == "align"
+            and is_quantized_kv_cache(self.kv_cache_dtype)
+        ):
+            raise ValueError("YOCO FP8 KV cache requires Fast execution mode")
+        if is_quantized_kv_cache(self.kv_cache_dtype) and not flash_attn_supports_fp8(
+            self.vllm_flash_attn_version
+        ):
             raise NotImplementedError(
                 "FlashAttention does not support fp8 kv-cache on this device."
             )
@@ -778,6 +796,9 @@ class FlashAttentionImpl(AttentionImpl):
         self.use_triton_yoco_decode = (
             model_type == "yoco"
             and self.yoco_execution_mode == "fast"
+            # This YOCO shortcut predates FP8 queries and omits their descale.
+            # Keep quantized Q/K/V on the selected FlashAttention backend.
+            and not is_quantized_kv_cache(self.kv_cache_dtype)
             and cudagraph_mode is not None
             and cudagraph_mode.has_full_cudagraphs()
             and (
@@ -805,6 +826,19 @@ class FlashAttentionImpl(AttentionImpl):
         self._dcp_dtype: torch.dtype | None = None
         if vllm_config is not None and self.dcp_world_size > 1:
             self._dcp_dtype = vllm_config.model_config.dtype
+
+    def _get_kv_scale_source(self, layer: torch.nn.Module) -> torch.nn.Module:
+        target = self.kv_sharing_target_layer_name
+        if target is None:
+            return layer
+        layers = get_forward_context().no_compile_layers
+        source = layer
+        while target is not None:
+            source = layers[target]
+            target = source.kv_sharing_target_layer_name
+        if source.kv_cache_torch_dtype != layer.kv_cache_torch_dtype:
+            raise ValueError("Shared KV cache must have the same dtype as its writer")
+        return source
 
     def forward(
         self,
@@ -892,7 +926,11 @@ class FlashAttentionImpl(AttentionImpl):
             )
         key_cache, value_cache = fixed_k, fixed_v
 
+        kv_scale_source = layer
         if is_quantized_kv_cache(self.kv_cache_dtype):
+            # The shared cache was encoded by its writer, whose K/V scales
+            # may differ from the reader's independently loaded scales.
+            kv_scale_source = self._get_kv_scale_source(layer)
             # queries are quantized in the attention layer
             dtype = FlashAttentionBackend.get_fp8_dtype_for_flashattn(
                 self.kv_cache_dtype
@@ -916,8 +954,8 @@ class FlashAttentionImpl(AttentionImpl):
                 if self.supports_quant_query_input
                 else None
             )
-            k_descale = layer._k_scale.expand(descale_shape)
-            v_descale = layer._v_scale.expand(descale_shape)
+            k_descale = kv_scale_source._k_scale.expand(descale_shape)
+            v_descale = kv_scale_source._v_scale.expand(descale_shape)
 
             if self.dcp_world_size > 1:
                 self._forward_with_dcp(
@@ -1072,8 +1110,8 @@ class FlashAttentionImpl(AttentionImpl):
             prefix_scheduler_metadata=attn_metadata.prefix_scheduler_metadata,
             suffix_scheduler_metadata=attn_metadata.scheduler_metadata,
             q_descale=layer._q_scale,
-            k_descale=layer._k_scale,
-            v_descale=layer._v_scale,
+            k_descale=kv_scale_source._k_scale,
+            v_descale=kv_scale_source._v_scale,
             s_aux=self.sinks,
         )
         return output
@@ -1102,6 +1140,15 @@ class FlashAttentionImpl(AttentionImpl):
         # and value[:num_actual_tokens] because the reshape_and_cache_flash
         # op uses the slot_mapping's shape to determine the number of
         # actual tokens.
+        if key.dtype == torch.float8_e4m3fn:
+            if self.kv_cache_dtype not in ("fp8", "fp8_e4m3"):
+                raise ValueError("Prequantized E4M3 K/V require an E4M3 cache")
+            from vllm.model_executor.layers.yoco_attention_fp8 import (
+                cache_prequantized_fp8,
+            )
+
+            cache_prequantized_fp8(key, value, key_cache, value_cache, slot_mapping)
+            return
         reshape_and_cache_flash(
             key,
             value,

@@ -1,0 +1,104 @@
+{
+  "case": "baseline-a-f1p2",
+  "request_index": 725,
+  "error": {
+    "metadata": {
+      "session_num": 725,
+      "x_request_id": "72b1a8b1-b7df-4f08-8e58-6e3426f00bec",
+      "x_correlation_id": "e6857da5-38c2-4051-adcd-709aa8c592e3",
+      "conversation_id": "session_000725",
+      "turn_index": 0,
+      "credit_issued_ns": 1788926925308114038,
+      "request_start_ns": 1788926925308789872,
+      "request_ack_ns": 1788926925355574280,
+      "request_end_ns": 1788927525469737001,
+      "worker_id": "worker_59e147b4",
+      "record_processor_id": "record_processor_8d31bfdf",
+      "benchmark_phase": "profiling",
+      "phase_index": 0,
+      "profiling_index": 0,
+      "phase_name": "profiling",
+      "phase_kind": "profiling",
+      "was_cancelled": false,
+      "context_overflow_skip": false,
+      "agent_depth": 0,
+      "root_correlation_id": "e6857da5-38c2-4051-adcd-709aa8c592e3"
+    },
+    "metrics": {},
+    "trace_data": {
+      "trace_type": "aiohttp",
+      "request_send_start_ns": 1788926925308848007,
+      "request_headers": {
+        "Host": "127.0.0.1:8794",
+        "User-Agent": "aiperf/0.12.0",
+        "X-Request-ID": "72b1a8b1-b7df-4f08-8e58-6e3426f00bec",
+        "X-Correlation-ID": "e6857da5-38c2-4051-adcd-709aa8c592e3",
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json",
+        "Content-Length": "29605"
+      },
+      "request_headers_sent_ns": 1788926925309258741,
+      "request_chunks": [],
+      "request_send_end_ns": 1788926925309288533,
+      "request_chunks_count": 1,
+      "request_bytes_total": 29605,
+      "response_status_code": 200,
+      "response_reason": "OK",
+      "response_receive_start_ns": 1788927060897304938,
+      "response_headers": {
+        "Date": "Wed, 09 Sep 2026 04:08:44 GMT",
+        "Server": "uvicorn",
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Transfer-Encoding": "chunked"
+      },
+      "response_headers_received_ns": 1788926925355555161,
+      "response_chunks": [],
+      "response_chunks_count": 1892,
+      "response_bytes_total": 543004,
+      "response_receive_end_ns": 1788927525469734766,
+      "tcp_connect_start_ns": 1788926925308936317,
+      "tcp_connect_end_ns": 1788926925309228172,
+      "local_ip": "127.0.0.1",
+      "local_port": 39602,
+      "remote_ip": "127.0.0.1",
+      "remote_port": 8794,
+      "sending_ns": 440526,
+      "waiting_ns": 135588016405,
+      "receiving_ns": 464572429828,
+      "duration_ns": 600160886759,
+      "connecting_ns": 291855
+    },
+    "error": {
+      "type": "TimeoutError",
+      "message": "TimeoutError()",
+      "cause": "CancelledError()",
+      "cause_chain": [
+        "TimeoutError",
+        "CancelledError"
+      ]
+    }
+  },
+  "recheck_trace": "/data/fast-fp8-optimization-20260908/traces/toolagent-timeout-session725.jsonl",
+  "requested_input": 6775,
+  "requested_output": 2000,
+  "original_complete": {
+    "name": "baseline-a-f1p2",
+    "finished": 1788927626.8298247,
+    "client_exit": 0,
+    "client_audit_exit": 1,
+    "token_accounting_pass": false,
+    "services": {
+      "standalone": {
+        "scrape_errors": 0,
+        "max_gap_seconds": 1.4948220252990723,
+        "counter_resets": []
+      }
+    },
+    "transfer_pass": true,
+    "proxy_pass": true,
+    "server_pass": true,
+    "drained": true,
+    "passed": false
+  },
+  "interpretation": "HTTP 200 streaming request reached the 600s timeout during cold-cache overload; no server CUDA errors observed. Isolated same-request recheck required before same-rate rerun."
+}

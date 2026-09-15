@@ -1,0 +1,42 @@
+{
+  "started": 1788955401.8990014,
+  "steps": [
+    {
+      "name": "tests",
+      "command": [
+        "/data/yoco-align-invariant-20260905/.venv/bin/python",
+        "/data/fast-fp8-sparse-20260909/run_tests.py",
+        "tests/kernels/moe/test_yoco_fp8_sparse.py",
+        "tests/kernels/moe/test_yoco_fp8.py",
+        "tests/kernels/moe/test_deep_gemm_padding.py",
+        "tests/model_executor/test_yoco_fp8.py",
+        "tests/model_executor/test_deep_gemm_warmup.py",
+        "tests/model_executor/test_yoco_config.py",
+        "tests/model_executor/test_yoco_fast_decode.py",
+        "tests/model_executor/test_yoco_fast_standalone_moe.py",
+        "--junitxml=/data/fast-fp8-sparse-20260909/validation-second-tests.xml"
+      ],
+      "started": 1788955402.1409826,
+      "exit_code": 0,
+      "finished": 1788955526.0550826
+    },
+    {
+      "name": "quant-bench",
+      "command": [
+        "/data/yoco-align-invariant-20260905/.venv/bin/python",
+        "/data/fast-fp8-sparse-20260909/bench_quant.py"
+      ],
+      "started": 1788955526.055773,
+      "exit_code": 0,
+      "finished": 1788955684.692484
+    }
+  ],
+  "device": {
+    "index": 3,
+    "uuid": "GPU-7d5a27ae-f576-89e7-835b-64d8602e70b0",
+    "before": "3, GPU-7d5a27ae-f576-89e7-835b-64d8602e70b0, NVIDIA B200, 0, 0"
+  },
+  "baseline_completed": 1788955198.2938974,
+  "completed": true,
+  "finished": 1788955684.6929383
+}

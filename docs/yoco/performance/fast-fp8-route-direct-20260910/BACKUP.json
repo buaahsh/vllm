@@ -1,0 +1,8 @@
+{
+  "remote": "/data/fast-fp8-route-direct-20260910/EVIDENCE.tar.gz",
+  "pvc": "/mnt/pvc/lidong1/fast-fp8-route-direct-20260910/EVIDENCE.tar.gz",
+  "bytes": 2552061,
+  "sha256": "d5dc5bb088dafe6e07627c6120dd75a0658f0e7e272fe962740ab7678c099cee",
+  "files": 178,
+  "local": "/home/lidong1/vllm_test/yoco_results/fast-fp8-route-direct-20260910/EVIDENCE.tar.gz"
+}

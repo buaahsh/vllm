@@ -1,0 +1,106 @@
+{
+  "source_files": 1767,
+  "source_differences": [
+    "vllm/model_executor/layers/fused_moe/deep_gemm_utils.py",
+    "vllm/model_executor/warmup/deep_gemm_warmup.py"
+  ],
+  "candidate_hashes": {
+    "vllm/model_executor/layers/fused_moe/deep_gemm_utils.py": "0cfb728931ed47faa968c36dff585379639d7ffee3c639f29f9cae6030bdcc8b",
+    "vllm/model_executor/warmup/deep_gemm_warmup.py": "9688c13f08ec724649c930223eab035eeb1389934e93e1779e82ce2c893652c0"
+  },
+  "normalized_cli_identical": true,
+  "normalized_cli": [
+    "/data/yoco-align-invariant-20260905/.venv/bin/python",
+    "/data/fast-fp8-optimization-20260908/serve.py",
+    "serve",
+    "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+    "--fast",
+    "--served-model-name",
+    "yoco-fast-l3",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "8794",
+    "--trust-remote-code",
+    "--dtype",
+    "bfloat16",
+    "--attention-config.backend",
+    "FLASH_ATTN",
+    "--attention-config.flash_attn_version",
+    "4",
+    "--quantization",
+    "fp8_per_block",
+    "--moe-backend",
+    "deep_gemm",
+    "--kernel-config",
+    "{\"enable_flashinfer_autotune\": false}",
+    "--tensor-parallel-size",
+    "1",
+    "--data-parallel-size",
+    "1",
+    "--gpu-memory-utilization",
+    "0.85",
+    "--max-model-len",
+    "81920",
+    "--max-num-batched-tokens",
+    "32768",
+    "--max-num-seqs",
+    "256",
+    "--enable-prefix-caching",
+    "--enable-chunked-prefill",
+    "--kv-sharing-fast-prefill",
+    "--enable-prompt-tokens-details",
+    "--worker-extension-cls",
+    "pd_observer.PDObserver",
+    "--profiler-config",
+    "{\"ignore_frontend\": true, \"profiler\": \"torch\", \"torch_profiler_dir\": \"<case-specific-output>\", \"torch_profiler_record_shapes\": true, \"torch_profiler_with_stack\": false}",
+    "--compilation-config",
+    "{\"cudagraph_mode\": \"FULL_AND_PIECEWISE\", \"cudagraph_capture_sizes\": [1, 2, 4, 8, 16, 32, 64, 128, 256]}"
+  ],
+  "model_metadata_unchanged": true,
+  "model_hash_limitation": "Initial run_sequence.py compared suffix to json instead of .json; initial hashes are null. Final JSON hashes captured, comparison limited to size/mtime/names.",
+  "pod": {
+    "pod": "yoco-align-fast-vllm-vllm-train-master-0",
+    "uid": "505f46a3-597a-40c3-8260-d213fae60136",
+    "node": "slc01-cl02-hgx-0228",
+    "phase": "Running",
+    "restart_counts": {
+      "master": 0
+    }
+  },
+  "kernel_error_cutoff_utc": "2026-09-09T03:43:57.680198+00:00",
+  "historical_kernel_gpu_errors": [
+    "2026-07-17T04:50:40,488168+00:00 NVRM: Xid (PCI:0000:ca:00): 43, pid=205179, name=python3, channel 0x00000002",
+    "2026-07-17T04:50:40,659177+00:00 NVRM: Xid (PCI:0000:5d:00): 43, pid=205176, name=python3, channel 0x00000002",
+    "2026-07-17T04:50:40,662989+00:00 NVRM: Xid (PCI:0000:3b:00): 43, pid=205174, name=python3, channel 0x00000002",
+    "2026-07-17T04:50:40,708204+00:00 NVRM: Xid (PCI:0000:dc:00): 43, pid=205180, name=python3, channel 0x00000002",
+    "2026-09-08T03:55:07,639076+00:00 NVRM: Xid (PCI:0000:4c:00): 31, pid=2681797, name=python, channel 0x00000002, intr 00000000. MMU Fault: ENGINE GRAPHICS GPC4 GPCCLIENT_T1_14 faulted @ 0xb_02108000. Fault is of type FAULT_PDE ACCESS_TYPE_VIRT_WRITE"
+  ],
+  "new_kernel_gpu_errors": [],
+  "final_gpu_ecc": {
+    "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7": {
+      "volatile/sram_uncorrectable_parity": "0",
+      "volatile/sram_uncorrectable_secded": "0",
+      "volatile/dram_uncorrectable": "0",
+      "aggregate/sram_uncorrectable_parity": "0",
+      "aggregate/sram_uncorrectable_secded": "0",
+      "aggregate/dram_uncorrectable": "0"
+    },
+    "GPU-7d5a27ae-f576-89e7-835b-64d8602e70b0": {
+      "volatile/sram_uncorrectable_parity": "0",
+      "volatile/sram_uncorrectable_secded": "0",
+      "volatile/dram_uncorrectable": "0",
+      "aggregate/sram_uncorrectable_parity": "0",
+      "aggregate/sram_uncorrectable_secded": "0",
+      "aggregate/dram_uncorrectable": "0"
+    }
+  },
+  "no_server_errors": true,
+  "cleanup": {
+    "timestamp": 1788931016.7538486,
+    "pid7_cmdline": "sleep infinity ",
+    "active_record_exists": false,
+    "gpus": "2, GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7, 0, 0\n3, GPU-7d5a27ae-f576-89e7-835b-64d8602e70b0, 0, 0\n4, GPU-4e279853-e2ff-de3e-70a8-d3623fd038b3, 0, 0\n5, GPU-14379c29-e601-fc6d-b27c-4fd778ab772a, 0, 0\n",
+    "compute_processes": ""
+  }
+}

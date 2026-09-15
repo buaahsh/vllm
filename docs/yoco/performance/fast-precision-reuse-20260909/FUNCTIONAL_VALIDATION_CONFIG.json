@@ -1,0 +1,9 @@
+{
+  "scope": "Functional validation only; no service throughput timing",
+  "reason": "Default DeepGEMM warmup enumerates 8505 shapes in a cold cache; all required shapes still execute and graph capture remains enabled",
+  "environment": {
+    "VLLM_DEEP_GEMM_WARMUP": "skip"
+  },
+  "stopped_service": "reuse-v7",
+  "replacement_service": "reuse-v7-functional"
+}

@@ -1,0 +1,334 @@
+{
+  "runs_order": [
+    "fp32-a",
+    "bf16-a",
+    "bf16-b",
+    "fp32-b"
+  ],
+  "gpu_uuid": "464fe39e-1a51-de28-0118-11eac3bc1fbf",
+  "decode": [
+    {
+      "batch": 1,
+      "per_run_tok_s": {
+        "bf16-a": 163.96599251657997,
+        "fp32-b": 163.441305961252,
+        "fp32-a": 163.4487844235376,
+        "bf16-b": 163.85916337397433
+      },
+      "generation_sha256": {
+        "bf16-a": "842f1f27d7bc3457c50b5cae4d6255dec406245099e84b1f8f2da6654544c2b7",
+        "fp32-b": "9b0205ee9cdbf89033b89221f0e6c6b83302b916bd88621cb27073a379a373e0",
+        "fp32-a": "9b0205ee9cdbf89033b89221f0e6c6b83302b916bd88621cb27073a379a373e0",
+        "bf16-b": "842f1f27d7bc3457c50b5cae4d6255dec406245099e84b1f8f2da6654544c2b7"
+      },
+      "fp32_tok_s": 163.44302735614073,
+      "fp32_seconds": [
+        0.7829560721293092,
+        0.7831468917429447,
+        0.7828921088948846,
+        0.7829872779548168,
+        0.7833091858774424,
+        0.7831199262291193,
+        0.7832886911928654,
+        0.7832191865891218,
+        0.7833908246830106,
+        0.784017032943666,
+        0.7831481294706464,
+        0.7831557588651776,
+        0.7825489211827517,
+        0.7830039169639349
+      ],
+      "bf16_tok_s": 163.88059687315575,
+      "bf16_seconds": [
+        0.78063889965415,
+        0.7811476588249207,
+        0.7806496825069189,
+        0.7809267174452543,
+        0.7808485338464379,
+        0.7804849520325661,
+        0.7806369094178081,
+        0.7816311866044998,
+        0.7811495345085859,
+        0.7811058070510626,
+        0.7811586325988173,
+        0.7816009866073728,
+        0.7812783177942038,
+        0.781007126905024
+      ],
+      "throughput_change_percent": 0.2677199046623002
+    },
+    {
+      "batch": 8,
+      "per_run_tok_s": {
+        "bf16-a": 836.3055150509243,
+        "fp32-b": 836.9662717494052,
+        "fp32-a": 837.4731121901888,
+        "bf16-b": 836.7227229469626
+      },
+      "generation_sha256": {
+        "bf16-a": "3115039a5151e10e4682568b9fb43a16f5398495325e4dfa3b518ebd222ae893",
+        "fp32-b": "22d3bbfbbb67ab4c7bfc9e94c48ee7eba070db1427cda6ee40540aafb7ec38cc",
+        "fp32-a": "22d3bbfbbb67ab4c7bfc9e94c48ee7eba070db1427cda6ee40540aafb7ec38cc",
+        "bf16-b": "3115039a5151e10e4682568b9fb43a16f5398495325e4dfa3b518ebd222ae893"
+      },
+      "fp32_tok_s": 836.9822970269732,
+      "fp32_seconds": [
+        1.2234943499788642,
+        1.2269529737532139,
+        1.2221360746771097,
+        1.2227258225902915,
+        1.22208789922297,
+        1.2225607242435217,
+        1.2234373902902007,
+        1.2247786037623882,
+        1.2231047945097089,
+        1.2228083619847894,
+        1.2241102140396833,
+        1.2234482932835817,
+        1.2234662668779492,
+        1.2237008940428495
+      ],
+      "bf16_tok_s": 836.5140217926587,
+      "bf16_seconds": [
+        1.224543764255941,
+        1.2244214713573456,
+        1.2260844502598047,
+        1.2230446673929691,
+        1.2231314145028591,
+        1.2244329154491425,
+        1.2245055278763175,
+        1.2236183509230614,
+        1.2242128048092127,
+        1.2237668624147773,
+        1.2243106355890632,
+        1.2240426298230886,
+        1.2236320385709405,
+        1.2238223869353533
+      ],
+      "throughput_change_percent": -0.05594804525470565
+    }
+  ],
+  "prefill": [
+    {
+      "prompt_tokens": 1024,
+      "per_run_ms": {
+        "bf16-a": 110.96275970339775,
+        "fp32-b": 110.69609131664038,
+        "fp32-a": 110.35238299518824,
+        "bf16-b": 111.16540152579546
+      },
+      "fp32_ms": 110.50686938688159,
+      "bf16_ms": 111.02283652871847,
+      "latency_reduction_percent": -0.4669095638122789
+    },
+    {
+      "prompt_tokens": 4096,
+      "per_run_ms": {
+        "bf16-a": 119.34841051697731,
+        "fp32-b": 118.46367083489895,
+        "fp32-a": 118.61828342080116,
+        "bf16-b": 119.26567275077105
+      },
+      "fp32_ms": 118.54624701663852,
+      "bf16_ms": 119.32142078876495,
+      "latency_reduction_percent": -0.6538998843359733
+    }
+  ],
+  "quality": {
+    "batch1": {
+      "targets": 1024,
+      "fp32_nll": 1.4443084157960655,
+      "bf16_nll": 1.4441881477832794,
+      "delta_nll": -0.00012026801278608446,
+      "exp_nll_change_percent": -0.012026078087856,
+      "positions_changed": 1024,
+      "max_abs_logprob_diff": 1.3118906021118164,
+      "mean_abs_logprob_diff": 0.07995778885993587
+    },
+    "batch8": {
+      "targets": 1024,
+      "fp32_nll": 1.4624673871640081,
+      "bf16_nll": 1.4722061455249786,
+      "delta_nll": 0.00973875836097049,
+      "exp_nll_change_percent": 0.9786334386560621,
+      "positions_changed": 1024,
+      "max_abs_logprob_diff": 5.159131288528442,
+      "mean_abs_logprob_diff": 0.1970567710220732
+    }
+  },
+  "dataset_sha256": "1bdcb29af3cbbcb126ec34d2bdbb366dd476cc55fb6eedb4416600757a73da41",
+  "fp64_quality": {
+    "baseline": {
+      "start_index": 3,
+      "total_calls": 1156,
+      "targets": 1024,
+      "mean_nll": 1.4443086262016573,
+      "mean_returned_logprob_error": 2.1040559190657982e-07,
+      "max_abs_returned_logprob_error": 7.724685842092072e-07
+    },
+    "candidate": {
+      "start_index": 3,
+      "total_calls": 1156,
+      "targets": 1024,
+      "mean_nll": 1.447189990604721,
+      "mean_returned_logprob_error": 0.003001842821441501,
+      "max_abs_returned_logprob_error": 0.029987594162845355
+    },
+    "delta_nll": 0.0028813644030636354,
+    "exp_nll_change_percent": 0.28855195233220265,
+    "alignment": "Unique contiguous match of all 1024 returned target tokens; unreturned async samples excluded. B8 reference is not used without request IDs."
+  },
+  "baseline": "Previous BF16 main-chain/router with FP32 RMSNorm reduction and sampling",
+  "candidate": "Native BF16 RMSNorm reductions and BF16 greedy logits/logprobs; FA4/GEMM accumulators and scale formats unchanged",
+  "micro": {
+    "norm": [
+      {
+        "rows": 1,
+        "norm_ms": {
+          "fp32_reduce": [
+            0.0018026437530324674,
+            0.001987739897886258
+          ],
+          "bf16_reduce": [
+            0.0016961516631012708,
+            0.0016881702378951592
+          ]
+        }
+      },
+      {
+        "rows": 8,
+        "norm_ms": {
+          "fp32_reduce": [
+            0.002100611944902166,
+            0.002058317468868482
+          ],
+          "bf16_reduce": [
+            0.001746535639707952,
+            0.0017252345952802636
+          ]
+        }
+      },
+      {
+        "rows": 128,
+        "norm_ms": {
+          "fp32_reduce": [
+            0.001921910121695388,
+            0.0019048657187344096
+          ],
+          "bf16_reduce": [
+            0.0019406132864221977,
+            0.0019347257766799966
+          ]
+        }
+      },
+      {
+        "rows": 1024,
+        "norm_ms": {
+          "fp32_reduce": [
+            0.004350628681826692,
+            0.004350161815805852
+          ],
+          "bf16_reduce": [
+            0.00357143909331793,
+            0.0035724837695331347
+          ]
+        }
+      },
+      {
+        "rows": 4096,
+        "norm_ms": {
+          "fp32_reduce": [
+            0.016901539977275715,
+            0.01689071728172375
+          ],
+          "bf16_reduce": [
+            0.012667412754076053,
+            0.012691029409694257
+          ]
+        }
+      }
+    ],
+    "logprob_ms": {
+      "fp32": 0.033576809807666606,
+      "bf16": 0.005576583124715644
+    },
+    "logprob_error": {
+      "max_abs": 0.07956799208961485,
+      "mean_abs": 0.02268507694064033
+    },
+    "ptx": {
+      "logprob_max": {
+        "fp32_arithmetic": [],
+        "native_bf16_add": false
+      },
+      "logprob_sum": {
+        "fp32_arithmetic": [],
+        "native_bf16_add": true
+      },
+      "logprob_output": {
+        "fp32_arithmetic": [],
+        "native_bf16_add": true
+      },
+      "norm": {
+        "fp32_arithmetic": [],
+        "native_bf16_add": true
+      }
+    },
+    "mma_accumulator_probe": {
+      "Float32": {
+        "ok": true
+      },
+      "BFloat16": {
+        "ok": false,
+        "error": "OpError: expects the 'acc_dtype' Op parameter to be one of Float16 or Float32\n\u001b[1mError Code:\u001b[0m MmaF16BF16Op error\n\n\u001b[92m\ud83d\udca1 Suggestions:\u001b[0m\n Check your Op construction code"
+      }
+    },
+    "gpu_uuid": "464fe39e-1a51-de28-0118-11eac3bc1fbf"
+  },
+  "support": {
+    "dot": {
+      "fp32": {
+        "ok": true,
+        "value": 32.0
+      },
+      "bf16": {
+        "ok": false,
+        "error": "at 4:3:\ndef dot_probe(A,B,C,OUT:tl.constexpr):\n i=tl.arange(0,16);j=tl.arange(0,16);k=tl.arange(0,32)\n a=tl.load(A+i[:,None]*32+k[None,:]);b=tl.load(B+k[:,None]*16+j[None,:])\n c=tl.dot(a,b,out_dtype=OUT)\n   ^\nout_dtype=bfloat16 is unsupported. Please use out_dtype=float32/float16 and cast with `.to(tl.bfloat16)`"
+      }
+    },
+    "deep_gemm_scale": {
+      "fp32": {
+        "ok": true,
+        "finite": true
+      },
+      "bf16": {
+        "ok": false,
+        "error": "Assertion error (csrc/apis/../jit_kernels/impls/../heuristics/../../utils/layout.hpp:71): sfb_dtype == torch::kFloat or sfb_dtype == torch::kInt"
+      }
+    }
+  },
+  "status": "partial_implementation_default_off",
+  "full_bf16_backend_supported": false,
+  "enabled_components": [
+    "BF16 RMSNorm arithmetic/reduction",
+    "BF16 LM-head output and greedy sampling logits",
+    "BF16 logprob reduction/output"
+  ],
+  "retained_components": [
+    "FA4/GEMM Tensor Core accumulators",
+    "native FP8 scale formats/interfaces",
+    "FA4 softmax and other fused scalar/routed-expert kernels"
+  ],
+  "flags": {
+    "VLLM_YOCO_BF16_CHAIN": "1 in both variants",
+    "VLLM_YOCO_BF16_REDUCTIONS": "1 only in candidate, default 0",
+    "VLLM_YOCO_BF16_SAMPLING": "1 only in candidate, default 0",
+    "VLLM_YOCO_FP8_LATENT_NORM_FUSION": "0 in both variants"
+  },
+  "validation": {
+    "kernel_boundary_tests": 97,
+    "existing_sampler_and_lm_head_tests": 75,
+    "ptx_fp32_arithmetic_in_new_kernels": false,
+    "pre_commit": "passed"
+  }
+}

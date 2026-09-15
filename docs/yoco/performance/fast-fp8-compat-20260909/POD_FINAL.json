@@ -1,0 +1,9 @@
+{
+  "name": "yoco-align-fast-vllm-vllm-train-master-0",
+  "uid": "505f46a3-597a-40c3-8260-d213fae60136",
+  "node": "slc01-cl02-hgx-0228",
+  "phase": "Running",
+  "restarts": [
+    0
+  ]
+}

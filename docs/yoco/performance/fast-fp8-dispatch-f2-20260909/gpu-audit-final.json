@@ -1,0 +1,161 @@
+{
+  "timestamp": 1788963306.0486944,
+  "cases": [
+    {
+      "case": "baseline-measured-full-a",
+      "before": {
+        "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+        "uncorrectable": {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        "recovery": "None",
+        "bus": "00000000:4C:00.0"
+      },
+      "after": {
+        "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+        "uncorrectable": {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        "recovery": "None",
+        "bus": "00000000:4C:00.0"
+      },
+      "no_uncorrectable_increase": true
+    },
+    {
+      "case": "baseline-measured-smoke",
+      "before": {
+        "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+        "uncorrectable": {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        "recovery": "None",
+        "bus": "00000000:4C:00.0"
+      },
+      "after": {
+        "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+        "uncorrectable": {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        "recovery": "None",
+        "bus": "00000000:4C:00.0"
+      },
+      "no_uncorrectable_increase": true
+    },
+    {
+      "case": "candidate-v1-full-a",
+      "before": {
+        "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+        "uncorrectable": {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        "recovery": "None",
+        "bus": "00000000:4C:00.0"
+      },
+      "after": {
+        "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+        "uncorrectable": {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        "recovery": "None",
+        "bus": "00000000:4C:00.0"
+      },
+      "no_uncorrectable_increase": true
+    },
+    {
+      "case": "candidate-v1-full-b",
+      "before": {
+        "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+        "uncorrectable": {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        "recovery": "None",
+        "bus": "00000000:4C:00.0"
+      },
+      "after": {
+        "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+        "uncorrectable": {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        "recovery": "None",
+        "bus": "00000000:4C:00.0"
+      },
+      "no_uncorrectable_increase": true
+    },
+    {
+      "case": "candidate-v1-smoke",
+      "before": {
+        "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+        "uncorrectable": {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        "recovery": "None",
+        "bus": "00000000:4C:00.0"
+      },
+      "after": {
+        "uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+        "uncorrectable": {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        "recovery": "None",
+        "bus": "00000000:4C:00.0"
+      },
+      "no_uncorrectable_increase": true
+    }
+  ],
+  "kernel_log_returncode": 0,
+  "kernel_log_stderr": "",
+  "recent_selected_gpu_errors": [],
+  "unparsed_selected_gpu_errors": [],
+  "ecc_pass": true,
+  "xid_audit_pass": true
+}

@@ -1,0 +1,79 @@
+[
+  {
+    "case": "baseline-a-smoke",
+    "planned": 50,
+    "completed": 50,
+    "output_tok_s": 49.34237128950361,
+    "schedule_lag_p99_ms": 4.41905152,
+    "passed": true,
+    "token_accounting_pass": true,
+    "server_pass": true,
+    "drained": true
+  },
+  {
+    "case": "baseline-a-f1p2",
+    "planned": 3643,
+    "completed": 3642,
+    "output_tok_s": 803.2167575550894,
+    "schedule_lag_p99_ms": 221919.28814848,
+    "passed": false,
+    "token_accounting_pass": false,
+    "server_pass": true,
+    "drained": true
+  },
+  {
+    "case": "baseline-timeout-recheck",
+    "planned": 1,
+    "completed": 1,
+    "output_tok_s": 89.90786398897724,
+    "schedule_lag_p99_ms": 0.0,
+    "passed": true,
+    "token_accounting_pass": true,
+    "server_pass": true,
+    "drained": true
+  },
+  {
+    "case": "baseline-b-f1p2",
+    "planned": 3643,
+    "completed": 3643,
+    "output_tok_s": 1059.862952539312,
+    "schedule_lag_p99_ms": 24530.7095552,
+    "passed": false,
+    "token_accounting_pass": true,
+    "server_pass": true,
+    "drained": true
+  },
+  {
+    "case": "candidate-a-smoke",
+    "planned": 50,
+    "completed": 50,
+    "output_tok_s": 69.78522595420951,
+    "schedule_lag_p99_ms": 4.80445952,
+    "passed": true,
+    "token_accounting_pass": true,
+    "server_pass": true,
+    "drained": true
+  },
+  {
+    "case": "candidate-a-f1p2",
+    "planned": 3643,
+    "completed": 3643,
+    "output_tok_s": 1110.1888922227877,
+    "schedule_lag_p99_ms": 5139.728179199999,
+    "passed": false,
+    "token_accounting_pass": true,
+    "server_pass": true,
+    "drained": true
+  },
+  {
+    "case": "candidate-b-f1p2",
+    "planned": 3643,
+    "completed": 3643,
+    "output_tok_s": 1095.0242430556168,
+    "schedule_lag_p99_ms": 12525.34533632,
+    "passed": false,
+    "token_accounting_pass": true,
+    "server_pass": true,
+    "drained": true
+  }
+]

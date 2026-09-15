@@ -51,12 +51,52 @@ class Ernie4_5_VLMoeForConditionalGenerationConfig(VerifyAndUpdateConfig):
 class YOCOForCausalLMConfig(VerifyAndUpdateConfig):
     @staticmethod
     def verify_and_update_config(vllm_config: "VllmConfig") -> None:
+        # This hook runs before VllmConfig.quant_config is constructed.
+        from vllm.config.quantization import resolve_quantization_config
+        from vllm.model_executor.layers.quantization.utils.quant_utils import (
+            kFp8Static128BlockSym,
+        )
+
+        model_config = getattr(vllm_config, "model_config", None)
+        quant_args = resolve_quantization_config(
+            getattr(model_config, "quantization", None),
+            getattr(model_config, "quantization_config", None),
+        )
+        additional_config = getattr(vllm_config, "additional_config", None) or {}
+        if (
+            additional_config.get("yoco_execution_mode", "fast") == "fast"
+            and quant_args is not None
+            and quant_args.linear is not None
+            and quant_args.linear.weight == kFp8Static128BlockSym
+        ):
+            # Keep the platform FP8 quantizer inside compiled YOCO graphs.
+            # The native quantization path can produce non-finite full-model
+            # outputs under Inductor; on B200 this operator also emits the
+            # packed UE8M0 scales consumed by DeepGEMM directly.
+            custom_ops = vllm_config.compilation_config.custom_ops
+            if "-quant_fp8" in custom_ops:
+                if not getattr(model_config, "enforce_eager", False):
+                    raise ValueError(
+                        "Compiled YOCO Fast online block FP8 requires quant_fp8; "
+                        "remove '-quant_fp8' from compilation_config.custom_ops."
+                    )
+            elif "+quant_fp8" not in custom_ops and "all" not in custom_ops:
+                custom_ops.append("+quant_fp8")
+
         if vllm_config.kernel_config.moe_backend == "auto":
-            vllm_config.kernel_config.moe_backend = "triton"
-            logger.info(
-                "Using the Triton MoE backend for YOCO. FlashInfer TRTLLM "
-                "can produce incorrect output for YOCO expert shapes."
+            # Defer online block FP8 until each expert's ignore rules and
+            # precision are known. BF16 keeps its existing backend policy.
+            block_fp8_moe = (
+                quant_args is not None
+                and quant_args.moe is not None
+                and quant_args.moe.weight == kFp8Static128BlockSym
             )
+            if not block_fp8_moe:
+                vllm_config.kernel_config.moe_backend = "triton"
+                logger.info(
+                    "Using the Triton MoE backend for YOCO. FlashInfer TRTLLM "
+                    "can produce incorrect output for YOCO expert shapes."
+                )
 
         cache_config = vllm_config.cache_config
 
@@ -66,6 +106,18 @@ class YOCOForCausalLMConfig(VerifyAndUpdateConfig):
         # all_moe_layers list once per call can produce IndexError.  Force
         # the runner to bake the actual layer_name into the compiled graph.
         vllm_config.compilation_config.fast_moe_cold_start = False
+
+        if (
+            str(getattr(cache_config, "cache_dtype", "auto")).startswith("fp8")
+            and getattr(cache_config, "calculate_kv_scales", False)
+            and cache_config.kv_sharing_fast_prefill
+        ):
+            # Shared KV is written before the first cross-layer Attention
+            # forward could calculate scales. Keep the cache encoding stable.
+            raise ValueError(
+                "YOCO FP8 kv_sharing_fast_prefill requires fixed KV scales; "
+                "disable calculate_kv_scales or kv_sharing_fast_prefill"
+            )
 
         compilation_config = vllm_config.compilation_config
         cudagraph_mode = compilation_config.cudagraph_mode

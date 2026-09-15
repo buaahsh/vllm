@@ -266,6 +266,55 @@ def try_get_yoco_w2_config(
     return w13_config
 
 
+def select_yoco_fp8_w2_config(
+    configs: dict[int, dict[str, int]] | None,
+    num_tokens: int,
+    w13_config: dict[str, int],
+) -> dict[str, int]:
+    """Use measured W2 tiles without changing dispatch or K accumulation."""
+    selected = select_yoco_decode_config(configs, num_tokens)
+    if selected is None or any(
+        selected[key] != w13_config.get(key)
+        for key in ("BLOCK_SIZE_M", "BLOCK_SIZE_K", "GROUP_SIZE_M")
+    ):
+        return w13_config
+    # M determines the existing token/expert layout; K determines the FP32
+    # scaled partial-sum boundaries. Only N, warp count and pipeline depth
+    # were varied in the FP8 sweep. Do not mutate W13's shared dictionary.
+    result = w13_config.copy()
+    for key in ("BLOCK_SIZE_N", "num_warps", "num_stages"):
+        result[key] = selected[key]
+    return result
+
+
+def try_get_yoco_fp8_w2_config(
+    num_tokens: int,
+    num_experts: int,
+    output_size: int,
+    input_size: int,
+    w13_config: dict[str, int],
+) -> dict[str, int]:
+    """Private B200 L3 FP8 decode tuning, independent of the BF16 tables."""
+    from vllm.model_executor.layers.fused_moe import get_config
+
+    if (
+        not envs.VLLM_YOCO_FP8_W2_TUNING
+        or envs.VLLM_BATCH_INVARIANT
+        or not 0 < num_tokens <= 16
+        or (num_experts, output_size, input_size) != (128, 1024, 3840)
+        or not current_platform.is_device_capability(100)
+        or get_config()
+    ):
+        return w13_config
+    configs = _load_yoco_decode_configs(
+        "fp8_"
+        + _yoco_w2_config_file_name(
+            num_experts, output_size, input_size, current_platform.get_device_name()
+        )
+    )
+    return select_yoco_fp8_w2_config(configs, num_tokens, w13_config)
+
+
 @triton.jit
 def _yoco_weighted_swiglu_kernel(
     input_ptr,

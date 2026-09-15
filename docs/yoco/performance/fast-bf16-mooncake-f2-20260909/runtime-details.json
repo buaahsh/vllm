@@ -1,0 +1,33 @@
+{
+  "bf16": {
+    "model_loading_gib": 61.04,
+    "kv_cache_tokens": 1608309,
+    "expert_kernels": [
+      "FlashInferExperts"
+    ],
+    "primary_experts": [
+      "NoneType"
+    ],
+    "fast_lm_head": true,
+    "fast_weighted_rms_clip": 10,
+    "custom_ops": [
+      "none"
+    ]
+  },
+  "fp8": {
+    "model_loading_gib": 32.07,
+    "kv_cache_tokens": 2168880,
+    "expert_kernels": [
+      "TritonOrDeepGemmExperts"
+    ],
+    "primary_experts": [
+      "DeepGemmExperts"
+    ],
+    "fast_lm_head": true,
+    "fast_weighted_rms_clip": 10,
+    "custom_ops": [
+      "+quant_fp8",
+      "none"
+    ]
+  }
+}

@@ -1,0 +1,5625 @@
+{
+  "dataset_sha256": "1bdcb29af3cbbcb126ec34d2bdbb366dd476cc55fb6eedb4416600757a73da41",
+  "started": 1789029193.1194289,
+  "variants": {
+    "baseline_fp8": {
+      "port": 8804,
+      "raw_logprob_anchor": {
+        "unforced": {
+          "token": 553,
+          "logprob": -0.46739864349365234,
+          "response": {
+            "id": "cmpl-a86efc4296a7e293",
+            "object": "text_completion",
+            "created": 1789029193,
+            "prompt_routed_experts": null,
+            "model": "yoco-fast-l3",
+            "choices": [
+              {
+                "index": 0,
+                "text": " by",
+                "logprobs": {
+                  "text_offset": [
+                    0
+                  ],
+                  "token_logprobs": [
+                    -0.46739864349365234
+                  ],
+                  "tokens": [
+                    " by"
+                  ],
+                  "top_logprobs": [
+                    {
+                      " by": -0.46739864349365234
+                    }
+                  ]
+                },
+                "finish_reason": "length",
+                "stop_reason": null,
+                "token_ids": [
+                  553
+                ],
+                "prompt_logprobs": null,
+                "prompt_token_ids": [
+                  154824,
+                  715,
+                  284,
+                  13214,
+                  49995,
+                  9012,
+                  5612,
+                  355,
+                  284,
+                  31770,
+                  13214,
+                  49995,
+                  9012,
+                  5612,
+                  355,
+                  1154,
+                  3881,
+                  438,
+                  279,
+                  7513,
+                  79074,
+                  476,
+                  4185,
+                  79074,
+                  1154,
+                  374,
+                  264,
+                  9415,
+                  315,
+                  366,
+                  3122,
+                  29,
+                  79074,
+                  504,
+                  279,
+                  23086,
+                  22318,
+                  21524,
+                  1154,
+                  37489,
+                  15017,
+                  323,
+                  5479,
+                  315,
+                  279,
+                  5235,
+                  15017,
+                  659,
+                  1084,
+                  374,
+                  15136,
+                  5435,
+                  311,
+                  279,
+                  3693,
+                  79074,
+                  1154,
+                  472,
+                  13,
+                  38235,
+                  355,
+                  659,
+                  1084,
+                  1231,
+                  3063,
+                  311,
+                  264,
+                  3084,
+                  315,
+                  220,
+                  99618,
+                  9956,
+                  320,
+                  220,
+                  99590,
+                  304,
+                  873,
+                  323,
+                  264,
+                  3072,
+                  315,
+                  220,
+                  21,
+                  83607,
+                  320,
+                  220,
+                  99366,
+                  18832,
+                  873,
+                  1154,
+                  323,
+                  29611,
+                  264,
+                  96074,
+                  6716,
+                  315,
+                  66958,
+                  659,
+                  758,
+                  2272,
+                  1154,
+                  279,
+                  39932,
+                  12564,
+                  525,
+                  6303,
+                  1154,
+                  1172,
+                  10449,
+                  330,
+                  79074,
+                  2518,
+                  330,
+                  389,
+                  17213,
+                  659,
+                  386,
+                  1095,
+                  13657,
+                  304,
+                  279,
+                  7324,
+                  1154,
+                  17365,
+                  18772,
+                  892,
+                  525,
+                  11685
+                ],
+                "routed_experts": null
+              }
+            ],
+            "service_tier": null,
+            "system_fingerprint": "vllm-dev-5bd24632",
+            "usage": {
+              "prompt_tokens": 128,
+              "total_tokens": 129,
+              "completion_tokens": 1,
+              "prompt_tokens_details": null
+            },
+            "kv_transfer_params": null
+          }
+        },
+        "forced": {
+          "token": 553,
+          "logprob": -0.46739864349365234,
+          "response": {
+            "id": "cmpl-a05a107a6aaee071",
+            "object": "text_completion",
+            "created": 1789029206,
+            "prompt_routed_experts": null,
+            "model": "yoco-fast-l3",
+            "choices": [
+              {
+                "index": 0,
+                "text": " by",
+                "logprobs": {
+                  "text_offset": [
+                    0
+                  ],
+                  "token_logprobs": [
+                    -0.46739864349365234
+                  ],
+                  "tokens": [
+                    " by"
+                  ],
+                  "top_logprobs": [
+                    {
+                      " by": -0.46739864349365234
+                    }
+                  ]
+                },
+                "finish_reason": "length",
+                "stop_reason": null,
+                "token_ids": [
+                  553
+                ],
+                "prompt_logprobs": null,
+                "prompt_token_ids": [
+                  154824,
+                  715,
+                  284,
+                  13214,
+                  49995,
+                  9012,
+                  5612,
+                  355,
+                  284,
+                  31770,
+                  13214,
+                  49995,
+                  9012,
+                  5612,
+                  355,
+                  1154,
+                  3881,
+                  438,
+                  279,
+                  7513,
+                  79074,
+                  476,
+                  4185,
+                  79074,
+                  1154,
+                  374,
+                  264,
+                  9415,
+                  315,
+                  366,
+                  3122,
+                  29,
+                  79074,
+                  504,
+                  279,
+                  23086,
+                  22318,
+                  21524,
+                  1154,
+                  37489,
+                  15017,
+                  323,
+                  5479,
+                  315,
+                  279,
+                  5235,
+                  15017,
+                  659,
+                  1084,
+                  374,
+                  15136,
+                  5435,
+                  311,
+                  279,
+                  3693,
+                  79074,
+                  1154,
+                  472,
+                  13,
+                  38235,
+                  355,
+                  659,
+                  1084,
+                  1231,
+                  3063,
+                  311,
+                  264,
+                  3084,
+                  315,
+                  220,
+                  99618,
+                  9956,
+                  320,
+                  220,
+                  99590,
+                  304,
+                  873,
+                  323,
+                  264,
+                  3072,
+                  315,
+                  220,
+                  21,
+                  83607,
+                  320,
+                  220,
+                  99366,
+                  18832,
+                  873,
+                  1154,
+                  323,
+                  29611,
+                  264,
+                  96074,
+                  6716,
+                  315,
+                  66958,
+                  659,
+                  758,
+                  2272,
+                  1154,
+                  279,
+                  39932,
+                  12564,
+                  525,
+                  6303,
+                  1154,
+                  1172,
+                  10449,
+                  330,
+                  79074,
+                  2518,
+                  330,
+                  389,
+                  17213,
+                  659,
+                  386,
+                  1095,
+                  13657,
+                  304,
+                  279,
+                  7324,
+                  1154,
+                  17365,
+                  18772,
+                  892,
+                  525,
+                  11685
+                ],
+                "routed_experts": null
+              }
+            ],
+            "service_tier": null,
+            "system_fingerprint": "vllm-dev-5bd24632",
+            "usage": {
+              "prompt_tokens": 128,
+              "total_tokens": 129,
+              "completion_tokens": 1,
+              "prompt_tokens_details": null
+            },
+            "kv_transfer_params": null
+          }
+        }
+      },
+      "samples": [
+        {
+          "position": 128,
+          "target": 553,
+          "logprob": -0.46739864349365234
+        },
+        {
+          "position": 132,
+          "target": 705,
+          "logprob": -1.1165683269500732
+        },
+        {
+          "position": 136,
+          "target": 1573,
+          "logprob": -0.7637810111045837
+        },
+        {
+          "position": 140,
+          "target": 366,
+          "logprob": -3.5989208221435547
+        },
+        {
+          "position": 144,
+          "target": 659,
+          "logprob": -0.31015029549598694
+        },
+        {
+          "position": 148,
+          "target": 5612,
+          "logprob": -0.0013094907626509666
+        },
+        {
+          "position": 152,
+          "target": 7548,
+          "logprob": -1.7978928089141846
+        },
+        {
+          "position": 156,
+          "target": 323,
+          "logprob": -0.7813314199447632
+        },
+        {
+          "position": 160,
+          "target": 1667,
+          "logprob": -0.22016824781894684
+        },
+        {
+          "position": 164,
+          "target": 10003,
+          "logprob": -4.9863667488098145
+        },
+        {
+          "position": 168,
+          "target": 85235,
+          "logprob": -0.021705225110054016
+        },
+        {
+          "position": 172,
+          "target": 284,
+          "logprob": -4.8525896072387695
+        },
+        {
+          "position": 176,
+          "target": 31770,
+          "logprob": -1.6931482553482056
+        },
+        {
+          "position": 180,
+          "target": 5612,
+          "logprob": -0.00032443503732793033
+        },
+        {
+          "position": 184,
+          "target": 3460,
+          "logprob": -0.5911245942115784
+        },
+        {
+          "position": 188,
+          "target": 1154,
+          "logprob": -1.8139728307724
+        },
+        {
+          "position": 192,
+          "target": 3084,
+          "logprob": -0.08269535005092621
+        },
+        {
+          "position": 196,
+          "target": 99618,
+          "logprob": -0.6186038851737976
+        },
+        {
+          "position": 200,
+          "target": 320,
+          "logprob": -0.05901262164115906
+        },
+        {
+          "position": 204,
+          "target": 873,
+          "logprob": -0.03673965111374855
+        },
+        {
+          "position": 208,
+          "target": 311,
+          "logprob": -0.0006573423161171377
+        },
+        {
+          "position": 212,
+          "target": 220,
+          "logprob": -0.02096889354288578
+        },
+        {
+          "position": 216,
+          "target": 220,
+          "logprob": -0.006663009524345398
+        },
+        {
+          "position": 220,
+          "target": 99366,
+          "logprob": -0.009107593446969986
+        },
+        {
+          "position": 224,
+          "target": 7892,
+          "logprob": -1.0615419149398804
+        },
+        {
+          "position": 228,
+          "target": 10563,
+          "logprob": -1.2291990518569946
+        },
+        {
+          "position": 232,
+          "target": 525,
+          "logprob": -0.8141229748725891
+        },
+        {
+          "position": 236,
+          "target": 1365,
+          "logprob": -0.6723496913909912
+        },
+        {
+          "position": 240,
+          "target": 320,
+          "logprob": -0.07623286545276642
+        },
+        {
+          "position": 244,
+          "target": 220,
+          "logprob": -0.004481510724872351
+        },
+        {
+          "position": 248,
+          "target": 1293,
+          "logprob": -0.8969041109085083
+        },
+        {
+          "position": 252,
+          "target": 15,
+          "logprob": -1.0497843027114868
+        },
+        {
+          "position": 256,
+          "target": 22,
+          "logprob": -5.721230506896973
+        },
+        {
+          "position": 260,
+          "target": 569,
+          "logprob": -2.946056365966797
+        },
+        {
+          "position": 264,
+          "target": 20925,
+          "logprob": -0.4505150616168976
+        },
+        {
+          "position": 268,
+          "target": 569,
+          "logprob": -0.16653089225292206
+        },
+        {
+          "position": 272,
+          "target": 1365,
+          "logprob": -0.027457095682621002
+        },
+        {
+          "position": 276,
+          "target": 58061,
+          "logprob": -0.00018189683032687753
+        },
+        {
+          "position": 280,
+          "target": 873,
+          "logprob": -0.02988012507557869
+        },
+        {
+          "position": 284,
+          "target": 39397,
+          "logprob": -2.560251235961914
+        },
+        {
+          "position": 288,
+          "target": 39932,
+          "logprob": -2.229158878326416
+        },
+        {
+          "position": 292,
+          "target": 2588,
+          "logprob": -0.2871726155281067
+        },
+        {
+          "position": 296,
+          "target": 892,
+          "logprob": -1.6454031467437744
+        },
+        {
+          "position": 300,
+          "target": 304,
+          "logprob": -0.7911363244056702
+        },
+        {
+          "position": 304,
+          "target": 1154,
+          "logprob": -2.1988964080810547
+        },
+        {
+          "position": 308,
+          "target": 2598,
+          "logprob": -1.2571752071380615
+        },
+        {
+          "position": 312,
+          "target": 320,
+          "logprob": -4.5497822761535645
+        },
+        {
+          "position": 316,
+          "target": 873,
+          "logprob": -1.1351298093795776
+        },
+        {
+          "position": 320,
+          "target": 12164,
+          "logprob": -0.9943066835403442
+        },
+        {
+          "position": 324,
+          "target": 1042,
+          "logprob": -0.004319979343563318
+        },
+        {
+          "position": 328,
+          "target": 12564,
+          "logprob": -0.00019858295854646713
+        },
+        {
+          "position": 332,
+          "target": 311,
+          "logprob": -0.2802641987800598
+        },
+        {
+          "position": 336,
+          "target": 16,
+          "logprob": -0.7203800678253174
+        },
+        {
+          "position": 340,
+          "target": 1635,
+          "logprob": -0.007912127301096916
+        },
+        {
+          "position": 344,
+          "target": 659,
+          "logprob": -0.14632494747638702
+        },
+        {
+          "position": 348,
+          "target": 6716,
+          "logprob": -0.4915256202220917
+        },
+        {
+          "position": 352,
+          "target": 29,
+          "logprob": -0.010347291827201843
+        },
+        {
+          "position": 356,
+          "target": 264,
+          "logprob": -0.7016031742095947
+        },
+        {
+          "position": 360,
+          "target": 57904,
+          "logprob": -0.003703997703269124
+        },
+        {
+          "position": 364,
+          "target": 659,
+          "logprob": -1.1795618534088135
+        },
+        {
+          "position": 368,
+          "target": 374,
+          "logprob": -0.7556307315826416
+        },
+        {
+          "position": 372,
+          "target": 3122,
+          "logprob": -0.029248319566249847
+        },
+        {
+          "position": 376,
+          "target": 323,
+          "logprob": -2.3522400856018066
+        },
+        {
+          "position": 380,
+          "target": 3122,
+          "logprob": -0.0321025624871254
+        },
+        {
+          "position": 384,
+          "target": 14422,
+          "logprob": -0.13771045207977295
+        },
+        {
+          "position": 388,
+          "target": 1008,
+          "logprob": -1.4687309265136719
+        },
+        {
+          "position": 392,
+          "target": 61173,
+          "logprob": -1.9366836547851562
+        },
+        {
+          "position": 396,
+          "target": 702,
+          "logprob": -0.06673233211040497
+        },
+        {
+          "position": 400,
+          "target": 1154,
+          "logprob": -4.162656784057617
+        },
+        {
+          "position": 404,
+          "target": 369,
+          "logprob": -0.19794145226478577
+        },
+        {
+          "position": 408,
+          "target": 279,
+          "logprob": -3.2531917095184326
+        },
+        {
+          "position": 412,
+          "target": 1154,
+          "logprob": -0.8749467134475708
+        },
+        {
+          "position": 416,
+          "target": 374,
+          "logprob": -0.2404204159975052
+        },
+        {
+          "position": 420,
+          "target": 29,
+          "logprob": -0.0009517907164990902
+        },
+        {
+          "position": 424,
+          "target": 1290,
+          "logprob": -0.09865265339612961
+        },
+        {
+          "position": 428,
+          "target": 659,
+          "logprob": -1.377650260925293
+        },
+        {
+          "position": 432,
+          "target": 3122,
+          "logprob": -0.008606839925050735
+        },
+        {
+          "position": 436,
+          "target": 6303,
+          "logprob": -1.312671184539795
+        },
+        {
+          "position": 440,
+          "target": 18740,
+          "logprob": -5.4843058586120605
+        },
+        {
+          "position": 444,
+          "target": 29,
+          "logprob": -0.0023260461166501045
+        },
+        {
+          "position": 448,
+          "target": 3685,
+          "logprob": -1.355355143547058
+        },
+        {
+          "position": 452,
+          "target": 12457,
+          "logprob": -1.5957632064819336
+        },
+        {
+          "position": 456,
+          "target": 12564,
+          "logprob": -0.0004306104383431375
+        },
+        {
+          "position": 460,
+          "target": 17213,
+          "logprob": -0.3793942630290985
+        },
+        {
+          "position": 464,
+          "target": 1576,
+          "logprob": -1.0432236194610596
+        },
+        {
+          "position": 468,
+          "target": 1154,
+          "logprob": -0.007103071082383394
+        },
+        {
+          "position": 472,
+          "target": 366,
+          "logprob": -1.762911081314087
+        },
+        {
+          "position": 476,
+          "target": 6822,
+          "logprob": -0.8752025365829468
+        },
+        {
+          "position": 480,
+          "target": 6351,
+          "logprob": -3.5590357780456543
+        },
+        {
+          "position": 484,
+          "target": 6351,
+          "logprob": -3.974102735519409
+        },
+        {
+          "position": 488,
+          "target": 553,
+          "logprob": -0.08470084518194199
+        },
+        {
+          "position": 492,
+          "target": 17213,
+          "logprob": -0.16704809665679932
+        },
+        {
+          "position": 496,
+          "target": 2518,
+          "logprob": -1.057525396347046
+        },
+        {
+          "position": 500,
+          "target": 576,
+          "logprob": -1.2114094495773315
+        },
+        {
+          "position": 504,
+          "target": 472,
+          "logprob": -0.9590039253234863
+        },
+        {
+          "position": 508,
+          "target": 355,
+          "logprob": -0.00021395778458099812
+        },
+        {
+          "position": 512,
+          "target": 79074,
+          "logprob": -0.10013119876384735
+        },
+        {
+          "position": 516,
+          "target": 38235,
+          "logprob": -0.011267837136983871
+        },
+        {
+          "position": 520,
+          "target": 1378,
+          "logprob": -0.3959580361843109
+        },
+        {
+          "position": 524,
+          "target": 4428,
+          "logprob": -0.04061765968799591
+        },
+        {
+          "position": 528,
+          "target": 387,
+          "logprob": -0.7532793879508972
+        },
+        {
+          "position": 532,
+          "target": 7892,
+          "logprob": -1.2805447578430176
+        },
+        {
+          "position": 536,
+          "target": 311,
+          "logprob": -0.15375451743602753
+        },
+        {
+          "position": 540,
+          "target": 8379,
+          "logprob": -0.013599838130176067
+        },
+        {
+          "position": 544,
+          "target": 653,
+          "logprob": -0.24075385928153992
+        },
+        {
+          "position": 548,
+          "target": 576,
+          "logprob": -1.4550387859344482
+        },
+        {
+          "position": 552,
+          "target": 387,
+          "logprob": -0.1000838503241539
+        },
+        {
+          "position": 556,
+          "target": 1372,
+          "logprob": -0.44203561544418335
+        },
+        {
+          "position": 560,
+          "target": 715,
+          "logprob": -2.6788268089294434
+        },
+        {
+          "position": 564,
+          "target": 29,
+          "logprob": -0.003971191123127937
+        },
+        {
+          "position": 568,
+          "target": 38235,
+          "logprob": -0.4911360740661621
+        },
+        {
+          "position": 572,
+          "target": 476,
+          "logprob": -1.0990227460861206
+        },
+        {
+          "position": 576,
+          "target": 389,
+          "logprob": -0.6078153848648071
+        },
+        {
+          "position": 580,
+          "target": 892,
+          "logprob": -2.4520766735076904
+        },
+        {
+          "position": 584,
+          "target": 472,
+          "logprob": -0.04214470461010933
+        },
+        {
+          "position": 588,
+          "target": 355,
+          "logprob": -0.00010883215873036534
+        },
+        {
+          "position": 592,
+          "target": 978,
+          "logprob": -3.9660401344299316
+        },
+        {
+          "position": 596,
+          "target": 66958,
+          "logprob": -3.221508026123047
+        },
+        {
+          "position": 600,
+          "target": 38235,
+          "logprob": -0.15470491349697113
+        },
+        {
+          "position": 604,
+          "target": 476,
+          "logprob": -2.301262140274048
+        },
+        {
+          "position": 608,
+          "target": 31,
+          "logprob": -1.5874061584472656
+        },
+        {
+          "position": 612,
+          "target": 1846,
+          "logprob": -0.30579033493995667
+        },
+        {
+          "position": 616,
+          "target": 9012,
+          "logprob": -0.004708749707788229
+        },
+        {
+          "position": 620,
+          "target": 4158,
+          "logprob": -0.45835909247398376
+        },
+        {
+          "position": 624,
+          "target": 12,
+          "logprob": -0.00799183826893568
+        },
+        {
+          "position": 628,
+          "target": 715,
+          "logprob": -0.07004193216562271
+        },
+        {
+          "position": 632,
+          "target": 279,
+          "logprob": -0.3422905504703522
+        },
+        {
+          "position": 636,
+          "target": 13,
+          "logprob": -0.0017694068374112248
+        },
+        {
+          "position": 640,
+          "target": 18543,
+          "logprob": -2.781269073486328
+        },
+        {
+          "position": 644,
+          "target": 1393,
+          "logprob": -0.2548767030239105
+        },
+        {
+          "position": 648,
+          "target": 13,
+          "logprob": -0.0018463960150256753
+        },
+        {
+          "position": 652,
+          "target": 374,
+          "logprob": -0.015605476684868336
+        },
+        {
+          "position": 656,
+          "target": 1602,
+          "logprob": -5.600835800170898
+        },
+        {
+          "position": 660,
+          "target": 31770,
+          "logprob": -4.035483360290527
+        },
+        {
+          "position": 664,
+          "target": 10770,
+          "logprob": -0.49723079800605774
+        },
+        {
+          "position": 668,
+          "target": 28537,
+          "logprob": -4.045065879821777
+        },
+        {
+          "position": 672,
+          "target": 5612,
+          "logprob": -9.297892393078655e-05
+        },
+        {
+          "position": 676,
+          "target": 46870,
+          "logprob": -0.009116453118622303
+        },
+        {
+          "position": 680,
+          "target": 14690,
+          "logprob": -1.871721625328064
+        },
+        {
+          "position": 684,
+          "target": 391,
+          "logprob": -0.0007606235449202359
+        },
+        {
+          "position": 688,
+          "target": 220,
+          "logprob": -0.6306694746017456
+        },
+        {
+          "position": 692,
+          "target": 102284,
+          "logprob": -3.4786758422851562
+        },
+        {
+          "position": 696,
+          "target": 320,
+          "logprob": -0.008929203264415264
+        },
+        {
+          "position": 700,
+          "target": 58061,
+          "logprob": -0.008993002586066723
+        },
+        {
+          "position": 704,
+          "target": 220,
+          "logprob": -0.0019052940187975764
+        },
+        {
+          "position": 708,
+          "target": 220,
+          "logprob": -0.00038747431244701147
+        },
+        {
+          "position": 712,
+          "target": 1154,
+          "logprob": -0.8298653364181519
+        },
+        {
+          "position": 716,
+          "target": 518,
+          "logprob": -0.21337202191352844
+        },
+        {
+          "position": 720,
+          "target": 1379,
+          "logprob": -0.47159910202026367
+        },
+        {
+          "position": 724,
+          "target": 11131,
+          "logprob": -4.553892135620117
+        },
+        {
+          "position": 728,
+          "target": 1948,
+          "logprob": -5.227475643157959
+        },
+        {
+          "position": 732,
+          "target": 3122,
+          "logprob": -0.0023412692826241255
+        },
+        {
+          "position": 736,
+          "target": 6693,
+          "logprob": -3.728599786758423
+        },
+        {
+          "position": 740,
+          "target": 8412,
+          "logprob": -0.8234524726867676
+        },
+        {
+          "position": 744,
+          "target": 2588,
+          "logprob": -2.74110746383667
+        },
+        {
+          "position": 748,
+          "target": 557,
+          "logprob": -0.8410334587097168
+        },
+        {
+          "position": 752,
+          "target": 576,
+          "logprob": -0.7154631018638611
+        },
+        {
+          "position": 756,
+          "target": 18772,
+          "logprob": -0.43936946988105774
+        },
+        {
+          "position": 760,
+          "target": 220,
+          "logprob": -1.775728702545166
+        },
+        {
+          "position": 764,
+          "target": 11643,
+          "logprob": -3.4766769409179688
+        },
+        {
+          "position": 768,
+          "target": 1154,
+          "logprob": -1.0451918840408325
+        },
+        {
+          "position": 772,
+          "target": 366,
+          "logprob": -2.685227632522583
+        },
+        {
+          "position": 776,
+          "target": 34029,
+          "logprob": -4.485003471374512
+        },
+        {
+          "position": 780,
+          "target": 525,
+          "logprob": -0.4491904377937317
+        },
+        {
+          "position": 784,
+          "target": 330,
+          "logprob": -0.1818687915802002
+        },
+        {
+          "position": 788,
+          "target": 330,
+          "logprob": -0.038642000406980515
+        },
+        {
+          "position": 792,
+          "target": 1730,
+          "logprob": -4.623432636260986
+        },
+        {
+          "position": 796,
+          "target": 659,
+          "logprob": -0.7065450549125671
+        },
+        {
+          "position": 800,
+          "target": 43009,
+          "logprob": -0.40275299549102783
+        },
+        {
+          "position": 804,
+          "target": 323,
+          "logprob": -1.2045235633850098
+        },
+        {
+          "position": 808,
+          "target": 311,
+          "logprob": -1.1948070526123047
+        },
+        {
+          "position": 812,
+          "target": 1380,
+          "logprob": -2.8930234909057617
+        },
+        {
+          "position": 816,
+          "target": 279,
+          "logprob": -0.0933731272816658
+        },
+        {
+          "position": 820,
+          "target": 855,
+          "logprob": -6.771440505981445
+        },
+        {
+          "position": 824,
+          "target": 3122,
+          "logprob": -0.006540321744978428
+        },
+        {
+          "position": 828,
+          "target": 6430,
+          "logprob": -1.9281977415084839
+        },
+        {
+          "position": 832,
+          "target": 3122,
+          "logprob": -0.024719571694731712
+        },
+        {
+          "position": 836,
+          "target": 369,
+          "logprob": -0.9999638795852661
+        },
+        {
+          "position": 840,
+          "target": 220,
+          "logprob": -0.0023142718710005283
+        },
+        {
+          "position": 844,
+          "target": 4636,
+          "logprob": -2.0557260513305664
+        },
+        {
+          "position": 848,
+          "target": 4832,
+          "logprob": -0.00035565727739594877
+        },
+        {
+          "position": 852,
+          "target": 4990,
+          "logprob": -5.313713550567627
+        },
+        {
+          "position": 856,
+          "target": 12122,
+          "logprob": -4.658835411071777
+        },
+        {
+          "position": 860,
+          "target": 1154,
+          "logprob": -0.4138384163379669
+        },
+        {
+          "position": 864,
+          "target": 366,
+          "logprob": -2.292973518371582
+        },
+        {
+          "position": 868,
+          "target": 659,
+          "logprob": -0.7408433556556702
+        },
+        {
+          "position": 872,
+          "target": 525,
+          "logprob": -2.111436605453491
+        },
+        {
+          "position": 876,
+          "target": 279,
+          "logprob": -0.2626008689403534
+        },
+        {
+          "position": 880,
+          "target": 525,
+          "logprob": -1.6308788061141968
+        },
+        {
+          "position": 884,
+          "target": 7892,
+          "logprob": -1.7402360439300537
+        },
+        {
+          "position": 888,
+          "target": 311,
+          "logprob": -0.08058299869298935
+        },
+        {
+          "position": 892,
+          "target": 40870,
+          "logprob": -4.422762870788574
+        },
+        {
+          "position": 896,
+          "target": 659,
+          "logprob": -0.5465577840805054
+        },
+        {
+          "position": 900,
+          "target": 429,
+          "logprob": -0.026202209293842316
+        },
+        {
+          "position": 904,
+          "target": 44197,
+          "logprob": -3.838808536529541
+        },
+        {
+          "position": 908,
+          "target": 220,
+          "logprob": -0.2566338777542114
+        },
+        {
+          "position": 912,
+          "target": 220,
+          "logprob": -0.07437697052955627
+        },
+        {
+          "position": 916,
+          "target": 279,
+          "logprob": -2.1447315216064453
+        },
+        {
+          "position": 920,
+          "target": 10257,
+          "logprob": -3.635659694671631
+        },
+        {
+          "position": 924,
+          "target": 5545,
+          "logprob": -0.7278243899345398
+        },
+        {
+          "position": 928,
+          "target": 578,
+          "logprob": -3.266281055402942e-05
+        },
+        {
+          "position": 932,
+          "target": 99082,
+          "logprob": -3.1065402030944824
+        },
+        {
+          "position": 936,
+          "target": 15,
+          "logprob": -0.036822155117988586
+        },
+        {
+          "position": 940,
+          "target": 102573,
+          "logprob": -1.5106432437896729
+        },
+        {
+          "position": 944,
+          "target": 279,
+          "logprob": -0.5980120897293091
+        },
+        {
+          "position": 948,
+          "target": 862,
+          "logprob": -0.9884614944458008
+        },
+        {
+          "position": 952,
+          "target": 1191,
+          "logprob": -3.8987388610839844
+        },
+        {
+          "position": 956,
+          "target": 659,
+          "logprob": -0.5828969478607178
+        },
+        {
+          "position": 960,
+          "target": 33746,
+          "logprob": -1.2159700393676758
+        },
+        {
+          "position": 964,
+          "target": 13214,
+          "logprob": -0.7553948760032654
+        },
+        {
+          "position": 968,
+          "target": 355,
+          "logprob": -0.0005165196489542723
+        },
+        {
+          "position": 972,
+          "target": 279,
+          "logprob": -0.46226218342781067
+        },
+        {
+          "position": 976,
+          "target": 31,
+          "logprob": -0.0038023332599550486
+        },
+        {
+          "position": 980,
+          "target": 504,
+          "logprob": -2.755471706390381
+        },
+        {
+          "position": 984,
+          "target": 279,
+          "logprob": -1.9529876708984375
+        },
+        {
+          "position": 988,
+          "target": 57734,
+          "logprob": -1.578621745109558
+        },
+        {
+          "position": 992,
+          "target": 279,
+          "logprob": -0.1677485853433609
+        },
+        {
+          "position": 996,
+          "target": 1084,
+          "logprob": -0.6811975240707397
+        },
+        {
+          "position": 1000,
+          "target": 304,
+          "logprob": -0.10751741379499435
+        },
+        {
+          "position": 1004,
+          "target": 37489,
+          "logprob": -0.4757823348045349
+        },
+        {
+          "position": 1008,
+          "target": 7402,
+          "logprob": -2.5547304153442383
+        },
+        {
+          "position": 1012,
+          "target": 10979,
+          "logprob": -2.636916160583496
+        },
+        {
+          "position": 1016,
+          "target": 1154,
+          "logprob": -1.7404865026474
+        },
+        {
+          "position": 1020,
+          "target": 279,
+          "logprob": -0.7919224500656128
+        },
+        {
+          "position": 1024,
+          "target": 31,
+          "logprob": -0.0030728999990969896
+        },
+        {
+          "position": 1028,
+          "target": 279,
+          "logprob": -0.1972350776195526
+        },
+        {
+          "position": 1032,
+          "target": 576,
+          "logprob": -2.009868621826172
+        },
+        {
+          "position": 1036,
+          "target": 21856,
+          "logprob": -5.33791971206665
+        },
+        {
+          "position": 1040,
+          "target": 279,
+          "logprob": -1.5234525203704834
+        },
+        {
+          "position": 1044,
+          "target": 29,
+          "logprob": -0.00907333567738533
+        },
+        {
+          "position": 1048,
+          "target": 323,
+          "logprob": -1.6767024993896484
+        },
+        {
+          "position": 1052,
+          "target": 1154,
+          "logprob": -1.4507917165756226
+        },
+        {
+          "position": 1056,
+          "target": 21176,
+          "logprob": -0.09460900723934174
+        },
+        {
+          "position": 1060,
+          "target": 9415,
+          "logprob": -1.3588182926177979
+        },
+        {
+          "position": 1064,
+          "target": 1119,
+          "logprob": -0.05547410622239113
+        },
+        {
+          "position": 1068,
+          "target": 21856,
+          "logprob": -0.9843329191207886
+        },
+        {
+          "position": 1072,
+          "target": 7042,
+          "logprob": -4.516941547393799
+        },
+        {
+          "position": 1076,
+          "target": 892,
+          "logprob": -4.4621148109436035
+        },
+        {
+          "position": 1080,
+          "target": 4152,
+          "logprob": -3.2522263526916504
+        },
+        {
+          "position": 1084,
+          "target": 7042,
+          "logprob": -0.09306959062814713
+        },
+        {
+          "position": 1088,
+          "target": 4152,
+          "logprob": -1.7114272117614746
+        },
+        {
+          "position": 1092,
+          "target": 279,
+          "logprob": -3.5621097087860107
+        },
+        {
+          "position": 1096,
+          "target": 576,
+          "logprob": -0.8473252058029175
+        },
+        {
+          "position": 1100,
+          "target": 374,
+          "logprob": -0.8761599659919739
+        },
+        {
+          "position": 1104,
+          "target": 39932,
+          "logprob": -4.566372871398926
+        },
+        {
+          "position": 1108,
+          "target": 31372,
+          "logprob": -0.2615431845188141
+        },
+        {
+          "position": 1112,
+          "target": 1012,
+          "logprob": -2.0861618518829346
+        },
+        {
+          "position": 1116,
+          "target": 279,
+          "logprob": -2.2237682342529297
+        },
+        {
+          "position": 1120,
+          "target": 12,
+          "logprob": -0.012611517682671547
+        },
+        {
+          "position": 1124,
+          "target": 330,
+          "logprob": -0.06464675068855286
+        },
+        {
+          "position": 1128,
+          "target": 304,
+          "logprob": -1.733425498008728
+        },
+        {
+          "position": 1132,
+          "target": 525,
+          "logprob": -2.0971593856811523
+        },
+        {
+          "position": 1136,
+          "target": 304,
+          "logprob": -0.44647127389907837
+        },
+        {
+          "position": 1140,
+          "target": 659,
+          "logprob": -1.458009958267212
+        },
+        {
+          "position": 1144,
+          "target": 7042,
+          "logprob": -0.21821705996990204
+        },
+        {
+          "position": 1148,
+          "target": 279,
+          "logprob": -0.1994582712650299
+        },
+        {
+          "position": 1152,
+          "target": 504,
+          "logprob": -0.6285108327865601
+        },
+        {
+          "position": 1156,
+          "target": 29,
+          "logprob": -0.0021553635597229004
+        },
+        {
+          "position": 1160,
+          "target": 1846,
+          "logprob": -0.6479924321174622
+        },
+        {
+          "position": 1164,
+          "target": 4787,
+          "logprob": -2.115205764770508
+        },
+        {
+          "position": 1168,
+          "target": 13425,
+          "logprob": -0.027194945141673088
+        },
+        {
+          "position": 1172,
+          "target": 614,
+          "logprob": -0.7435128092765808
+        },
+        {
+          "position": 1176,
+          "target": 19095,
+          "logprob": -0.5346359014511108
+        },
+        {
+          "position": 1180,
+          "target": 5612,
+          "logprob": -0.00021181246847845614
+        },
+        {
+          "position": 1184,
+          "target": 16892,
+          "logprob": -0.2865731120109558
+        },
+        {
+          "position": 1188,
+          "target": 7513,
+          "logprob": -2.642162322998047
+        },
+        {
+          "position": 1192,
+          "target": 279,
+          "logprob": -0.546530544757843
+        },
+        {
+          "position": 1196,
+          "target": 25076,
+          "logprob": -0.2992301881313324
+        },
+        {
+          "position": 1200,
+          "target": 659,
+          "logprob": -0.7988288998603821
+        },
+        {
+          "position": 1204,
+          "target": 19,
+          "logprob": -0.6306372284889221
+        },
+        {
+          "position": 1208,
+          "target": 16,
+          "logprob": -0.11379775404930115
+        },
+        {
+          "position": 1212,
+          "target": 3526,
+          "logprob": -0.7096218466758728
+        },
+        {
+          "position": 1216,
+          "target": 5880,
+          "logprob": -0.5928615927696228
+        },
+        {
+          "position": 1220,
+          "target": 29,
+          "logprob": -0.007728319149464369
+        },
+        {
+          "position": 1224,
+          "target": 29,
+          "logprob": -0.006042782682925463
+        },
+        {
+          "position": 1228,
+          "target": 9415,
+          "logprob": -2.315126419067383
+        },
+        {
+          "position": 1232,
+          "target": 9551,
+          "logprob": -0.05679069086909294
+        },
+        {
+          "position": 1236,
+          "target": 284,
+          "logprob": -0.016306007280945778
+        },
+        {
+          "position": 1240,
+          "target": 284,
+          "logprob": -0.0002739054325502366
+        },
+        {
+          "position": 1244,
+          "target": 13,
+          "logprob": -0.001042656716890633
+        },
+        {
+          "position": 1248,
+          "target": 3887,
+          "logprob": -2.533658266067505
+        },
+        {
+          "position": 1252,
+          "target": 27552,
+          "logprob": -0.3275684714317322
+        },
+        {
+          "position": 1256,
+          "target": 220,
+          "logprob": -0.681918203830719
+        },
+        {
+          "position": 1260,
+          "target": 102781,
+          "logprob": -3.966020107269287
+        },
+        {
+          "position": 1264,
+          "target": 15,
+          "logprob": -0.01662132702767849
+        },
+        {
+          "position": 1268,
+          "target": 29,
+          "logprob": -0.001209838199429214
+        },
+        {
+          "position": 1272,
+          "target": 7892,
+          "logprob": -1.4571588039398193
+        },
+        {
+          "position": 1276,
+          "target": 1091,
+          "logprob": -0.0063470215536653996
+        },
+        {
+          "position": 1280,
+          "target": 320,
+          "logprob": -0.033811163157224655
+        },
+        {
+          "position": 1284,
+          "target": 873,
+          "logprob": -0.036870066076517105
+        },
+        {
+          "position": 1288,
+          "target": 2588,
+          "logprob": -2.878439426422119
+        },
+        {
+          "position": 1292,
+          "target": 1741,
+          "logprob": -0.6664696335792542
+        },
+        {
+          "position": 1296,
+          "target": 2588,
+          "logprob": -4.4595489501953125
+        },
+        {
+          "position": 1300,
+          "target": 3887,
+          "logprob": -3.12978458404541
+        },
+        {
+          "position": 1304,
+          "target": 1884,
+          "logprob": -0.4305709898471832
+        },
+        {
+          "position": 1308,
+          "target": 23143,
+          "logprob": -3.787848472595215
+        },
+        {
+          "position": 1312,
+          "target": 5395,
+          "logprob": -0.4684111475944519
+        },
+        {
+          "position": 1316,
+          "target": 9963,
+          "logprob": -1.5199875831604004
+        },
+        {
+          "position": 1320,
+          "target": 9012,
+          "logprob": -0.002096480457112193
+        },
+        {
+          "position": 1324,
+          "target": 17148,
+          "logprob": -0.04891272634267807
+        },
+        {
+          "position": 1328,
+          "target": 3122,
+          "logprob": -0.003915977198630571
+        },
+        {
+          "position": 1332,
+          "target": 97930,
+          "logprob": -0.002121699508279562
+        },
+        {
+          "position": 1336,
+          "target": 1560,
+          "logprob": -3.640964984893799
+        },
+        {
+          "position": 1340,
+          "target": 355,
+          "logprob": -0.012878931127488613
+        },
+        {
+          "position": 1344,
+          "target": 366,
+          "logprob": -1.2310192584991455
+        },
+        {
+          "position": 1348,
+          "target": 366,
+          "logprob": -1.8778431415557861
+        },
+        {
+          "position": 1352,
+          "target": 1471,
+          "logprob": -3.084702491760254
+        },
+        {
+          "position": 1356,
+          "target": 61466,
+          "logprob": -0.0883161723613739
+        },
+        {
+          "position": 1360,
+          "target": 2326,
+          "logprob": -6.819070816040039
+        },
+        {
+          "position": 1364,
+          "target": 79074,
+          "logprob": -4.515646934509277
+        },
+        {
+          "position": 1368,
+          "target": 9012,
+          "logprob": -0.2836371958255768
+        },
+        {
+          "position": 1372,
+          "target": 472,
+          "logprob": -1.658367395401001
+        },
+        {
+          "position": 1376,
+          "target": 323,
+          "logprob": -0.18930694460868835
+        },
+        {
+          "position": 1380,
+          "target": 366,
+          "logprob": -1.4512321949005127
+        },
+        {
+          "position": 1384,
+          "target": 18402,
+          "logprob": -4.3857951164245605
+        },
+        {
+          "position": 1388,
+          "target": 3881,
+          "logprob": -4.188815116882324
+        },
+        {
+          "position": 1392,
+          "target": 9859,
+          "logprob": -8.272794723510742
+        },
+        {
+          "position": 1396,
+          "target": 366,
+          "logprob": -1.7582125663757324
+        },
+        {
+          "position": 1400,
+          "target": 279,
+          "logprob": -1.7305936813354492
+        },
+        {
+          "position": 1404,
+          "target": 13,
+          "logprob": -0.0019450333202257752
+        },
+        {
+          "position": 1408,
+          "target": 702,
+          "logprob": -4.495911598205566
+        },
+        {
+          "position": 1412,
+          "target": 659,
+          "logprob": -0.5634965300559998
+        },
+        {
+          "position": 1416,
+          "target": 9012,
+          "logprob": -0.021544935181736946
+        },
+        {
+          "position": 1420,
+          "target": 45902,
+          "logprob": -3.8908395767211914
+        },
+        {
+          "position": 1424,
+          "target": 366,
+          "logprob": -0.3623517155647278
+        },
+        {
+          "position": 1428,
+          "target": 8879,
+          "logprob": -1.4424526691436768
+        },
+        {
+          "position": 1432,
+          "target": 3122,
+          "logprob": -0.0023858672939240932
+        },
+        {
+          "position": 1436,
+          "target": 29,
+          "logprob": -0.015526135452091694
+        },
+        {
+          "position": 1440,
+          "target": 659,
+          "logprob": -0.9627267122268677
+        },
+        {
+          "position": 1444,
+          "target": 13805,
+          "logprob": -6.440107822418213
+        },
+        {
+          "position": 1448,
+          "target": 39932,
+          "logprob": -0.3823377788066864
+        },
+        {
+          "position": 1452,
+          "target": 8456,
+          "logprob": -0.4810265302658081
+        },
+        {
+          "position": 1456,
+          "target": 3884,
+          "logprob": -2.8893072605133057
+        },
+        {
+          "position": 1460,
+          "target": 13,
+          "logprob": -0.00159327348228544
+        },
+        {
+          "position": 1464,
+          "target": 1154,
+          "logprob": -1.295142650604248
+        },
+        {
+          "position": 1468,
+          "target": 315,
+          "logprob": -1.4016295671463013
+        },
+        {
+          "position": 1472,
+          "target": 472,
+          "logprob": -2.0401220321655273
+        },
+        {
+          "position": 1476,
+          "target": 1410,
+          "logprob": -5.265756607055664
+        },
+        {
+          "position": 1480,
+          "target": 700,
+          "logprob": -0.0007508557755500078
+        },
+        {
+          "position": 1484,
+          "target": 284,
+          "logprob": -0.009810565039515495
+        },
+        {
+          "position": 1488,
+          "target": 284,
+          "logprob": -0.00024053541710600257
+        },
+        {
+          "position": 1492,
+          "target": 9012,
+          "logprob": -0.005151569377630949
+        },
+        {
+          "position": 1496,
+          "target": 35068,
+          "logprob": -7.645153045654297
+        },
+        {
+          "position": 1500,
+          "target": 330,
+          "logprob": -1.0514477491378784
+        },
+        {
+          "position": 1504,
+          "target": 3122,
+          "logprob": -0.0010987442219629884
+        },
+        {
+          "position": 1508,
+          "target": 9729,
+          "logprob": -4.424156188964844
+        },
+        {
+          "position": 1512,
+          "target": 366,
+          "logprob": -1.1323641538619995
+        },
+        {
+          "position": 1516,
+          "target": 264,
+          "logprob": -7.121551036834717
+        },
+        {
+          "position": 1520,
+          "target": 6364,
+          "logprob": -2.6588683128356934
+        },
+        {
+          "position": 1524,
+          "target": 1084,
+          "logprob": -1.0788403749465942
+        },
+        {
+          "position": 1528,
+          "target": 1550,
+          "logprob": -0.009868759661912918
+        },
+        {
+          "position": 1532,
+          "target": 387,
+          "logprob": -0.388990193605423
+        },
+        {
+          "position": 1536,
+          "target": 19653,
+          "logprob": -0.23272815346717834
+        },
+        {
+          "position": 1540,
+          "target": 81805,
+          "logprob": -7.245208740234375
+        },
+        {
+          "position": 1544,
+          "target": 66958,
+          "logprob": -1.474678635597229
+        },
+        {
+          "position": 1548,
+          "target": 315,
+          "logprob": -2.5101122856140137
+        },
+        {
+          "position": 1552,
+          "target": 5612,
+          "logprob": -0.0001586549769854173
+        },
+        {
+          "position": 1556,
+          "target": 9070,
+          "logprob": -2.4618771076202393
+        },
+        {
+          "position": 1560,
+          "target": 1154,
+          "logprob": -0.6670336127281189
+        },
+        {
+          "position": 1564,
+          "target": 279,
+          "logprob": -0.1253502368927002
+        },
+        {
+          "position": 1568,
+          "target": 61655,
+          "logprob": -6.055550575256348
+        },
+        {
+          "position": 1572,
+          "target": 706,
+          "logprob": -0.011769027449190617
+        },
+        {
+          "position": 1576,
+          "target": 576,
+          "logprob": -1.578218698501587
+        },
+        {
+          "position": 1580,
+          "target": 366,
+          "logprob": -2.2047762870788574
+        },
+        {
+          "position": 1584,
+          "target": 323,
+          "logprob": -4.295769214630127
+        },
+        {
+          "position": 1588,
+          "target": 52890,
+          "logprob": -1.710423231124878
+        },
+        {
+          "position": 1592,
+          "target": 873,
+          "logprob": -0.4087858498096466
+        },
+        {
+          "position": 1596,
+          "target": 315,
+          "logprob": -0.43276137113571167
+        },
+        {
+          "position": 1600,
+          "target": 5612,
+          "logprob": -0.0010171722387894988
+        },
+        {
+          "position": 1604,
+          "target": 311,
+          "logprob": -0.00730237876996398
+        },
+        {
+          "position": 1608,
+          "target": 1091,
+          "logprob": -0.046834878623485565
+        },
+        {
+          "position": 1612,
+          "target": 13,
+          "logprob": -0.0016069606645032763
+        },
+        {
+          "position": 1616,
+          "target": 323,
+          "logprob": -1.7956092357635498
+        },
+        {
+          "position": 1620,
+          "target": 374,
+          "logprob": -0.45481327176094055
+        },
+        {
+          "position": 1624,
+          "target": 264,
+          "logprob": -0.8357661366462708
+        },
+        {
+          "position": 1628,
+          "target": 715,
+          "logprob": -0.7554196119308472
+        },
+        {
+          "position": 1632,
+          "target": 525,
+          "logprob": -2.0211877822875977
+        },
+        {
+          "position": 1636,
+          "target": 1667,
+          "logprob": -1.2811444997787476
+        },
+        {
+          "position": 1640,
+          "target": 7892,
+          "logprob": -1.2904223203659058
+        },
+        {
+          "position": 1644,
+          "target": 29,
+          "logprob": -0.0019470559200271964
+        },
+        {
+          "position": 1648,
+          "target": 29,
+          "logprob": -0.003544597653672099
+        },
+        {
+          "position": 1652,
+          "target": 29,
+          "logprob": -0.003180091269314289
+        },
+        {
+          "position": 1656,
+          "target": 59781,
+          "logprob": -7.659966945648193
+        },
+        {
+          "position": 1660,
+          "target": 311,
+          "logprob": -6.232170581817627
+        },
+        {
+          "position": 1664,
+          "target": 387,
+          "logprob": -0.0054470691829919815
+        },
+        {
+          "position": 1668,
+          "target": 4179,
+          "logprob": -1.2526350021362305
+        },
+        {
+          "position": 1672,
+          "target": 659,
+          "logprob": -0.051757317036390305
+        },
+        {
+          "position": 1676,
+          "target": 23,
+          "logprob": -2.277466297149658
+        },
+        {
+          "position": 1680,
+          "target": 569,
+          "logprob": -1.8574126958847046
+        },
+        {
+          "position": 1684,
+          "target": 21,
+          "logprob": -2.263829469680786
+        },
+        {
+          "position": 1688,
+          "target": 13,
+          "logprob": -0.001261034864000976
+        },
+        {
+          "position": 1692,
+          "target": 1033,
+          "logprob": -0.19412167370319366
+        },
+        {
+          "position": 1696,
+          "target": 323,
+          "logprob": -4.667391777038574
+        },
+        {
+          "position": 1700,
+          "target": 315,
+          "logprob": -2.3976480960845947
+        },
+        {
+          "position": 1704,
+          "target": 569,
+          "logprob": -0.04161929339170456
+        },
+        {
+          "position": 1708,
+          "target": 17,
+          "logprob": -2.0059595108032227
+        },
+        {
+          "position": 1712,
+          "target": 102626,
+          "logprob": -0.38815581798553467
+        },
+        {
+          "position": 1716,
+          "target": 10563,
+          "logprob": -0.8232382535934448
+        },
+        {
+          "position": 1720,
+          "target": 85235,
+          "logprob": -0.0780511423945427
+        },
+        {
+          "position": 1724,
+          "target": 13425,
+          "logprob": -1.1235849857330322
+        },
+        {
+          "position": 1728,
+          "target": 576,
+          "logprob": -1.1641058921813965
+        },
+        {
+          "position": 1732,
+          "target": 369,
+          "logprob": -1.4381288290023804
+        },
+        {
+          "position": 1736,
+          "target": 5612,
+          "logprob": -0.00045110538485459983
+        },
+        {
+          "position": 1740,
+          "target": 1803,
+          "logprob": -0.09707997739315033
+        },
+        {
+          "position": 1744,
+          "target": 315,
+          "logprob": -0.016579587012529373
+        },
+        {
+          "position": 1748,
+          "target": 320,
+          "logprob": -0.02613450586795807
+        },
+        {
+          "position": 1752,
+          "target": 58061,
+          "logprob": -0.00022682955022901297
+        },
+        {
+          "position": 1756,
+          "target": 873,
+          "logprob": -0.016588732600212097
+        },
+        {
+          "position": 1760,
+          "target": 3122,
+          "logprob": -0.2835547924041748
+        },
+        {
+          "position": 1764,
+          "target": 472,
+          "logprob": -0.5897431373596191
+        },
+        {
+          "position": 1768,
+          "target": 355,
+          "logprob": -0.0009004590683616698
+        },
+        {
+          "position": 1772,
+          "target": 1154,
+          "logprob": -1.1502772569656372
+        },
+        {
+          "position": 1776,
+          "target": 525,
+          "logprob": -1.516991138458252
+        },
+        {
+          "position": 1780,
+          "target": 659,
+          "logprob": -0.3513282239437103
+        },
+        {
+          "position": 1784,
+          "target": 366,
+          "logprob": -7.642292022705078
+        },
+        {
+          "position": 1788,
+          "target": 284,
+          "logprob": -0.02987596020102501
+        },
+        {
+          "position": 1792,
+          "target": 49995,
+          "logprob": -0.0015343570848926902
+        },
+        {
+          "position": 1796,
+          "target": 572,
+          "logprob": -1.1651533842086792
+        },
+        {
+          "position": 1800,
+          "target": 9540,
+          "logprob": -2.3550357818603516
+        },
+        {
+          "position": 1804,
+          "target": 21944,
+          "logprob": -2.37978458404541
+        },
+        {
+          "position": 1808,
+          "target": 304,
+          "logprob": -0.15887925028800964
+        },
+        {
+          "position": 1812,
+          "target": 315,
+          "logprob": -0.012644831091165543
+        },
+        {
+          "position": 1816,
+          "target": 366,
+          "logprob": -2.2952311038970947
+        },
+        {
+          "position": 1820,
+          "target": 4652,
+          "logprob": -0.5342161655426025
+        },
+        {
+          "position": 1824,
+          "target": 23,
+          "logprob": -0.0023646983318030834
+        },
+        {
+          "position": 1828,
+          "target": 572,
+          "logprob": -0.5396993160247803
+        },
+        {
+          "position": 1832,
+          "target": 355,
+          "logprob": -0.0028493304271250963
+        },
+        {
+          "position": 1836,
+          "target": 3376,
+          "logprob": -0.0005570290377363563
+        },
+        {
+          "position": 1840,
+          "target": 315,
+          "logprob": -0.024833885952830315
+        },
+        {
+          "position": 1844,
+          "target": 518,
+          "logprob": -1.7187947034835815
+        },
+        {
+          "position": 1848,
+          "target": 678,
+          "logprob": -1.0338895320892334
+        },
+        {
+          "position": 1852,
+          "target": 596,
+          "logprob": -0.038622502237558365
+        },
+        {
+          "position": 1856,
+          "target": 13,
+          "logprob": -0.015187223441898823
+        },
+        {
+          "position": 1860,
+          "target": 374,
+          "logprob": -0.9545683860778809
+        },
+        {
+          "position": 1864,
+          "target": 315,
+          "logprob": -0.0584988109767437
+        },
+        {
+          "position": 1868,
+          "target": 49995,
+          "logprob": -0.007920405827462673
+        },
+        {
+          "position": 1872,
+          "target": 126612,
+          "logprob": -0.003278478281572461
+        },
+        {
+          "position": 1876,
+          "target": 10833,
+          "logprob": -3.1689398288726807
+        },
+        {
+          "position": 1880,
+          "target": 102624,
+          "logprob": -4.3319549560546875
+        },
+        {
+          "position": 1884,
+          "target": 9648,
+          "logprob": -0.9519811868667603
+        },
+        {
+          "position": 1888,
+          "target": 451,
+          "logprob": -0.5329574346542358
+        },
+        {
+          "position": 1892,
+          "target": 31268,
+          "logprob": -6.997106075286865
+        },
+        {
+          "position": 1896,
+          "target": 1154,
+          "logprob": -0.11999227106571198
+        },
+        {
+          "position": 1900,
+          "target": 279,
+          "logprob": -0.9496860504150391
+        },
+        {
+          "position": 1904,
+          "target": 13853,
+          "logprob": -3.8296940326690674
+        },
+        {
+          "position": 1908,
+          "target": 2155,
+          "logprob": -0.9452819228172302
+        },
+        {
+          "position": 1912,
+          "target": 366,
+          "logprob": -2.177257537841797
+        },
+        {
+          "position": 1916,
+          "target": 3122,
+          "logprob": -0.0076203132048249245
+        },
+        {
+          "position": 1920,
+          "target": 29,
+          "logprob": -0.005141488742083311
+        },
+        {
+          "position": 1924,
+          "target": 20,
+          "logprob": -1.7485967874526978
+        },
+        {
+          "position": 1928,
+          "target": 72594,
+          "logprob": -0.9424963593482971
+        },
+        {
+          "position": 1932,
+          "target": 10142,
+          "logprob": -0.005721501540392637
+        },
+        {
+          "position": 1936,
+          "target": 31,
+          "logprob": -0.07912525534629822
+        },
+        {
+          "position": 1940,
+          "target": 124380,
+          "logprob": -0.022961102426052094
+        },
+        {
+          "position": 1944,
+          "target": 1083,
+          "logprob": -4.0316853523254395
+        },
+        {
+          "position": 1948,
+          "target": 364,
+          "logprob": -2.449155807495117
+        },
+        {
+          "position": 1952,
+          "target": 279,
+          "logprob": -0.9038216471672058
+        },
+        {
+          "position": 1956,
+          "target": 44178,
+          "logprob": -3.6930670738220215
+        },
+        {
+          "position": 1960,
+          "target": 553,
+          "logprob": -0.6563332080841064
+        },
+        {
+          "position": 1964,
+          "target": 29,
+          "logprob": -0.009497223421931267
+        },
+        {
+          "position": 1968,
+          "target": 4867,
+          "logprob": -3.146017074584961
+        },
+        {
+          "position": 1972,
+          "target": 9415,
+          "logprob": -0.7250552177429199
+        },
+        {
+          "position": 1976,
+          "target": 49995,
+          "logprob": -0.015859300270676613
+        },
+        {
+          "position": 1980,
+          "target": 811,
+          "logprob": -0.00041368984966538846
+        },
+        {
+          "position": 1984,
+          "target": 36572,
+          "logprob": -0.0024534144904464483
+        },
+        {
+          "position": 1988,
+          "target": 22,
+          "logprob": -0.08746031671762466
+        },
+        {
+          "position": 1992,
+          "target": 13214,
+          "logprob": -5.3188700675964355
+        },
+        {
+          "position": 1996,
+          "target": 220,
+          "logprob": -0.004595552105456591
+        },
+        {
+          "position": 2000,
+          "target": 715,
+          "logprob": -0.7975208759307861
+        },
+        {
+          "position": 2004,
+          "target": 315,
+          "logprob": -0.49235743284225464
+        },
+        {
+          "position": 2008,
+          "target": 5612,
+          "logprob": -7.617183291586116e-05
+        },
+        {
+          "position": 2012,
+          "target": 366,
+          "logprob": -2.823683738708496
+        },
+        {
+          "position": 2016,
+          "target": 553,
+          "logprob": -0.21546395123004913
+        },
+        {
+          "position": 2020,
+          "target": 366,
+          "logprob": -2.368537664413452
+        },
+        {
+          "position": 2024,
+          "target": 220,
+          "logprob": -0.5148553848266602
+        },
+        {
+          "position": 2028,
+          "target": 659,
+          "logprob": -1.280261516571045
+        },
+        {
+          "position": 2032,
+          "target": 220,
+          "logprob": -5.895471096038818
+        },
+        {
+          "position": 2036,
+          "target": 102721,
+          "logprob": -4.400882720947266
+        },
+        {
+          "position": 2040,
+          "target": 220,
+          "logprob": -1.4353556632995605
+        },
+        {
+          "position": 2044,
+          "target": 101175,
+          "logprob": -4.221907615661621
+        },
+        {
+          "position": 2048,
+          "target": 1154,
+          "logprob": -0.6165034770965576
+        },
+        {
+          "position": 2052,
+          "target": 29,
+          "logprob": -0.002422019839286804
+        },
+        {
+          "position": 2056,
+          "target": 220,
+          "logprob": -2.045351028442383
+        },
+        {
+          "position": 2060,
+          "target": 220,
+          "logprob": -0.05354851484298706
+        },
+        {
+          "position": 2064,
+          "target": 315,
+          "logprob": -0.017193667590618134
+        },
+        {
+          "position": 2068,
+          "target": 873,
+          "logprob": -0.15589547157287598
+        },
+        {
+          "position": 2072,
+          "target": 432,
+          "logprob": -3.693526029586792
+        },
+        {
+          "position": 2076,
+          "target": 3122,
+          "logprob": -0.009884105063974857
+        },
+        {
+          "position": 2080,
+          "target": 1012,
+          "logprob": -0.14813290536403656
+        },
+        {
+          "position": 2084,
+          "target": 576,
+          "logprob": -0.9962937235832214
+        },
+        {
+          "position": 2088,
+          "target": 472,
+          "logprob": -0.6826139688491821
+        },
+        {
+          "position": 2092,
+          "target": 355,
+          "logprob": -6.05564855504781e-05
+        },
+        {
+          "position": 2096,
+          "target": 12092,
+          "logprob": -3.7918810844421387
+        },
+        {
+          "position": 2100,
+          "target": 374,
+          "logprob": -1.5695774555206299
+        },
+        {
+          "position": 2104,
+          "target": 330,
+          "logprob": -0.16044679284095764
+        },
+        {
+          "position": 2108,
+          "target": 9415,
+          "logprob": -2.551966905593872
+        },
+        {
+          "position": 2112,
+          "target": 3881,
+          "logprob": -0.27098414301872253
+        },
+        {
+          "position": 2116,
+          "target": 4185,
+          "logprob": -0.39599189162254333
+        },
+        {
+          "position": 2120,
+          "target": 31770,
+          "logprob": -3.227118968963623
+        },
+        {
+          "position": 2124,
+          "target": 366,
+          "logprob": -3.489948034286499
+        },
+        {
+          "position": 2128,
+          "target": 31770,
+          "logprob": -2.2984538078308105
+        },
+        {
+          "position": 2132,
+          "target": 9267,
+          "logprob": -0.7735326290130615
+        },
+        {
+          "position": 2136,
+          "target": 1154,
+          "logprob": -1.1238480806350708
+        },
+        {
+          "position": 2140,
+          "target": 11589,
+          "logprob": -0.010693981312215328
+        },
+        {
+          "position": 2144,
+          "target": 5768,
+          "logprob": -2.446286916732788
+        },
+        {
+          "position": 2148,
+          "target": 19,
+          "logprob": -2.2443647384643555
+        },
+        {
+          "position": 2152,
+          "target": 6652,
+          "logprob": -2.4246644973754883
+        },
+        {
+          "position": 2156,
+          "target": 21,
+          "logprob": -2.25089693069458
+        },
+        {
+          "position": 2160,
+          "target": 9985,
+          "logprob": -0.9710215926170349
+        },
+        {
+          "position": 2164,
+          "target": 16180,
+          "logprob": -0.3328803777694702
+        },
+        {
+          "position": 2168,
+          "target": 320,
+          "logprob": -1.42939031124115
+        },
+        {
+          "position": 2172,
+          "target": 659,
+          "logprob": -0.6024011373519897
+        },
+        {
+          "position": 2176,
+          "target": 304,
+          "logprob": -0.013144626282155514
+        },
+        {
+          "position": 2180,
+          "target": 10854,
+          "logprob": -1.0644786357879639
+        },
+        {
+          "position": 2184,
+          "target": 438,
+          "logprob": -2.0629360675811768
+        },
+        {
+          "position": 2188,
+          "target": 295,
+          "logprob": -3.790783375734463e-05
+        },
+        {
+          "position": 2192,
+          "target": 98729,
+          "logprob": -0.007327111903578043
+        },
+        {
+          "position": 2196,
+          "target": 1260,
+          "logprob": -1.0479857921600342
+        },
+        {
+          "position": 2200,
+          "target": 7600,
+          "logprob": -6.9002604484558105
+        },
+        {
+          "position": 2204,
+          "target": 279,
+          "logprob": -1.1958216428756714
+        },
+        {
+          "position": 2208,
+          "target": 5004,
+          "logprob": -0.0020053531043231487
+        },
+        {
+          "position": 2212,
+          "target": 5813,
+          "logprob": -3.4544873237609863
+        },
+        {
+          "position": 2216,
+          "target": 16,
+          "logprob": -1.4774808883666992
+        },
+        {
+          "position": 2220,
+          "target": 63878,
+          "logprob": -2.515873908996582
+        },
+        {
+          "position": 2224,
+          "target": 13,
+          "logprob": -0.19899021089076996
+        },
+        {
+          "position": 2228,
+          "target": 1154,
+          "logprob": -1.0256730318069458
+        },
+        {
+          "position": 2232,
+          "target": 366,
+          "logprob": -2.612027883529663
+        },
+        {
+          "position": 2236,
+          "target": 576,
+          "logprob": -2.979180097579956
+        },
+        {
+          "position": 2240,
+          "target": 311,
+          "logprob": -0.0902322381734848
+        },
+        {
+          "position": 2244,
+          "target": 304,
+          "logprob": -0.6514837145805359
+        },
+        {
+          "position": 2248,
+          "target": 5485,
+          "logprob": -4.112938404083252
+        },
+        {
+          "position": 2252,
+          "target": 8436,
+          "logprob": -0.2157721072435379
+        },
+        {
+          "position": 2256,
+          "target": 4312,
+          "logprob": -0.5951100587844849
+        },
+        {
+          "position": 2260,
+          "target": 13442,
+          "logprob": -2.301853656768799
+        },
+        {
+          "position": 2264,
+          "target": 7400,
+          "logprob": -2.906073808670044
+        },
+        {
+          "position": 2268,
+          "target": 17,
+          "logprob": -0.11367221176624298
+        },
+        {
+          "position": 2272,
+          "target": 29,
+          "logprob": -0.00349862570874393
+        },
+        {
+          "position": 2276,
+          "target": 323,
+          "logprob": -2.5021307468414307
+        },
+        {
+          "position": 2280,
+          "target": 24215,
+          "logprob": -7.370815277099609
+        },
+        {
+          "position": 2284,
+          "target": 1874,
+          "logprob": -1.0904545783996582
+        },
+        {
+          "position": 2288,
+          "target": 366,
+          "logprob": -1.5530346632003784
+        },
+        {
+          "position": 2292,
+          "target": 438,
+          "logprob": -1.8163342475891113
+        },
+        {
+          "position": 2296,
+          "target": 4787,
+          "logprob": -6.675844192504883
+        },
+        {
+          "position": 2300,
+          "target": 10862,
+          "logprob": -0.8480263948440552
+        },
+        {
+          "position": 2304,
+          "target": 98729,
+          "logprob": -0.04132365435361862
+        },
+        {
+          "position": 2308,
+          "target": 323,
+          "logprob": -0.38886311650276184
+        },
+        {
+          "position": 2312,
+          "target": 16137,
+          "logprob": -3.469329833984375
+        },
+        {
+          "position": 2316,
+          "target": 19,
+          "logprob": -0.0007843278581276536
+        },
+        {
+          "position": 2320,
+          "target": 122414,
+          "logprob": -0.9013917446136475
+        },
+        {
+          "position": 2324,
+          "target": 220,
+          "logprob": -0.5828690528869629
+        },
+        {
+          "position": 2328,
+          "target": 220,
+          "logprob": -0.013765051029622555
+        },
+        {
+          "position": 2332,
+          "target": 279,
+          "logprob": -0.019762754440307617
+        },
+        {
+          "position": 2336,
+          "target": 1154,
+          "logprob": -0.019173288717865944
+        },
+        {
+          "position": 2340,
+          "target": 518,
+          "logprob": -1.5125055313110352
+        },
+        {
+          "position": 2344,
+          "target": 315,
+          "logprob": -0.02597515657544136
+        },
+        {
+          "position": 2348,
+          "target": 100067,
+          "logprob": -4.36907958984375
+        },
+        {
+          "position": 2352,
+          "target": 34352,
+          "logprob": -0.1441313922405243
+        },
+        {
+          "position": 2356,
+          "target": 1154,
+          "logprob": -0.09170228242874146
+        },
+        {
+          "position": 2360,
+          "target": 29,
+          "logprob": -0.009216265752911568
+        },
+        {
+          "position": 2364,
+          "target": 10218,
+          "logprob": -2.0270628929138184
+        },
+        {
+          "position": 2368,
+          "target": 12033,
+          "logprob": -5.541566848754883
+        },
+        {
+          "position": 2372,
+          "target": 304,
+          "logprob": -1.8742142915725708
+        },
+        {
+          "position": 2376,
+          "target": 323,
+          "logprob": -0.44790732860565186
+        },
+        {
+          "position": 2380,
+          "target": 1365,
+          "logprob": -1.8980205059051514
+        },
+        {
+          "position": 2384,
+          "target": 12302,
+          "logprob": -8.08190631866455
+        },
+        {
+          "position": 2388,
+          "target": 33973,
+          "logprob": -1.996279239654541
+        },
+        {
+          "position": 2392,
+          "target": 315,
+          "logprob": -0.0004634975048247725
+        },
+        {
+          "position": 2396,
+          "target": 304,
+          "logprob": -0.8841469287872314
+        },
+        {
+          "position": 2400,
+          "target": 659,
+          "logprob": -0.10808722674846649
+        },
+        {
+          "position": 2404,
+          "target": 16756,
+          "logprob": -0.3805147409439087
+        },
+        {
+          "position": 2408,
+          "target": 2393,
+          "logprob": -9.309377670288086
+        },
+        {
+          "position": 2412,
+          "target": 9887,
+          "logprob": -1.89125394821167
+        },
+        {
+          "position": 2416,
+          "target": 7348,
+          "logprob": -0.1851525902748108
+        },
+        {
+          "position": 2420,
+          "target": 7612,
+          "logprob": -0.0003854485403280705
+        },
+        {
+          "position": 2424,
+          "target": 304,
+          "logprob": -1.7876962423324585
+        },
+        {
+          "position": 2428,
+          "target": 1365,
+          "logprob": -0.27036792039871216
+        },
+        {
+          "position": 2432,
+          "target": 362,
+          "logprob": -1.5713657140731812
+        },
+        {
+          "position": 2436,
+          "target": 220,
+          "logprob": -0.01024511456489563
+        },
+        {
+          "position": 2440,
+          "target": 70516,
+          "logprob": -5.788442611694336
+        },
+        {
+          "position": 2444,
+          "target": 17,
+          "logprob": -0.3101005554199219
+        },
+        {
+          "position": 2448,
+          "target": 20,
+          "logprob": -1.4584758281707764
+        },
+        {
+          "position": 2452,
+          "target": 1365,
+          "logprob": -1.9402222633361816
+        },
+        {
+          "position": 2456,
+          "target": 29,
+          "logprob": -0.004423001315444708
+        },
+        {
+          "position": 2460,
+          "target": 315,
+          "logprob": -0.0018478238489478827
+        },
+        {
+          "position": 2464,
+          "target": 304,
+          "logprob": -1.2491886615753174
+        },
+        {
+          "position": 2468,
+          "target": 1365,
+          "logprob": -0.4501974582672119
+        },
+        {
+          "position": 2472,
+          "target": 323,
+          "logprob": -0.1304369419813156
+        },
+        {
+          "position": 2476,
+          "target": 7348,
+          "logprob": -0.02125007100403309
+        },
+        {
+          "position": 2480,
+          "target": 21,
+          "logprob": -0.1871575266122818
+        },
+        {
+          "position": 2484,
+          "target": 659,
+          "logprob": -0.08701413869857788
+        },
+        {
+          "position": 2488,
+          "target": 264,
+          "logprob": -0.6664539575576782
+        },
+        {
+          "position": 2492,
+          "target": 7217,
+          "logprob": -0.06043297052383423
+        },
+        {
+          "position": 2496,
+          "target": 304,
+          "logprob": -0.24486187100410461
+        },
+        {
+          "position": 2500,
+          "target": 659,
+          "logprob": -0.67840576171875
+        },
+        {
+          "position": 2504,
+          "target": 311,
+          "logprob": -1.6878039836883545
+        },
+        {
+          "position": 2508,
+          "target": 315,
+          "logprob": -0.08276954293251038
+        },
+        {
+          "position": 2512,
+          "target": 8306,
+          "logprob": -0.5304693579673767
+        },
+        {
+          "position": 2516,
+          "target": 121818,
+          "logprob": -0.01391906850039959
+        },
+        {
+          "position": 2520,
+          "target": 98729,
+          "logprob": -0.163375124335289
+        },
+        {
+          "position": 2524,
+          "target": 566,
+          "logprob": -0.42542821168899536
+        },
+        {
+          "position": 2528,
+          "target": 6553,
+          "logprob": -4.937178134918213
+        },
+        {
+          "position": 2532,
+          "target": 304,
+          "logprob": -0.3322766423225403
+        },
+        {
+          "position": 2536,
+          "target": 2937,
+          "logprob": -0.010620973072946072
+        },
+        {
+          "position": 2540,
+          "target": 284,
+          "logprob": -1.1630263328552246
+        },
+        {
+          "position": 2544,
+          "target": 284,
+          "logprob": -0.0009569118265062571
+        },
+        {
+          "position": 2548,
+          "target": 315,
+          "logprob": -0.0008211340173147619
+        },
+        {
+          "position": 2552,
+          "target": 472,
+          "logprob": -5.294011116027832
+        },
+        {
+          "position": 2556,
+          "target": 29,
+          "logprob": -0.001937180757522583
+        },
+        {
+          "position": 2560,
+          "target": 3122,
+          "logprob": -0.024143842980265617
+        },
+        {
+          "position": 2564,
+          "target": 389,
+          "logprob": -1.6057313680648804
+        },
+        {
+          "position": 2568,
+          "target": 220,
+          "logprob": -0.0027344953268766403
+        },
+        {
+          "position": 2572,
+          "target": 304,
+          "logprob": -1.0414773225784302
+        },
+        {
+          "position": 2576,
+          "target": 1154,
+          "logprob": -0.12316737323999405
+        },
+        {
+          "position": 2580,
+          "target": 572,
+          "logprob": -0.5952863097190857
+        },
+        {
+          "position": 2584,
+          "target": 518,
+          "logprob": -3.7400407791137695
+        },
+        {
+          "position": 2588,
+          "target": 9123,
+          "logprob": -2.5854697227478027
+        },
+        {
+          "position": 2592,
+          "target": 1154,
+          "logprob": -0.2486494779586792
+        },
+        {
+          "position": 2596,
+          "target": 29,
+          "logprob": -0.0023888403084129095
+        },
+        {
+          "position": 2600,
+          "target": 18,
+          "logprob": -0.0023623197339475155
+        },
+        {
+          "position": 2604,
+          "target": 279,
+          "logprob": -1.172966718673706
+        },
+        {
+          "position": 2608,
+          "target": 6562,
+          "logprob": -0.8052880764007568
+        },
+        {
+          "position": 2612,
+          "target": 16180,
+          "logprob": -0.7355468273162842
+        },
+        {
+          "position": 2616,
+          "target": 320,
+          "logprob": -0.20603686571121216
+        },
+        {
+          "position": 2620,
+          "target": 438,
+          "logprob": -0.4250432252883911
+        },
+        {
+          "position": 2624,
+          "target": 295,
+          "logprob": -0.00019667598826345056
+        },
+        {
+          "position": 2628,
+          "target": 6058,
+          "logprob": -0.12675678730010986
+        },
+        {
+          "position": 2632,
+          "target": 19,
+          "logprob": -0.01416062843054533
+        },
+        {
+          "position": 2636,
+          "target": 16293,
+          "logprob": -1.9225884675979614
+        },
+        {
+          "position": 2640,
+          "target": 13,
+          "logprob": -0.0434034988284111
+        },
+        {
+          "position": 2644,
+          "target": 16137,
+          "logprob": -0.31884509325027466
+        },
+        {
+          "position": 2648,
+          "target": 3122,
+          "logprob": -0.01882566697895527
+        },
+        {
+          "position": 2652,
+          "target": 431,
+          "logprob": -3.6435225009918213
+        },
+        {
+          "position": 2656,
+          "target": 1154,
+          "logprob": -0.6690601706504822
+        },
+        {
+          "position": 2660,
+          "target": 572,
+          "logprob": -1.3885751962661743
+        },
+        {
+          "position": 2664,
+          "target": 17683,
+          "logprob": -0.016271408647298813
+        },
+        {
+          "position": 2668,
+          "target": 16,
+          "logprob": -2.5829930305480957
+        },
+        {
+          "position": 2672,
+          "target": 18,
+          "logprob": -0.0004558716027531773
+        },
+        {
+          "position": 2676,
+          "target": 4636,
+          "logprob": -1.6927831172943115
+        },
+        {
+          "position": 2680,
+          "target": 3308,
+          "logprob": -0.04660506919026375
+        },
+        {
+          "position": 2684,
+          "target": 29,
+          "logprob": -0.001370087033137679
+        },
+        {
+          "position": 2688,
+          "target": 279,
+          "logprob": -2.313887596130371
+        },
+        {
+          "position": 2692,
+          "target": 69550,
+          "logprob": -3.9461140632629395
+        },
+        {
+          "position": 2696,
+          "target": 659,
+          "logprob": -1.9360085725784302
+        },
+        {
+          "position": 2700,
+          "target": 264,
+          "logprob": -0.28428298234939575
+        },
+        {
+          "position": 2704,
+          "target": 279,
+          "logprob": -1.0060524940490723
+        },
+        {
+          "position": 2708,
+          "target": 279,
+          "logprob": -0.06359890848398209
+        },
+        {
+          "position": 2712,
+          "target": 31,
+          "logprob": -0.0023966894950717688
+        },
+        {
+          "position": 2716,
+          "target": 1154,
+          "logprob": -0.04076370596885681
+        },
+        {
+          "position": 2720,
+          "target": 69550,
+          "logprob": -0.7332766652107239
+        },
+        {
+          "position": 2724,
+          "target": 2308,
+          "logprob": -1.6878724098205566
+        },
+        {
+          "position": 2728,
+          "target": 366,
+          "logprob": -2.726533889770508
+        },
+        {
+          "position": 2732,
+          "target": 23088,
+          "logprob": -2.2349765300750732
+        },
+        {
+          "position": 2736,
+          "target": 60721,
+          "logprob": -13.28984260559082
+        },
+        {
+          "position": 2740,
+          "target": 409,
+          "logprob": -5.833221435546875
+        },
+        {
+          "position": 2744,
+          "target": 366,
+          "logprob": -0.3999563157558441
+        },
+        {
+          "position": 2748,
+          "target": 339,
+          "logprob": -1.0891504287719727
+        },
+        {
+          "position": 2752,
+          "target": 1154,
+          "logprob": -3.4141767024993896
+        },
+        {
+          "position": 2756,
+          "target": 659,
+          "logprob": -0.09034942835569382
+        },
+        {
+          "position": 2760,
+          "target": 366,
+          "logprob": -1.4307475090026855
+        },
+        {
+          "position": 2764,
+          "target": 28823,
+          "logprob": -0.3710092306137085
+        },
+        {
+          "position": 2768,
+          "target": 1154,
+          "logprob": -3.067824125289917
+        },
+        {
+          "position": 2772,
+          "target": 5768,
+          "logprob": -1.3510395288467407
+        },
+        {
+          "position": 2776,
+          "target": 20,
+          "logprob": -0.9184932112693787
+        },
+        {
+          "position": 2780,
+          "target": 264,
+          "logprob": -1.4519637823104858
+        },
+        {
+          "position": 2784,
+          "target": 22774,
+          "logprob": -0.8000774383544922
+        },
+        {
+          "position": 2788,
+          "target": 11821,
+          "logprob": -2.8823771476745605
+        },
+        {
+          "position": 2792,
+          "target": 3746,
+          "logprob": -6.608061790466309
+        },
+        {
+          "position": 2796,
+          "target": 45030,
+          "logprob": -5.193432331085205
+        },
+        {
+          "position": 2800,
+          "target": 84837,
+          "logprob": -0.8903024196624756
+        },
+        {
+          "position": 2804,
+          "target": 8355,
+          "logprob": -7.345143795013428
+        },
+        {
+          "position": 2808,
+          "target": 8329,
+          "logprob": -1.1218724250793457
+        },
+        {
+          "position": 2812,
+          "target": 31136,
+          "logprob": -2.700606346130371
+        },
+        {
+          "position": 2816,
+          "target": 330,
+          "logprob": -0.7930638194084167
+        },
+        {
+          "position": 2820,
+          "target": 6553,
+          "logprob": -3.563199520111084
+        },
+        {
+          "position": 2824,
+          "target": 75319,
+          "logprob": -0.17414827644824982
+        },
+        {
+          "position": 2828,
+          "target": 330,
+          "logprob": -1.3103314638137817
+        },
+        {
+          "position": 2832,
+          "target": 4512,
+          "logprob": -5.073703765869141
+        },
+        {
+          "position": 2836,
+          "target": 569,
+          "logprob": -0.2706355154514313
+        },
+        {
+          "position": 2840,
+          "target": 3122,
+          "logprob": -0.006298690568655729
+        },
+        {
+          "position": 2844,
+          "target": 892,
+          "logprob": -1.7233757972717285
+        },
+        {
+          "position": 2848,
+          "target": 24923,
+          "logprob": -6.914259910583496
+        },
+        {
+          "position": 2852,
+          "target": 70502,
+          "logprob": -0.022813715040683746
+        },
+        {
+          "position": 2856,
+          "target": 659,
+          "logprob": -0.09831538796424866
+        },
+        {
+          "position": 2860,
+          "target": 29,
+          "logprob": -0.008904037065804005
+        },
+        {
+          "position": 2864,
+          "target": 53460,
+          "logprob": -1.3212863206863403
+        },
+        {
+          "position": 2868,
+          "target": 220,
+          "logprob": -0.028020601719617844
+        },
+        {
+          "position": 2872,
+          "target": 323,
+          "logprob": -1.028838038444519
+        },
+        {
+          "position": 2876,
+          "target": 315,
+          "logprob": -0.17486004531383514
+        },
+        {
+          "position": 2880,
+          "target": 16,
+          "logprob": -0.6270223259925842
+        },
+        {
+          "position": 2884,
+          "target": 659,
+          "logprob": -1.665387511253357
+        },
+        {
+          "position": 2888,
+          "target": 311,
+          "logprob": -0.03462976589798927
+        },
+        {
+          "position": 2892,
+          "target": 220,
+          "logprob": -0.006453033071011305
+        },
+        {
+          "position": 2896,
+          "target": 98729,
+          "logprob": -9.452849917579442e-05
+        },
+        {
+          "position": 2900,
+          "target": 366,
+          "logprob": -2.651153564453125
+        },
+        {
+          "position": 2904,
+          "target": 5768,
+          "logprob": -3.3948330879211426
+        },
+        {
+          "position": 2908,
+          "target": 23,
+          "logprob": -1.0211691856384277
+        },
+        {
+          "position": 2912,
+          "target": 825,
+          "logprob": -5.465554237365723
+        },
+        {
+          "position": 2916,
+          "target": 311,
+          "logprob": -2.1243977546691895
+        },
+        {
+          "position": 2920,
+          "target": 279,
+          "logprob": -0.7076462507247925
+        },
+        {
+          "position": 2924,
+          "target": 82,
+          "logprob": -0.03165073320269585
+        },
+        {
+          "position": 2928,
+          "target": 3122,
+          "logprob": -0.015851087868213654
+        },
+        {
+          "position": 2932,
+          "target": 1154,
+          "logprob": -0.7744472026824951
+        },
+        {
+          "position": 2936,
+          "target": 366,
+          "logprob": -2.379901885986328
+        },
+        {
+          "position": 2940,
+          "target": 366,
+          "logprob": -1.2447597980499268
+        },
+        {
+          "position": 2944,
+          "target": 366,
+          "logprob": -2.7919981479644775
+        },
+        {
+          "position": 2948,
+          "target": 518,
+          "logprob": -4.702576160430908
+        },
+        {
+          "position": 2952,
+          "target": 576,
+          "logprob": -1.181522250175476
+        },
+        {
+          "position": 2956,
+          "target": 24603,
+          "logprob": -9.487200736999512
+        },
+        {
+          "position": 2960,
+          "target": 27928,
+          "logprob": -6.911287307739258
+        },
+        {
+          "position": 2964,
+          "target": 1154,
+          "logprob": -1.288591742515564
+        },
+        {
+          "position": 2968,
+          "target": 569,
+          "logprob": -0.21850740909576416
+        },
+        {
+          "position": 2972,
+          "target": 1154,
+          "logprob": -4.918435096740723
+        },
+        {
+          "position": 2976,
+          "target": 30987,
+          "logprob": -0.1511954516172409
+        },
+        {
+          "position": 2980,
+          "target": 12,
+          "logprob": -0.10268045216798782
+        },
+        {
+          "position": 2984,
+          "target": 320,
+          "logprob": -0.08136498183012009
+        },
+        {
+          "position": 2988,
+          "target": 30987,
+          "logprob": -0.4035404920578003
+        },
+        {
+          "position": 2992,
+          "target": 873,
+          "logprob": -0.01211828738451004
+        },
+        {
+          "position": 2996,
+          "target": 31,
+          "logprob": -0.002167615806683898
+        },
+        {
+          "position": 3000,
+          "target": 2326,
+          "logprob": -2.3071188926696777
+        },
+        {
+          "position": 3004,
+          "target": 37154,
+          "logprob": -0.10523685067892075
+        },
+        {
+          "position": 3008,
+          "target": 892,
+          "logprob": -0.07266785204410553
+        },
+        {
+          "position": 3012,
+          "target": 29,
+          "logprob": -0.013616889715194702
+        },
+        {
+          "position": 3016,
+          "target": 29,
+          "logprob": -0.011141704395413399
+        },
+        {
+          "position": 3020,
+          "target": 659,
+          "logprob": -2.5252931118011475
+        },
+        {
+          "position": 3024,
+          "target": 1154,
+          "logprob": -0.9761186838150024
+        },
+        {
+          "position": 3028,
+          "target": 6069,
+          "logprob": -5.439835071563721
+        },
+        {
+          "position": 3032,
+          "target": 37154,
+          "logprob": -0.0013366345083341002
+        },
+        {
+          "position": 3036,
+          "target": 569,
+          "logprob": -0.043890438973903656
+        },
+        {
+          "position": 3040,
+          "target": 11613,
+          "logprob": -4.296690464019775
+        },
+        {
+          "position": 3044,
+          "target": 916,
+          "logprob": -2.714165210723877
+        },
+        {
+          "position": 3048,
+          "target": 1260,
+          "logprob": -2.398604154586792
+        },
+        {
+          "position": 3052,
+          "target": 10641,
+          "logprob": -4.636279106140137
+        },
+        {
+          "position": 3056,
+          "target": 3281,
+          "logprob": -3.7108869552612305
+        },
+        {
+          "position": 3060,
+          "target": 220,
+          "logprob": -0.20103929936885834
+        },
+        {
+          "position": 3064,
+          "target": 98729,
+          "logprob": -0.0007415643776766956
+        },
+        {
+          "position": 3068,
+          "target": 572,
+          "logprob": -0.46190622448921204
+        },
+        {
+          "position": 3072,
+          "target": 70502,
+          "logprob": -0.016866572201251984
+        },
+        {
+          "position": 3076,
+          "target": 1154,
+          "logprob": -1.088082194328308
+        },
+        {
+          "position": 3080,
+          "target": 264,
+          "logprob": -1.112067461013794
+        },
+        {
+          "position": 3084,
+          "target": 1260,
+          "logprob": -1.5607578754425049
+        },
+        {
+          "position": 3088,
+          "target": 2308,
+          "logprob": -0.22940196096897125
+        },
+        {
+          "position": 3092,
+          "target": 69550,
+          "logprob": -2.0874252319335938
+        },
+        {
+          "position": 3096,
+          "target": 311,
+          "logprob": -0.15866321325302124
+        },
+        {
+          "position": 3100,
+          "target": 16,
+          "logprob": -1.7665576934814453
+        },
+        {
+          "position": 3104,
+          "target": 100104,
+          "logprob": -4.221775054931641
+        },
+        {
+          "position": 3108,
+          "target": 8152,
+          "logprob": -2.143549919128418
+        },
+        {
+          "position": 3112,
+          "target": 659,
+          "logprob": -0.7289052605628967
+        },
+        {
+          "position": 3116,
+          "target": 4337,
+          "logprob": -0.315750390291214
+        },
+        {
+          "position": 3120,
+          "target": 284,
+          "logprob": -0.00022790218645241112
+        },
+        {
+          "position": 3124,
+          "target": 29971,
+          "logprob": -0.10738444328308105
+        },
+        {
+          "position": 3128,
+          "target": 7946,
+          "logprob": -0.001645878772251308
+        },
+        {
+          "position": 3132,
+          "target": 220,
+          "logprob": -0.002654126612469554
+        },
+        {
+          "position": 3136,
+          "target": 16617,
+          "logprob": -4.705845355987549
+        },
+        {
+          "position": 3140,
+          "target": 323,
+          "logprob": -0.8403605818748474
+        },
+        {
+          "position": 3144,
+          "target": 1007,
+          "logprob": -2.4122393131256104
+        },
+        {
+          "position": 3148,
+          "target": 31,
+          "logprob": -0.003093816339969635
+        },
+        {
+          "position": 3152,
+          "target": 366,
+          "logprob": -0.9400725960731506
+        },
+        {
+          "position": 3156,
+          "target": 311,
+          "logprob": -0.5438532829284668
+        },
+        {
+          "position": 3160,
+          "target": 96464,
+          "logprob": -0.2289571911096573
+        },
+        {
+          "position": 3164,
+          "target": 27899,
+          "logprob": -0.023267343640327454
+        },
+        {
+          "position": 3168,
+          "target": 6058,
+          "logprob": -3.0487184524536133
+        },
+        {
+          "position": 3172,
+          "target": 15,
+          "logprob": -0.5417984127998352
+        },
+        {
+          "position": 3176,
+          "target": 572,
+          "logprob": -0.44190916419029236
+        },
+        {
+          "position": 3180,
+          "target": 42606,
+          "logprob": -7.439186096191406
+        },
+        {
+          "position": 3184,
+          "target": 8055,
+          "logprob": -2.142493724822998
+        },
+        {
+          "position": 3188,
+          "target": 1913,
+          "logprob": -2.155460834503174
+        },
+        {
+          "position": 3192,
+          "target": 566,
+          "logprob": -0.7660884857177734
+        },
+        {
+          "position": 3196,
+          "target": 279,
+          "logprob": -1.2957139015197754
+        },
+        {
+          "position": 3200,
+          "target": 70502,
+          "logprob": -0.01837657392024994
+        },
+        {
+          "position": 3204,
+          "target": 659,
+          "logprob": -1.6488122940063477
+        },
+        {
+          "position": 3208,
+          "target": 311,
+          "logprob": -0.014531846158206463
+        },
+        {
+          "position": 3212,
+          "target": 220,
+          "logprob": -0.010478479787707329
+        },
+        {
+          "position": 3216,
+          "target": 98729,
+          "logprob": -0.0016049373662099242
+        },
+        {
+          "position": 3220,
+          "target": 9040,
+          "logprob": -5.631047248840332
+        },
+        {
+          "position": 3224,
+          "target": 12218,
+          "logprob": -5.053691387176514
+        },
+        {
+          "position": 3228,
+          "target": 794,
+          "logprob": -1.1961623430252075
+        },
+        {
+          "position": 3232,
+          "target": 89785,
+          "logprob": -1.3897212743759155
+        },
+        {
+          "position": 3236,
+          "target": 366,
+          "logprob": -1.2355947494506836
+        },
+        {
+          "position": 3240,
+          "target": 279,
+          "logprob": -0.9912577867507935
+        },
+        {
+          "position": 3244,
+          "target": 264,
+          "logprob": -2.8219549655914307
+        },
+        {
+          "position": 3248,
+          "target": 9798,
+          "logprob": -0.004749801475554705
+        },
+        {
+          "position": 3252,
+          "target": 3122,
+          "logprob": -0.0029920830857008696
+        },
+        {
+          "position": 3256,
+          "target": 3210,
+          "logprob": -0.3475814759731293
+        },
+        {
+          "position": 3260,
+          "target": 220,
+          "logprob": -0.0007126175914891064
+        },
+        {
+          "position": 3264,
+          "target": 42606,
+          "logprob": -0.6379317045211792
+        },
+        {
+          "position": 3268,
+          "target": 99082,
+          "logprob": -3.0941295623779297
+        },
+        {
+          "position": 3272,
+          "target": 19,
+          "logprob": -0.0004267973708920181
+        },
+        {
+          "position": 3276,
+          "target": 9223,
+          "logprob": -7.906697750091553
+        },
+        {
+          "position": 3280,
+          "target": 389,
+          "logprob": -0.44976091384887695
+        },
+        {
+          "position": 3284,
+          "target": 659,
+          "logprob": -0.08046652376651764
+        },
+        {
+          "position": 3288,
+          "target": 448,
+          "logprob": -6.754161834716797
+        },
+        {
+          "position": 3292,
+          "target": 29,
+          "logprob": -0.010314964689314365
+        },
+        {
+          "position": 3296,
+          "target": 14566,
+          "logprob": -9.045341491699219
+        },
+        {
+          "position": 3300,
+          "target": 304,
+          "logprob": -2.4350948333740234
+        },
+        {
+          "position": 3304,
+          "target": 220,
+          "logprob": -2.807223081588745
+        },
+        {
+          "position": 3308,
+          "target": 979,
+          "logprob": -0.02843642048537731
+        },
+        {
+          "position": 3312,
+          "target": 14126,
+          "logprob": -0.8415143489837646
+        },
+        {
+          "position": 3316,
+          "target": 44122,
+          "logprob": -6.173065662384033
+        },
+        {
+          "position": 3320,
+          "target": 1154,
+          "logprob": -0.5746238231658936
+        },
+        {
+          "position": 3324,
+          "target": 23146,
+          "logprob": -3.3117318153381348
+        },
+        {
+          "position": 3328,
+          "target": 304,
+          "logprob": -1.0405340194702148
+        },
+        {
+          "position": 3332,
+          "target": 1913,
+          "logprob": -2.390624761581421
+        },
+        {
+          "position": 3336,
+          "target": 1154,
+          "logprob": -0.7558329701423645
+        },
+        {
+          "position": 3340,
+          "target": 5086,
+          "logprob": -3.479310989379883
+        },
+        {
+          "position": 3344,
+          "target": 29,
+          "logprob": -0.010177619755268097
+        },
+        {
+          "position": 3348,
+          "target": 3122,
+          "logprob": -0.00680652167648077
+        },
+        {
+          "position": 3352,
+          "target": 9351,
+          "logprob": -0.03454766049981117
+        },
+        {
+          "position": 3356,
+          "target": 2308,
+          "logprob": -3.8752007484436035
+        },
+        {
+          "position": 3360,
+          "target": 69550,
+          "logprob": -0.05137305334210396
+        },
+        {
+          "position": 3364,
+          "target": 9660,
+          "logprob": -0.23757416009902954
+        },
+        {
+          "position": 3368,
+          "target": 1033,
+          "logprob": -0.8866971731185913
+        },
+        {
+          "position": 3372,
+          "target": 389,
+          "logprob": -6.601768493652344
+        },
+        {
+          "position": 3376,
+          "target": 2701,
+          "logprob": -3.0124783515930176
+        },
+        {
+          "position": 3380,
+          "target": 429,
+          "logprob": -0.5353262424468994
+        },
+        {
+          "position": 3384,
+          "target": 518,
+          "logprob": -0.3054436147212982
+        },
+        {
+          "position": 3388,
+          "target": 16448,
+          "logprob": -0.13550612330436707
+        },
+        {
+          "position": 3392,
+          "target": 279,
+          "logprob": -0.2499406784772873
+        },
+        {
+          "position": 3396,
+          "target": 569,
+          "logprob": -7.172617435455322
+        },
+        {
+          "position": 3400,
+          "target": 366,
+          "logprob": -1.4827033281326294
+        },
+        {
+          "position": 3404,
+          "target": 279,
+          "logprob": -1.4967244863510132
+        },
+        {
+          "position": 3408,
+          "target": 29,
+          "logprob": -0.005705974064767361
+        },
+        {
+          "position": 3412,
+          "target": 366,
+          "logprob": -2.8322556018829346
+        },
+        {
+          "position": 3416,
+          "target": 892,
+          "logprob": -1.6976851224899292
+        },
+        {
+          "position": 3420,
+          "target": 1660,
+          "logprob": -1.552257776260376
+        },
+        {
+          "position": 3424,
+          "target": 1154,
+          "logprob": -1.3293993473052979
+        },
+        {
+          "position": 3428,
+          "target": 933,
+          "logprob": -4.83267879486084
+        },
+        {
+          "position": 3432,
+          "target": 220,
+          "logprob": -1.029463291168213
+        },
+        {
+          "position": 3436,
+          "target": 366,
+          "logprob": -2.2488975524902344
+        },
+        {
+          "position": 3440,
+          "target": 22351,
+          "logprob": -3.5481128692626953
+        },
+        {
+          "position": 3444,
+          "target": 29,
+          "logprob": -0.002744124736636877
+        },
+        {
+          "position": 3448,
+          "target": 315,
+          "logprob": -0.20031072199344635
+        },
+        {
+          "position": 3452,
+          "target": 438,
+          "logprob": -4.204020977020264
+        },
+        {
+          "position": 3456,
+          "target": 13,
+          "logprob": -0.01003411877900362
+        },
+        {
+          "position": 3460,
+          "target": 659,
+          "logprob": -0.4167071580886841
+        },
+        {
+          "position": 3464,
+          "target": 220,
+          "logprob": -0.31729426980018616
+        },
+        {
+          "position": 3468,
+          "target": 1154,
+          "logprob": -0.1456514149904251
+        },
+        {
+          "position": 3472,
+          "target": 17,
+          "logprob": -0.02032138593494892
+        },
+        {
+          "position": 3476,
+          "target": 14126,
+          "logprob": -2.5994975566864014
+        },
+        {
+          "position": 3480,
+          "target": 366,
+          "logprob": -1.853636384010315
+        },
+        {
+          "position": 3484,
+          "target": 366,
+          "logprob": -0.45285651087760925
+        },
+        {
+          "position": 3488,
+          "target": 1154,
+          "logprob": -0.6952341198921204
+        },
+        {
+          "position": 3492,
+          "target": 576,
+          "logprob": -1.925290584564209
+        },
+        {
+          "position": 3496,
+          "target": 98237,
+          "logprob": -4.892267227172852
+        },
+        {
+          "position": 3500,
+          "target": 4633,
+          "logprob": -9.963120460510254
+        },
+        {
+          "position": 3504,
+          "target": 29008,
+          "logprob": -0.6854326128959656
+        },
+        {
+          "position": 3508,
+          "target": 29,
+          "logprob": -0.0029037713538855314
+        },
+        {
+          "position": 3512,
+          "target": 3122,
+          "logprob": -0.002383964601904154
+        },
+        {
+          "position": 3516,
+          "target": 476,
+          "logprob": -6.197449684143066
+        },
+        {
+          "position": 3520,
+          "target": 366,
+          "logprob": -1.486433506011963
+        },
+        {
+          "position": 3524,
+          "target": 18320,
+          "logprob": -3.701211452484131
+        },
+        {
+          "position": 3528,
+          "target": 1033,
+          "logprob": -2.1710240840911865
+        },
+        {
+          "position": 3532,
+          "target": 8283,
+          "logprob": -1.7529611587524414
+        },
+        {
+          "position": 3536,
+          "target": 6058,
+          "logprob": -0.7641979455947876
+        },
+        {
+          "position": 3540,
+          "target": 1899,
+          "logprob": -0.04149887338280678
+        },
+        {
+          "position": 3544,
+          "target": 29,
+          "logprob": -0.00372893875464797
+        },
+        {
+          "position": 3548,
+          "target": 1495,
+          "logprob": -0.005503739695996046
+        },
+        {
+          "position": 3552,
+          "target": 29,
+          "logprob": -0.01033466774970293
+        },
+        {
+          "position": 3556,
+          "target": 659,
+          "logprob": -1.0710904598236084
+        },
+        {
+          "position": 3560,
+          "target": 572,
+          "logprob": -1.631662368774414
+        },
+        {
+          "position": 3564,
+          "target": 10764,
+          "logprob": -0.3068148195743561
+        },
+        {
+          "position": 3568,
+          "target": 882,
+          "logprob": -0.003529392648488283
+        },
+        {
+          "position": 3572,
+          "target": 6058,
+          "logprob": -0.039859503507614136
+        },
+        {
+          "position": 3576,
+          "target": 17,
+          "logprob": -0.0038112399633973837
+        },
+        {
+          "position": 3580,
+          "target": 15490,
+          "logprob": -5.333385944366455
+        },
+        {
+          "position": 3584,
+          "target": 1045,
+          "logprob": -3.2227835655212402
+        },
+        {
+          "position": 3588,
+          "target": 34269,
+          "logprob": -12.422693252563477
+        },
+        {
+          "position": 3592,
+          "target": 1033,
+          "logprob": -0.849492073059082
+        },
+        {
+          "position": 3596,
+          "target": 714,
+          "logprob": -7.2186760902404785
+        },
+        {
+          "position": 3600,
+          "target": 323,
+          "logprob": -3.2231626510620117
+        },
+        {
+          "position": 3604,
+          "target": 518,
+          "logprob": -0.9712704420089722
+        },
+        {
+          "position": 3608,
+          "target": 311,
+          "logprob": -2.7265193462371826
+        },
+        {
+          "position": 3612,
+          "target": 311,
+          "logprob": -0.13143128156661987
+        },
+        {
+          "position": 3616,
+          "target": 14126,
+          "logprob": -2.617438793182373
+        },
+        {
+          "position": 3620,
+          "target": 504,
+          "logprob": -5.62523078918457
+        },
+        {
+          "position": 3624,
+          "target": 220,
+          "logprob": -0.06143973767757416
+        },
+        {
+          "position": 3628,
+          "target": 366,
+          "logprob": -0.8771166801452637
+        },
+        {
+          "position": 3632,
+          "target": 11452,
+          "logprob": -1.7413029670715332
+        },
+        {
+          "position": 3636,
+          "target": 806,
+          "logprob": -3.9748735427856445
+        },
+        {
+          "position": 3640,
+          "target": 2613,
+          "logprob": -1.7434806823730469
+        },
+        {
+          "position": 3644,
+          "target": 3122,
+          "logprob": -0.01948314718902111
+        },
+        {
+          "position": 3648,
+          "target": 2566,
+          "logprob": -0.14557752013206482
+        },
+        {
+          "position": 3652,
+          "target": 366,
+          "logprob": -2.6992664337158203
+        },
+        {
+          "position": 3656,
+          "target": 659,
+          "logprob": -1.8231654167175293
+        },
+        {
+          "position": 3660,
+          "target": 44122,
+          "logprob": -0.9695070385932922
+        },
+        {
+          "position": 3664,
+          "target": 1154,
+          "logprob": -1.498227834701538
+        },
+        {
+          "position": 3668,
+          "target": 3283,
+          "logprob": -6.640535354614258
+        },
+        {
+          "position": 3672,
+          "target": 24721,
+          "logprob": -3.839373826980591
+        },
+        {
+          "position": 3676,
+          "target": 659,
+          "logprob": -0.33074402809143066
+        },
+        {
+          "position": 3680,
+          "target": 13,
+          "logprob": -0.006353181321173906
+        },
+        {
+          "position": 3684,
+          "target": 364,
+          "logprob": -0.007116091437637806
+        },
+        {
+          "position": 3688,
+          "target": 29,
+          "logprob": -0.0031663067638874054
+        },
+        {
+          "position": 3692,
+          "target": 279,
+          "logprob": -0.4514119625091553
+        },
+        {
+          "position": 3696,
+          "target": 26230,
+          "logprob": -2.314370632171631
+        },
+        {
+          "position": 3700,
+          "target": 93641,
+          "logprob": -4.3816046714782715
+        },
+        {
+          "position": 3704,
+          "target": 807,
+          "logprob": -0.4430810511112213
+        },
+        {
+          "position": 3708,
+          "target": 700,
+          "logprob": -0.018673807382583618
+        },
+        {
+          "position": 3712,
+          "target": 24565,
+          "logprob": -0.3544088304042816
+        },
+        {
+          "position": 3716,
+          "target": 304,
+          "logprob": -0.9283396005630493
+        },
+        {
+          "position": 3720,
+          "target": 715,
+          "logprob": -0.6765609979629517
+        },
+        {
+          "position": 3724,
+          "target": 14606,
+          "logprob": -3.055349349975586
+        },
+        {
+          "position": 3728,
+          "target": 366,
+          "logprob": -4.714492321014404
+        },
+        {
+          "position": 3732,
+          "target": 24807,
+          "logprob": -5.491609573364258
+        },
+        {
+          "position": 3736,
+          "target": 569,
+          "logprob": -0.614882230758667
+        },
+        {
+          "position": 3740,
+          "target": 12024,
+          "logprob": -0.01940610073506832
+        },
+        {
+          "position": 3744,
+          "target": 98886,
+          "logprob": -3.4207029342651367
+        },
+        {
+          "position": 3748,
+          "target": 19,
+          "logprob": -5.61460001335945e-05
+        },
+        {
+          "position": 3752,
+          "target": 566,
+          "logprob": -0.028760099783539772
+        },
+        {
+          "position": 3756,
+          "target": 366,
+          "logprob": -2.860922336578369
+        },
+        {
+          "position": 3760,
+          "target": 22359,
+          "logprob": -4.73664665222168
+        },
+        {
+          "position": 3764,
+          "target": 9448,
+          "logprob": -0.001211266964673996
+        },
+        {
+          "position": 3768,
+          "target": 220,
+          "logprob": -0.0033227966632694006
+        },
+        {
+          "position": 3772,
+          "target": 6022,
+          "logprob": -0.06924392282962799
+        },
+        {
+          "position": 3776,
+          "target": 37154,
+          "logprob": -0.02690150961279869
+        },
+        {
+          "position": 3780,
+          "target": 220,
+          "logprob": -0.003564553800970316
+        },
+        {
+          "position": 3784,
+          "target": 873,
+          "logprob": -0.007771376520395279
+        },
+        {
+          "position": 3788,
+          "target": 504,
+          "logprob": -2.9937400817871094
+        },
+        {
+          "position": 3792,
+          "target": 82,
+          "logprob": -0.0004232226056046784
+        },
+        {
+          "position": 3796,
+          "target": 659,
+          "logprob": -1.4228336811065674
+        },
+        {
+          "position": 3800,
+          "target": 5768,
+          "logprob": -1.8249070644378662
+        },
+        {
+          "position": 3804,
+          "target": 18,
+          "logprob": -1.83302640914917
+        },
+        {
+          "position": 3808,
+          "target": 29,
+          "logprob": -0.0021928329952061176
+        },
+        {
+          "position": 3812,
+          "target": 2308,
+          "logprob": -0.5398401618003845
+        },
+        {
+          "position": 3816,
+          "target": 6553,
+          "logprob": -1.495621919631958
+        },
+        {
+          "position": 3820,
+          "target": 366,
+          "logprob": -0.532583475112915
+        },
+        {
+          "position": 3824,
+          "target": 1154,
+          "logprob": -2.2363617420196533
+        },
+        {
+          "position": 3828,
+          "target": 37154,
+          "logprob": -0.000814582861494273
+        },
+        {
+          "position": 3832,
+          "target": 66303,
+          "logprob": -0.5792232155799866
+        },
+        {
+          "position": 3836,
+          "target": 8329,
+          "logprob": -0.004467743914574385
+        },
+        {
+          "position": 3840,
+          "target": 28823,
+          "logprob": -0.2413758486509323
+        },
+        {
+          "position": 3844,
+          "target": 389,
+          "logprob": -0.06597832590341568
+        },
+        {
+          "position": 3848,
+          "target": 220,
+          "logprob": -0.8206572532653809
+        },
+        {
+          "position": 3852,
+          "target": 1154,
+          "logprob": -2.1779215335845947
+        },
+        {
+          "position": 3856,
+          "target": 279,
+          "logprob": -4.884804725646973
+        },
+        {
+          "position": 3860,
+          "target": 315,
+          "logprob": -0.027501165866851807
+        },
+        {
+          "position": 3864,
+          "target": 18,
+          "logprob": -2.558147430419922
+        },
+        {
+          "position": 3868,
+          "target": 1154,
+          "logprob": -2.202584743499756
+        },
+        {
+          "position": 3872,
+          "target": 323,
+          "logprob": -0.879456102848053
+        },
+        {
+          "position": 3876,
+          "target": 69632,
+          "logprob": -10.46994400024414
+        },
+        {
+          "position": 3880,
+          "target": 366,
+          "logprob": -2.082831382751465
+        },
+        {
+          "position": 3884,
+          "target": 389,
+          "logprob": -2.026658058166504
+        },
+        {
+          "position": 3888,
+          "target": 659,
+          "logprob": -0.17615759372711182
+        },
+        {
+          "position": 3892,
+          "target": 3210,
+          "logprob": -1.3557841777801514
+        },
+        {
+          "position": 3896,
+          "target": 220,
+          "logprob": -0.01948104240000248
+        },
+        {
+          "position": 3900,
+          "target": 29,
+          "logprob": -0.0007038023322820663
+        },
+        {
+          "position": 3904,
+          "target": 7822,
+          "logprob": -4.212631702423096
+        },
+        {
+          "position": 3908,
+          "target": 16932,
+          "logprob": -0.3901488184928894
+        },
+        {
+          "position": 3912,
+          "target": 50537,
+          "logprob": -1.0486215353012085
+        },
+        {
+          "position": 3916,
+          "target": 389,
+          "logprob": -1.0181055068969727
+        },
+        {
+          "position": 3920,
+          "target": 220,
+          "logprob": -0.05795605108141899
+        },
+        {
+          "position": 3924,
+          "target": 659,
+          "logprob": -0.15353922545909882
+        },
+        {
+          "position": 3928,
+          "target": 9985,
+          "logprob": -5.745553493499756
+        },
+        {
+          "position": 3932,
+          "target": 518,
+          "logprob": -1.025373935699463
+        },
+        {
+          "position": 3936,
+          "target": 31,
+          "logprob": -0.00019059749320149422
+        },
+        {
+          "position": 3940,
+          "target": 389,
+          "logprob": -0.5746734738349915
+        },
+        {
+          "position": 3944,
+          "target": 220,
+          "logprob": -0.03867284953594208
+        },
+        {
+          "position": 3948,
+          "target": 659,
+          "logprob": -0.7018492817878723
+        },
+        {
+          "position": 3952,
+          "target": 3877,
+          "logprob": -0.2976151704788208
+        },
+        {
+          "position": 3956,
+          "target": 4116,
+          "logprob": -0.01543152891099453
+        },
+        {
+          "position": 3960,
+          "target": 31770,
+          "logprob": -0.006023586727678776
+        },
+        {
+          "position": 3964,
+          "target": 6116,
+          "logprob": -4.260293006896973
+        },
+        {
+          "position": 3968,
+          "target": 4787,
+          "logprob": -0.10800547897815704
+        },
+        {
+          "position": 3972,
+          "target": 10862,
+          "logprob": -0.002310703741386533
+        },
+        {
+          "position": 3976,
+          "target": 220,
+          "logprob": -0.005215965677052736
+        },
+        {
+          "position": 3980,
+          "target": 659,
+          "logprob": -0.8337043523788452
+        },
+        {
+          "position": 3984,
+          "target": 311,
+          "logprob": -3.1075844764709473
+        },
+        {
+          "position": 3988,
+          "target": 835,
+          "logprob": -0.27973443269729614
+        },
+        {
+          "position": 3992,
+          "target": 1154,
+          "logprob": -0.5317970514297485
+        },
+        {
+          "position": 3996,
+          "target": 16180,
+          "logprob": -2.255936861038208
+        },
+        {
+          "position": 4000,
+          "target": 9123,
+          "logprob": -0.018751611933112144
+        },
+        {
+          "position": 4004,
+          "target": 29,
+          "logprob": -0.00300586991943419
+        },
+        {
+          "position": 4008,
+          "target": 448,
+          "logprob": -3.022317886352539
+        },
+        {
+          "position": 4012,
+          "target": 300,
+          "logprob": -0.0009457168052904308
+        },
+        {
+          "position": 4016,
+          "target": 659,
+          "logprob": -2.043715000152588
+        },
+        {
+          "position": 4020,
+          "target": 311,
+          "logprob": -0.1441536843776703
+        },
+        {
+          "position": 4024,
+          "target": 6702,
+          "logprob": -2.8825185298919678
+        },
+        {
+          "position": 4028,
+          "target": 22,
+          "logprob": -0.22398948669433594
+        },
+        {
+          "position": 4032,
+          "target": 10555,
+          "logprob": -0.7413884401321411
+        },
+        {
+          "position": 4036,
+          "target": 431,
+          "logprob": -0.6241798400878906
+        },
+        {
+          "position": 4040,
+          "target": 758,
+          "logprob": -2.4351487159729004
+        },
+        {
+          "position": 4044,
+          "target": 15,
+          "logprob": -0.00866025872528553
+        },
+        {
+          "position": 4048,
+          "target": 29,
+          "logprob": -0.0019050560658797622
+        },
+        {
+          "position": 4052,
+          "target": 1896,
+          "logprob": -5.143624305725098
+        },
+        {
+          "position": 4056,
+          "target": 2308,
+          "logprob": -0.4925674796104431
+        },
+        {
+          "position": 4060,
+          "target": 320,
+          "logprob": -0.009667837992310524
+        },
+        {
+          "position": 4064,
+          "target": 504,
+          "logprob": -5.779489517211914
+        },
+        {
+          "position": 4068,
+          "target": 22419,
+          "logprob": -1.3734495639801025
+        },
+        {
+          "position": 4072,
+          "target": 659,
+          "logprob": -1.7778548002243042
+        },
+        {
+          "position": 4076,
+          "target": 70516,
+          "logprob": -2.6631529331207275
+        },
+        {
+          "position": 4080,
+          "target": 1154,
+          "logprob": -0.5226750373840332
+        },
+        {
+          "position": 4084,
+          "target": 13,
+          "logprob": -0.00778143061324954
+        },
+        {
+          "position": 4088,
+          "target": 14062,
+          "logprob": -4.088652610778809
+        },
+        {
+          "position": 4092,
+          "target": 10345,
+          "logprob": -2.8725976943969727
+        },
+        {
+          "position": 4096,
+          "target": 43606,
+          "logprob": -0.00176214799284935
+        },
+        {
+          "position": 4100,
+          "target": 13,
+          "logprob": -0.015813658013939857
+        },
+        {
+          "position": 4104,
+          "target": 366,
+          "logprob": -2.172574758529663
+        },
+        {
+          "position": 4108,
+          "target": 69550,
+          "logprob": -0.38463374972343445
+        },
+        {
+          "position": 4112,
+          "target": 299,
+          "logprob": -0.004810664337128401
+        },
+        {
+          "position": 4116,
+          "target": 1154,
+          "logprob": -2.27296781539917
+        },
+        {
+          "position": 4120,
+          "target": 220,
+          "logprob": -0.002731047570705414
+        },
+        {
+          "position": 4124,
+          "target": 873,
+          "logprob": -0.05381570756435394
+        },
+        {
+          "position": 4128,
+          "target": 29947,
+          "logprob": -1.0388163328170776
+        },
+        {
+          "position": 4132,
+          "target": 31,
+          "logprob": -0.1957821100950241
+        },
+        {
+          "position": 4136,
+          "target": 53167,
+          "logprob": -0.0017661938909441233
+        },
+        {
+          "position": 4140,
+          "target": 3122,
+          "logprob": -0.011705758981406689
+        },
+        {
+          "position": 4144,
+          "target": 36147,
+          "logprob": -1.6489766836166382
+        },
+        {
+          "position": 4148,
+          "target": 569,
+          "logprob": -3.5879716873168945
+        },
+        {
+          "position": 4152,
+          "target": 17944,
+          "logprob": -2.219937801361084
+        },
+        {
+          "position": 4156,
+          "target": 438,
+          "logprob": -0.0043678125366568565
+        },
+        {
+          "position": 4160,
+          "target": 3122,
+          "logprob": -0.007574173621833324
+        },
+        {
+          "position": 4164,
+          "target": 576,
+          "logprob": -1.844035267829895
+        },
+        {
+          "position": 4168,
+          "target": 50487,
+          "logprob": -3.7995996475219727
+        },
+        {
+          "position": 4172,
+          "target": 29,
+          "logprob": -0.005646351259201765
+        },
+        {
+          "position": 4176,
+          "target": 3122,
+          "logprob": -0.0023078492376953363
+        },
+        {
+          "position": 4180,
+          "target": 6457,
+          "logprob": -3.147078514099121
+        },
+        {
+          "position": 4184,
+          "target": 3941,
+          "logprob": -6.650909423828125
+        },
+        {
+          "position": 4188,
+          "target": 1154,
+          "logprob": -1.7833081483840942
+        },
+        {
+          "position": 4192,
+          "target": 12583,
+          "logprob": -0.04517689347267151
+        },
+        {
+          "position": 4196,
+          "target": 29,
+          "logprob": -0.005207308568060398
+        },
+        {
+          "position": 4200,
+          "target": 1154,
+          "logprob": -2.109978675842285
+        },
+        {
+          "position": 4204,
+          "target": 11651,
+          "logprob": -4.471615791320801
+        },
+        {
+          "position": 4208,
+          "target": 3122,
+          "logprob": -0.002806060714647174
+        },
+        {
+          "position": 4212,
+          "target": 9937,
+          "logprob": -0.0014394884929060936
+        },
+        {
+          "position": 4216,
+          "target": 29,
+          "logprob": -0.011259821243584156
+        },
+        {
+          "position": 4220,
+          "target": 389,
+          "logprob": -2.381753444671631
+        }
+      ],
+      "warmup_positions": [
+        128,
+        160,
+        192,
+        224,
+        256,
+        288,
+        320,
+        352,
+        384,
+        416,
+        448,
+        480,
+        512,
+        544,
+        576,
+        608,
+        640,
+        672,
+        704,
+        736,
+        768,
+        800,
+        832,
+        864,
+        896,
+        928,
+        960,
+        992,
+        1024,
+        1056,
+        1088,
+        1120,
+        1152,
+        1184,
+        1216,
+        1248,
+        1280,
+        1312,
+        1344,
+        1376,
+        1408,
+        1440,
+        1472,
+        1504,
+        1536,
+        1568,
+        1600,
+        1632,
+        1664,
+        1696,
+        1728,
+        1760,
+        1792,
+        1824,
+        1856,
+        1888,
+        1920,
+        1952,
+        1984,
+        2016,
+        2048,
+        2080,
+        2112,
+        2144,
+        2176,
+        2208,
+        2240,
+        2272,
+        2304,
+        2336,
+        2368,
+        2400,
+        2432,
+        2464,
+        2496,
+        2528,
+        2560,
+        2592,
+        2624,
+        2656,
+        2688,
+        2720,
+        2752,
+        2784,
+        2816,
+        2848,
+        2880,
+        2912,
+        2944,
+        2976,
+        3008,
+        3040,
+        3072,
+        3104,
+        3136,
+        3168,
+        3200,
+        3232,
+        3264,
+        3296,
+        3328,
+        3360,
+        3392,
+        3424,
+        3456,
+        3488,
+        3520,
+        3552,
+        3584,
+        3616,
+        3648,
+        3680,
+        3712,
+        3744,
+        3776,
+        3808,
+        3840,
+        3872,
+        3904,
+        3936,
+        3968,
+        4000,
+        4032,
+        4064,
+        4096,
+        4128,
+        4160,
+        4192
+      ],
+      "mean_nll": 1.449901850921421,
+      "exp_mean_nll": 4.262696114940411
+    }
+  },
+  "completed": true,
+  "finished": 1789029229.1315713
+}

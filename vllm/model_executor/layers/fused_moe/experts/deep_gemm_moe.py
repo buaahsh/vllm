@@ -242,6 +242,7 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         activation: MoEActivation,
         row_weights: torch.Tensor | None = None,
         negative_row_weights: torch.Tensor | None = None,
+        row_indices: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         assert self.block_shape is not None
         block_k = self.block_shape[1]
@@ -265,6 +266,10 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
                         negative_row_weights.contiguous()
                         if negative_row_weights is not None
                         else None
+                    ),
+                    row_indices=row_indices,
+                    round_before_quant=not getattr(
+                        self, "yoco_direct_fp8_activation", False
                     ),
                 )
             act_out = torch.empty(
@@ -373,6 +378,10 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         use_psum_layout = (
             probs_before_w2 or os.getenv("VLLM_DEEPGEMM_MOE_PSUM_LAYOUT") == "1"
         )
+        pack_scales = (
+            use_psum_layout
+            and DeepGemmQuantScaleFMT.from_oracle() == DeepGemmQuantScaleFMT.UE8M0
+        )
 
         a1q_perm = _resize_cache(
             workspace13.view(dtype=torch.float8_e4m3fn), (M_sum, K)
@@ -386,9 +395,14 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             expert_tokens_meta=expert_tokens_meta,
             aq_out=a1q_perm,
             use_psum_layout=use_psum_layout,
+            pack_scales=pack_scales,
         )
         if (
             use_psum_layout
+            # Packed TMA scales use the static workspace pitch. The prefix
+            # layout already bounds real expert blocks, so this path can keep
+            # the full buffers and avoid synchronizing a device scalar to CPU.
+            and not pack_scales
             and not torch.cuda.is_current_stream_capturing()
             and not torch.compiler.is_compiling()
         ):
@@ -419,11 +433,24 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
         )
         row_weights = None
         negative_row_weights = None
+        row_indices = None
         if probs_before_w2:
-            row_weights = torch.zeros(
-                (m_gemm,), device=topk_weights.device, dtype=topk_weights.dtype
-            )
-            _scatter_routed_row_weights(row_weights, topk_ids, topk_weights, inv_perm)
+            if (
+                DeepGemmQuantScaleFMT.from_oracle() == DeepGemmQuantScaleFMT.UE8M0
+                and activation == MoEActivation.SILU
+            ):
+                # inv_perm maps real routes to their padded expert rows. Read
+                # routing weights directly and quantize only those rows; the
+                # graph's static workspace shape and addresses stay unchanged.
+                row_weights = topk_weights.reshape(-1)
+                row_indices = inv_perm.reshape(-1)
+            else:
+                row_weights = torch.zeros(
+                    (m_gemm,), device=topk_weights.device, dtype=topk_weights.dtype
+                )
+                _scatter_routed_row_weights(
+                    row_weights, topk_ids, topk_weights, inv_perm
+                )
             negative_row_weights = row_weights
 
         a2q, a2q_scale = self._act_mul_quant(
@@ -432,6 +459,7 @@ class DeepGemmExperts(mk.FusedMoEExpertsModular):
             activation=activation,
             row_weights=row_weights,
             negative_row_weights=negative_row_weights,
+            row_indices=row_indices,
         )
         mm2_out = _resize_cache(workspace2, (m_gemm, K))
         m_grouped_fp8_gemm_nt_contiguous(

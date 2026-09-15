@@ -1,0 +1,182 @@
+[
+  {
+    "tokens": 1,
+    "routing": "spread",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16384,
+    "candidate_rows": 1024,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  {
+    "tokens": 1,
+    "routing": "concentrated",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16384,
+    "candidate_rows": 1024,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  {
+    "tokens": 2,
+    "routing": "spread",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16384,
+    "candidate_rows": 2048,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  {
+    "tokens": 2,
+    "routing": "concentrated",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16384,
+    "candidate_rows": 2048,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  {
+    "tokens": 4,
+    "routing": "spread",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16384,
+    "candidate_rows": 4096,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  {
+    "tokens": 4,
+    "routing": "concentrated",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16384,
+    "candidate_rows": 4096,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  {
+    "tokens": 8,
+    "routing": "spread",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16384,
+    "candidate_rows": 8192,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  {
+    "tokens": 8,
+    "routing": "concentrated",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16384,
+    "candidate_rows": 8192,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  {
+    "tokens": 16,
+    "routing": "spread",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16384,
+    "candidate_rows": 16384,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  {
+    "tokens": 16,
+    "routing": "concentrated",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16384,
+    "candidate_rows": 16384,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  {
+    "tokens": 32,
+    "routing": "spread",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16512,
+    "candidate_rows": 16512,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  {
+    "tokens": 32,
+    "routing": "concentrated",
+    "finite": true,
+    "bitwise": true,
+    "numeric_equal": true,
+    "comparison": "uint8 byte view",
+    "max_abs": 0.0,
+    "baseline_rows": 16512,
+    "candidate_rows": 16512,
+    "samples_us": {
+      "baseline": [],
+      "candidate": []
+    }
+  }
+]

@@ -440,6 +440,7 @@ class Attention(nn.Module, AttentionLayerBase):
         output_shape: torch.Size | None = None,
         kv_cache_dummy_dep: torch.Tensor | None = None,
         skip_kv_cache_update: bool = False,
+        output_dtype: torch.dtype | None = None,
     ) -> torch.Tensor:
         """
         The KV cache is stored inside this class and is accessed via
@@ -450,12 +451,24 @@ class Attention(nn.Module, AttentionLayerBase):
         context using
         `vllm.forward_context.get_forward_context().attn_metadata`.
         """
+        prequantized_query = query.dtype == torch.float8_e4m3fn
+        if prequantized_query and (
+            output_dtype != torch.bfloat16
+            or self.calculate_kv_scales
+            or self.query_quant is None
+            or not self.impl.supports_quant_query_input
+            or self.kv_cache_dtype not in ("fp8", "fp8_e4m3")
+        ):
+            raise ValueError(
+                "Prequantized E4M3 queries require BF16 output, an FP8 "
+                "query backend and fixed scales from this attention layer"
+            )
         if self.calculate_kv_scales:
             torch.ops.vllm.maybe_calc_kv_scales(
                 query, key, value, _encode_layer_name(self.layer_name)
             )
-        output_dtype = query.dtype
-        if self.query_quant is not None:
+        output_dtype = output_dtype or query.dtype
+        if self.query_quant is not None and not prequantized_query:
             # quantizing with a simple torch operation enables
             # torch.compile to fuse this into previous ops
             # which reduces overheads during decoding.

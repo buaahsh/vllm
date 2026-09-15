@@ -1,0 +1,10 @@
+{
+  "archive": "fast-fp8-vs-bf16-20260909-evidence.tar.gz",
+  "remote": "/data/fast-fp8-vs-bf16-20260909/fast-fp8-vs-bf16-20260909-evidence.tar.gz",
+  "pvc": "/mnt/pvc/lidong1/fast-fp8-vs-bf16-20260909/fast-fp8-vs-bf16-20260909-evidence.tar.gz",
+  "sha256": "bf48c95cb1212e2f9660494bbdaba4247bce44d423e1eb99eec4dc34cebd33f8",
+  "bytes": 35484590,
+  "files": 267,
+  "local": "/home/lidong1/vllm_test/yoco_results/fast-fp8-vs-bf16-20260909/fast-fp8-vs-bf16-20260909-evidence.tar.gz",
+  "files_verified": 267
+}

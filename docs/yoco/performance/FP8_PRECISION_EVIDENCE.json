@@ -1,0 +1,321 @@
+{
+  "reviewed_at_utc": "2026-09-14T06:47:05.986311+00:00",
+  "repositories": {
+    "vllm": {
+      "root": "/home/lidong1/vllm_test/vllm_yoco_align_gemm_20260906",
+      "branch": "fhb-dev-9-18",
+      "head": "511fbed3f75f0fd18a4f93194ca832db2c723f98"
+    },
+    "llm_train": {
+      "root": "/home/lidong1/vllm_test/llm-train-align-gemm-20260906",
+      "branch": "fhb-dev-9-18",
+      "head": "0b6978ee35e95982a4ea10bd8de63d6264bb676d"
+    }
+  },
+  "report_sha256": "b0d74a58babbd286d0de11e3cec1b58fd5639d6ee9ab22c3e95b0d9e834cc27e",
+  "scope": "Precision review and CPU sensitivity only; no new policy enabled, no GPU performance or full-model quality claims",
+  "router": {
+    "checkpoint": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+    "checkpoint_index_sha256": "8c4757110740c4833789f08fbba6f478be1fdb6508e2ec9c1c561fff77795ba6",
+    "capture_scope": "Historical BF16 Align physics_v0 trajectory, 128 decode tokens, 40 logical MoE blocks",
+    "baseline": "CPU FP32 linear from original FP32 router weights and recorded BF16 inputs",
+    "limits": "Operand-rounding sensitivity only; not B200 kernel output, not current Fast TF32 baseline, not model task accuracy or speed",
+    "summary": {
+      "rows": 5120,
+      "variants": {
+        "FP16_operands_FP32_reference_accum": {
+          "logits_relative_l2": 9.923632847135534e-05,
+          "top8_set_changed": 2,
+          "top8_set_changed_pct": 0.0390625,
+          "ordered_top8_changed_pct": 0.2734375,
+          "highest_expert_changed_pct": 0.0,
+          "mean_sparse_router_l1": 0.00010504808524274268
+        },
+        "BF16_operands_FP32_reference_accum": {
+          "logits_relative_l2": 0.0008003459288299217,
+          "top8_set_changed": 21,
+          "top8_set_changed_pct": 0.41015625,
+          "ordered_top8_changed_pct": 2.32421875,
+          "highest_expert_changed_pct": 0.0390625,
+          "mean_sparse_router_l1": 0.0009260422255465528
+        },
+        "FP8_weights_BF16_input_reference": {
+          "logits_relative_l2": 0.012777114083306148,
+          "top8_set_changed": 426,
+          "top8_set_changed_pct": 8.3203125,
+          "ordered_top8_changed_pct": 28.53515625,
+          "highest_expert_changed_pct": 0.95703125,
+          "mean_sparse_router_l1": 0.018270277352348784
+        },
+        "FP8_W8A8_block128_reference": {
+          "logits_relative_l2": 0.01813136828181276,
+          "top8_set_changed": 587,
+          "top8_set_changed_pct": 11.46484375,
+          "ordered_top8_changed_pct": 37.01171875,
+          "highest_expert_changed_pct": 1.2890625,
+          "mean_sparse_router_l1": 0.0253422665369726
+        }
+      }
+    }
+  },
+  "scale": {
+    "weight_scope": "Deterministic aligned 128x128 blocks; not a whole-model quality evaluation",
+    "weight_summary": {
+      "numel": 12976128,
+      "blocks": 792,
+      "reference_energy": 66452.61340682722,
+      "source_zeros": 0,
+      "nonzero": 12976128,
+      "below_normal": 2345535,
+      "max_abs": 1.53125,
+      "variants": {
+        "unscaled": {
+          "relative_l2": 0.027218964911702073,
+          "zeroed_nonzero_pct": 1.1495031491674559,
+          "clipped_pct": 0.0,
+          "identical_to_block_pct": 88.2499463630445,
+          "max_absolute_error": 0.0625
+        },
+        "fixed_2^-4": {
+          "relative_l2": 0.027041269178390552,
+          "zeroed_nonzero_pct": 0.07195520882654671,
+          "clipped_pct": 0.0,
+          "identical_to_block_pct": 99.2604804761482,
+          "max_absolute_error": 0.0625
+        },
+        "fixed_2^-8": {
+          "relative_l2": 0.02704122514780247,
+          "zeroed_nonzero_pct": 0.004685527146464646,
+          "clipped_pct": 0.0,
+          "identical_to_block_pct": 99.95744493272569,
+          "max_absolute_error": 0.0625
+        },
+        "fixed_2^-12": {
+          "relative_l2": 0.2378621853741728,
+          "zeroed_nonzero_pct": 0.00023890023279671716,
+          "clipped_pct": 12.109097567471592,
+          "identical_to_block_pct": 89.07094627919824,
+          "max_absolute_error": 1.421875
+        },
+        "block128_pow2": {
+          "relative_l2": 0.027041225137505287,
+          "zeroed_nonzero_pct": 0.0012330334595959595,
+          "clipped_pct": 0.0,
+          "identical_to_block_pct": 100.0,
+          "max_absolute_error": 0.0625
+        }
+      },
+      "rms": 0.07156216519930984,
+      "source_zero_pct": 0.0,
+      "source_nonzero_below_min_normal_pct": 18.07576959783381
+    },
+    "activation_scope": "Historical BF16 Align decode, physics_v0, 128 forced tokens, September 3",
+    "activation_limits": "Not current Fast-FP8 activations; no routed W2 input, no new prefill/long-context capture, no full-model quality or speed test",
+    "activation_categories": {
+      "input_norm": {
+        "numel": 15728640,
+        "blocks": 122880,
+        "reference_energy": 860004.6049077613,
+        "source_zeros": 892,
+        "nonzero": 15727748,
+        "below_normal": 886376,
+        "max_abs": 1.5703125,
+        "variants": {
+          "unscaled": {
+            "relative_l2": 0.026605843673218357,
+            "zeroed_nonzero_pct": 0.3481108674935534,
+            "clipped_pct": 0.0,
+            "identical_to_block_pct": 96.34312947591145,
+            "max_absolute_error": 0.0625
+          },
+          "fixed_2^-4": {
+            "relative_l2": 0.026600546550011803,
+            "zeroed_nonzero_pct": 0.016601232420560146,
+            "clipped_pct": 0.0,
+            "identical_to_block_pct": 99.77800369262695,
+            "max_absolute_error": 0.0625
+          },
+          "fixed_2^-8": {
+            "relative_l2": 0.026600545276150654,
+            "zeroed_nonzero_pct": 0.00026068576378512675,
+            "clipped_pct": 0.0,
+            "identical_to_block_pct": 99.99265670776367,
+            "max_absolute_error": 0.0625
+          },
+          "block128_pow2": {
+            "relative_l2": 0.02660054527596202,
+            "zeroed_nonzero_pct": 0.00012716378721225696,
+            "clipped_pct": 0.0,
+            "identical_to_block_pct": 100.0,
+            "max_absolute_error": 0.0625
+          }
+        },
+        "rms": 0.23383246191687992,
+        "source_zero_pct": 0.005671183268229167,
+        "source_nonzero_below_min_normal_pct": 5.635746452702574,
+        "captured_tensors": 5120
+      },
+      "post_attention_norm": {
+        "numel": 15728640,
+        "blocks": 122880,
+        "reference_energy": 1239065.6093654418,
+        "source_zeros": 1098,
+        "nonzero": 15727542,
+        "below_normal": 738084,
+        "max_abs": 2.5625,
+        "variants": {
+          "unscaled": {
+            "relative_l2": 0.026602414396929834,
+            "zeroed_nonzero_pct": 0.28941585404763187,
+            "clipped_pct": 0.0,
+            "identical_to_block_pct": 96.95582707722981,
+            "max_absolute_error": 0.0625
+          },
+          "fixed_2^-4": {
+            "relative_l2": 0.02659935362798765,
+            "zeroed_nonzero_pct": 0.013988199808972058,
+            "clipped_pct": 0.0,
+            "identical_to_block_pct": 99.81426239013672,
+            "max_absolute_error": 0.0625
+          },
+          "fixed_2^-8": {
+            "relative_l2": 0.026710618634761072,
+            "zeroed_nonzero_pct": 0.00029248054146032484,
+            "clipped_pct": 0.00018437703450520834,
+            "identical_to_block_pct": 99.9948247273763,
+            "max_absolute_error": 0.8125
+          },
+          "block128_pow2": {
+            "relative_l2": 0.02659935288364783,
+            "zeroed_nonzero_pct": 0.00013352372544927872,
+            "clipped_pct": 0.0,
+            "identical_to_block_pct": 100.0,
+            "max_absolute_error": 0.0625
+          }
+        },
+        "rms": 0.28067360023036025,
+        "source_zero_pct": 0.00698089599609375,
+        "source_nonzero_below_min_normal_pct": 4.692939303547878,
+        "captured_tensors": 5120
+      },
+      "pre_lm_head": {
+        "numel": 393216,
+        "blocks": 3072,
+        "reference_energy": 78625.2812210145,
+        "source_zeros": 5,
+        "nonzero": 393211,
+        "below_normal": 11343,
+        "max_abs": 6.4375,
+        "variants": {
+          "unscaled": {
+            "relative_l2": 0.026620028997167484,
+            "zeroed_nonzero_pct": 0.18183621516183424,
+            "clipped_pct": 0.0,
+            "identical_to_block_pct": 98.12901814778645,
+            "max_absolute_error": 0.21875
+          },
+          "fixed_2^-4": {
+            "relative_l2": 0.02661928829327767,
+            "zeroed_nonzero_pct": 0.012715819242086309,
+            "clipped_pct": 0.0,
+            "identical_to_block_pct": 99.88454182942708,
+            "max_absolute_error": 0.21875
+          },
+          "fixed_2^-8": {
+            "relative_l2": 0.06155494047323876,
+            "zeroed_nonzero_pct": 0.0002543163848417262,
+            "clipped_pct": 0.12105305989583333,
+            "identical_to_block_pct": 99.89471435546875,
+            "max_absolute_error": 4.6875
+          },
+          "block128_pow2": {
+            "relative_l2": 0.0266192881180866,
+            "zeroed_nonzero_pct": 0.0002543163848417262,
+            "clipped_pct": 0.0,
+            "identical_to_block_pct": 100.0,
+            "max_absolute_error": 0.21875
+          }
+        },
+        "rms": 0.4471626439993996,
+        "source_zero_pct": 0.0012715657552083333,
+        "source_nonzero_below_min_normal_pct": 2.8847107532597,
+        "captured_tensors": 128
+      }
+    }
+  },
+  "sources": {
+    "vllm": {
+      "vllm/model_executor/models/yoco.py": "100400f1d20d94dc6b42a3399f798859b07c5b5847bba8df479c7a922369cfbf",
+      "vllm/model_executor/layers/fused_moe/fused_moe.py": "a429cbe012690e18dbf290e2f01ecec782a90cee7c0e3ba6cf10e54044d0be1e",
+      "vllm/model_executor/layers/fused_moe/experts/triton_moe.py": "18c188bda55b80b7093fa3350bfa1ec0bb4bcdafb2fa651eba5ead5f50b280c4",
+      "vllm/model_executor/layers/quantization/utils/fp8_utils.py": "5e4c4334f1a0d10bc32830184e50b3d344e8b691a96953b02e9f3db6ed301439",
+      "vllm/utils/deep_gemm.py": "99e316620e3cdda2db7d9fd7a4ae5968e9c9ef98d7399d62a2c4a5c506627854",
+      "vllm/v1/attention/backends/fa_utils.py": "38a19539ae5fda68b9123ef26992dc9ba25d93fadd6533a3125e53ebe8434ba1"
+    },
+    "llm_train": {
+      "llm/arch/linear.py": "49c2f540d298f60723b32aa384c3a7da91fe8f86830e6ade4b302b1da5a20949",
+      "llm/arch/moe.py": "c1edcdcfa073454fc77afaed0e7838c53662ce0f8146db165d09287c614a70b6",
+      "llm/arch/model.py": "6713dc86f9965133e70af615e9f1c6ae486bb513089414054ace21bd70dd5985",
+      "llm/kernel/moe_ffn.py": "98c5cf6f895c89ea37d2ebf6871916b63f2bbe3a2b4f6eaef3ebb55f3d81d81d",
+      "llm/kernel/quant.py": "59dcb2a3e0c5fcf92f532f7bf76ac2fa45928626fe3ae2b5e8d195943a793f1b",
+      "llm/arch/attention.py": "41d73da74c250d73b2945d38680cc9da75f06ebf1569eddd433d6ef138540671",
+      "llm/arch/config.py": "ee9dba5e122308b1f88c9d7ad24e39709a8a732f3f4573ddce7dec5f6a08d15d",
+      "llm/arch/ffn.py": "80d247d779646955b845f2344ba8230d961ac811992bf9a272e7a4649e7daa73",
+      "llm/arch/rms_norm.py": "dd9783bad9368132aec884942191cc40d7578b1c0e5debc71e07649314bef8d6"
+    }
+  },
+  "artifacts": {
+    "router": "/home/lidong1/vllm_test/yoco_results/fp8-precision-review-20260913",
+    "scale": "/home/lidong1/vllm_test/yoco_results/fp8-scale-audit-20260913"
+  },
+  "report_history": [
+    {
+      "sha256": "8e9378b542cbce1308a9d8050475cf192749acd5d18e5fcd967f1421bd508469",
+      "reviewed_at_utc": "2026-09-14T06:47:05.986311+00:00"
+    }
+  ],
+  "updated_at_utc": "2026-09-14T07:37:38.717815+00:00",
+  "deepseek_v4_reference": {
+    "model": "deepseek-ai/DeepSeek-V4-Flash",
+    "revision": "60d8d70770c6776ff598c94bb586a859a38244f1",
+    "files": [
+      {
+        "path": "config.json",
+        "bytes": 1749,
+        "sha256": "b628e63398a645abc711d92207f8737dd8140f7a4ef1e0a5b3616019e0ddd818"
+      },
+      {
+        "path": "inference/model.py",
+        "bytes": 38632,
+        "sha256": "ce962f1face79d4f633d36436576214057a7e11443c9789935e1deb5c6cd1d71"
+      },
+      {
+        "path": "inference/kernel.py",
+        "bytes": 22198,
+        "sha256": "59b325083d7103975cba025bd0d60ea343bb82d8fff53088afb7c04bd380c0c2"
+      },
+      {
+        "path": "inference/README.md",
+        "bytes": 951,
+        "sha256": "b9fe8027f91f2160b46582b61eaaf7b9873b3da36ee9f98bc76a900e7c1fed94"
+      },
+      {
+        "path": "model.safetensors.index.json",
+        "bytes": 5371381,
+        "sha256": "7e975ba3bef8947a94e7da0abd60888375b232b4dfad883d59653e65c6ba522a"
+      }
+    ],
+    "scope": "Official V4-Flash config, reference model/kernel and checkpoint index, plus frozen vLLM optimized implementation at 67111973ee; no new model run"
+  },
+  "policy_update_20260914": {
+    "first_fp8_modules": [
+      "model.layers.*.mlp.fc1_latent_proj",
+      "model.layers.*.mlp.fc2_latent_proj"
+    ],
+    "fused_fp8_gemm_inputs": true,
+    "kv_candidate": "Separate global shared NoPE KV experiment; do not infer YOCO quality from DeepSeek QAT",
+    "lm_head": "P2 independent aggressive experiment; both reference policies retain higher precision",
+    "router": "Not in first FP8 scope; 16-bit operands with FP32 outputs remain separate candidates",
+    "scales": "Static scale is our independent experiment; both reference strategies retain dynamic block scale"
+  }
+}

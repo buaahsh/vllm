@@ -1,0 +1,27 @@
+{
+  "scope": "Fast FP8 only: pre-reuse baseline and current reuse candidate, one paired diagnostic on the same physical GPU",
+  "gpu_index": 2,
+  "gpu_uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+  "pod": "yoco-align-fast-vllm-vllm-train-master-0",
+  "pod_uid": "505f46a3-597a-40c3-8260-d213fae60136",
+  "node": "slc01-cl02-hgx-0228",
+  "trace_sha256": "e0df4ca65eeac5daf8eb1529f2eb832b2e16ef8c76c53ce426a8ba1f1eb41310",
+  "requests": 3643,
+  "timestamp_speedup": 2,
+  "source_window_seconds": [
+    300,
+    900
+  ],
+  "arrival_span_seconds": 300,
+  "client_ceiling": 2048,
+  "server_max_sequences": 256,
+  "max_batched_tokens": 32768,
+  "max_model_len": 81920,
+  "source_model": "YOCO L3 step28000",
+  "precision": "Fast online fp8_per_block; BF16 hidden/KV",
+  "warmup": "Seed existing compiled caches; default DeepGEMM relax warmup; retain full replays with JIT as warmup and select the first audited replay without new observed compilation",
+  "final_state": "Retain new Fast FP8 serving process and all GPU/Pod allocation",
+  "authorization": "Reuse of owned temporary benchmark services and same-GPU switches already authorized in prior optimization turns; no Job/Pod deletion or unrelated process changes",
+  "latency_slo": null,
+  "diagnostic": true
+}

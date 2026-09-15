@@ -1,0 +1,11 @@
+{
+  "returncode": 0,
+  "stderr": "",
+  "gpu_error_lines": [
+    "2026-07-17T04:50:40,488168+00:00 NVRM: Xid (PCI:0000:ca:00): 43, pid=205179, name=python3, channel 0x00000002",
+    "2026-07-17T04:50:40,659177+00:00 NVRM: Xid (PCI:0000:5d:00): 43, pid=205176, name=python3, channel 0x00000002",
+    "2026-07-17T04:50:40,662989+00:00 NVRM: Xid (PCI:0000:3b:00): 43, pid=205174, name=python3, channel 0x00000002",
+    "2026-07-17T04:50:40,708204+00:00 NVRM: Xid (PCI:0000:dc:00): 43, pid=205180, name=python3, channel 0x00000002",
+    "2026-09-08T03:55:07,639076+00:00 NVRM: Xid (PCI:0000:4c:00): 31, pid=2681797, name=python, channel 0x00000002, intr 00000000. MMU Fault: ENGINE GRAPHICS GPC4 GPCCLIENT_T1_14 faulted @ 0xb_02108000. Fault is of type FAULT_PDE ACCESS_TYPE_VIRT_WRITE"
+  ]
+}

@@ -26,6 +26,7 @@ def _make_vllm_config(
             cudagraph_mode=cudagraph_mode,
             cudagraph_capture_sizes=cudagraph_capture_sizes,
             fast_moe_cold_start=True,
+            custom_ops=[],
         ),
         kernel_config=SimpleNamespace(moe_backend=moe_backend),
         parallel_config=SimpleNamespace(data_parallel_size=data_parallel_size),

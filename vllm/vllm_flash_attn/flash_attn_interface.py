@@ -194,7 +194,7 @@ def flash_attn_varlen_func(
     block_table=None,
     return_softmax_lse=False,
     out=None,
-    # FA3 Only
+    # FA3 scheduler metadata; FP8 descales are shared by FA3 and FA4.
     scheduler_metadata=None,
     q_descale=None,
     k_descale=None,
@@ -367,7 +367,19 @@ def flash_attn_varlen_func(
     elif fa_version == 4:
         assert alibi_slopes is None, "Alibi is not supported in FA4"
 
-        from vllm.vllm_flash_attn.cute.interface import _flash_attn_fwd
+        from vllm.vllm_flash_attn.fa4_compat import fa4_supports_fp8, get_fa4_fwd
+
+        _flash_attn_fwd = get_fa4_fwd()
+        is_fp8 = q.dtype in (torch.float8_e4m3fn, torch.float8_e5m2)
+        fp8_kwargs = {}
+        if is_fp8:
+            if not fa4_supports_fp8():
+                raise NotImplementedError(
+                    "The installed FA4 sources do not support FP8 descales"
+                )
+            fp8_kwargs = dict(
+                q_descale=q_descale, k_descale=k_descale, v_descale=v_descale
+            )
 
         out, softmax_lse = _flash_attn_fwd(
             q,
@@ -388,6 +400,7 @@ def flash_attn_varlen_func(
             return_lse=return_softmax_lse,
             out=out,
             learnable_sink=s_aux,
+            **fp8_kwargs,
         )
     else:
         raise ValueError(f"Unsupported FA version: {fa_version}")

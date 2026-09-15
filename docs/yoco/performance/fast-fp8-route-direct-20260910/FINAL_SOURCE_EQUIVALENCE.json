@@ -1,0 +1,23 @@
+{
+  "model_validation_revision": "candidate-v4",
+  "final_revision": "candidate-v5",
+  "yoco_before_sha256": "d9d464fbb0075504c7e4d1e84a1a4e59c9433a3e09fe4bdc2730813a380348f5",
+  "yoco_final_sha256": "100400f1d20d94dc6b42a3399f798859b07c5b5847bba8df479c7a922369cfbf",
+  "operator_ast_equal_excluding_disabled_route_dump": true,
+  "other_inference_sources_byte_equal": [
+    "vllm/model_executor/layers/yoco_fast.py",
+    "vllm/model_executor/kernels/linear/scaled_mm/BlockScaledMMLinearKernel.py",
+    "vllm/model_executor/layers/fused_moe/deep_gemm_utils.py",
+    "vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py",
+    "vllm/model_executor/layers/fused_moe/experts/fallback.py",
+    "vllm/model_executor/layers/fused_moe/experts/triton_deep_gemm_moe.py",
+    "vllm/model_executor/layers/fused_moe/experts/triton_moe.py",
+    "vllm/model_executor/layers/fused_moe/fused_moe_modular_method.py",
+    "vllm/model_executor/layers/quantization/online/fp8.py",
+    "vllm/model_executor/layers/quantization/online/moe_base.py",
+    "vllm/model_executor/layers/quantization/utils/fp8_utils.py",
+    "vllm/model_executor/models/config.py",
+    "vllm/model_executor/warmup/deep_gemm_warmup.py"
+  ],
+  "final_addition": "Mode-aware diagnostic route dump and its tests; dump was disabled in model validation"
+}

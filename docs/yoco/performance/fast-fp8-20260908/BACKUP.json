@@ -1,0 +1,12 @@
+{
+  "created_utc": "2026-09-09T05:22:36.091755+00:00",
+  "local_archive": "/home/lidong1/vllm_test/yoco_results/fast-fp8-optimization-20260908/fast-fp8-optimization-20260908-evidence.tar.gz",
+  "pvc_archive": "/mnt/pvc/lidong1/fast-fp8-optimization-20260908/fast-fp8-optimization-20260908-evidence.tar.gz",
+  "sha256": "327cb4315566978bdd48802b14935643e72faa24fac825de37c61eaa0e4f2059",
+  "bytes": 56986341,
+  "files_verified": 377,
+  "all_member_hashes_verified": true,
+  "pvc_copy_verified": true,
+  "scope": "All retained cases/probes including failures; frozen public trace; commands/logs/tests/source baseline and patch; report/figures/results. Excludes model weights and large runtime/compiler-cache duplicates.",
+  "pvc_verified_utc": "2026-09-09T05:24:17.005962+00:00"
+}

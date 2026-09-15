@@ -1,0 +1,10 @@
+{
+  "archive": "EVIDENCE.tar.gz",
+  "remote": "/data/fast-fp8-reuse-mooncake-f2-20260910T052204Z/EVIDENCE.tar.gz",
+  "pvc": "/mnt/pvc/lidong1/fast-fp8-reuse-mooncake-f2-20260910T052204Z/EVIDENCE.tar.gz",
+  "sha256": "52a0f595bb94f2f9df41baced6b12091bb110876e0cd45146f9047aa61b4bd25",
+  "bytes": 27342628,
+  "files": 227,
+  "local": "/home/lidong1/vllm_test/yoco_results/fast-fp8-reuse-mooncake-f2-20260910T052204Z/EVIDENCE.tar.gz",
+  "verified_files": 227
+}

@@ -28,7 +28,7 @@ class Sampler(nn.Module):
            as the final logprobs to return.
         b) If `logprobs_mode` is `raw_logits`, clone the logits
            as the final logprobs to return.
-    2. Convert logits to float32.
+    2. Convert logits to the sampler dtype (float32 by default).
     3. Apply allowed token ids whitelist.
     4. Apply bad words exclusion.
     5. Apply logit processors which are not argmax-invariant,
@@ -64,6 +64,7 @@ class Sampler(nn.Module):
         self.topk_topp_sampler = TopKTopPSampler(logprobs_mode)
         self.pin_memory = is_pin_memory_available()
         self.logprobs_mode = logprobs_mode
+        self.logits_dtype = torch.float32
 
     def forward(
         self,
@@ -82,13 +83,13 @@ class Sampler(nn.Module):
             if logprobs_mode == "raw_logprobs":
                 raw_logprobs = self.compute_logprobs(logits)
             elif logprobs_mode == "raw_logits":
-                if logits.dtype == torch.float32:
+                if logits.dtype == self.logits_dtype:
                     raw_logprobs = logits.clone()
                 else:
-                    raw_logprobs = logits.to(torch.float32)
+                    raw_logprobs = logits.to(self.logits_dtype)
 
-        # Use float32 for the logits.
-        logits = logits.to(torch.float32)
+        # Standard sampling uses FP32; specialized samplers can choose BF16.
+        logits = logits.to(self.logits_dtype)
 
         logits = self.apply_logits_processors(
             logits, sampling_metadata, predict_bonus_token

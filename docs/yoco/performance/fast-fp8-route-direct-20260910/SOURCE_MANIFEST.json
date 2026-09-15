@@ -1,0 +1,33 @@
+{
+  "head": "511fbed3f75f0fd18a4f93194ca832db2c723f98",
+  "runtime": "/data/fast-fp8-route-direct-20260910/runtime",
+  "sha256": {
+    "tests/kernels/moe/test_deep_gemm_packed_permute.py": "7b4eb51d09ec4f34f129ec71e7807c6326505d46014b9cfbd77d1ee7a8f4447d",
+    "tests/kernels/moe/test_deep_gemm_padding.py": "04e170804a831b9c8c68fbcc78b1cd26828468845e81d253c7756768de66da30",
+    "tests/kernels/moe/test_yoco_fp8.py": "8f905d8a7beee539d47c66d4c886b4cc5ac449770b962ee43ce315f132e7ae6d",
+    "tests/kernels/moe/test_yoco_fp8_decode.py": "1e7df844cdde2852323984d0224b061fef1cd646e0daef834cd373df10d0f60d",
+    "tests/kernels/moe/test_yoco_fp8_direct.py": "a8eb058902bba3f24a850e9ad75933df4ecde215d1bc03960ff30217802dd886",
+    "tests/kernels/moe/test_yoco_fp8_sparse.py": "acef3a715aef45e449f2c452b072e0e4c6161f7ca2269d6e58439752cdd72be7",
+    "tests/kernels/test_yoco_fast_precision.py": "76b31f0e71929c1b747501217dad79f7724f6af5591b28bb0ea226e0327c7797",
+    "tests/kernels/test_yoco_fast_routing.py": "00a7abfc1d90cf5f69744e3fcdc441cef8dd0be1f5a1b82ab2bd594a8f28dfa9",
+    "tests/model_executor/test_deep_gemm_warmup.py": "188b588b3689b22994b5587e7687d49a914718ec9ec113f2457a1c0051fbf772",
+    "tests/model_executor/test_yoco_fast_precision.py": "38141afbe7d71201fee1bdfefce76773c5e091ebf5f01ce7372f82e49278b93a",
+    "tests/model_executor/test_yoco_fp8.py": "c7ac61fc18b9f41e73b818e254e0efc938ab58e305ce868602b110e34f78915f",
+    "vllm/model_executor/layers/yoco_fast.py": "da2da61608d21b87c5c53379cf93ca64b818542d531c81acf6cb30f13ead5f0c",
+    "tests/model_executor/test_yoco_config.py": "bdb6b7f98c8450e313f067ba52844dbdd695ca52b5363df9262bc6a86ca6748b",
+    "tests/model_executor/test_yoco_conversion.py": "d7dcd936d124282aca42c4f07fea18a691c2d82ccfb1acc5b947e9803259c318",
+    "vllm/model_executor/kernels/linear/scaled_mm/BlockScaledMMLinearKernel.py": "749f7c3ea1398fd07265b538413e73e9001d84602876d4401cebdb7fe38668d2",
+    "vllm/model_executor/layers/fused_moe/deep_gemm_utils.py": "cb137ede2d59d7c3984470508bbe7aecfe1bc68a706ce44eb9456ce62c823aa6",
+    "vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py": "ca669ec8a72b4896b0eacb5e6cd3bc6ded817af21e2490f1b72539649f7a7da4",
+    "vllm/model_executor/layers/fused_moe/experts/fallback.py": "be2e91d383288766f34b17c82f95e6fd2b3ac747ba72abee72ad8467b1846c01",
+    "vllm/model_executor/layers/fused_moe/experts/triton_deep_gemm_moe.py": "f0d120f96fd0ef1b63eaa2d74f2d7368415d87702f5f235a751c6daf05b26020",
+    "vllm/model_executor/layers/fused_moe/experts/triton_moe.py": "18c188bda55b80b7093fa3350bfa1ec0bb4bcdafb2fa651eba5ead5f50b280c4",
+    "vllm/model_executor/layers/fused_moe/fused_moe_modular_method.py": "a0561c689e7c1fb8f2e772ab7cd14bc9e27e1279d219eacfdffc4a8450d36551",
+    "vllm/model_executor/layers/quantization/online/fp8.py": "178c60751261c54bc4f7b5fc5bf7d43e2535bc3b3dfcb55547484e3e2c91c90f",
+    "vllm/model_executor/layers/quantization/online/moe_base.py": "dfb089ab6e5a43825a5d219a7d161a3fc2a67aa11be2b3833a7d9ca623cc72ac",
+    "vllm/model_executor/layers/quantization/utils/fp8_utils.py": "5e4c4334f1a0d10bc32830184e50b3d344e8b691a96953b02e9f3db6ed301439",
+    "vllm/model_executor/models/config.py": "e4acdb8c01444a7da763caae5062f4d0d16de10e6d1660baba7d82ec5ceefa2b",
+    "vllm/model_executor/models/yoco.py": "100400f1d20d94dc6b42a3399f798859b07c5b5847bba8df479c7a922369cfbf",
+    "vllm/model_executor/warmup/deep_gemm_warmup.py": "9688c13f08ec724649c930223eab035eeb1389934e93e1779e82ce2c893652c0"
+  }
+}

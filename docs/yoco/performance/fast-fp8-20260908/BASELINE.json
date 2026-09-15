@@ -1,0 +1,11 @@
+{
+  "repository": "/home/lidong1/vllm_test/vllm_yoco_align_gemm_20260906",
+  "commit": "511fbed3f75f0fd18a4f93194ca832db2c723f98",
+  "source_tar_sha256": "83679c9d3b46572f70114f7c58c4c46e2600250c06bbb2c3827464aae95de1df",
+  "pod": "yoco-align-fast-vllm-vllm-train-master-0",
+  "pod_uid": "505f46a3-597a-40c3-8260-d213fae60136",
+  "gpu_index": 2,
+  "gpu_uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+  "scheme": "fp8_per_block",
+  "scope": "YOCO Fast FP8 block-128; BF16 and Align are controls, not optimization targets"
+}

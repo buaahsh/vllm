@@ -1,0 +1,38 @@
+{
+  "passed": true,
+  "tests_passed": 98,
+  "requests_passed": 8,
+  "profile_requests_passed": 1,
+  "fp8_expert_layers": 20,
+  "fp8_linear_layers": 82,
+  "effective_custom_ops": [
+    "+quant_fp8",
+    "none"
+  ],
+  "explicit_custom_ops": [],
+  "explicit_moe_backend": false,
+  "fast_lm_head": true,
+  "fast_weighted_rms_clip_layers": 10,
+  "gpu_kernel_counts": {
+    "packed_quant": 1458,
+    "deep_gemm": 2178,
+    "weighted_swiglu_quant": 360,
+    "weighted_rms_clip": 90,
+    "lm_head": 9
+  },
+  "source": {
+    "head": "511fbed3f75f0fd18a4f93194ca832db2c723f98",
+    "branch": "fhb-dev-9-8",
+    "sha256": {
+      "vllm/model_executor/models/config.py": "e4acdb8c01444a7da763caae5062f4d0d16de10e6d1660baba7d82ec5ceefa2b",
+      "vllm/model_executor/models/yoco.py": "4723599e5e7356a40ef11de6631fa561acfd3e82254fa0a23e3bcddab3ed3e61",
+      "vllm/model_executor/layers/fused_moe/experts/triton_moe.py": "28d2612941887c87f8f07c43f0ec68b0fa973489c1f6ecdcc70930b53f1cae7c",
+      "vllm/model_executor/layers/fused_moe/deep_gemm_utils.py": "0cfb728931ed47faa968c36dff585379639d7ffee3c639f29f9cae6030bdcc8b",
+      "vllm/model_executor/warmup/deep_gemm_warmup.py": "9688c13f08ec724649c930223eab035eeb1389934e93e1779e82ce2c893652c0",
+      "tests/model_executor/test_yoco_config.py": "bdb6b7f98c8450e313f067ba52844dbdd695ca52b5363df9262bc6a86ca6748b",
+      "tests/model_executor/test_yoco_fp8.py": "c7ac61fc18b9f41e73b818e254e0efc938ab58e305ce868602b110e34f78915f",
+      "tests/kernels/moe/test_yoco_fp8.py": "8f905d8a7beee539d47c66d4c886b4cc5ac449770b962ee43ce315f132e7ae6d"
+    }
+  },
+  "sealed_at": 1788943617.8154752
+}

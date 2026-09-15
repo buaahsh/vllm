@@ -11,6 +11,9 @@ from tqdm import tqdm
 
 import vllm.envs as envs
 from vllm.distributed.parallel_state import get_dp_group, is_global_first_rank
+from vllm.model_executor.kernels.linear.scaled_mm.deep_gemm import (
+    DeepGemmFp8BlockScaledMMKernel,
+)
 from vllm.model_executor.layers.fused_moe.deep_gemm_utils import compute_aligned_M
 from vllm.model_executor.layers.fused_moe.experts.deep_gemm_moe import DeepGemmExperts
 from vllm.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
@@ -19,6 +22,9 @@ from vllm.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
 from vllm.model_executor.layers.fused_moe.layer import FusedMoE
 from vllm.model_executor.layers.linear import LinearBase
 from vllm.model_executor.layers.quantization.fp8 import Fp8LinearMethod
+from vllm.model_executor.layers.quantization.online.fp8 import (
+    Fp8PerBlockOnlineLinearMethod,
+)
 from vllm.model_executor.layers.quantization.online.mxfp8 import Mxfp8OnlineLinearMethod
 from vllm.tracing import instrument
 from vllm.utils.deep_gemm import (
@@ -84,13 +90,18 @@ def _extract_data_from_linear_base_module(
     LinearBase module.
     """
     assert isinstance(m, LinearBase)
-    assert isinstance(m.quant_method, Fp8LinearMethod)
-    assert m.quant_method.block_quant
-    assert m.quant_method.quant_config is not None
+    method = m.quant_method
+    quant_block_size: list[int] | None
+    if isinstance(method, Fp8PerBlockOnlineLinearMethod):
+        quant_block_size = method.weight_block_size
+    else:
+        assert isinstance(method, Fp8LinearMethod)
+        assert method.block_quant
+        assert method.quant_config is not None
+        quant_block_size = method.quant_config.weight_block_size
 
     w = m.weight
     ws = m.weight_scale_inv if hasattr(m, "weight_scale_inv") else m.weight_scale
-    quant_block_size = m.quant_method.quant_config.weight_block_size
 
     assert isinstance(w, torch.Tensor)
     assert isinstance(ws, torch.Tensor)
@@ -131,18 +142,26 @@ def _fp8_linear_may_use_deep_gemm(module: torch.nn.Module) -> bool:
     Return True if the input module/layer could be processed with DeepGEMM.
     """
 
-    # FIXME: this logic is brittle and incorrect - since we
-    # could use DeepGEMM with for than just Fp8LinearMethod
-    block_size = get_mk_alignment_for_contiguous_layout()[0]
-    if not (
-        isinstance(module, LinearBase)
-        and isinstance(module.quant_method, Fp8LinearMethod)
-        and not isinstance(module.quant_method, Mxfp8OnlineLinearMethod)
-        and getattr(module.quant_method, "block_quant", False)
-        and not getattr(module.quant_method, "use_marlin", True)
+    if not isinstance(module, LinearBase):
+        return False
+
+    method = module.quant_method
+    if isinstance(method, Fp8PerBlockOnlineLinearMethod):
+        # Online block FP8 is not a Fp8LinearMethod subclass. Its selected
+        # kernel determines whether startup must warm DeepGEMM specializations.
+        if not isinstance(
+            getattr(method, "fp8_linear", None), DeepGemmFp8BlockScaledMMKernel
+        ):
+            return False
+    elif not (
+        isinstance(method, Fp8LinearMethod)
+        and not isinstance(method, Mxfp8OnlineLinearMethod)
+        and getattr(method, "block_quant", False)
+        and not getattr(method, "use_marlin", True)
     ):
         return False
 
+    block_size = get_mk_alignment_for_contiguous_layout()[0]
     w, _, block_sizes = _extract_data_from_linear_base_module(module)
     return (
         block_sizes == get_mk_alignment_for_contiguous_layout()

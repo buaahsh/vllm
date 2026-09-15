@@ -1,0 +1,227 @@
+{
+  "branch": "fhb-dev-9-18",
+  "base_head": "511fbed3f75f0fd18a4f93194ca832db2c723f98",
+  "scope": "YOCO Fast inference; no llm-train changes",
+  "gpu": "B200",
+  "job": "yoco-fp8-dev",
+  "tests": {
+    "passed": 105,
+    "failures": 0
+  },
+  "quality_batch1": {
+    "samples": 1024,
+    "unfused_nll": 1.446602718533466,
+    "fused_nll": 1.446602718533466,
+    "max_abs_logprob_difference": 0.0,
+    "changed_positions": 0,
+    "prior_fa4_baseline_exact": true,
+    "all_fusions_enabled": true,
+    "shared": {
+      "enabled": true,
+      "buffer_dtype": "torch.float8_e4m3fn"
+    },
+    "dataset_sha256": "1bdcb29af3cbbcb126ec34d2bdbb366dd476cc55fb6eedb4416600757a73da41"
+  },
+  "quality_batch8": {
+    "samples": 1024,
+    "condition": "8 equal-length streams, 128 teacher-forced steps, each full batch queued before scheduling; one warmup pass + two scored passes",
+    "unfused_nll": 1.497806329604936,
+    "fused_nll": 1.497553201592945,
+    "nll_delta": -0.00025312801199106616,
+    "max_abs_logprob_difference": 0.19234061241149902,
+    "mean_abs_logprob_difference": 0.00048627729529471253,
+    "changed_positions": 14,
+    "repeatability": {
+      "unfused": {
+        "all_passes_exact": true,
+        "nll": [
+          1.497806329604936,
+          1.497806329604936,
+          1.497806329604936
+        ]
+      },
+      "fused": {
+        "all_passes_exact": true,
+        "nll": [
+          1.497553201592945,
+          1.497553201592945,
+          1.497553201592945
+        ]
+      }
+    },
+    "generation": {
+      "unfused": {
+        "post_warmup_unique_hashes": 1,
+        "last_hash": "8cf760b89294a0186021536588f821c6a8720006e9f9751d9cee2afa3a57371c"
+      },
+      "fused": {
+        "post_warmup_unique_hashes": 1,
+        "last_hash": "8cf760b89294a0186021536588f821c6a8720006e9f9751d9cee2afa3a57371c"
+      },
+      "between_variants_equal": true,
+      "different_streams": 0
+    }
+  },
+  "ordinary_batch8_diagnostic": {
+    "unfused": {
+      "nll_by_pass": [
+        1.446041151651908,
+        1.4511476142034176
+      ],
+      "repeat_max_abs_logprob_difference": 0.657597541809082,
+      "repeat_changed_positions": 600,
+      "post_warmup_unique_generation_hashes": 2
+    },
+    "fused": {
+      "nll_by_pass": [
+        1.4442044305238504,
+        1.4464418313655685
+      ],
+      "repeat_max_abs_logprob_difference": 0.6805213689804077,
+      "repeat_changed_positions": 629,
+      "post_warmup_unique_generation_hashes": 4
+    }
+  },
+  "timing": {
+    "gpu_uuid": "464fe39e-1a51-de28-0118-11eac3bc1fbf",
+    "scope": "same B200 sequential variants, 512 warm-prefix tokens + 128 generated tokens, 5 warmups and 7 timed runs",
+    "measurements": [
+      {
+        "batch": 1,
+        "unfused_tok_s": 152.83239388029617,
+        "fused_tok_s": 158.52227294513503,
+        "throughput_change_pct": 3.7229535704946137,
+        "identical_generation": true,
+        "unfused_seconds": [
+          0.8372164340689778,
+          0.8375187795609236,
+          0.8374479925259948,
+          0.8380924323573709,
+          0.8371439445763826,
+          0.8377943253144622,
+          0.8375780303031206
+        ],
+        "fused_seconds": [
+          0.8074330976232886,
+          0.8087279051542282,
+          0.8086644019931555,
+          0.8075625905767083,
+          0.8074575113132596,
+          0.8066698703914881,
+          0.8069782517850399
+        ]
+      },
+      {
+        "batch": 8,
+        "unfused_tok_s": 733.9070668922951,
+        "fused_tok_s": 808.2986929186014,
+        "throughput_change_pct": 10.136382299916402,
+        "identical_generation": false,
+        "unfused_seconds": [
+          1.5409009298309684,
+          1.3952720258384943,
+          1.2974077872931957,
+          1.4533595982939005,
+          1.2930727722123265,
+          1.471206495538354,
+          1.3908905610442162
+        ],
+        "fused_seconds": [
+          1.2668584138154984,
+          1.2696149600669742,
+          1.4411139311268926,
+          1.2640335513278842,
+          1.2669214801862836,
+          1.2659661443904042,
+          1.2658628365024924
+        ]
+      }
+    ]
+  },
+  "operator_timing": [
+    {
+      "tokens": 1,
+      "self_inputs": {
+        "unfused_us": 5.883594046314623,
+        "fused_us": 2.9278095685177656
+      },
+      "cross_query": {
+        "unfused_us": 3.1854210090875927,
+        "fused_us": 1.3806130111916461
+      },
+      "diff_output": {
+        "unfused_us": 2.663867161915444,
+        "fused_us": 1.377140987765873
+      }
+    },
+    {
+      "tokens": 8,
+      "self_inputs": {
+        "unfused_us": 6.4331487337492055,
+        "fused_us": 3.458937048642953
+      },
+      "cross_query": {
+        "unfused_us": 3.485763999529039,
+        "fused_us": 1.4783249219832437
+      },
+      "diff_output": {
+        "unfused_us": 3.0390057371416224,
+        "fused_us": 1.4928463440568753
+      }
+    },
+    {
+      "tokens": 32,
+      "self_inputs": {
+        "unfused_us": 6.904026167447712,
+        "fused_us": 3.7603453171154686
+      },
+      "cross_query": {
+        "unfused_us": 3.663396066038007,
+        "fused_us": 1.5570054816430452
+      },
+      "diff_output": {
+        "unfused_us": 3.181438951534851,
+        "fused_us": 1.5785719527967281
+      }
+    },
+    {
+      "tokens": 128,
+      "self_inputs": {
+        "unfused_us": 8.790152470771883,
+        "fused_us": 5.400117371186351
+      },
+      "cross_query": {
+        "unfused_us": 4.085290523174682,
+        "fused_us": 1.9890123488299645
+      },
+      "diff_output": {
+        "unfused_us": 3.553294768498585,
+        "fused_us": 2.0374992717259706
+      }
+    },
+    {
+      "tokens": 1024,
+      "self_inputs": {
+        "unfused_us": 33.92866792888387,
+        "fused_us": 22.334964791896102
+      },
+      "cross_query": {
+        "unfused_us": 9.606506255920042,
+        "fused_us": 6.40002922083011
+      },
+      "diff_output": {
+        "unfused_us": 6.7238877137193915,
+        "fused_us": 6.907187549523562
+      }
+    }
+  ],
+  "source_sha256": {
+    "vllm/envs.py": "e0003e835a92211d062988bf17d90bb9bf82e53fd4817448e6a4c9cc0dd03950",
+    "vllm/model_executor/models/yoco.py": "2a2711df18ec9a1bd04312e181feecd23ea81f153e46a83150bd00c1947ddd51",
+    "vllm/model_executor/layers/yoco_attention_fp8.py": "1a70e20d576f8314633a96bbb58cec8d427f1ef3fcc10f40ecd1414d6927aad0",
+    "vllm/model_executor/layers/attention/attention.py": "ca135862714262c2c15d951e29e0c9402e0f0be544c9a67c21a86a10851463aa",
+    "vllm/v1/attention/backends/flash_attn.py": "27a90eda770b02d46da8e8d08f0ee8012b7af87074c1df5afc8b947bb7267d87",
+    "tests/kernels/attention/test_yoco_attention_fp8.py": "b8999acd70b3aaefa954f173eeb1614d3645797f2cc7b664deb5eeab34b30fde",
+    "tests/model_executor/test_yoco_attention_fp8.py": "637f29fdbf583d9cb69da106f56c96bf6d0bd67affbfddf33275c7b8f175a3c9"
+  }
+}

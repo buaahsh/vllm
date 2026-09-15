@@ -1,0 +1,10 @@
+{
+  "fixed_prefixes": 15,
+  "compared": 15,
+  "missing_baseline_target": [],
+  "top1_changed": [],
+  "max_abs_logprob_delta": 0.29384028911590576,
+  "mean_abs_logprob_delta": 0.049418424393904085,
+  "mean_logprob_delta": -0.0009625601291190833,
+  "diagnostic_only": true
+}

@@ -1,0 +1,17 @@
+{
+  "timestamp": 1788929514.1644619,
+  "source_files": 1767,
+  "differences": {
+    "vllm/model_executor/layers/fused_moe/deep_gemm_utils.py": {
+      "baseline": "622efc1736f4867ce907bfeec81f4a2ebdc92dd53a63944cc02915942580ec8c",
+      "candidate": "0cfb728931ed47faa968c36dff585379639d7ffee3c639f29f9cae6030bdcc8b"
+    },
+    "vllm/model_executor/warmup/deep_gemm_warmup.py": {
+      "baseline": "b05db0127b19fc38da78e96c74df279e2cd53e0c262e9a7cad53486cf21f3414",
+      "candidate": "9688c13f08ec724649c930223eab035eeb1389934e93e1779e82ce2c893652c0"
+    }
+  },
+  "model_metadata_same": true,
+  "aiperf_same": true,
+  "passed": true
+}

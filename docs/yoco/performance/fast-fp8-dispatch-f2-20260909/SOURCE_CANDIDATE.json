@@ -1,0 +1,21 @@
+{
+  "head": "511fbed3f75f0fd18a4f93194ca832db2c723f98",
+  "branch": "fhb-dev-9-8",
+  "sha256": {
+    "vllm/model_executor/models/config.py": "e4acdb8c01444a7da763caae5062f4d0d16de10e6d1660baba7d82ec5ceefa2b",
+    "vllm/model_executor/models/yoco.py": "4723599e5e7356a40ef11de6631fa561acfd3e82254fa0a23e3bcddab3ed3e61",
+    "vllm/model_executor/layers/fused_moe/experts/triton_moe.py": "1791f88fbde604ab2b3c429b05585b15150120e461f18ef7502253c02a4ee40c",
+    "vllm/model_executor/layers/fused_moe/deep_gemm_utils.py": "cb137ede2d59d7c3984470508bbe7aecfe1bc68a706ce44eb9456ce62c823aa6",
+    "vllm/model_executor/warmup/deep_gemm_warmup.py": "9688c13f08ec724649c930223eab035eeb1389934e93e1779e82ce2c893652c0",
+    "tests/model_executor/test_yoco_config.py": "bdb6b7f98c8450e313f067ba52844dbdd695ca52b5363df9262bc6a86ca6748b",
+    "tests/model_executor/test_yoco_fp8.py": "c7ac61fc18b9f41e73b818e254e0efc938ab58e305ce868602b110e34f78915f",
+    "tests/kernels/moe/test_yoco_fp8.py": "8f905d8a7beee539d47c66d4c886b4cc5ac449770b962ee43ce315f132e7ae6d",
+    "vllm/model_executor/layers/quantization/utils/fp8_utils.py": "0643bec490f72b7898a4a5401a7164b8cfe29e83e6f86573c42ce452c3183874",
+    "vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py": "e2df4003dfbf986ab0e91dfb933fa0034e123b794d29ea62da9a31ed5276987c",
+    "tests/kernels/moe/test_yoco_fp8_sparse.py": "acef3a715aef45e449f2c452b072e0e4c6161f7ca2269d6e58439752cdd72be7",
+    "vllm/model_executor/layers/fused_moe/experts/triton_deep_gemm_moe.py": "6b852e360ef7a29a06a0369261ab9715a1dc2611529f64c9921c9c5f51ebedea",
+    "vllm/model_executor/layers/quantization/online/fp8.py": "0ea7a7d7cdb2cacc378516ff864c2c968c74f20ea66842827cfc74830cfd6314",
+    "tests/kernels/moe/test_deep_gemm_packed_permute.py": "7b4eb51d09ec4f34f129ec71e7807c6326505d46014b9cfbd77d1ee7a8f4447d",
+    "tests/kernels/moe/test_yoco_fp8_decode.py": "1e7df844cdde2852323984d0224b061fef1cd646e0daef834cd373df10d0f60d"
+  }
+}

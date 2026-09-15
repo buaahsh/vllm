@@ -1,0 +1,119 @@
+{
+  "variant": "fp8",
+  "started": 1788949722.4181511,
+  "steps": [
+    {
+      "name": "numeric-before",
+      "started": 1788950107.5153682,
+      "command": [
+        "/data/yoco-align-invariant-20260905/.venv/bin/python",
+        "/data/fast-fp8-vs-bf16-20260909/numeric_gate.py",
+        "--name",
+        "fp8-before"
+      ],
+      "exit_code": 0,
+      "finished": 1788950137.2025106
+    },
+    {
+      "name": "smoke",
+      "started": 1788950137.202846,
+      "command": [
+        "/data/yoco-align-invariant-20260905/.venv/bin/python",
+        "/data/fast-fp8-vs-bf16-20260909/run_case.py",
+        "--name",
+        "fp8-smoke",
+        "--trace",
+        "toolagent-ctx81920-smoke50.jsonl"
+      ],
+      "exit_code": 0,
+      "finished": 1788950190.269127
+    },
+    {
+      "name": "low-c",
+      "started": 1788950190.2695625,
+      "command": [
+        "/data/yoco-align-invariant-20260905/.venv/bin/python",
+        "/data/fast-fp8-vs-bf16-20260909/probe_service.py",
+        "--name",
+        "fp8-low-c",
+        "--warmup-each-config"
+      ],
+      "exit_code": 0,
+      "finished": 1788950222.52718
+    },
+    {
+      "name": "full-a",
+      "started": 1788950222.5274985,
+      "command": [
+        "/data/yoco-align-invariant-20260905/.venv/bin/python",
+        "/data/fast-fp8-vs-bf16-20260909/run_case.py",
+        "--name",
+        "fp8-full-a",
+        "--trace",
+        "toolagent-ctx81920-t300-900s-f1p2.jsonl"
+      ],
+      "exit_code": 1,
+      "finished": 1788950834.6791728
+    },
+    {
+      "name": "full-b",
+      "started": 1788950834.6812027,
+      "command": [
+        "/data/yoco-align-invariant-20260905/.venv/bin/python",
+        "/data/fast-fp8-vs-bf16-20260909/run_case.py",
+        "--name",
+        "fp8-full-b",
+        "--trace",
+        "toolagent-ctx81920-t300-900s-f1p2.jsonl"
+      ],
+      "exit_code": 1,
+      "finished": 1788951453.8063924
+    },
+    {
+      "name": "numeric-after",
+      "started": 1788951453.8083036,
+      "command": [
+        "/data/yoco-align-invariant-20260905/.venv/bin/python",
+        "/data/fast-fp8-vs-bf16-20260909/numeric_gate.py",
+        "--name",
+        "fp8-after"
+      ],
+      "exit_code": 0,
+      "finished": 1788951455.6158762
+    }
+  ],
+  "full_audits": [
+    {
+      "case": "fp8-full-a",
+      "new_cache_entries": {
+        "deep_gemm": 2,
+        "triton": 0
+      },
+      "jit_events": [
+        "(EngineCore pid=138828) WARNING 09-09 10:39:35 [jit_monitor.py:103] Triton kernel JIT compilation during inference: kernel_unified_attention. This causes a latency spike; consider extending warmup to cover this shape/config.",
+        "(EngineCore pid=138828) WARNING 09-09 10:42:33 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _yoco_weighted_rms_clip_kernel. This causes a latency spike; consider extending warmup to cover this shape/config."
+      ],
+      "failed_client_gates": [
+        "concurrency_ceiling_not_reached",
+        "schedule_lag_within_limit",
+        "schedule_not_degraded"
+      ]
+    },
+    {
+      "case": "fp8-full-b",
+      "new_cache_entries": {
+        "deep_gemm": 0,
+        "triton": 0
+      },
+      "jit_events": [],
+      "failed_client_gates": [
+        "concurrency_ceiling_not_reached",
+        "schedule_lag_within_limit",
+        "schedule_not_degraded"
+      ]
+    }
+  ],
+  "selected_case": "fp8-full-b",
+  "completed": true,
+  "finished": 1788951455.6161935
+}

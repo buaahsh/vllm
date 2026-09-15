@@ -527,6 +527,33 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Enable batch-invariant mode: deterministic results regardless of
     # batch composition. Requires NVIDIA GPU with compute capability >= 9.0.
     "VLLM_BATCH_INVARIANT": lambda: bool(int(os.getenv("VLLM_BATCH_INVARIANT", "0"))),
+    # Fuse YOCO Fast attention FP8 producers; disable for numerical/perf A/B.
+    "VLLM_YOCO_FP8_ATTENTION_FUSION": lambda: bool(
+        int(os.getenv("VLLM_YOCO_FP8_ATTENTION_FUSION", "1"))
+    ),
+    # Experimental: full-model quality is not yet equivalent to the baseline.
+    "VLLM_YOCO_FP8_LATENT_NORM_FUSION": lambda: bool(
+        int(os.getenv("VLLM_YOCO_FP8_LATENT_NORM_FUSION", "0"))
+    ),
+    # Experimental Fast-only BF16 residual storage; add/Norm math stays FP32.
+    "VLLM_YOCO_BF16_RESIDUAL": lambda: bool(
+        int(os.getenv("VLLM_YOCO_BF16_RESIDUAL", "0"))
+    ),
+    # Fast BF16 residual boundaries and router operands/logits. Kernel-local
+    # reductions, FP8 scales and Top-K probabilities retain FP32 arithmetic.
+    "VLLM_YOCO_BF16_CHAIN": lambda: bool(int(os.getenv("VLLM_YOCO_BF16_CHAIN", "0"))),
+    # Experiments for YOCO Fast scalar reductions and greedy sampling. These
+    # do not change FA4/DeepGEMM Tensor Core accumulators or scale interfaces.
+    "VLLM_YOCO_BF16_REDUCTIONS": lambda: bool(
+        int(os.getenv("VLLM_YOCO_BF16_REDUCTIONS", "0"))
+    ),
+    "VLLM_YOCO_BF16_SAMPLING": lambda: bool(
+        int(os.getenv("VLLM_YOCO_BF16_SAMPLING", "0"))
+    ),
+    # Fast B200 block-FP8 W2 tuning; select before rebuilding engine/graphs.
+    "VLLM_YOCO_FP8_W2_TUNING": lambda: bool(
+        int(os.getenv("VLLM_YOCO_FP8_W2_TUNING", "1"))
+    ),
     # Experimental, environment-matched YOCO Align MoE launch configuration.
     # No profile is selected by default; both inference and training use this path.
     "VLLM_YOCO_ALIGN_MOE_CONFIG": lambda: os.getenv("VLLM_YOCO_ALIGN_MOE_CONFIG"),
