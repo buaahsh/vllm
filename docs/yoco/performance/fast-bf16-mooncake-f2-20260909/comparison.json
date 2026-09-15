@@ -1,0 +1,408 @@
+{
+  "trace": [
+    {
+      "variant": "bf16",
+      "case": "bf16-full-b",
+      "measured_start_utc": "2026-09-10T06:42:07.604454+00:00",
+      "measured_end_utc": "2026-09-10T06:50:46.945085+00:00",
+      "trace_sha256": "e0df4ca65eeac5daf8eb1529f2eb832b2e16ef8c76c53ce426a8ba1f1eb41310",
+      "gpu_uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+      "cache_salt": "fast-bf16-mooncake-f2-20260910T062300Z-bf16-full-b",
+      "planned": 3643,
+      "completed": 3643,
+      "error_records": 0,
+      "arrival_span_s": 299.9995,
+      "offered_req_s": 12.143353572255954,
+      "offered_input_tok_s": 101728.41288068813,
+      "offered_output_tok_s": 2144.586907644846,
+      "achieved_req_s": 7.014448180429805,
+      "achieved_input_tok_s": 58769.124426210954,
+      "achieved_output_tok_s": 1238.7923684007756,
+      "actual_input_tokens": 30522133,
+      "actual_output_tokens": 643375,
+      "benchmark_duration_s": 519.3406312960001,
+      "overhang_from_first_actual_send_s": 219.34113148498534,
+      "schedule_lag_p99_ms": 7.053931519999998,
+      "schedule_degraded": 0.0,
+      "concurrency_max": 1613.0,
+      "client_pass": true,
+      "client_gates": {
+        "command_exit_zero": true,
+        "concurrency_ceiling_not_reached": true,
+        "http_2xx_only": true,
+        "no_context_skips": true,
+        "no_error_summary": true,
+        "not_cancelled": true,
+        "planned_equals_completed": true,
+        "record_count_matches_completed": true,
+        "schedule_lag_within_limit": true,
+        "schedule_not_degraded": true,
+        "zero_osl_mismatch": true
+      },
+      "server_pass": true,
+      "token_accounting_pass": true,
+      "drained": true,
+      "passed": true,
+      "metrics_gates": {
+        "standalone": {
+          "scrape_errors": 0,
+          "max_gap_seconds": 1.3161261081695557,
+          "counter_resets": []
+        }
+      },
+      "queue_maxima": {
+        "vllm:num_requests_running": 256.0,
+        "vllm:num_requests_waiting": 1348.0
+      },
+      "prefix_cache_deltas": {
+        "vllm:prefix_cache_queries_total": 30522133.0,
+        "vllm:prefix_cache_hits_total": 11376032.0,
+        "vllm:external_prefix_cache_queries_total": 0.0,
+        "vllm:external_prefix_cache_hits_total": 0.0
+      },
+      "cache_hit_fraction": 0.37271418743899715,
+      "manifest_sha256": "fc862ee356aa70d43517e6ec484257befc000bc487217654e06a394c0f7c2561",
+      "diagnostic": true,
+      "newly_compiled_kernels": {
+        "deep_gemm": [],
+        "triton": []
+      },
+      "gpu_telemetry": {
+        "memory_mib": {
+          "mean": 162466.0,
+          "minimum": 162466.0,
+          "maximum": 162466.0
+        },
+        "utilization_percent": {
+          "mean": 90.1919191919192,
+          "minimum": 0.0,
+          "maximum": 100.0
+        },
+        "power_w": {
+          "mean": 869.6467676767677,
+          "minimum": 514.92,
+          "maximum": 985.14
+        },
+        "temperature_c": {
+          "mean": 53.696969696969695,
+          "minimum": 47.0,
+          "maximum": 57.0
+        },
+        "sm_clock_mhz": {
+          "mean": 1739.1919191919192,
+          "minimum": 1492.0,
+          "maximum": 1965.0
+        },
+        "memory_clock_mhz": {
+          "mean": 3996.0,
+          "minimum": 3996.0,
+          "maximum": 3996.0
+        }
+      },
+      "gpu_telemetry_samples": 99,
+      "other_busy_gpus": [
+        0,
+        1
+      ],
+      "ttft_p50_ms": 75336.958021,
+      "ttft_p95_ms": 174911.76675229997,
+      "ttft_p99_ms": 183425.40210116,
+      "itl_p50_ms": 195.23083052165504,
+      "itl_p95_ms": 343.759402375,
+      "itl_p99_ms": 498.29014075,
+      "e2e_p50_ms": 112929.28362799999,
+      "e2e_p95_ms": 225668.40399889997,
+      "e2e_p99_ms": 258112.5465251599,
+      "gpu_ecc_before_after": [
+        {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        }
+      ]
+    },
+    {
+      "variant": "fp8",
+      "case": "candidate-full-b",
+      "measured_start_utc": "2026-09-10T05:54:34.553808+00:00",
+      "measured_end_utc": "2026-09-10T06:02:11.532000+00:00",
+      "trace_sha256": "e0df4ca65eeac5daf8eb1529f2eb832b2e16ef8c76c53ce426a8ba1f1eb41310",
+      "gpu_uuid": "GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7",
+      "cache_salt": "fast-fp8-reuse-mooncake-f2-20260910T052204Z-candidate-full-b",
+      "planned": 3643,
+      "completed": 3643,
+      "error_records": 0,
+      "arrival_span_s": 299.9995,
+      "offered_req_s": 12.143353572255954,
+      "offered_input_tok_s": 101728.41288068813,
+      "offered_output_tok_s": 2144.586907644846,
+      "achieved_req_s": 7.971643078817738,
+      "achieved_input_tok_s": 66788.78679116236,
+      "achieved_output_tok_s": 1407.8385577365802,
+      "actual_input_tokens": 30522133,
+      "actual_output_tokens": 643375,
+      "benchmark_duration_s": 456.978191616,
+      "overhang_from_first_actual_send_s": 156.978691614151,
+      "schedule_lag_p99_ms": 5.73622272,
+      "schedule_degraded": 0.0,
+      "concurrency_max": 1266.0,
+      "client_pass": true,
+      "client_gates": {
+        "command_exit_zero": true,
+        "concurrency_ceiling_not_reached": true,
+        "http_2xx_only": true,
+        "no_context_skips": true,
+        "no_error_summary": true,
+        "not_cancelled": true,
+        "planned_equals_completed": true,
+        "record_count_matches_completed": true,
+        "schedule_lag_within_limit": true,
+        "schedule_not_degraded": true,
+        "zero_osl_mismatch": true
+      },
+      "server_pass": true,
+      "token_accounting_pass": true,
+      "drained": true,
+      "passed": true,
+      "metrics_gates": {
+        "standalone": {
+          "scrape_errors": 0,
+          "max_gap_seconds": 1.2283234596252441,
+          "counter_resets": []
+        }
+      },
+      "queue_maxima": {
+        "vllm:num_requests_running": 256.0,
+        "vllm:num_requests_waiting": 1002.0
+      },
+      "prefix_cache_deltas": {
+        "vllm:prefix_cache_queries_total": 30522133.0,
+        "vllm:prefix_cache_hits_total": 11505840.0,
+        "vllm:external_prefix_cache_queries_total": 0.0,
+        "vllm:external_prefix_cache_hits_total": 0.0
+      },
+      "cache_hit_fraction": 0.37696710121799154,
+      "manifest_sha256": "d2df65e965c5ed06b27de0c1df734d9f15647c94e75ae3f9bbbc80aff335bdf2",
+      "diagnostic": true,
+      "newly_compiled_kernels": {
+        "deep_gemm": [],
+        "triton": []
+      },
+      "gpu_telemetry": {
+        "memory_mib": {
+          "mean": 158436.0,
+          "minimum": 158436.0,
+          "maximum": 158436.0
+        },
+        "utilization_percent": {
+          "mean": 85.4367816091954,
+          "minimum": 0.0,
+          "maximum": 100.0
+        },
+        "power_w": {
+          "mean": 781.9174712643678,
+          "minimum": 516.92,
+          "maximum": 981.33
+        },
+        "temperature_c": {
+          "mean": 51.206896551724135,
+          "minimum": 45.0,
+          "maximum": 56.0
+        },
+        "sm_clock_mhz": {
+          "mean": 1823.2643678160919,
+          "minimum": 1477.0,
+          "maximum": 1965.0
+        },
+        "memory_clock_mhz": {
+          "mean": 3996.0,
+          "minimum": 3996.0,
+          "maximum": 3996.0
+        }
+      },
+      "gpu_telemetry_samples": 87,
+      "other_busy_gpus": [
+        0,
+        1
+      ],
+      "ttft_p50_ms": 43609.066870999995,
+      "ttft_p95_ms": 117719.9766728,
+      "ttft_p99_ms": 124820.81904675999,
+      "itl_p50_ms": 170.06065768412614,
+      "itl_p95_ms": 254.66241478846152,
+      "itl_p99_ms": 348.961030875,
+      "e2e_p50_ms": 76391.745243,
+      "e2e_p95_ms": 168721.06826309997,
+      "e2e_p99_ms": 199328.77633885996,
+      "gpu_ecc_before_after": [
+        {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        },
+        {
+          "volatile/sram_uncorrectable_parity": 0,
+          "volatile/sram_uncorrectable_secded": 0,
+          "volatile/dram_uncorrectable": 0,
+          "aggregate/sram_uncorrectable_parity": 0,
+          "aggregate/sram_uncorrectable_secded": 0,
+          "aggregate/dram_uncorrectable": 0
+        }
+      ]
+    }
+  ],
+  "trace_speedup": 1.136460470412839,
+  "fp8_relative_to_bf16_percent": {
+    "achieved_output_tok_s": 13.646047041283893,
+    "achieved_input_tok_s": 13.646047041283893,
+    "achieved_req_s": 13.646047041283893,
+    "ttft_p95_ms": -32.69750865903248,
+    "itl_p95_ms": -25.918414731633842,
+    "e2e_p95_ms": -25.234961885084097,
+    "overhang_from_first_actual_send_s": -28.431712487588435
+  },
+  "token_count_differences": [],
+  "replay_selection": {
+    "bf16": {
+      "selected_case": "bf16-full-b",
+      "full_audits": [
+        {
+          "case": "bf16-full-a",
+          "added": {
+            "deep_gemm": 0,
+            "triton": 2
+          },
+          "modified": {
+            "deep_gemm": 0,
+            "triton": 0
+          },
+          "jit": [
+            "(EngineCore pid=166835) WARNING 09-10 06:31:44 [jit_monitor.py:103] Triton kernel JIT compilation during inference: kernel_unified_attention. This causes a latency spike; consider extending warmup to cover this shape/config.",
+            "(EngineCore pid=166835) WARNING 09-10 06:32:33 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _yoco_weighted_rms_clip_kernel. This causes a latency spike; consider extending warmup to cover this shape/config."
+          ],
+          "ecc_before": {
+            "volatile/sram_uncorrectable_parity": 0,
+            "volatile/sram_uncorrectable_secded": 0,
+            "volatile/dram_uncorrectable": 0,
+            "aggregate/sram_uncorrectable_parity": 0,
+            "aggregate/sram_uncorrectable_secded": 0,
+            "aggregate/dram_uncorrectable": 0
+          },
+          "ecc_after": {
+            "volatile/sram_uncorrectable_parity": 0,
+            "volatile/sram_uncorrectable_secded": 0,
+            "volatile/dram_uncorrectable": 0,
+            "aggregate/sram_uncorrectable_parity": 0,
+            "aggregate/sram_uncorrectable_secded": 0,
+            "aggregate/dram_uncorrectable": 0
+          },
+          "server_errors": []
+        },
+        {
+          "case": "bf16-full-b",
+          "added": {
+            "deep_gemm": 0,
+            "triton": 0
+          },
+          "modified": {
+            "deep_gemm": 0,
+            "triton": 0
+          },
+          "jit": [],
+          "ecc_before": {
+            "volatile/sram_uncorrectable_parity": 0,
+            "volatile/sram_uncorrectable_secded": 0,
+            "volatile/dram_uncorrectable": 0,
+            "aggregate/sram_uncorrectable_parity": 0,
+            "aggregate/sram_uncorrectable_secded": 0,
+            "aggregate/dram_uncorrectable": 0
+          },
+          "ecc_after": {
+            "volatile/sram_uncorrectable_parity": 0,
+            "volatile/sram_uncorrectable_secded": 0,
+            "volatile/dram_uncorrectable": 0,
+            "aggregate/sram_uncorrectable_parity": 0,
+            "aggregate/sram_uncorrectable_secded": 0,
+            "aggregate/dram_uncorrectable": 0
+          },
+          "server_errors": []
+        }
+      ],
+      "failed_cases": [
+        {
+          "case": "bf16-full-a",
+          "reason": "One ClientOSError(104, Connection reset by peer), no completion token accounting",
+          "completed": 3642,
+          "planned": 3643
+        }
+      ]
+    },
+    "fp8": {
+      "selected_case": "candidate-full-b",
+      "full_audits": [
+        {
+          "case": "candidate-full-a",
+          "added": {
+            "deep_gemm": 1,
+            "triton": 2
+          },
+          "modified": {
+            "deep_gemm": 0,
+            "triton": 0
+          },
+          "jit": [
+            "(EngineCore pid=164074) WARNING 09-10 05:47:00 [jit_monitor.py:103] Triton kernel JIT compilation during inference: kernel_unified_attention. This causes a latency spike; consider extending warmup to cover this shape/config.",
+            "(EngineCore pid=164074) WARNING 09-10 05:47:44 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _yoco_weighted_rms_clip_kernel. This causes a latency spike; consider extending warmup to cover this shape/config."
+          ],
+          "ecc_before": [],
+          "ecc_after": [],
+          "server_errors": []
+        },
+        {
+          "case": "candidate-full-b",
+          "added": {
+            "deep_gemm": 0,
+            "triton": 0
+          },
+          "modified": {
+            "deep_gemm": 0,
+            "triton": 0
+          },
+          "jit": [],
+          "ecc_before": [],
+          "ecc_after": [],
+          "server_errors": []
+        }
+      ],
+      "failed_cases": []
+    }
+  },
+  "comparability": {
+    "same_physical_gpu": true,
+    "same_frozen_trace": true,
+    "same_source_hashes": true,
+    "server_arguments_differ_only_in_quantization": true,
+    "same_client_parameters_except_unique_case_paths_salt": true,
+    "same_client_versions_and_hashes": true,
+    "same_model_file_metadata": true,
+    "weights_content_hashed": false,
+    "fp8_reference_reused": true,
+    "inference_code_modified": false
+  },
+  "diagnostic": true,
+  "scope": "Current Fast BF16 versus current Fast FP8, same GPU and frozen Mooncake 2x trace. BF16 newly measured; FP8 candidate-full-b retained from preceding benchmark. One selected replay each, shared node, no latency SLO."
+}

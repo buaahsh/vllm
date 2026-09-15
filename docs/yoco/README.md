@@ -1,5 +1,15 @@
 # YOCO Align 与 Fast 开发记录
 
+- [Fast直接FP8激活与Top-8 logits路由](performance/fast-fp8-route-direct-20260910/REPORT.md)：实现、403项回归、同卡局部性能及公开文本固定位置NLL验证。
+- [最新 BF16 / FP8 的 Mooncake 2× 同卡对照](performance/fast-bf16-mooncake-f2-20260909/REPORT.md)：Fast BF16 **1238.79**、当前 Fast FP8 **1407.84** 输出 tok/s，FP8/BF16 **1.136×（+13.65%）**；本轮仅补测BF16，两端3643请求全部成功、门槛通过并排空。
+- [公共路径复用前后的 FP8 内部对照](performance/fast-fp8-reuse-mooncake-f2-20260909/REPORT.md)：Fast FP8 公共复用前后1401.36→1407.84 tok/s，+0.46%、基本持平；两端3643请求全部成功并排空。
+- [Fast 多精度公共实现复用](performance/fast-precision-reuse-20260909/REPORT.md)：按层精度融合 K/V 与 BF16 投影、shared-expert 复用 MoE 量化，以及图兼容的缓存刷新。
+- [Fast FP8 分派与布局优化 / Mooncake 2×](performance/fast-fp8-dispatch-f2-20260909/REPORT.md)：低并发吞吐提升17.81%–26.32%，2×回放吞吐提升28.60%，209项测试通过；小batch后端切换存在浮点与生成token差异。
+- [上一轮 Fast FP8 有效路由行量化优化](performance/fast-fp8-sparse-20260909/REPORT.md)：低并发吞吐提升3.93%–16.07%，183项测试通过；1.2×观测提升1.18%，两端调度门槛均未通过。
+- [修改前的 Fast FP8 / BF16 同卡性能对照](performance/fp8-vs-bf16-20260909/REPORT.md)：保留原始低并发与Mooncake数据、客户端调度限制。
+- [Fast 在线 FP8 适配](performance/fast-fp8-compat-20260909/REPORT.md)：补齐默认后端、编译图中的 FP8 量化、Triton 量化前路由加权和实际 BF16 层的 Fast 分派。
+- [2026-09-08 PDT / 09-09 UTC Fast FP8 优化](performance/fast-fp8-20260908/REPORT.md)：约束小批次 MoE padding，补齐在线 block-FP8 dense 启动预热；同卡低并发吞吐提升13.58%–36.29%。Mooncake 1.2×结果与过载限制见报告，[FP8表](performance/FP8.md)单独维护。
+
 - [2026-09-08 Fast 低并发 W2 优化](fast-low-concurrency-20260908/REPORT.md)：恢复FA4 split-KV自动调度；完整W2并发1/2吞吐提升2.014×/1.770×，与Qwen差距缩小至5.42%/4.16%。固定形状同卡诊断，Fast非bitwise。见[独立低并发表](performance/LOW_CONCURRENCY.md)。
 
 - [2026-09-08 Align backward 路由越界修复](align-backward-fix-20260908/REPORT.md)：复现并修复Triton3.7.1下的CUDA非法访问；两版本回归、显存检查及NNScaler连续训练通过。旧报告保留历史测量值。

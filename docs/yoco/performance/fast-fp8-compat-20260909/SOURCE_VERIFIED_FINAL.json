@@ -1,0 +1,10 @@
+{
+  "vllm/model_executor/models/config.py": true,
+  "vllm/model_executor/models/yoco.py": true,
+  "vllm/model_executor/layers/fused_moe/experts/triton_moe.py": true,
+  "vllm/model_executor/layers/fused_moe/deep_gemm_utils.py": true,
+  "vllm/model_executor/warmup/deep_gemm_warmup.py": true,
+  "tests/model_executor/test_yoco_config.py": true,
+  "tests/model_executor/test_yoco_fp8.py": true,
+  "tests/kernels/moe/test_yoco_fp8.py": true
+}

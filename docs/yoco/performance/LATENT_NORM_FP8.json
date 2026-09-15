@@ -1,0 +1,245 @@
+{
+  "branch": "fhb-dev-9-18",
+  "status": "experimental_default_off",
+  "tests_passed": 64,
+  "model_quality": {
+    "status": "experimental_default_off",
+    "samples": 1024,
+    "baseline_nll": 1.446602718533466,
+    "candidate_nll": 1.4519632863898924,
+    "delta_nll": 0.005360567856426357,
+    "sampled_exp_nll_change_pct": 0.5374961408008083,
+    "changed_positions": 1001,
+    "max_abs_logprob_delta": 0.7986745834350586,
+    "batch8_baseline_nll": [
+      1.5011943401326475,
+      1.5010338570848403
+    ],
+    "batch8_candidate_nll": [
+      1.4955297896111834,
+      1.4954525842847635
+    ],
+    "all_20_transforms_enabled": true,
+    "candidate_v2_v3_identical_samples": true
+  },
+  "operator_timing": [
+    {
+      "rows": 1,
+      "us": {
+        "norm_quant_unfused": 2.608653811939895,
+        "norm_quant_fused": 1.6005918828953953,
+        "with_gemm_unfused": 7.174060256392868,
+        "with_gemm_fused": 5.941088994344075
+      },
+      "runs_us": {
+        "norm_quant_unfused": [
+          2.6262340441528007,
+          2.608653811939895,
+          2.576371890593933
+        ],
+        "norm_quant_fused": [
+          1.612875959541224,
+          1.5958568367714412,
+          1.6005918828953953
+        ],
+        "with_gemm_unfused": [
+          7.2091733759099785,
+          7.174060256392868,
+          7.075603841577919
+        ],
+        "with_gemm_fused": [
+          5.949620033215009,
+          5.941088994344075,
+          5.895089457028603
+        ]
+      }
+    },
+    {
+      "rows": 8,
+      "us": {
+        "norm_quant_unfused": 2.928961540910807,
+        "norm_quant_fused": 1.6294297608451254,
+        "with_gemm_unfused": 7.421021644885723,
+        "with_gemm_fused": 6.10711898134014
+      },
+      "runs_us": {
+        "norm_quant_unfused": [
+          2.9383127984394597,
+          2.8952310286883858,
+          2.928961540910807
+        ],
+        "norm_quant_fused": [
+          1.6364930508266178,
+          1.6294297608451254,
+          1.6274150298989336
+        ],
+        "with_gemm_unfused": [
+          7.421021644885723,
+          7.375346615676481,
+          7.431248985991186
+        ],
+        "with_gemm_fused": [
+          6.119846867787524,
+          6.10711898134014,
+          6.096466338436906
+        ]
+      }
+    },
+    {
+      "rows": 32,
+      "us": {
+        "norm_quant_unfused": 3.274133668254422,
+        "norm_quant_fused": 1.747725162482172,
+        "with_gemm_unfused": 8.095318965422802,
+        "with_gemm_fused": 6.528375219463338
+      },
+      "runs_us": {
+        "norm_quant_unfused": [
+          3.274133668254422,
+          3.258663914223731,
+          3.3091280195448136
+        ],
+        "norm_quant_fused": [
+          1.7400100361899309,
+          1.747725162482172,
+          1.7480572847607387
+        ],
+        "with_gemm_unfused": [
+          8.095318965422802,
+          8.10978599379019,
+          8.056047180038668
+        ],
+        "with_gemm_fused": [
+          6.523478879090633,
+          6.528375219463338,
+          6.551507180197198
+        ]
+      }
+    },
+    {
+      "rows": 128,
+      "us": {
+        "norm_quant_unfused": 3.3836492766177284,
+        "norm_quant_fused": 1.838260292158231,
+        "with_gemm_unfused": 8.436890090063905,
+        "with_gemm_fused": 6.880752913424281
+      },
+      "runs_us": {
+        "norm_quant_unfused": [
+          3.3836492766177284,
+          3.389316579609785,
+          3.3759226091798897
+        ],
+        "norm_quant_fused": [
+          1.838260292158231,
+          1.840245227018992,
+          1.8306453849707587
+        ],
+        "with_gemm_unfused": [
+          8.436890090063905,
+          8.50217047073384,
+          8.436515537309058
+        ],
+        "with_gemm_fused": [
+          6.880752913424281,
+          6.8668041204541455,
+          6.898227718233647
+        ]
+      }
+    },
+    {
+      "rows": 1024,
+      "us": {
+        "norm_quant_unfused": 4.27663543843365,
+        "norm_quant_fused": 2.5789947654811147,
+        "with_gemm_unfused": 12.114209969634421,
+        "with_gemm_fused": 10.390904229828143
+      },
+      "runs_us": {
+        "norm_quant_unfused": [
+          4.27663543843365,
+          4.268919647717085,
+          4.292298797846931
+        ],
+        "norm_quant_fused": [
+          2.5783411427177625,
+          2.5789947654811147,
+          2.583350900069118
+        ],
+        "with_gemm_unfused": [
+          12.11118563971556,
+          12.145956149276014,
+          12.114209969634421
+        ],
+        "with_gemm_fused": [
+          10.390904229828143,
+          10.376425354277135,
+          10.403951265666734
+        ]
+      }
+    }
+  ],
+  "steady_timing": {
+    "gpu_uuid": "464fe39e-1a51-de28-0118-11eac3bc1fbf",
+    "conditions": "Same physical B200, sequential variants, atomic batch admission, 512 warm-prefix tokens +128 generated tokens; 5 warmups, 7 timed runs",
+    "measurements": [
+      {
+        "batch": 1,
+        "baseline_tok_s": 158.03419005128058,
+        "candidate_tok_s": 159.77118716922323,
+        "change_pct": 1.0991274213377533,
+        "baseline_seconds": [
+          0.8097902061417699,
+          0.8100228467956185,
+          0.8095873892307281,
+          0.8096702452749014,
+          0.8101000068709254,
+          0.8099994519725442,
+          0.80995131470263
+        ],
+        "candidate_seconds": [
+          0.8010693276301026,
+          0.8015745170414448,
+          0.8013710174709558,
+          0.8008405035361648,
+          0.8011226607486606,
+          0.8011457026004791,
+          0.8016716623678803
+        ],
+        "generation_equal": false
+      },
+      {
+        "batch": 8,
+        "baseline_tok_s": 810.7358947898414,
+        "candidate_tok_s": 818.6694137015097,
+        "change_pct": 0.9785577476774776,
+        "baseline_seconds": [
+          1.2629553144797683,
+          1.261642049998045,
+          1.2621431155130267,
+          1.2630500346422195,
+          1.265449813567102,
+          1.266059996560216,
+          1.2653836775571108
+        ],
+        "candidate_seconds": [
+          1.250441306270659,
+          1.2527675507590175,
+          1.2507812110707164,
+          1.2508101351559162,
+          1.2507145907729864,
+          1.251061781309545,
+          1.254039065912366
+        ],
+        "generation_equal": false
+      }
+    ]
+  },
+  "source_sha256": {
+    "vllm/envs.py": "d84439ec9fa569e9936df6ac7cf22aaaa7fc7f66e0706d9a50f007cef5e9fad9",
+    "vllm/model_executor/models/yoco.py": "4e13a0488e66c5c194d090dc83bd38ca0960a96154de3a7abc0a005170c4780c",
+    "vllm/model_executor/layers/yoco_norm_fp8.py": "34bf0dc6e240c43be02f03165c4f7d033aa4d24f22c364bb9b1985690d4d3a26",
+    "tests/kernels/test_yoco_latent_norm_fp8.py": "bdc4b26b736e3f77b51b6d6b1b9683d2c6bc0ca4bc16259a29aa1a6f3c15eb42",
+    "tests/model_executor/test_yoco_latent_norm_fp8.py": "b04558e71bf372e95819cba25b79ed67f75218aea6df74b7159de4828e5d6ca0"
+  }
+}

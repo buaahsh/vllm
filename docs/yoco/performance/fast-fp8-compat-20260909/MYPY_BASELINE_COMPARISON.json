@@ -1,0 +1,14 @@
+{
+  "head": "511fbed3f75f0fd18a4f93194ca832db2c723f98",
+  "identical_errors": true,
+  "baseline_errors": [
+    "vllm/model_executor/layers/fused_moe/all2all_utils.py:43: error: Incompatible import of \"DeepEPHTPrepareAndFinalize\" (imported name has type \"type[DeepEPHTPrepareAndFinalize]\", local name has type \"object\")  [assignment]",
+    "vllm/model_executor/layers/fused_moe/all2all_utils.py:44: error: Incompatible import of \"DEEPEP_QUANT_BLOCK_SHAPE\" (imported name has type \"list[int]\", local name has type \"object\")  [assignment]",
+    "vllm/model_executor/layers/fused_moe/all2all_utils.py:44: error: Incompatible import of \"DeepEPLLPrepareAndFinalize\" (imported name has type \"type[DeepEPLLPrepareAndFinalize]\", local name has type \"object\")  [assignment]"
+  ],
+  "final_errors": [
+    "vllm/model_executor/layers/fused_moe/all2all_utils.py:43: error: Incompatible import of \"DeepEPHTPrepareAndFinalize\" (imported name has type \"type[DeepEPHTPrepareAndFinalize]\", local name has type \"object\")  [assignment]",
+    "vllm/model_executor/layers/fused_moe/all2all_utils.py:44: error: Incompatible import of \"DEEPEP_QUANT_BLOCK_SHAPE\" (imported name has type \"list[int]\", local name has type \"object\")  [assignment]",
+    "vllm/model_executor/layers/fused_moe/all2all_utils.py:44: error: Incompatible import of \"DeepEPLLPrepareAndFinalize\" (imported name has type \"type[DeepEPLLPrepareAndFinalize]\", local name has type \"object\")  [assignment]"
+  ]
+}

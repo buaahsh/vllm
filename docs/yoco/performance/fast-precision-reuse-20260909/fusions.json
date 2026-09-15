@@ -1,0 +1,86 @@
+{
+  "results": [
+    {
+      "model.layers.0.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.1.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.2.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.3.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.4.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.5.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.6.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.7.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.8.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.9.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.10.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.11.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.12.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.13.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.14.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.15.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.16.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.17.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.18.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      },
+      "model.layers.19.mlp.shared_experts": {
+        "use_fast_fp8_swiglu": true,
+        "use_fast_down_transpose": false
+      }
+    }
+  ]
+}

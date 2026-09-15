@@ -1,0 +1,9 @@
+{
+  "archive": "EVIDENCE.tar.gz",
+  "remote": "/data/fast-bf16-mooncake-f2-20260910T062300Z/EVIDENCE.tar.gz",
+  "pvc": "/mnt/pvc/lidong1/fast-bf16-mooncake-f2-20260910T062300Z/EVIDENCE.tar.gz",
+  "sha256": "917a8288c15e9e20df4a546969b3ad56d853ed8ee6f944a46bd7fe4a7fcef396",
+  "bytes": 28539078,
+  "files": 216,
+  "local": "/home/lidong1/vllm_test/yoco_results/fast-bf16-mooncake-f2-20260910T062300Z/EVIDENCE.tar.gz"
+}

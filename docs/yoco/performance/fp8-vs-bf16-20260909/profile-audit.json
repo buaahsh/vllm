@@ -1,0 +1,102 @@
+{
+  "scope": "Reanalysis of existing 128-input/8-output functionality profiler; not a new benchmark or paired BF16 profile. M is kernel dispatch input rows, not client concurrency.",
+  "profile_path": "/home/lidong1/vllm_test/yoco_results/fast-fp8-compat-20260909/evidence/profiles/fp8-final-default/dp0_pp0_tp0_dcp0_ep0_rank0.1788943369906232649.pt.trace.json.gz",
+  "profile_sha256": "efe56419a5de7882481d4a06d4f3b4ca09f30005e8093c378464c2b6d8a3fe5d",
+  "manifest_equal_to_measured_snapshot": true,
+  "local_manifest_files_match": {
+    "vllm/model_executor/models/config.py": true,
+    "vllm/model_executor/models/yoco.py": true,
+    "vllm/model_executor/layers/fused_moe/experts/triton_moe.py": true,
+    "vllm/model_executor/layers/fused_moe/deep_gemm_utils.py": true,
+    "vllm/model_executor/warmup/deep_gemm_warmup.py": true,
+    "tests/model_executor/test_yoco_config.py": true,
+    "tests/model_executor/test_yoco_fp8.py": true,
+    "tests/kernels/moe/test_yoco_fp8.py": true
+  },
+  "aggregation": "Sum cat=kernel durations only; excludes nested GPU graph annotations, CPU, memcpy and memset. Shares are not wall-clock or causal slowdown percentages.",
+  "kernel_events": 18649,
+  "sum_kernel_duration_ms": 84.79083199999998,
+  "selected_kernels": {
+    "_silu_mul_quant_fp8_packed_kernel": {
+      "count": 360,
+      "sum_ms": 9.05412899999999,
+      "share_percent": 10.678193368830243
+    },
+    "_fwd_kernel_ep_scatter_1": {
+      "count": 360,
+      "sum_ms": 0.6285429999999992,
+      "share_percent": 0.7412865107869202
+    },
+    "_fwd_kernel_ep_scatter_2": {
+      "count": 360,
+      "sum_ms": 2.716637999999999,
+      "share_percent": 3.203928934203641
+    },
+    "_fwd_kernel_ep_gather": {
+      "count": 360,
+      "sum_ms": 1.5899300000000012,
+      "share_percent": 1.87512017808718
+    },
+    "_scatter_routed_row_weights_kernel": {
+      "count": 360,
+      "sum_ms": 0.6669729999999996,
+      "share_percent": 0.7866098070602724
+    },
+    "void deep_gemm::transpose_and_pack_fp32_into_ue8m0<512u, 48u, 8u>(float*, unsigned int*, unsigned int)": {
+      "count": 360,
+      "sum_ms": 0.622236,
+      "share_percent": 0.7338482066079975
+    },
+    "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 0u, 7680u, 1024u, 128u, 128u, 128u, 128u, 128u, 128u, 128u, 8u, 128u, 128u, 2u, true, 148u, true, (deep_gemm::GemmType)5, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)": {
+      "count": 360,
+      "sum_ms": 11.837209000000005,
+      "share_percent": 13.96048218986695
+    },
+    "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 0u, 1024u, 3840u, 128u, 128u, 128u, 128u, 128u, 128u, 128u, 8u, 128u, 128u, 2u, true, 148u, true, (deep_gemm::GemmType)5, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)": {
+      "count": 360,
+      "sum_ms": 9.033134999999987,
+      "share_percent": 10.6534336165023
+    }
+  },
+  "moe_dispatch_groups": {
+    "1": {
+      "invocations": 280,
+      "quant_buffer_rows": [
+        1024
+      ],
+      "mean_kernel_duration_us": {
+        "scatter2": 7.1450571428571426,
+        "w13": 22.91752857142857,
+        "silu_quant": 8.241071428571429,
+        "w2": 20.502210714285713,
+        "gather": 3.9512642857142857
+      }
+    },
+    "16": {
+      "invocations": 40,
+      "quant_buffer_rows": [
+        16384
+      ],
+      "mean_kernel_duration_us": {
+        "scatter2": 8.814225,
+        "w13": 38.67315,
+        "silu_quant": 82.64167499999999,
+        "w2": 28.69415,
+        "gather": 5.28465
+      }
+    },
+    "128": {
+      "invocations": 40,
+      "quant_buffer_rows": [
+        17280
+      ],
+      "mean_kernel_duration_us": {
+        "scatter2": 9.086324999999999,
+        "w13": 96.834375,
+        "silu_quant": 86.02405,
+        "w2": 53.61875,
+        "gather": 6.80475
+      }
+    }
+  }
+}

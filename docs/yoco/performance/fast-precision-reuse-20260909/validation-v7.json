@@ -1,0 +1,43 @@
+{
+  "started": 1789013535.5598202,
+  "gpu": {
+    "index": 3,
+    "uuid": "GPU-7d5a27ae-f576-89e7-835b-64d8602e70b0",
+    "before": "3, GPU-7d5a27ae-f576-89e7-835b-64d8602e70b0, NVIDIA B200, 0, 0"
+  },
+  "command": [
+    "/data/yoco-align-invariant-20260905/.venv/bin/python",
+    "/data/fast-precision-reuse-20260910T034205Z/run_tests.py",
+    "tests/model_executor/test_yoco_fast_precision.py",
+    "tests/kernels/test_yoco_fast_precision.py",
+    "tests/model_executor/test_yoco_conversion.py",
+    "tests/kernels/moe/test_yoco_fp8_decode.py",
+    "tests/kernels/moe/test_deep_gemm_packed_permute.py",
+    "tests/kernels/moe/test_yoco_fp8_sparse.py",
+    "tests/kernels/moe/test_yoco_fp8.py",
+    "tests/kernels/moe/test_deep_gemm_padding.py",
+    "tests/model_executor/test_yoco_fp8.py",
+    "tests/model_executor/test_deep_gemm_warmup.py",
+    "tests/model_executor/test_yoco_config.py",
+    "tests/model_executor/test_yoco_fast_decode.py",
+    "tests/model_executor/test_yoco_fast_standalone_moe.py",
+    "--maxfail=10",
+    "--tb=short",
+    "--junitxml=/data/fast-precision-reuse-20260910T034205Z/tests-v7.xml"
+  ],
+  "exit_code": 0,
+  "finished": 1789013675.4678435,
+  "suites": [
+    {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "383",
+      "time": "111.295",
+      "timestamp": "2026-09-10T04:12:41.424005",
+      "hostname": "yoco-align-fast-vllm-vllm-train-master-0"
+    }
+  ],
+  "failures": []
+}

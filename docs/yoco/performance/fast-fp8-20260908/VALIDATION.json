@@ -1,0 +1,50 @@
+{
+  "padding-tests-b200": {
+    "tests": 53,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "warmup-tests-b200": {
+    "tests": 9,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "cpu-tests-final": {
+    "tests": 53,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 42
+  },
+  "warmup-tests-local": {
+    "tests": 1,
+    "failures": 0,
+    "errors": 1,
+    "skipped": 0
+  },
+  "warmup-tests-local-final": {
+    "tests": 1,
+    "failures": 0,
+    "errors": 1,
+    "skipped": 0
+  },
+  "kernel_bytewise": {
+    "passed": 12,
+    "failed": 0,
+    "max_abs": 0.0,
+    "method": "torch.equal on contiguous uint8 views"
+  },
+  "probe_text_hashes": {
+    "matched": 48,
+    "total": 48,
+    "token_or_logit_byte_comparison": false
+  },
+  "static_checks": {
+    "pre_commit_pass": true,
+    "mypy_pass": true,
+    "diff_check_pass": true,
+    "analysis_and_table_reproduction_pass": true,
+    "log_sha256": "7ec99d18b928427ef6437cf57154908ded56a18fc9ed946cd19e9c5108bbe5b2"
+  }
+}

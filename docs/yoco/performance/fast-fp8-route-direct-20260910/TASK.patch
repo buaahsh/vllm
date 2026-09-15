@@ -1,0 +1,686 @@
+--- a/tests/model_executor/test_yoco_conversion.py
++++ b/tests/model_executor/test_yoco_conversion.py
+@@ -60,7 +60,10 @@
+         _yoco_logical_moe_layer_id(0, 3, 10, 3)
+ 
+ 
+-def test_yoco_logical_route_dump_records_eager_topk(monkeypatch, tmp_path) -> None:
++@pytest.mark.parametrize("execution_mode", ["fast", "align"])
++def test_yoco_logical_route_dump_records_eager_topk(
++    monkeypatch, tmp_path, execution_mode
++) -> None:
+     monkeypatch.setattr(yoco_module, "_YOCO_LOGICAL_ROUTE_DUMP_ROOT", str(tmp_path))
+     monkeypatch.setattr(yoco_module, "_YOCO_LOGICAL_ROUTE_DUMP_BATCHES", frozenset({8}))
+     monkeypatch.setattr(yoco_module, "_YOCO_LOGICAL_ROUTE_DUMP_INDEX", 0)
+@@ -68,7 +71,9 @@
+     topk_ids = torch.arange(64, dtype=torch.int64).view(8, 8)
+     monkeypatch.setattr(
+         yoco_module,
+-        "_yoco_topk_routing",
++        "_yoco_align_topk_routing"
++        if execution_mode == "align"
++        else "_yoco_topk_routing",
+         lambda *args: (torch.ones(8, 8), topk_ids),
+     )
+ 
+@@ -78,12 +83,14 @@
+         8,
+         (4, 10, 3),
+         2,
++        execution_mode=execution_mode,
+     )
+ 
+     paths = list(tmp_path.glob("*.pt"))
+     assert len(paths) == 1
+     record = torch.load(paths[0], weights_only=True)
+     assert record["logical_layer_id"] == 24
++    assert record["execution_mode"] == execution_mode
+     assert record["num_tokens"] == 8
+     assert torch.equal(record["topk_ids"], topk_ids.to(torch.int16))
+ 
+--- a/vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
+@@ -268,6 +268,9 @@
+                         else None
+                     ),
+                     row_indices=row_indices,
++                    round_before_quant=not getattr(
++                        self, "yoco_direct_fp8_activation", False
++                    ),
+                 )
+             act_out = torch.empty(
+                 (M_sum, activation_out_dim), dtype=input.dtype, device=input.device
+--- a/vllm/model_executor/layers/fused_moe/experts/fallback.py
++++ b/vllm/model_executor/layers/fused_moe/experts/fallback.py
+@@ -165,6 +165,7 @@
+             "swiglu_limit",
+             "apply_router_weight_before_w2",
+             "yoco_align_weighted_swiglu",
++            "yoco_direct_fp8_activation",
+             "yoco_align_deep_gemm_w2",
+             "yoco_separate_w2_config",
+             "yoco_fast_w13_config",
+--- a/vllm/model_executor/layers/fused_moe/experts/triton_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/triton_moe.py
+@@ -380,7 +380,33 @@
+             self.quant_config.use_fp8_w8a8
+             and getattr(self, "apply_router_weight_before_w2", False)
+         )
+-        if weight_before_w2:
++        direct_fp8_activation = (
++            weight_before_w2
++            and not yoco_align_weighted_swiglu
++            and getattr(self, "yoco_direct_fp8_activation", False)
++            and self.quant_config.use_fp8_w8a8
++            and self.yoco_fp8_decode_aligned
++            and self.block_shape == [128, 128]
++            and intermediate_cache1.dtype == torch.bfloat16
++        )
++        if direct_fp8_activation:
++            from vllm.model_executor.layers.quantization.utils.fp8_utils import (
++                silu_mul_quant_fp8_triton,
++            )
++
++            assert lora_context is None
++            assert not apply_router_weight_on_input
++            assert activation == MoEActivation.SILU
++            swiglu_limit = getattr(self, "swiglu_limit", None)
++            assert swiglu_limit is not None and swiglu_limit > 0
++            qintermediate_cache2, a2q_scale = silu_mul_quant_fp8_triton(
++                intermediate_cache1.view(-1, N),
++                clamp_limit=float(swiglu_limit),
++                row_weights=topk_weights.reshape(-1),
++                round_before_quant=False,
++                packed_scales=False,
++            )
++        elif weight_before_w2:
+             assert lora_context is None, (
+                 "Applying router weights before W2 is not supported with MoE LoRA"
+             )
+@@ -450,16 +476,15 @@
+                 self._yoco_moe_sum(intermediate_cache3, output)
+                 return
+ 
+-        a2q_scale: torch.Tensor | None = None
+-
+-        qintermediate_cache2, a2q_scale = moe_kernel_quantize_input(
+-            intermediate_cache2,
+-            a2_scale,
+-            self.quant_dtype,
+-            self.per_act_token_quant,
+-            self.block_shape,
+-            quantization_emulation=self.quantization_emulation,
+-        )
++        if not direct_fp8_activation:
++            qintermediate_cache2, a2q_scale = moe_kernel_quantize_input(
++                intermediate_cache2,
++                a2_scale,
++                self.quant_dtype,
++                self.per_act_token_quant,
++                self.block_shape,
++                quantization_emulation=self.quantization_emulation,
++            )
+ 
+         w2_config = config if align_configs is None else align_configs[1]
+         if (
+--- a/vllm/model_executor/layers/fused_moe/fused_moe_modular_method.py
++++ b/vllm/model_executor/layers/fused_moe/fused_moe_modular_method.py
+@@ -101,6 +101,9 @@
+             fused_experts.yoco_align_weighted_swiglu = getattr(
+                 layer, "yoco_align_weighted_swiglu", False
+             )
++            fused_experts.yoco_direct_fp8_activation = getattr(
++                layer, "yoco_direct_fp8_activation", False
++            )
+             fused_experts.yoco_align_deep_gemm_w2 = getattr(
+                 layer, "yoco_align_deep_gemm_w2", False
+             )
+--- a/vllm/model_executor/layers/quantization/online/moe_base.py
++++ b/vllm/model_executor/layers/quantization/online/moe_base.py
+@@ -170,6 +170,9 @@
+             fused_experts.apply_router_weight_before_w2 = getattr(
+                 layer, "apply_router_weight_before_w2", False
+             )
++            fused_experts.yoco_direct_fp8_activation = getattr(
++                layer, "yoco_direct_fp8_activation", False
++            )
+         return self.moe_kernel.apply(
+             x,
+             layer.w13_weight,
+--- a/vllm/model_executor/layers/quantization/utils/fp8_utils.py
++++ b/vllm/model_executor/layers/quantization/utils/fp8_utils.py
+@@ -161,6 +161,7 @@
+     NUM_ROWS,
+     input_stride_m,
+     output_q_stride_m,
++    output_scale_stride_m,
+     output_scale_stride_k,
+     clamp_limit,
+     N: tl.constexpr,
+@@ -173,6 +174,8 @@
+     HAS_ROW_WEIGHTS: tl.constexpr,
+     HAS_NEGATIVE_ROW_WEIGHTS: tl.constexpr,
+     HAS_ROW_INDICES: tl.constexpr,
++    ROUND_BEFORE_QUANT: tl.constexpr,
++    PACKED_SCALES: tl.constexpr,
+ ):
+     N_2: tl.constexpr = N // 2
+ 
+@@ -237,14 +240,29 @@
+                     )
+                 else:
+                     y *= row_weights[:, None]
+-            # Round through bf16 to match unfused precision path
+-            y = y.to(tl.bfloat16).to(tl.float32)
++            if ROUND_BEFORE_QUANT:
++                # Shared experts and existing callers retain their BF16
++                # activation boundary. YOCO routed FP8 quantizes directly.
++                y = y.to(tl.bfloat16).to(tl.float32)
+ 
+             absmax = tl.max(tl.abs(y), axis=1)
+ 
+             scale_raw = tl.maximum(absmax / fp8_max, 1e-4 / fp8_max)
+-            exponent = tl.ceil(tl.log2(scale_raw))
+-            scale = tl.math.exp2(exponent)
++            if ROUND_BEFORE_QUANT:
++                exponent = tl.ceil(tl.log2(scale_raw))
++                scale = tl.math.exp2(exponent)
++                exponent_biased = tl.clamp(exponent + 127.0, 0.0, 255.0).to(tl.int32)
++            else:
++                # Same UE8M0 ceiling as llm-train's fused quantizer. Using
++                # exponent bits avoids log2 rounding at power-of-two edges.
++                bits = scale_raw.to(tl.uint32, bitcast=True)
++                exponent_biased = ((bits >> 23) & 255) + ((bits & 0x7FFFFF) != 0).to(
++                    tl.uint32
++                )
++                exponent_biased = tl.minimum(tl.maximum(exponent_biased, 1), 254).to(
++                    tl.int32
++                )
++                scale = (exponent_biased << 23).to(tl.float32, bitcast=True)
+ 
+             y_q = tl.clamp(y / scale[:, None], fp8_min, fp8_max)
+ 
+@@ -255,14 +273,23 @@
+                 mask=row_mask[:, None],
+             )
+ 
+-            exponent_biased = tl.clamp(exponent + 127.0, 0.0, 255.0).to(tl.int32)
+-            packed_scale = packed_scale | (exponent_biased << (pack_idx * 8))
+-
+-    scale_ptrs = output_scale_ptr + pid_pack * output_scale_stride_k + rows
+-    tl.store(scale_ptrs, packed_scale, mask=row_mask)
+-
+-
+-def silu_mul_quant_fp8_packed_triton(
++            if PACKED_SCALES:
++                packed_scale = packed_scale | (exponent_biased << (pack_idx * 8))
++            else:
++                tl.store(
++                    output_scale_ptr
++                    + rows * output_scale_stride_m
++                    + group_id * output_scale_stride_k,
++                    scale,
++                    mask=row_mask,
++                )
++
++    if PACKED_SCALES:
++        scale_ptrs = output_scale_ptr + pid_pack * output_scale_stride_k + rows
++        tl.store(scale_ptrs, packed_scale, mask=row_mask)
++
++
++def silu_mul_quant_fp8_triton(
+     input: torch.Tensor,
+     group_size: int = 128,
+     output_q: torch.Tensor | None = None,
+@@ -270,6 +297,9 @@
+     row_weights: torch.Tensor | None = None,
+     negative_row_weights: torch.Tensor | None = None,
+     row_indices: torch.Tensor | None = None,
++    *,
++    round_before_quant: bool = True,
++    packed_scales: bool = True,
+ ) -> tuple[torch.Tensor, torch.Tensor]:
+     """Quantize dense rows, or only the routed rows of a padded MoE buffer.
+ 
+@@ -309,11 +339,16 @@
+         assert negative_row_weights.shape == row_weights.shape
+         assert negative_row_weights.is_contiguous()
+ 
+-    output_scale_packed = torch.zeros(
+-        (num_packed_groups, tma_aligned_M),
+-        dtype=torch.int32,
+-        device=input.device,
+-    ).T[:M, :]
++    if packed_scales:
++        output_scale = torch.zeros(
++            (num_packed_groups, tma_aligned_M),
++            dtype=torch.int32,
++            device=input.device,
++        ).T[:M, :]
++    else:
++        output_scale = torch.empty(
++            (M, num_groups_per_row), dtype=torch.float32, device=input.device
++        )
+ 
+     BLOCK_M = 8
+     grid = (num_packed_groups, triton.cdiv(num_rows, BLOCK_M))
+@@ -327,7 +362,7 @@
+     _silu_mul_quant_fp8_packed_kernel[grid](
+         input,
+         output_q,
+-        output_scale_packed,
++        output_scale,
+         row_weights if has_row_weights else input,
+         negative_row_weights if has_negative_row_weights else input,
+         row_indices if row_indices is not None else input,
+@@ -335,7 +370,8 @@
+         num_rows,
+         input.stride(0),
+         output_q.stride(0),
+-        output_scale_packed.stride(1),
++        output_scale.stride(0),
++        output_scale.stride(1),
+         clamp_limit if has_clamp else 0.0,
+         N=N,
+         NUM_GROUPS=num_groups_per_row,
+@@ -347,11 +383,37 @@
+         HAS_ROW_WEIGHTS=has_row_weights,
+         HAS_NEGATIVE_ROW_WEIGHTS=has_negative_row_weights,
+         HAS_ROW_INDICES=row_indices is not None,
++        ROUND_BEFORE_QUANT=round_before_quant,
++        PACKED_SCALES=packed_scales,
+         num_warps=num_warps,
+         num_stages=num_stages,
+     )
+ 
+-    return output_q, output_scale_packed
++    return output_q, output_scale
++
++
++def silu_mul_quant_fp8_packed_triton(
++    input: torch.Tensor,
++    group_size: int = 128,
++    output_q: torch.Tensor | None = None,
++    clamp_limit: float | None = None,
++    row_weights: torch.Tensor | None = None,
++    negative_row_weights: torch.Tensor | None = None,
++    row_indices: torch.Tensor | None = None,
++    *,
++    round_before_quant: bool = True,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    return silu_mul_quant_fp8_triton(
++        input,
++        group_size,
++        output_q,
++        clamp_limit,
++        row_weights,
++        negative_row_weights,
++        row_indices,
++        round_before_quant=round_before_quant,
++        packed_scales=True,
++    )
+ 
+ 
+ def _silu_mul_quant_fp8_packed(
+--- a/vllm/model_executor/models/yoco.py
++++ b/vllm/model_executor/models/yoco.py
+@@ -184,6 +184,7 @@
+     top_k: int,
+     logical_route_info: tuple[int, int, int] | None,
+     loop_idx: int,
++    execution_mode: str = "fast",
+ ) -> None:
+     root = _YOCO_LOGICAL_ROUTE_DUMP_ROOT
+     num_tokens = hidden_states.shape[0]
+@@ -203,7 +204,10 @@
+         first_cross_layer_idx,
+         universal_loop,
+     )
+-    _, topk_ids = _yoco_topk_routing(
++    routing = (
++        _yoco_align_topk_routing if execution_mode == "align" else _yoco_topk_routing
++    )
++    _, topk_ids = routing(
+         hidden_states,
+         router_logits,
+         top_k,
+@@ -218,6 +222,7 @@
+             "index": index,
+             "num_tokens": num_tokens,
+             "logical_layer_id": logical_layer_id,
++            "execution_mode": execution_mode,
+             "topk_ids": topk_ids.to(torch.int16).cpu(),
+         },
+         os.path.join(
+@@ -637,6 +642,7 @@
+         topk_ids_ptr,
+         num_rows,
+         BLOCK_ROWS: tl.constexpr,
++        TOPK_LOGITS: tl.constexpr,
+     ):
+         rows = tl.program_id(0) * BLOCK_ROWS + tl.arange(0, BLOCK_ROWS)[:, None]
+         cols = tl.arange(0, 128)[None, :]
+@@ -647,12 +653,14 @@
+             other=float("-inf"),
+         )
+ 
+-        # Keep the current fast path's FP32 full-row softmax.  Although its
+-        # denominator cancels during the final Top-8 renormalization, retaining
+-        # it minimizes numerical differences from the unfused implementation.
+-        row_max = tl.max(logits, axis=1)[:, None]
+-        numerator = tl.extra.cuda.libdevice.exp(logits - row_max)
+-        scores = numerator / tl.sum(numerator, axis=1)[:, None]
++        if TOPK_LOGITS:
++            # Fast only needs probabilities normalized over the selected
++            # experts. Keep the full-softmax rounding path for Align.
++            scores = logits
++        else:
++            row_max = tl.max(logits, axis=1)[:, None]
++            numerator = tl.extra.cuda.libdevice.exp(logits - row_max)
++            scores = numerator / tl.sum(numerator, axis=1)[:, None]
+ 
+         ranks = tl.arange(0, 8)[None, :]
+         selected_scores = tl.full((BLOCK_ROWS, 8), 0.0, tl.float32)
+@@ -676,6 +684,11 @@
+             )
+             scores = tl.where(cols == index[:, None], float("-inf"), scores)
+ 
++        if TOPK_LOGITS:
++            selected_max = tl.max(selected_scores, axis=1)[:, None]
++            selected_scores = tl.extra.cuda.libdevice.exp(
++                selected_scores - selected_max
++            )
+         selected_scores /= tl.sum(selected_scores, axis=1)[:, None]
+         output_offsets = rows * 8 + ranks
+         tl.store(topk_weights_ptr + output_offsets, selected_scores, mask=row_mask)
+@@ -1763,6 +1776,8 @@
+ def _yoco_topk_routing_impl(
+     router_logits: torch.Tensor,
+     topk: int,
++    *,
++    topk_logits: bool = False,
+ ) -> tuple[torch.Tensor, torch.Tensor]:
+     assert router_logits.dtype == torch.float32
+     assert router_logits.shape[-1] == 128
+@@ -1783,14 +1798,18 @@
+         dtype=torch.int32,
+         device=router_logits.device,
+     )
+-    block_rows = 4
++    single_token = (
++        topk_logits and num_rows == 1 and current_platform.is_device_capability(100)
++    )
++    block_rows = 1 if single_token else 4
+     _yoco_fused_topk_routing_kernel[(triton.cdiv(num_rows, block_rows),)](
+         router_logits,
+         topk_weights,
+         topk_ids,
+         num_rows,
+         BLOCK_ROWS=block_rows,
+-        num_warps=4,
++        TOPK_LOGITS=topk_logits,
++        num_warps=1 if single_token else 4,
+         num_stages=1,
+     )
+     return topk_weights, topk_ids
+@@ -1859,7 +1878,7 @@
+         topk_weights, topk_ids = torch.topk(gate_scores, k=topk, dim=-1)
+         topk_weights /= topk_weights.sum(dim=-1, keepdim=True)
+         return topk_weights, topk_ids
+-    return _yoco_topk_routing_impl(gating_output, topk)
++    return _yoco_topk_routing_impl(gating_output, topk, topk_logits=True)
+ 
+ 
+ @torch.compile
+@@ -3495,6 +3514,7 @@
+         # Keep the training-specific rounding boundary out of the common MoE
+         # path. The modular Triton backend reads this only for YOCO align.
+         self.experts.yoco_align_weighted_swiglu = execution_mode == "align"
++        self.experts.yoco_direct_fp8_activation = execution_mode == "fast"
+         # DeepGEMM chooses shape-dependent tiles. Align uses fixed Triton W2.
+         self.experts.yoco_align_deep_gemm_w2 = False
+         self.experts.yoco_separate_w2_config = execution_mode == "fast"
+@@ -3549,6 +3569,7 @@
+             self.top_k,
+             self._yoco_logical_route_info,
+             loop_idx,
++            execution_mode=self.execution_mode,
+         )
+         # FusedMoE overlaps the local shared-expert GEMMs with routed dispatch
+         # and expert compute. It then preserves YOCO's original order: routed
+--- /dev/null
++++ b/tests/kernels/moe/test_yoco_fp8_direct.py
+@@ -0,0 +1,164 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""Check direct quantization against llm-train's routed activation contract."""
++
++import pytest
++import torch
++
++from vllm.model_executor.layers.quantization.utils.fp8_utils import (
++    silu_mul_quant_fp8_packed_triton,
++    silu_mul_quant_fp8_triton,
++)
++from vllm.triton_utils import tl, triton
++
++pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
++
++
++@triton.jit
++def _training_reference(X, W, Q, S, N: tl.constexpr, B: tl.constexpr):
++    # Independent row-wise reference from llm-train/kernel/quant.py:
++    # FP32 weighted SwiGLU -> UE8M0 scale -> E4M3, without a BF16 round.
++    row = tl.program_id(0)
++    cols = tl.arange(0, B)
++    gate = tl.load(X + row * 2 * N + cols, cols < N, 0).to(tl.float32)
++    up = tl.load(X + row * 2 * N + N + cols, cols < N, 0).to(tl.float32)
++    gate = tl.minimum(gate, 10.0)
++    up = tl.clamp(up, -10.0, 10.0)
++    y = gate * tl.sigmoid(gate) * up * tl.load(W + row).to(tl.float32)
++    y = tl.reshape(y, (B // 128, 128))
++    raw = tl.maximum(tl.max(tl.abs(y), axis=1), 1e-4) / 448.0
++    bits = raw.to(tl.uint32, bitcast=True)
++    exponent = ((bits >> 23) & 255) + ((bits & 0x7FFFFF) != 0).to(tl.uint32)
++    exponent = tl.minimum(tl.maximum(exponent, 1), 254)
++    scale = (exponent << 23).to(tl.float32, bitcast=True)
++    q = tl.reshape(tl.clamp(y / scale[:, None], -448.0, 448.0), (B,))
++    tl.store(Q + row * N + cols, q, cols < N)
++    groups = tl.arange(0, B // 128)
++    tl.store(S + row * (N // 128) + groups, scale, groups < N // 128)
++
++
++def training_reference(x, weights):
++    rows, width = x.shape[0], x.shape[1] // 2
++    q = torch.empty(rows, width, device=x.device, dtype=torch.float8_e4m3fn)
++    scale = torch.empty(rows, width // 128, device=x.device)
++    _training_reference[(rows,)](
++        x, weights, q, scale, width, triton.next_power_of_2(width)
++    )
++    return q, scale
++
++
++@pytest.mark.parametrize("rows,width", [(1, 128), (8, 3840), (31, 1280), (128, 3840)])
++@pytest.mark.parametrize("amplitude", [0.001, 1.0, 32.0])
++def test_direct_fp8_matches_training_and_scale_layouts(rows, width, amplitude):
++    torch.manual_seed(9310)
++    x = torch.randn(rows, 2 * width, device="cuda", dtype=torch.bfloat16) * amplitude
++    weights = torch.rand(rows, device="cuda")
++    weights[0] = 0
++    expected, expected_scale = training_reference(x, weights)
++    outputs = []
++    for packed in [False, True]:
++        q, scale = silu_mul_quant_fp8_triton(
++            x,
++            clamp_limit=10.0,
++            row_weights=weights,
++            round_before_quant=False,
++            packed_scales=packed,
++        )
++        if packed:
++            groups = torch.arange(width // 128, device=x.device)
++            exponents = (scale[:, groups // 4] >> ((groups % 4) * 8)) & 255
++            scale = (exponents.int() << 23).view(torch.float32)
++        assert torch.equal(q.view(torch.uint8), expected.view(torch.uint8))
++        assert torch.equal(scale, expected_scale)
++        outputs.append(q.view(torch.uint8))
++    assert torch.equal(*outputs)
++
++
++def test_direct_quant_graph_replay_routes_and_preserves_shared_boundary():
++    torch.manual_seed(9311)
++    rows, width = 256, 3840
++    x = torch.randn(rows, 2 * width, device="cuda", dtype=torch.bfloat16) * 4
++    indices = torch.arange(8, device="cuda", dtype=torch.int32) * 16
++    weights = torch.rand(8, device="cuda")
++    storage = torch.full(
++        (rows + 1, width), 32, device="cuda", dtype=torch.float8_e4m3fn
++    )
++
++    def run():
++        return silu_mul_quant_fp8_packed_triton(
++            x,
++            output_q=storage[:rows],
++            clamp_limit=10.0,
++            row_weights=weights,
++            row_indices=indices,
++            round_before_quant=False,
++        )
++
++    stream = torch.cuda.Stream()
++    stream.wait_stream(torch.cuda.current_stream())
++    with torch.cuda.stream(stream):
++        for _ in range(3):
++            run()
++    torch.cuda.current_stream().wait_stream(stream)
++    graph = torch.cuda.CUDAGraph()
++    with torch.cuda.graph(graph):
++        q, _ = run()
++    for shift in [1, 7]:
++        storage.fill_(32)
++        indices.copy_(torch.arange(8, device="cuda", dtype=torch.int32) * 16 + shift)
++        indices[0] = -1
++        weights.copy_(torch.rand_like(weights))
++        valid = indices[1:].long()
++        x.fill_(float("nan"))
++        x[valid] = torch.randn(7, 2 * width, device="cuda").bfloat16() * 4
++        graph.replay()
++        expected, _ = training_reference(x[valid].contiguous(), weights[1:])
++        assert torch.equal(q.view(torch.uint8)[valid], expected.view(torch.uint8))
++        untouched = torch.ones(rows + 1, device="cuda", dtype=torch.bool)
++        untouched[valid] = False
++        assert (storage.float()[untouched] == 32).all()
++
++    # The shared-expert caller keeps the default BF16 activation boundary.
++    dense = x[valid].contiguous()
++    default, ds = silu_mul_quant_fp8_packed_triton(dense, clamp_limit=10.0)
++    rounded, rs = silu_mul_quant_fp8_triton(
++        dense, clamp_limit=10.0, round_before_quant=True
++    )
++    direct, _ = silu_mul_quant_fp8_triton(
++        dense, clamp_limit=10.0, round_before_quant=False
++    )
++    assert torch.equal(default.view(torch.uint8), rounded.view(torch.uint8))
++    assert torch.equal(ds, rs)
++    assert not torch.equal(default.view(torch.uint8), direct.view(torch.uint8))
++
++
++def test_online_moe_propagates_and_resets_direct_quantization_policy():
++    from types import SimpleNamespace
++
++    from vllm.model_executor.layers.quantization.online.moe_base import (
++        OnlineMoEMethodBase,
++    )
++
++    experts = SimpleNamespace()
++    x = torch.empty(1, 128)
++    method = SimpleNamespace(
++        is_monolithic=False,
++        moe_kernel=SimpleNamespace(fused_experts=experts, apply=lambda *a, **kw: x),
++    )
++    layer = SimpleNamespace(
++        swiglu_limit=10.0,
++        apply_router_weight_before_w2=True,
++        w13_weight=None,
++        w2_weight=None,
++        activation=None,
++        global_num_experts=128,
++        expert_map=None,
++        apply_router_weight_on_input=False,
++    )
++    for enabled in [True, False]:
++        layer.yoco_direct_fp8_activation = enabled
++        OnlineMoEMethodBase.apply(method, layer, x, None, None, None, None)
++        assert experts.yoco_direct_fp8_activation is enabled
++    del layer.yoco_direct_fp8_activation
++    OnlineMoEMethodBase.apply(method, layer, x, None, None, None, None)
++    assert not experts.yoco_direct_fp8_activation
+--- /dev/null
++++ b/tests/kernels/test_yoco_fast_routing.py
+@@ -0,0 +1,66 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""Fast selects logits directly; Align retains the full-softmax boundary."""
++
++import pytest
++import torch
++
++from vllm.model_executor.models import yoco
++
++pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
++
++
++@pytest.mark.parametrize("scale", [0.05, 1.0, 8.0, 100.0])
++def test_fast_logits_topk_matches_high_precision_reference(scale):
++    torch.manual_seed(9310)
++    logits = torch.randn(257, 128, device="cuda") * scale
++    logits[0].zero_()
++    logits[1] = torch.arange(128, device="cuda") * 1e-8
++    ids = logits.double().argsort(dim=-1, descending=True, stable=True)[:, :8]
++    expected = logits.double().gather(1, ids).softmax(-1).float()
++    weights, actual_ids = yoco._yoco_topk_routing(logits, logits, 8, True)
++    assert torch.equal(actual_ids.long(), ids)
++    torch.testing.assert_close(weights, expected, rtol=2e-6, atol=1e-7)
++    assert torch.isfinite(weights).all()
++
++
++def test_fast_and_align_dispatch_separate_rounding_contracts(monkeypatch):
++    observed = []
++
++    def observe(logits, topk, *, topk_logits=False):
++        observed.append(topk_logits)
++        return torch.ones(1, 8, device="cuda"), torch.arange(8, device="cuda")[
++            None
++        ].int()
++
++    monkeypatch.setattr(yoco, "_yoco_topk_routing_impl", observe)
++    logits = torch.zeros(1, 128, device="cuda")
++    yoco._yoco_topk_routing(logits, logits, 8, True)
++    yoco._yoco_align_topk_routing(logits, logits, 8, True)
++    assert observed == [True, False]
++
++
++def test_fast_routing_graph_replay_and_batch_independence():
++    torch.manual_seed(9312)
++    logits = torch.randn(33, 128, device="cuda")
++
++    def run():
++        return yoco._yoco_topk_routing(logits, logits, 8, True)
++
++    stream = torch.cuda.Stream()
++    stream.wait_stream(torch.cuda.current_stream())
++    with torch.cuda.stream(stream):
++        for _ in range(3):
++            run()
++    torch.cuda.current_stream().wait_stream(stream)
++    graph = torch.cuda.CUDAGraph()
++    with torch.cuda.graph(graph):
++        weights, ids = run()
++    for _ in range(3):
++        logits.copy_(torch.randn_like(logits))
++        graph.replay()
++        for row in [0, 16, 32]:
++            one = logits[row : row + 1].contiguous()
++            ref_w, ref_i = yoco._yoco_topk_routing(one, one, 8, True)
++            assert torch.equal(weights[row], ref_w[0])
++            assert torch.equal(ids[row], ref_i[0])

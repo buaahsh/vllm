@@ -1,0 +1,6 @@
+{
+  "time": 1789015208.5599995,
+  "gpu": "2, GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7, 158502, 0, 0\n3, GPU-7d5a27ae-f576-89e7-835b-64d8602e70b0, 0, 0, 0\n",
+  "compute_apps": "151434, GPU-3c98295b-46bd-92b3-ef14-82b5e35524f7, 158486 MiB\n",
+  "pid7": "sleep infinity "
+}

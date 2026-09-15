@@ -1,0 +1,141 @@
+{
+  "timestamp": 1788958311.0396955,
+  "model": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+  "model_files": [
+    {
+      "name": "chat_template.jinja",
+      "size": 4665,
+      "mtime_ns": 1784993972653549103
+    },
+    {
+      "name": "config.json",
+      "size": 1493,
+      "mtime_ns": 1784993970338260948,
+      "sha256": "1741520be38735183fd8da25f46765bc9f0a6cdad72c9a63a9dc39741234ade2"
+    },
+    {
+      "name": "generation_config.json",
+      "size": 171,
+      "mtime_ns": 1784993970343823429,
+      "sha256": "4dc8e3911135272c26fddabf11d52c0352376bcd0931db26f9f9063e198d8654"
+    },
+    {
+      "name": "model-00001-of-00014.safetensors",
+      "size": 5055609960,
+      "mtime_ns": 1784993980201228292
+    },
+    {
+      "name": "model-00002-of-00014.safetensors",
+      "size": 5159412552,
+      "mtime_ns": 1784993987575473609
+    },
+    {
+      "name": "model-00003-of-00014.safetensors",
+      "size": 4253859952,
+      "mtime_ns": 1784993993517386143
+    },
+    {
+      "name": "model-00004-of-00014.safetensors",
+      "size": 5146829056,
+      "mtime_ns": 1784994000646817035
+    },
+    {
+      "name": "model-00005-of-00014.safetensors",
+      "size": 4253859952,
+      "mtime_ns": 1784994006444071422
+    },
+    {
+      "name": "model-00006-of-00014.safetensors",
+      "size": 5146829056,
+      "mtime_ns": 1784994013431235159
+    },
+    {
+      "name": "model-00007-of-00014.safetensors",
+      "size": 4253859952,
+      "mtime_ns": 1784994019753347743
+    },
+    {
+      "name": "model-00008-of-00014.safetensors",
+      "size": 5146829056,
+      "mtime_ns": 1784994026950041163
+    },
+    {
+      "name": "model-00009-of-00014.safetensors",
+      "size": 4266443448,
+      "mtime_ns": 1784994033258394698
+    },
+    {
+      "name": "model-00010-of-00014.safetensors",
+      "size": 5159412552,
+      "mtime_ns": 1784994040796778101
+    },
+    {
+      "name": "model-00011-of-00014.safetensors",
+      "size": 4279026952,
+      "mtime_ns": 1784994046958087113
+    },
+    {
+      "name": "model-00012-of-00014.safetensors",
+      "size": 5159412552,
+      "mtime_ns": 1784994054201820107
+    },
+    {
+      "name": "model-00013-of-00014.safetensors",
+      "size": 4279026952,
+      "mtime_ns": 1784994060191498123
+    },
+    {
+      "name": "model-00014-of-00014.safetensors",
+      "size": 3152444640,
+      "mtime_ns": 1784994064412599517
+    },
+    {
+      "name": "model.safetensors.index.json",
+      "size": 30163,
+      "mtime_ns": 1784994064424808987,
+      "sha256": "8c4757110740c4833789f08fbba6f478be1fdb6508e2ec9c1c561fff77795ba6"
+    },
+    {
+      "name": "special_tokens_map.json",
+      "size": 134,
+      "mtime_ns": 1784993972664745544,
+      "sha256": "7577d775913d923b80ccf682b682b7d2728758b39eebf991acae87edf4698821"
+    },
+    {
+      "name": "tokenizer.json",
+      "size": 20219241,
+      "mtime_ns": 1784993972540042848,
+      "sha256": "c1a765a0b795103ffa077ac4cbb775199cd199a4a29153c00b4af23c35930f4b"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "size": 5144,
+      "mtime_ns": 1784993972659285783,
+      "sha256": "a9cdcabee01cba9e574fc3fb7d77b5a11d04f400e9e64b3980bbd982e8ade2fc"
+    }
+  ],
+  "weights_content_hashed": false,
+  "client": {
+    "python": "3.12.3 (main, Jan 22 2026, 20:57:42) [GCC 13.3.0]",
+    "aiperf": "0.12.0",
+    "package": "/mnt/pvc/lidong1/yoco-aiperf-mooncake-20260904/aiperf-venv/lib/python3.12/site-packages/aiperf",
+    "source_hashes": {
+      "aiperf/common/tokenizer.py": "df222097ef156e66196fc19630b50033e2f62813047627c6ed4086546e240f8e",
+      "aiperf/common/tokenizer_display.py": "ff9b2e55d0877b8ff00b5d792bed6c292ff9d102f50cf44515861fbe8cc8415f",
+      "aiperf/common/tokenizer_fake_names.py": "3aa3a7409bd7944ddfab7f5c61e6de2a8815b21e828200be3fb7c023459dab96",
+      "aiperf/common/tokenizer_validator.py": "37d8ad2b6721eb32aaf39e18a0094bc9037ba186339c2e17688b4b7fe0e70fc2",
+      "aiperf/config/tokenizer.py": "8b75f3ba49f0d3a1b46ffc4b3281c0c2a878c66e27de211e752bcf65ab4bd729",
+      "aiperf/dataset/_tokenizer_preload.py": "fc1a2014d483bb8a8a3f8f44c137dc23aed881fd591be6cfa3f52c3e01d82a09",
+      "aiperf/dataset/loader/mooncake_trace.py": "47460c7f6611cf33afbe6f31de175796f3495573e5d7e223077a950b04a82e0d"
+    }
+  },
+  "source_url": "https://raw.githubusercontent.com/kvcache-ai/Mooncake/main/FAST25-release/traces/toolagent_trace.jsonl",
+  "source_sha256": "48a2db1a13d3bc05e6330140c64f604ba366df20d3c9e128b5c35a01c1fa5f71",
+  "source_rows": 23608,
+  "trace_sha256": "e0df4ca65eeac5daf8eb1529f2eb832b2e16ef8c76c53ce426a8ba1f1eb41310",
+  "requests": 3643,
+  "input_tokens": 30518473,
+  "output_tokens": 643375,
+  "duration_ms": 299999.5,
+  "speedup": 2.0
+}

@@ -1,0 +1,1524 @@
+{
+  "results": [
+    {
+      "custom_ops": [
+        "+quant_fp8",
+        "none"
+      ],
+      "enabled_custom_ops": [
+        "quant_fp8",
+        "silu_and_mul_with_clamp_fp32"
+      ],
+      "model_type": "CUDAGraphWrapper",
+      "execution_mode": "fast",
+      "moe_backend": "auto",
+      "experts": [
+        {
+          "name": "model.layers.0.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.1.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.2.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.3.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.4.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.5.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.6.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.7.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.8.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.9.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.10.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.11.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.12.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.13.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.14.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.15.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.16.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.17.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.18.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        },
+        {
+          "name": "model.layers.19.mlp.experts",
+          "method": "Fp8PerBlockOnlineMoEMethod",
+          "w13_dtype": "torch.float8_e4m3fn",
+          "w2_dtype": "torch.float8_e4m3fn",
+          "backend": "Fp8MoeBackend.DEEPGEMM",
+          "kernel": "TritonOrDeepGemmExperts",
+          "primary": "DeepGemmExperts",
+          "fallback": "TritonExperts",
+          "weight_before_w2": true,
+          "fp8_decode_limit": 16,
+          "fp8_decode_scale_shapes": [
+            [
+              128,
+              60,
+              8
+            ],
+            [
+              128,
+              8,
+              30
+            ]
+          ],
+          "fp8_decode_scale_bytes": 368640
+        }
+      ],
+      "linear_methods": {
+        "UnquantizedEmbeddingMethod": 2,
+        "Fp8PerBlockOnlineLinearMethod": 81,
+        "UnquantizedLinearMethod": 100
+      },
+      "linears": [
+        {
+          "name": "model.embed_tokens",
+          "method": "UnquantizedEmbeddingMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.yoco_kv_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.0.self_attn.qkv_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.0.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.0.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.0.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.0.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.0.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.0.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.0.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.0.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.1.self_attn.qkv_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.1.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.1.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.1.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.1.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.1.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.1.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.1.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.1.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.2.self_attn.qkv_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.2.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.2.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.2.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.2.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.2.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.2.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.2.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.2.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.3.self_attn.qkv_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.3.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.3.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.3.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.3.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.3.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.3.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.3.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.3.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.4.self_attn.qkv_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.4.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.4.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.4.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.4.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.4.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.4.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.4.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.4.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.5.self_attn.qkv_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.5.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.5.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.5.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.5.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.5.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.5.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.5.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.5.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.6.self_attn.qkv_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.6.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.6.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.6.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.6.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.6.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.6.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.6.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.6.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.7.self_attn.qkv_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.7.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.7.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.7.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.7.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.7.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.7.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.7.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.7.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.8.self_attn.qkv_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.8.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.8.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.8.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.8.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.8.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.8.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.8.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.8.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.9.self_attn.qkv_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.9.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.9.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.9.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.9.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.9.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.9.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.9.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.9.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.10.self_attn.q_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.10.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.10.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.10.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.10.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.10.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.10.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.10.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.10.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.11.self_attn.q_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.11.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.11.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.11.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.11.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.11.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.11.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.11.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.11.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.12.self_attn.q_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.12.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.12.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.12.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.12.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.12.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.12.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.12.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.12.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.13.self_attn.q_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.13.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.13.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.13.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.13.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.13.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.13.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.13.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.13.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.14.self_attn.q_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.14.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.14.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.14.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.14.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.14.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.14.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.14.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.14.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.15.self_attn.q_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.15.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.15.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.15.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.15.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.15.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.15.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.15.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.15.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.16.self_attn.q_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.16.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.16.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.16.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.16.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.16.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.16.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.16.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.16.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.17.self_attn.q_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.17.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.17.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.17.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.17.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.17.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.17.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.17.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.17.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.18.self_attn.q_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.18.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.18.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.18.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.18.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.18.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.18.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.18.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.18.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.19.self_attn.q_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.19.self_attn.lambda_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.19.self_attn.o_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.19.mlp.gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.float32"
+        },
+        {
+          "name": "model.layers.19.mlp.shared_experts.gate_up_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.19.mlp.shared_experts.down_proj",
+          "method": "Fp8PerBlockOnlineLinearMethod",
+          "dtype": "torch.float8_e4m3fn",
+          "activation_quant_forward": "forward_cuda"
+        },
+        {
+          "name": "model.layers.19.mlp.shared_gate",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.19.mlp.fc1_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "model.layers.19.mlp.fc2_latent_proj",
+          "method": "UnquantizedLinearMethod",
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "name": "lm_head",
+          "method": "UnquantizedEmbeddingMethod",
+          "dtype": "torch.bfloat16"
+        }
+      ],
+      "fast_lm_head": true,
+      "fast_weighted_rms_clip": 10
+    }
+  ]
+}

@@ -241,8 +241,11 @@ class Fp8PerBlockOnlineLinearMethod(_Fp8OnlineLinearBase):
         block_size = self.weight_block_size
 
         use_ue8m0 = getattr(self.fp8_linear, "use_deep_gemm_e8m0", False)
+        # The compiled quantizer consumes values, not parameter-loader metadata.
+        # A vLLM Parameter subclass can recurse through __torch_function__ when
+        # Dynamo inspects its shape. Quantization during loading needs no grad.
         qweight, weight_scale_inv = per_block_cast_to_fp8(
-            layer.weight, block_size=block_size, use_ue8m0=use_ue8m0
+            layer.weight.data, block_size=block_size, use_ue8m0=use_ue8m0
         )
 
         replace_parameter(layer, "weight", qweight.data)
@@ -267,6 +270,40 @@ class Fp8PerBlockOnlineLinearMethod(_Fp8OnlineLinearBase):
             x,
             bias,
         )
+
+    def supports_silu_mul_fusion(self) -> bool:
+        """Whether the dense backend accepts MoE's packed activation output."""
+        from vllm.model_executor.kernels.linear.scaled_mm.deep_gemm import (
+            DeepGemmFp8BlockScaledMMKernel,
+        )
+        from vllm.utils.deep_gemm import DeepGemmQuantScaleFMT
+
+        return (
+            self.input_dtype == self.out_dtype == torch.bfloat16
+            and current_platform.is_device_capability(100)
+            and isinstance(self.fp8_linear, DeepGemmFp8BlockScaledMMKernel)
+            and self.fp8_linear.use_deep_gemm_e8m0
+            and DeepGemmQuantScaleFMT.from_oracle() == DeepGemmQuantScaleFMT.UE8M0
+        )
+
+    def apply_silu_mul(
+        self,
+        layer: torch.nn.Module,
+        gate_up: torch.Tensor,
+        clamp_limit: float,
+    ) -> torch.Tensor:
+        """Run clamped SwiGLU + quantization once, then the usual dense GEMM.
+
+        The caller checks support during construction and preserves the linear
+        layer's bias/parallel semantics. YOCO shared experts are bias-free TP1.
+        """
+        from vllm.model_executor.kernels.linear.scaled_mm.BlockScaledMMLinearKernel import (  # noqa: E501
+            Fp8BlockScaledMMLinearKernel,
+        )
+
+        assert isinstance(self.fp8_linear, Fp8BlockScaledMMLinearKernel)
+        q_input, scale = torch.ops.vllm.silu_mul_quant_fp8_packed(gate_up, clamp_limit)
+        return self.fp8_linear.apply_quantized_weights(layer, q_input, scale)
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +387,13 @@ class _Fp8OnlineMoEBase(OnlineMoEMethodBase):
         self.moe_quant_config = self.get_fused_moe_quant_config(layer)
         if self.moe_quant_config:
             assert self.experts_cls is not None
+            # Preserve addresses referenced by captured decode graphs when
+            # online processing rebuilds the kernel after a weight reload.
+            prior_cache = getattr(
+                getattr(getattr(self, "moe_kernel", None), "fused_experts", None),
+                "_yoco_fp8_scale_cache",
+                None,
+            )
             self.moe_kernel = make_fp8_moe_kernel(
                 moe_quant_config=self.moe_quant_config,
                 moe_config=self.moe,
@@ -357,6 +401,16 @@ class _Fp8OnlineMoEBase(OnlineMoEMethodBase):
                 experts_cls=self.experts_cls,
                 routing_tables=layer._expert_routing_tables(),
             )
+            if getattr(layer, "yoco_fast_w13_config", False) and not getattr(
+                layer, "yoco_align_weighted_swiglu", False
+            ):
+                from vllm.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (  # noqa: E501
+                    TritonOrDeepGemmExperts,
+                )
+
+                experts = self.moe_kernel.fused_experts
+                if isinstance(experts, TritonOrDeepGemmExperts):
+                    experts.configure_yoco_fp8_decode(cached_scales=prior_cache)
 
     def get_fused_moe_quant_config(
         self, layer: torch.nn.Module

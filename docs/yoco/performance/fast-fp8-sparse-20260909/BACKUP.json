@@ -1,0 +1,11 @@
+{
+  "archive": "fast-fp8-sparse-20260909-evidence.tar.gz",
+  "remote": "/data/fast-fp8-sparse-20260909/fast-fp8-sparse-20260909-evidence.tar.gz",
+  "pvc": "/mnt/pvc/lidong1/fast-fp8-sparse-20260909/fast-fp8-sparse-20260909-evidence.tar.gz",
+  "sha256": "0d1065c96f54226f30bf2a7fc2051701ce78df1f9d3b3978b08872906e1e4075",
+  "bytes": 27398493,
+  "files": 263,
+  "created": 1788957525.8141737,
+  "local": "/home/lidong1/vllm_test/yoco_results/fast-fp8-sparse-20260909/fast-fp8-sparse-20260909-evidence.tar.gz",
+  "files_verified": 263
+}

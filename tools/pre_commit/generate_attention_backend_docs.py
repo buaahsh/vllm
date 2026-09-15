@@ -879,6 +879,7 @@ def parse_flash_attn_features() -> dict[str, dict[str, Any]]:
 
     # Analyze the functions to determine FA3/FA4-specific features
     fa3_supports_fp8 = False
+    fa4_supports_fp8 = False
     fa3_supports_sinks = False
     fa4_supports_sinks = False
     fa3_compute_cap: str | None = None
@@ -888,17 +889,27 @@ def parse_flash_attn_features() -> dict[str, dict[str, Any]]:
         if not isinstance(node, ast.FunctionDef):
             continue
 
-        # Check flash_attn_supports_fp8 - looks for `get_flash_attn_version() == 3`
+        # FP8 may use either the selected version argument or the version getter.
         if node.name == "flash_attn_supports_fp8":
             for n in ast.walk(node):
                 if (
                     isinstance(n, ast.Compare)
-                    and isinstance(n.left, ast.Call)
-                    and isinstance(n.left.func, ast.Name)
-                    and n.left.func.id == "get_flash_attn_version"
+                    and len(n.ops) == 1
+                    and isinstance(n.ops[0], ast.Eq)
+                    and isinstance(n.comparators[0], ast.Constant)
                 ):
-                    fa3_supports_fp8 = True
-                    break
+                    is_version_compare = (
+                        isinstance(n.left, ast.Name) and n.left.id == "fa_version"
+                    ) or (
+                        isinstance(n.left, ast.Call)
+                        and isinstance(n.left.func, ast.Name)
+                        and n.left.func.id == "get_flash_attn_version"
+                    )
+                    if is_version_compare:
+                        if n.comparators[0].value == 3:
+                            fa3_supports_fp8 = True
+                        elif n.comparators[0].value == 4:
+                            fa4_supports_fp8 = True
 
         # Check flash_attn_supports_sinks - looks for `fa_version == 3/4`
         # or `get_flash_attn_version() == 3/4` (also accepts `in (3, 4)`)
@@ -1006,7 +1017,7 @@ def parse_flash_attn_features() -> dict[str, dict[str, Any]]:
         },
         "fa4": {
             "compute_capability": fa4_compute_cap,
-            "supports_fp8": False,
+            "supports_fp8": fa4_supports_fp8,
             "supports_sink": fa4_supports_sinks,
         },
     }
@@ -1102,6 +1113,12 @@ def _expand_flash_attn_variants(
             if fa_features["fa4"].get("compute_capability"):
                 fa4["compute_capability"] = fa_features["fa4"]["compute_capability"]
             fa4["supports_sink"] = fa_features["fa4"]["supports_sink"]
+            if fa_features["fa4"].get("supports_fp8"):
+                base_dtypes = backend["kv_cache_dtypes"].split(", ")
+                fp8_dtypes = ["fp8", "fp8_e4m3"]
+                fa4["kv_cache_dtypes"] = ", ".join(
+                    base_dtypes + [d for d in fp8_dtypes if d not in base_dtypes]
+                )
             expanded.append(fa4)
 
     return expanded
@@ -1710,6 +1727,11 @@ def generate_docs() -> str:
             "Default is FA4 on SM100+ (Blackwell), FA3 on SM90 (Hopper), "
             "FA2 otherwise."
         )
+        if fa_features.get("fa4", {}).get("supports_fp8"):
+            footnotes.append(
+                "> FA4 FP8 KV cache requires SM100 and installed FA4 CuTeDSL "
+                "sources with FP8 descale support."
+            )
     if footnotes:
         doc_lines.append("\n>\n".join(footnotes) + "\n")
 

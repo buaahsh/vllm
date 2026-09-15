@@ -488,6 +488,20 @@ class GPUModelRunner(
 
         # Sampler
         self.sampler = Sampler(logprobs_mode=self.model_config.logprobs_mode)
+        if (
+            envs.VLLM_YOCO_BF16_SAMPLING
+            and self.model_config.hf_text_config.model_type == "yoco"
+            and (
+                not isinstance(vllm_config.additional_config, dict)
+                or vllm_config.additional_config.get("yoco_execution_mode", "fast")
+                == "fast"
+            )
+        ):
+            from vllm.v1.sample.yoco_bf16 import YocoBf16GreedySampler
+
+            if vllm_config.speculative_config is not None:
+                raise ValueError("YOCO BF16 sampling does not support speculation")
+            self.sampler = YocoBf16GreedySampler(self.model_config.logprobs_mode)
 
         self.eplb_state: EplbState | None = None
         self._moe_model: MixtureOfExperts | None = None
@@ -5964,6 +5978,14 @@ class GPUModelRunner(
             bad_words_token_ids={},
             logitsprocs=LogitsProcessors(),
         )
+        if getattr(self.sampler, "greedy_only", False):
+            dummy_metadata = replace(
+                dummy_metadata,
+                all_greedy=True,
+                temperature=dummy_tensors(0.0),
+                top_p=None,
+                top_k=None,
+            )
         try:
             sampler_output = self.sampler(
                 logits=logits, sampling_metadata=dummy_metadata

@@ -1,0 +1,9 @@
+{
+  "archive": "fast-fp8-compat-20260909-evidence.tar.gz",
+  "remote": "/data/fast-fp8-compat-20260909/fast-fp8-compat-20260909-evidence.tar.gz",
+  "pvc": "/mnt/pvc/lidong1/fast-fp8-compat-20260909/fast-fp8-compat-20260909-evidence.tar.gz",
+  "sha256": "42a2cd23f271faaf4e351ab93b52eb6f79bd2151aba784534aee6b3b74064941",
+  "bytes": 2250253,
+  "local": "/home/lidong1/vllm_test/yoco_results/fast-fp8-compat-20260909/fast-fp8-compat-20260909-evidence.tar.gz",
+  "archive_files_verified": 103
+}

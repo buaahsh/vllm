@@ -59,9 +59,14 @@ class LogprobsTensors(NamedTuple):
     cu_num_generated_tokens: list[int] | None = None
 
     def tolists(self, cu_num_generated_tokens: list[int] | None = None):
+        logprobs = self.logprobs.cpu()
+        if logprobs.dtype == torch.bfloat16:
+            # NumPy has no built-in BF16 dtype. Export the already-rounded
+            # values in a host FP64 container without changing GPU arithmetic.
+            logprobs = logprobs.to(torch.float64)
         return LogprobsLists(
             self.logprob_token_ids.cpu().numpy(),
-            self.logprobs.cpu().numpy(),
+            logprobs.numpy(),
             self.selected_token_ranks.cpu().numpy(),
             cu_num_generated_tokens
             if cu_num_generated_tokens is not None

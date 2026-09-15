@@ -160,6 +160,8 @@ class LogitBiasLogitsProcessor(LogitsProcessor):
 
     def apply(self, logits: torch.Tensor) -> torch.Tensor:
         if self.biases:
+            if self.bias_tensor.dtype != logits.dtype:
+                self.bias_tensor = self.bias_tensor.to(logits.dtype)
             logits[self.logits_slice] += self.bias_tensor
         return logits
 
@@ -234,6 +236,8 @@ class MinTokensLogitsProcessor(LogitsProcessor):
     def apply(self, logits: torch.Tensor) -> torch.Tensor:
         if self.min_toks:
             # Inhibit EOS token for requests which have not reached min length
+            if self.neg_inf_tensor.dtype != logits.dtype:
+                self.neg_inf_tensor = self.neg_inf_tensor.to(logits.dtype)
             logits.index_put_(self.logits_slice, self.neg_inf_tensor)
         return logits
 

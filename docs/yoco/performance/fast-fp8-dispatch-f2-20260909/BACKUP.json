@@ -1,0 +1,11 @@
+{
+  "archive": "fast-fp8-dispatch-f2-20260909-evidence.tar.gz",
+  "remote": "/data/fast-fp8-dispatch-f2-20260909/fast-fp8-dispatch-f2-20260909-evidence.tar.gz",
+  "pvc": "/mnt/pvc/lidong1/fast-fp8-dispatch-f2-20260909/fast-fp8-dispatch-f2-20260909-evidence.tar.gz",
+  "sha256": "32c07c80bc1e687875ca24fe484e1fa9b39479e6359e094bfba2a4086bbf0c20",
+  "bytes": 27486321,
+  "files": 302,
+  "created": 1788963450.5261488,
+  "local": "/home/lidong1/vllm_test/yoco_results/fast-fp8-dispatch-f2-20260909/fast-fp8-dispatch-f2-20260909-evidence.tar.gz",
+  "files_verified": 302
+}

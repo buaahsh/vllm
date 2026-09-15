@@ -165,6 +165,7 @@ class FallbackExperts(mk.FusedMoEExpertsModular, ABC):
             "swiglu_limit",
             "apply_router_weight_before_w2",
             "yoco_align_weighted_swiglu",
+            "yoco_direct_fp8_activation",
             "yoco_align_deep_gemm_w2",
             "yoco_separate_w2_config",
             "yoco_fast_w13_config",

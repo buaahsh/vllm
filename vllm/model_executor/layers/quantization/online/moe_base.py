@@ -170,6 +170,9 @@ class OnlineMoEMethodBase(FusedMoEMethodBase):
             fused_experts.apply_router_weight_before_w2 = getattr(
                 layer, "apply_router_weight_before_w2", False
             )
+            fused_experts.yoco_direct_fp8_activation = getattr(
+                layer, "yoco_direct_fp8_activation", False
+            )
         return self.moe_kernel.apply(
             x,
             layer.w13_weight,

@@ -1,0 +1,9 @@
+{
+  "archive": "/data/fast-precision-reuse-20260910T034205Z/EVIDENCE.tar.gz",
+  "pvc_archive": "/mnt/pvc/lidong1/fast-precision-reuse-20260910T034205Z/EVIDENCE.tar.gz",
+  "size": 122241,
+  "sha256": "678a3430d40e6a3e1d8d6613b94a7ab4c7432ae889e75048e2b7887406ca5619",
+  "files": 111,
+  "local_archive": "/home/lidong1/vllm_test/yoco_results/fast-precision-reuse-20260910T034205Z/EVIDENCE.tar.gz",
+  "verified_files": 110
+}

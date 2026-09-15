@@ -101,6 +101,9 @@ class FusedMoEModularMethod(FusedMoEMethodBase, CustomOp):
             fused_experts.yoco_align_weighted_swiglu = getattr(
                 layer, "yoco_align_weighted_swiglu", False
             )
+            fused_experts.yoco_direct_fp8_activation = getattr(
+                layer, "yoco_direct_fp8_activation", False
+            )
             fused_experts.yoco_align_deep_gemm_w2 = getattr(
                 layer, "yoco_align_deep_gemm_w2", False
             )

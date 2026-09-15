@@ -101,14 +101,8 @@ class Fp8BlockScaledMMLinearKernel(
         bias: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        out_dtype = self.config.out_dtype
         params = self._get_layer_params(layer)
         weight = params.weight
-        weight_scale = (
-            params.weight_scale
-            if params.weight_scale_inv is None
-            else params.weight_scale_inv
-        )
         input_scale = params.input_scale
         scale_up = params.input_scale_ub
 
@@ -129,16 +123,37 @@ class Fp8BlockScaledMMLinearKernel(
                 input_scale if input_scale is not None else input_2d.new_ones(1)
             )
 
+        output = self.apply_quantized_weights(layer, q_input, input_scale, bias)
+        return output.view(*output_shape)
+
+    def apply_quantized_weights(
+        self,
+        layer: torch.nn.Module,
+        q_input: torch.Tensor,
+        input_scale: torch.Tensor,
+        bias: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Consume backend-compatible input produced by a fused quantizer.
+
+        The producer must preserve this kernel's quantization and scale layout.
+        This shares GEMM, weight lookup and output handling with apply_weights.
+        """
+        params = self._get_layer_params(layer)
+        weight_scale = (
+            params.weight_scale
+            if params.weight_scale_inv is None
+            else params.weight_scale_inv
+        )
         output = self.apply_block_scaled_mm(
             A=q_input,
-            B=weight,
+            B=params.weight,
             As=input_scale,
             Bs=weight_scale,
         )
 
         if bias is not None:
             output = output + bias
-        return output.to(dtype=out_dtype).view(*output_shape)
+        return output.to(dtype=self.config.out_dtype)
 
     @abstractmethod
     def apply_block_scaled_mm(

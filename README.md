@@ -23,6 +23,30 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 本分支 `fhb-dev-9-8` 包含 YOCO 的 `--align` 和 `--fast`。Align 的前向一致性结论限于已验证的配置与输入范围；Fast 优先性能，不保证 bitwise。上游发行版不包含本分支的开发改动。
 
+### Fast 在线 FP8 适配（2026-09-09）
+
+[Fast直接FP8激活与Top-8 logits路由](docs/yoco/performance/fast-fp8-route-direct-20260910/REPORT.md)：已接入两项优化并区分shared/Align舍入路径；B200完整回归403项通过，最终定向复查通过。低M routed-expert链路加速约1.3%–4.1%；公开文本1,024个固定位置的新旧FP8平均NLL未观察到退化。局部计时和数值变化见报告，本轮未重测Mooncake。
+
+[最新 BF16 / FP8 的 Mooncake 2× 同卡对照](docs/yoco/performance/fast-bf16-mooncake-f2-20260909/REPORT.md)：Fast BF16 **1238.79**、当前 Fast FP8 **1407.84** 输出 tok/s，FP8/BF16 **1.136×（+13.65%）**。本轮仅补测BF16，FP8保留上一轮正式结果；同一源码、同物理B200、同一2× trace与客户端上限2048，两端3643请求全部成功并排空、客户端/服务端门槛通过。共享节点、每精度一次正式测量、无延迟SLO，按过载诊断解读。
+
+[公共路径复用前后的 FP8 内部对照](docs/yoco/performance/fast-fp8-reuse-mooncake-f2-20260909/REPORT.md)：公共路径复用后，Fast FP8 输出吞吐1401.36→1407.84 tok/s（+0.46%，基本持平）；两端3643请求全部成功、调度门槛通过。首轮新增编译已排除，仍属共享节点过载诊断。
+
+[Fast 多精度公共实现复用](docs/yoco/performance/fast-precision-reuse-20260909/REPORT.md)：按每层实际精度启用投影融合，FP8 K/V 共用合并投影，shared-expert 复用 MoE 激活量化 kernel，BF16/FP8 共用图兼容的缓存刷新。验证与后续性能计划见报告；下方吞吐仍对应各自历史源码。
+
+[最新 Fast FP8 分派与布局优化](docs/yoco/performance/fast-fp8-dispatch-f2-20260909/REPORT.md)：小batch使用兼容scale的Triton，合并DeepGEMM专家布局与scale打包；同卡低并发吞吐提升17.81%–26.32%，Mooncake **2×**吞吐1094.75→1407.82 tok/s（+28.60%），209项测试通过。Fast有浮点差异，batch8检查中部分token变化，不保证bitwise。结果与过载边界见 [FP8性能表](docs/yoco/performance/FP8.md)。
+
+[上一轮有效路由行量化优化](docs/yoco/performance/fast-fp8-sparse-20260909/REPORT.md)保留1.2×、客户端上限512的原始结果；本轮2×的两端上限均为2048。
+
+[修改前的 FP8/BF16 对照](docs/yoco/performance/fp8-vs-bf16-20260909/REPORT.md)保留原始数据与条件；其后的两轮FP8实现优化均以FP8作为基线。
+
+补齐 `--fast --quantization fp8_per_block` 的自动 MoE 分派：在支持的 TP1 配置上按每层实际精度选择 DeepGEMM 或 Triton，保留显式后端选择；编译模式默认启用 CUDA FP8 量化，避免整模型 NaN；修复 Triton FP8 在 W2 输入量化前的路由加权，并让在线 FP8 模型复用仍为 BF16 的 Fast LM head 和归一化 kernel。支持范围、实际执行验证与既有性能数据的区别见[适配报告](docs/yoco/performance/fast-fp8-compat-20260909/REPORT.md)。
+
+### Fast block-128 FP8 优化（2026-09-08 PDT / 09-09 UTC）
+
+缩小 DeepGEMM 小批次 MoE 的 padding workspace，并补齐在线 block-FP8 dense 层的启动预热。同物理 B200、YOCO L3、`--fast --quantization fp8_per_block --moe-backend deep_gemm`，ISL128/OSL128 的并发1/2/4/8输出吞吐分别提升36.29%/27.05%/22.70%/13.58%；每档2次预热、3次测量。单 token MoE 算子在随机路由下加速1.835×。
+
+53项 padding 回归、9项预热回归通过，12组真实专家尺寸的 CUDA graph 输出逐位相同；这不是 Fast 整模型或与 llm-train 的 bitwise 保证。Mooncake 1.2× 同卡重放和过载限制另见[完整报告](docs/yoco/performance/fast-fp8-20260908/REPORT.md)；[FP8持续表](docs/yoco/performance/FP8.md)独立记录这组精度与负载。
+
 ### Fast 低并发 W2 优化（2026-09-08 UTC）
 
 修复了 Fast 沿用 YOCO FA4 强制单 split 的限制：Fast 恢复后端 split-KV 自动调度，Align 保留原规则。同物理 B200、BF16 TP1，完整 W2（65,536 输入 + 16,384 输出）实测：

@@ -1,0 +1,44 @@
+{
+  "scope": "Fast FP8 per-block W8A8; DeepGEMM UE8M0, TP1/DP1, standalone",
+  "change": "Bound reachable experts by min(local_experts, M*topk) when CPU counts are unavailable",
+  "baseline_commit": "511fbed3f75f0fd18a4f93194ca832db2c723f98",
+  "candidate_file": "vllm/model_executor/layers/fused_moe/deep_gemm_utils.py",
+  "candidate_sha256": "0cfb728931ed47faa968c36dff585379639d7ffee3c639f29f9cae6030bdcc8b",
+  "kernel_correctness_gpu": 3,
+  "service_ab_gpu": 2,
+  "model": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+  "trace_sha256": "5317e2301656c7d5441bbd63e58b7e8b9d3d445e0118729cd7fde0b8717b960c",
+  "trace_rows": 3643,
+  "timestamp_speedup": 1.2,
+  "arrival_seconds": 499.99916666666667,
+  "input_tokens": 30518473,
+  "output_tokens": 643375,
+  "classification": "diagnostic; one paired replay, shared node, no declared latency SLO",
+  "test_phases": [
+    "53 padding-bound/guard-row tests",
+    "CUDA graph FP8 experts at M=1/2/4/8/16/32, spread/concentrated routes",
+    "warmup and 50-row Mooncake smoke",
+    "low-concurrency streaming latency with fixed prompts",
+    "frozen 3643-row Mooncake 1.2x before/after, full drain and client/server audit"
+  ],
+  "authority": "Continue prior Fast optimization and B200 validation on retained allocation; only owned new processes are started/stopped, allocation is retained",
+  "measurement_amendment": {
+    "reason": "First-seen decode and trace shapes triggered inference-time JIT; original first replay is retained as warmup diagnostic.",
+    "protocol": "Per variant: original sequence and full warmup replay, then per-shape warmup (2 repeats) and 3 steady probe repeats, then second full frozen replay at identical 1.2x timestamps.",
+    "measured_cases": [
+      "baseline-b-f1p2",
+      "candidate-b-f1p2"
+    ],
+    "probe_cases": [
+      "baseline-a-steady",
+      "candidate-a-steady"
+    ],
+    "paired_trace_classification": "one steady pair; initial per-variant replays also retained and reported; shared-node diagnostic"
+  },
+  "additional_change": {
+    "file": "vllm/model_executor/warmup/deep_gemm_warmup.py",
+    "reason": "Online block-FP8 uses Fp8PerBlockOnlineLinearMethod, which is not Fp8LinearMethod; existing discovery excluded every new online dense layer. Observed cold-trace nvcc compiling Normal FP8 N=10240,K=3072 while GPU idle.",
+    "sha256": "9688c13f08ec724649c930223eab035eeb1389934e93e1779e82ce2c893652c0",
+    "validation": "B200 test_deep_gemm_warmup: 9 passed; local checks could not collect due unrelated stale filesystem entry and missing CUDA attention extensions. Pre-commit/mypy passed."
+  }
+}

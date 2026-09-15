@@ -1,0 +1,61 @@
+{
+  "scope": "Local rounding replay on sampled real eager Fast activations; not a modified-model quality test; only single-row calls are used, excluding multirow samples that may include graph/fast-prefill padding",
+  "model": "0000-28000-hf",
+  "contexts": [
+    128,
+    1024,
+    4096
+  ],
+  "dataset_sha256": "1bdcb29af3cbbcb126ec34d2bdbb366dd476cc55fb6eedb4416600757a73da41",
+  "residual": {
+    "kernel_input_rows": 1,
+    "sampled_updates": 160,
+    "sampled_token_rows": 160,
+    "state_abs_max": 81.92499542236328,
+    "state_rms": 3.143967866897583,
+    "update_rms": 1.005530595779419,
+    "formats": {
+      "BF16": {
+        "nonfinite_values": 0,
+        "state_relative_l2": 0.0023353779688477516,
+        "error_relative_to_update_l2": 0.007719709072262049,
+        "nonzero_updates_swallowed_fraction": 0.006868517491966486,
+        "swallowed_update_energy_fraction": 5.915695737712667e-07
+      },
+      "FP16": {
+        "nonfinite_values": 0,
+        "state_relative_l2": 0.0002781492075882852,
+        "error_relative_to_update_l2": 0.000919436221010983,
+        "nonzero_updates_swallowed_fraction": 0.000801598303951323,
+        "swallowed_update_energy_fraction": 9.691017988089357e-10
+      },
+      "FP8_group128": {
+        "nonfinite_values": 0,
+        "state_relative_l2": 0.036356113851070404,
+        "error_relative_to_update_l2": 0.12017697095870972,
+        "nonzero_updates_swallowed_fraction": 0.1053430363535881,
+        "swallowed_update_energy_fraction": 0.0019163269316777587
+      }
+    }
+  },
+  "attention": {
+    "kernel_input_rows": 1,
+    "sampled_calls": 80,
+    "sampled_token_rows": 80,
+    "attention_abs_max": 9.0,
+    "bf16_to_fp16_nonfinite": 0,
+    "fp8_attention_relative_l2": 0.026463976129889488,
+    "diff_output_relative_l2": 0.05084794759750366,
+    "projection_input_relative_l2": 0.06294763088226318,
+    "head_relative_l2_p50_p95_p99": [
+      0.06125850975513458,
+      0.15970034897327423,
+      0.26936620473861694
+    ],
+    "cancellation_factor_p50_p95_p99": [
+      3.2182769775390625,
+      8.363008499145508,
+      14.08183765411377
+    ]
+  }
+}
