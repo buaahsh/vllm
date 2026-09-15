@@ -1,5 +1,7 @@
 # YOCO 性能结果入口
 
+[单卡 Fast BF16 decode 复现](FAST_BF16_DECODE_BENCHMARK.md)：与 FP8 共用固定输入和计时方式，关闭量化并使用 BF16 KV。
+
 [单卡 Fast FP8 decode 复现](FAST_FP8_DECODE_BENCHMARK.md)：固定提示词 token、完整测试脚本、实测配置与计时范围。
 
 新增[Mooncake 1.2×持续表](THROUGHPUT_F1P2.md)和[Fast负载响应报告](fast-mooncake-f1p2-20260908/REPORT.md)。与1×表分开维护。

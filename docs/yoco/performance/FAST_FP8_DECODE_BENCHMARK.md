@@ -4,6 +4,10 @@
 [`benchmark_fast_fp8_decode.py`](../../../tools/yoco_alignment/benchmark_fast_fp8_decode.py)。
 只进行推理，不涉及训练。EP2 测试没有改变默认并行配置。
 
+相同输入和计时方式的 BF16 对照入口为
+[`benchmark_fast_bf16_decode.py`](../../../tools/yoco_alignment/benchmark_fast_bf16_decode.py)，
+配置区别见 [BF16 测试说明](FAST_BF16_DECODE_BENCHMARK.md)。
+
 ## 如何运行
 
 在安装了本分支的 B200 GPU 环境中，从 vLLM 仓库根目录运行：

@@ -16,7 +16,7 @@ import statistics
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 DEFAULT_ENV = {
     "OMP_NUM_THREADS": "4",
@@ -41,7 +41,7 @@ DEFAULT_TOKENS = Path(__file__).with_name("data") / "fast_fp8_decode_tokens.json
 
 def runtime_manifest(worker: Any) -> dict[str, Any]:
     """Read actual loaded weights and backend selection in the GPU worker."""
-    import deep_gemm
+    import importlib.util
 
     from vllm.model_executor.layers.attention import Attention
     from vllm.model_executor.layers.fused_moe.layer import FusedMoE
@@ -70,6 +70,7 @@ def runtime_manifest(worker: Any) -> dict[str, Any]:
             "name": name,
             "fa_version": layer.impl.vllm_flash_attn_version,
             "kv_cache_dtype": layer.kv_cache_dtype,
+            "cache_tensor_dtype": str(layer.kv_cache.dtype),
         }
         for name, layer in config.compilation_config.static_forward_context.items()
         if isinstance(layer, Attention)
@@ -81,22 +82,25 @@ def runtime_manifest(worker: Any) -> dict[str, Any]:
         "dp": parallel.data_parallel_size,
         "enable_expert_parallel": parallel.enable_expert_parallel,
         "cudagraph_mode": str(config.compilation_config.cudagraph_mode),
-        "deep_gemm": deep_gemm.__file__,
+        "deep_gemm": (
+            spec.origin if (spec := importlib.util.find_spec("deep_gemm")) else None
+        ),
         "experts": experts,
         "latent": latent,
         "attention": attention,
     }
 
 
-class FastFP8DecodeWorker:
+class FastDecodeWorker:
     """Named worker RPC avoids enabling arbitrary-object serialization."""
 
-    def fast_fp8_decode_manifest(self) -> dict[str, Any]:
+    def fast_decode_manifest(self) -> dict[str, Any]:
         return runtime_manifest(self)
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+def parse_args(precision: str = "fp8") -> argparse.Namespace:
+    description = (__doc__ or "").replace("FP8", precision.upper())
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--model", required=True, help="YOCO HF checkpoint directory")
     parser.add_argument("--gpu", default="0", help="One CUDA device index or UUID")
     parser.add_argument("--batches", type=int, nargs="+", default=[1, 2, 4, 8, 16])
@@ -131,10 +135,24 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def main() -> None:
-    args = parse_args()
+def main(
+    *, precision: Literal["fp8", "bf16"] = "fp8", entrypoint: Path | None = None
+) -> None:
+    args = parse_args(precision)
+    if precision not in ("fp8", "bf16"):
+        raise ValueError(f"Unsupported precision: {precision}")
+    use_fp8 = precision == "fp8"
+    env = dict(DEFAULT_ENV)
+    # Compilation concurrency affects cold startup, outside the timed runs.
+    env["MAX_JOBS"] = os.environ.get("MAX_JOBS", env["MAX_JOBS"])
+    if not use_fp8:
+        env.update(
+            VLLM_YOCO_FP8_ATTENTION_FUSION="0",
+            VLLM_YOCO_FP8_LATENT_NORM_FUSION="0",
+            VLLM_YOCO_FP8_W2_TUNING="0",
+        )
     # Set before importing Torch/vLLM; this is the measured single-GPU preset.
-    os.environ.update(DEFAULT_ENV)
+    os.environ.update(env)
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     os.environ["PYTHONPATH"] = os.pathsep.join(
         [str(Path(__file__).resolve().parent), os.environ.get("PYTHONPATH", "")]
@@ -173,8 +191,8 @@ def main() -> None:
         "enable_prefix_caching": True,
         "enable_chunked_prefill": True,
         "kv_sharing_fast_prefill": True,
-        "quantization": "fp8_per_block",
-        "kv_cache_dtype": "fp8",
+        "quantization": "fp8_per_block" if use_fp8 else None,
+        "kv_cache_dtype": "fp8" if use_fp8 else "auto",
         "calculate_kv_scales": False,
         "attention_config": {"backend": "FLASH_ATTN", "flash_attn_version": 4},
         "kernel_config": {"enable_flashinfer_autotune": False},
@@ -185,7 +203,7 @@ def main() -> None:
         },
         "logprobs_mode": "raw_logprobs",
         "seed": 918,
-        "worker_extension_cls": "benchmark_fast_fp8_decode.FastFP8DecodeWorker",
+        "worker_extension_cls": "benchmark_fast_fp8_decode.FastDecodeWorker",
     }
     if args.profile_dir:
         args.profile_dir = args.profile_dir.resolve()
@@ -207,12 +225,18 @@ def main() -> None:
     ).stdout.strip()
     result: dict[str, Any] = {
         "completed": False,
+        "precision": precision,
         "config": config,
-        "env": {**DEFAULT_ENV, "CUDA_VISIBLE_DEVICES": args.gpu},
+        "env": {**env, "CUDA_VISIBLE_DEVICES": args.gpu},
         "torch": str(torch.__version__),
         "cuda": torch.version.cuda,
         "source_revision": revision,
-        "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "script_sha256": hashlib.sha256(
+            (entrypoint or Path(__file__)).read_bytes()
+        ).hexdigest(),
+        "implementation_sha256": hashlib.sha256(
+            Path(__file__).read_bytes()
+        ).hexdigest(),
         "tokens_sha256": hashlib.sha256(args.tokens_json.read_bytes()).hexdigest(),
         "scope": "Warm-prefix offline generation; resume to drained outputs",
         "warmups": args.warmups,
@@ -228,19 +252,26 @@ def main() -> None:
     save()
     llm = LLM(**config)
     try:
-        manifest = llm.collective_rpc("fast_fp8_decode_manifest")[0]
+        manifest = llm.collective_rpc("fast_decode_manifest")[0]
         result["runtime"] = manifest
         assert manifest["tp"] == manifest["dp"] == 1
         assert not manifest["enable_expert_parallel"]
+        expected_weight = "torch.float8_e4m3fn" if use_fp8 else "torch.bfloat16"
         assert manifest["experts"] and all(
-            e["w13_dtype"] == e["w2_dtype"] == "torch.float8_e4m3fn"
+            e["w13_dtype"] == e["w2_dtype"] == expected_weight
             for e in manifest["experts"]
         )
         assert manifest["latent"] and all(
-            e["dtype"] == "torch.float8_e4m3fn" for e in manifest["latent"]
+            e["dtype"] == expected_weight for e in manifest["latent"]
         )
         assert manifest["attention"] and all(
-            a["fa_version"] == 4 and a["kv_cache_dtype"] == "fp8"
+            a["fa_version"] == 4
+            and (
+                a["kv_cache_dtype"] == "fp8"
+                if use_fp8
+                else a["kv_cache_dtype"] == "auto"
+                and a["cache_tensor_dtype"] == "torch.bfloat16"
+            )
             for a in manifest["attention"]
         )
         save()
@@ -267,6 +298,7 @@ def main() -> None:
             min_tokens=args.output_tokens,
             max_tokens=args.output_tokens,
         )
+        print(f"Fast {precision.upper()} · TP1/DP1/EP1 · FA4")
         print("Batch   Total tok/s   Mean step ms   Cached prompt tokens")
         for batch in args.batches:
             prompts = [
@@ -319,7 +351,7 @@ def main() -> None:
                 for _ in range(3):
                     generate(prompts, profile_params)
                 previous = set(args.profile_dir.glob("*.gz"))
-                generate(prompts, profile_params, profile=f"fast-fp8-b{batch}")
+                generate(prompts, profile_params, profile=f"fast-{precision}-b{batch}")
                 result["profiles"].append(
                     {
                         "batch": batch,
