@@ -21,7 +21,17 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 ## YOCO Align 与 Fast 开发
 
-本分支 `fhb-dev-9-8` 包含 YOCO 的 `--align` 和 `--fast`。Align 的前向一致性结论限于已验证的配置与输入范围；Fast 优先性能，不保证 bitwise。上游发行版不包含本分支的开发改动。
+本分支 `vllm-yoco-version-0.29` 将 YOCO 开发迁到包含 DeepSeek V4.1 的上游版本，并继续合入 `fhb-dev-9-18` 的增量。包含 YOCO 的 `--align` 和 `--fast`；Align 的前向一致性结论限于已验证范围，Fast 不保证 bitwise。
+
+从[中文代码导读](docs/yoco/DEVELOPER_GUIDE.zh-CN.md)开始了解模块、执行流程和修改入口。
+[迁移验证](docs/yoco/migration-v029.md)与[本次增量合并](docs/yoco/fhb-dev-9-18-merge.md)分别记录来源和验收范围。
+
+### 单卡 Fast BF16 / FP8 decode
+
+[BF16](docs/yoco/performance/FAST_BF16_DECODE_BENCHMARK.md)与
+[FP8](docs/yoco/performance/FAST_FP8_DECODE_BENCHMARK.md)脚本共用固定输入和计时实现，支持 CUDA Graph profile。
+FP8 预设使用 FA4 / FP8 KV、FP8 latent 和专家、BF16 残差/router，W2 独立调参仅覆盖 M1/M2/M4。
+附带的约 171 token/s 等历史数据来自旧分支测量；当前版本的验证见增量合并报告。
 
 ### Fast 在线 FP8 适配（2026-09-09）
 

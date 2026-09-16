@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """W2-only tuning must preserve W13 dispatch and unmeasured paths."""
 
+from pathlib import Path
+
 import pytest
 
 import vllm.envs as envs
@@ -104,3 +106,18 @@ def test_explicit_config_override_is_respected(supported):
 def test_missing_table_keeps_original_config(supported, monkeypatch):
     monkeypatch.setattr(yt, "_load_yoco_decode_configs", lambda name: None)
     assert yt.try_get_yoco_fp8_w2_config(1, 128, 1024, 3840, BASE) is BASE
+
+
+@pytest.mark.parametrize("tokens", [1, 2, 4, 8, 16])
+def test_shipped_table_excludes_m16_after_full_model_regression(
+    supported, monkeypatch, tokens
+):
+    table = Path(yt.__file__).with_name("yoco_configs") / (
+        "decode_fp8_w2_E=128,N=1024,K=3840,device_name=NVIDIA_B200.json"
+    )
+    monkeypatch.setattr(
+        yt, "_load_yoco_decode_configs", lambda name: yt._parse_yoco_configs(table)
+    )
+    actual = yt.try_get_yoco_fp8_w2_config(tokens, 128, 1024, 3840, BASE)
+    assert (actual != BASE) == (tokens in (1, 2, 4))
+    assert BASE["BLOCK_SIZE_N"] == 128

@@ -94,7 +94,7 @@ def test_fp8_w2_matches_original_and_preserves_padding(
     )
     expected = torch.empty(tokens, 8, 1024, device="cuda", dtype=torch.bfloat16)
     config = try_get_yoco_fp8_w2_config(tokens, 128, 1024, 3840, BASE)
-    assert config != BASE
+    assert (config != BASE) == (tokens in (1, 2, 4))
     run(
         a, scale, weights[0], weights[1], expected, sorted_ids, expert_ids, padded, BASE
     )

@@ -1,0 +1,253 @@
+{
+  "source": {
+    "before": "fa3d96d0f09d4021075562e0ea5896580cec9822",
+    "source_snapshot": "dd465efd1235376267aee0275019ce1b2fc277d0",
+    "incoming": "e8cb46cf64149e5d0386de7b78bfe212b9366b8f",
+    "incoming_delta": [
+      [
+        "M",
+        "README.md"
+      ],
+      [
+        "D",
+        "YOCO-REFACTOR-PLAN-20260915.md"
+      ],
+      [
+        "M",
+        "docs/yoco/README.md"
+      ],
+      [
+        "A",
+        "docs/yoco/performance/FAST_BF16_DECODE_BENCHMARK.md"
+      ],
+      [
+        "A",
+        "docs/yoco/performance/FAST_BF16_DECODE_VALIDATION.json"
+      ],
+      [
+        "A",
+        "docs/yoco/performance/FAST_FP8_DECODE_BENCHMARK.md"
+      ],
+      [
+        "A",
+        "docs/yoco/performance/FAST_FP8_DECODE_VALIDATION.json"
+      ],
+      [
+        "A",
+        "docs/yoco/performance/FP8_W2_TUNING.json"
+      ],
+      [
+        "A",
+        "docs/yoco/performance/FP8_W2_TUNING.md"
+      ],
+      [
+        "M",
+        "docs/yoco/performance/README.md"
+      ],
+      [
+        "M",
+        "tests/kernels/moe/test_yoco_fp8_w2.py"
+      ],
+      [
+        "A",
+        "tools/yoco_alignment/benchmark_fast_bf16_decode.py"
+      ],
+      [
+        "A",
+        "tools/yoco_alignment/benchmark_fast_fp8_decode.py"
+      ],
+      [
+        "A",
+        "tools/yoco_alignment/data/fast_fp8_decode_tokens.json"
+      ],
+      [
+        "M",
+        "vllm/model_executor/layers/fused_moe/experts/yoco_configs/decode_fp8_w2_E=128,N=1024,K=3840,device_name=NVIDIA_B200.json"
+      ]
+    ],
+    "resolution": "Preserve migrated HEAD for changes already captured in the source snapshot; import new artifacts and W2 table, adapt benchmark and docs separately. Preserve locally added refactor plan."
+  },
+  "runtime_bundle_sha256": "cd73a9adf740fd6a635c18b71beb8a819d1e0672850f1dde5cbb33e3be9b579d",
+  "local_tests": {
+    "passed": 32,
+    "log": "local-tests.log"
+  },
+  "b200_tests": {
+    "passed": 69,
+    "log": "fhb918-kernels-r1/process.log"
+  },
+  "precision_runs": {
+    "bf16": {
+      "run_id": "fhb918-bf16-r2",
+      "completed": true,
+      "torch": "2.13.0+cu130",
+      "cuda": "13.0",
+      "result_sha256": "8004273f86d7c290f32ac0baf1984f5035d27527a38360faee284813dd072662",
+      "gpu": "NVIDIA B200",
+      "gpu_uuid": "GPU-a1af57eb-3f0a-bd1c-3379-3e735f37113a",
+      "deep_gemm_library_sha256": "73824dc1312e98cf277ae6bc017becf7e963d5b0bfab81e0c6d475d9b769c9e7",
+      "experts": 20,
+      "latent_projections": 40,
+      "moe_backends": [
+        "FlashInferExperts"
+      ],
+      "kv_tensor_dtypes": [
+        "torch.bfloat16"
+      ],
+      "benchmark": [
+        {
+          "batch": 1,
+          "median_seconds": 0.7162768775597215,
+          "total_tokens_per_second": 178.70184562718578,
+          "mean_output_step_ms": 5.595913105935324,
+          "cached_prompt_token_values": [
+            496
+          ]
+        },
+        {
+          "batch": 2,
+          "median_seconds": 0.9302877970039845,
+          "total_tokens_per_second": 275.18365910469265,
+          "mean_output_step_ms": 7.2678734140936285,
+          "cached_prompt_token_values": [
+            496
+          ]
+        },
+        {
+          "batch": 4,
+          "median_seconds": 1.1800893070176244,
+          "total_tokens_per_second": 433.8654684482735,
+          "mean_output_step_ms": 9.21944771107519,
+          "cached_prompt_token_values": [
+            496
+          ]
+        },
+        {
+          "batch": 8,
+          "median_seconds": 1.403341074474156,
+          "total_tokens_per_second": 729.6871862627563,
+          "mean_output_step_ms": 10.963602144329343,
+          "cached_prompt_token_values": [
+            496
+          ]
+        },
+        {
+          "batch": 16,
+          "median_seconds": 1.6899730302393436,
+          "total_tokens_per_second": 1211.8536588184195,
+          "mean_output_step_ms": 13.202914298744872,
+          "cached_prompt_token_values": [
+            496
+          ]
+        }
+      ],
+      "profiles": [
+        {
+          "batch": 1,
+          "generation_steps": 12,
+          "cuda_graph_launches": 12,
+          "file": "fhb918-bf16-r2/profiles/fast-bf16-b1_dp0_pp0_tp0_dcp0_ep0_rank0.1789545301875710739.pt.trace.json.gz",
+          "sha256": "df1fb3bef92b41912683b96e1e72bc7f2846f9c62a5173b0e6a70bdd283d964e"
+        },
+        {
+          "batch": 8,
+          "generation_steps": 12,
+          "cuda_graph_launches": 12,
+          "file": "fhb918-bf16-r2/profiles/fast-bf16-b1_dp0_pp0_tp0_dcp0_ep0_rank0.1789545354409827296.pt.trace.json.gz",
+          "sha256": "dcf791fbc073e12747cf6c5d800f2ff0bf9515ec14fda44ae026a643b2cefbb6"
+        }
+      ]
+    },
+    "fp8": {
+      "run_id": "fhb918-fp8-r2",
+      "completed": true,
+      "torch": "2.13.0+cu130",
+      "cuda": "13.0",
+      "result_sha256": "2cc220d00041036e7458909208af5245f72339302a8f94e88cb0c6d3e8201cc8",
+      "gpu": "NVIDIA B200",
+      "gpu_uuid": "GPU-a1af57eb-3f0a-bd1c-3379-3e735f37113a",
+      "deep_gemm_library_sha256": "73824dc1312e98cf277ae6bc017becf7e963d5b0bfab81e0c6d475d9b769c9e7",
+      "experts": 20,
+      "latent_projections": 40,
+      "moe_backends": [
+        "TritonOrDeepGemmExperts"
+      ],
+      "kv_tensor_dtypes": [
+        "torch.uint8"
+      ],
+      "benchmark": [
+        {
+          "batch": 1,
+          "median_seconds": 0.744394694454968,
+          "total_tokens_per_second": 171.95178976083278,
+          "mean_output_step_ms": 5.815583550429437,
+          "cached_prompt_token_values": [
+            496
+          ]
+        },
+        {
+          "batch": 2,
+          "median_seconds": 0.9271617848426104,
+          "total_tokens_per_second": 276.11146639683506,
+          "mean_output_step_ms": 7.243451444082893,
+          "cached_prompt_token_values": [
+            496
+          ]
+        },
+        {
+          "batch": 4,
+          "median_seconds": 1.06057015247643,
+          "total_tokens_per_second": 482.75920155256176,
+          "mean_output_step_ms": 8.285704316222109,
+          "cached_prompt_token_values": [
+            496
+          ]
+        },
+        {
+          "batch": 8,
+          "median_seconds": 1.2455094261094928,
+          "total_tokens_per_second": 822.1535530233556,
+          "mean_output_step_ms": 9.730542391480412,
+          "cached_prompt_token_values": [
+            496
+          ]
+        },
+        {
+          "batch": 16,
+          "median_seconds": 1.3447949634864926,
+          "total_tokens_per_second": 1522.9087374705732,
+          "mean_output_step_ms": 10.506210652238224,
+          "cached_prompt_token_values": [
+            496
+          ]
+        }
+      ],
+      "profiles": [
+        {
+          "batch": 1,
+          "generation_steps": 12,
+          "cuda_graph_launches": 12,
+          "file": "fhb918-fp8-r2/profiles/fast-fp8-b1_dp0_pp0_tp0_dcp0_ep0_rank0.1789545598293789781.pt.trace.json.gz",
+          "sha256": "7662fca3e96456004536f7e06005eeef8281263093993ffa46327a218dd2bd81"
+        },
+        {
+          "batch": 8,
+          "generation_steps": 12,
+          "cuda_graph_launches": 12,
+          "file": "fhb918-fp8-r2/profiles/fast-fp8-b1_dp0_pp0_tp0_dcp0_ep0_rank0.1789545676907330069.pt.trace.json.gz",
+          "sha256": "a1f7c20945e469714fb8fa028be57a56114182d0a37383b389b4d9f9547a470d"
+        }
+      ]
+    }
+  },
+  "benchmark_implementation_sha256": "c122807ece4baa37638fcd0dd2b33ef05db56af4489ef1e5f8e94d226c5c63ba",
+  "tokens_sha256": "d4a164ab94f2197a924418dd5f795ac96ec51376f6e853408819908951fd3043",
+  "scope": "Single-B200 standalone script and kernel validation; warm-prefix offline generation, not model-quality or general capacity qualification.",
+  "checks": {
+    "pre_commit": "passed",
+    "mypy_3_12_scoped": "passed",
+    "source_preset_preserved": true,
+    "historical_json_bytes_preserved": true
+  },
+  "artifacts": "work/yoco-fhb-dev-918-20260916 in the parent workspace"
+}

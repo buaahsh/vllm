@@ -1,5 +1,9 @@
 # YOCO 性能结果入口
 
+[单卡 Fast BF16 decode 复现](FAST_BF16_DECODE_BENCHMARK.md)与
+[Fast FP8 decode 复现](FAST_FP8_DECODE_BENCHMARK.md)共用固定输入和计时实现。
+旧分支原始测量保留在各报告；当前版本的适配和复测见[增量合并报告](../fhb-dev-9-18-merge.md)。
+
 新增[Mooncake 1.2×持续表](THROUGHPUT_F1P2.md)和[Fast负载响应报告](fast-mooncake-f1p2-20260908/REPORT.md)。与1×表分开维护。
 
 日常开源trace比较和更新使用 [三模式持续吞吐表](THROUGHPUT.md)。低并发固定形状W2使用独立的 [低并发W2表](LOW_CONCURRENCY.md)；两组工作负载与统计口径不同。
@@ -31,6 +35,8 @@
 机器可读当前值在 [low-concurrency/current.json](low-concurrency/current.json)，各行实际测量时间与源码、结果SHA256保存在 [low-concurrency/history](low-concurrency/history/)。更新时只替换实际重测的模式/并发行，保留其他行时间；不能混入Mooncake表。原始证据与PVC归档见 [报告](../fast-low-concurrency-20260908/REPORT.md)。
 
 ## Fast block-128 FP8 组
+
+[Fast FP8 W2 独立调参](FP8_W2_TUNING.md)：M1/M2/M4 使用独立配置，M8/M16 保留原选择。
 
 [BF16 内部归约与采样实验](BF16_INTERNALS.md)：实现自有 RMSNorm 和 greedy logprob 的原生 BF16 运算；额外吞吐收益很小，独立 NLL 略升。当前 MMA 累加类型和 DeepGEMM scale 接口不支持全部改成 BF16，实验默认关闭。
 

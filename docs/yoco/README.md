@@ -1,5 +1,10 @@
 # YOCO Align 与 Fast 开发记录
 
+- [中文代码导读](DEVELOPER_GUIDE.zh-CN.md)：先读哪些函数、各模块负责什么、以后在哪里修改。
+- [v0.29 迁移与验证](migration-v029.md)：上游来源、模块拆分、数值与性能证据及限制。
+- [fhb-dev-9-18 增量合并](fhb-dev-9-18-merge.md)：新增脚本、新 API 适配、W2 调参范围及本轮验证。
+- [单卡 Fast BF16 decode](performance/FAST_BF16_DECODE_BENCHMARK.md) / [Fast FP8 decode](performance/FAST_FP8_DECODE_BENCHMARK.md)：共用固定输入与计时方式，历史测量独立保留。
+
 - [Fast直接FP8激活与Top-8 logits路由](performance/fast-fp8-route-direct-20260910/REPORT.md)：实现、403项回归、同卡局部性能及公开文本固定位置NLL验证。
 - [最新 BF16 / FP8 的 Mooncake 2× 同卡对照](performance/fast-bf16-mooncake-f2-20260909/REPORT.md)：Fast BF16 **1238.79**、当前 Fast FP8 **1407.84** 输出 tok/s，FP8/BF16 **1.136×（+13.65%）**；本轮仅补测BF16，两端3643请求全部成功、门槛通过并排空。
 - [公共路径复用前后的 FP8 内部对照](performance/fast-fp8-reuse-mooncake-f2-20260909/REPORT.md)：Fast FP8 公共复用前后1401.36→1407.84 tok/s，+0.46%、基本持平；两端3643请求全部成功并排空。

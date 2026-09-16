@@ -1,0 +1,1856 @@
+{
+  "date": "2026-09-15",
+  "variants": {
+    "bf16": {
+      "precision": "bf16",
+      "config": {
+        "model": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+        "fast": true,
+        "trust_remote_code": true,
+        "dtype": "bfloat16",
+        "tensor_parallel_size": 1,
+        "data_parallel_size": 1,
+        "enable_expert_parallel": false,
+        "gpu_memory_utilization": 0.65,
+        "max_model_len": 8192,
+        "max_num_batched_tokens": 4096,
+        "max_num_seqs": 16,
+        "enable_prefix_caching": true,
+        "enable_chunked_prefill": true,
+        "kv_sharing_fast_prefill": true,
+        "quantization": null,
+        "kv_cache_dtype": "auto",
+        "calculate_kv_scales": false,
+        "attention_config": {
+          "backend": "FLASH_ATTN",
+          "flash_attn_version": 4
+        },
+        "kernel_config": {
+          "enable_flashinfer_autotune": false
+        },
+        "compilation_config": {
+          "cudagraph_mode": "FULL_AND_PIECEWISE",
+          "custom_ops": [],
+          "cudagraph_capture_sizes": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ]
+        },
+        "logprobs_mode": "raw_logprobs",
+        "seed": 918,
+        "worker_extension_cls": "benchmark_fast_fp8_decode.FastDecodeWorker",
+        "profiler_config": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/workspace/results/publish-bf16-decode-20260915-eckzifaz/run-2/bf16-traces",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": true,
+          "ignore_frontend": true,
+          "delay_iterations": 4,
+          "max_iterations": 12
+        }
+      },
+      "env": {
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "MAX_JOBS": "12",
+        "VLLM_WORKER_MULTIPROC_METHOD": "spawn",
+        "VLLM_DP_SIZE": "1",
+        "VLLM_DP_RANK": "0",
+        "VLLM_DP_RANK_LOCAL": "0",
+        "VLLM_USE_DEEP_GEMM": "1",
+        "VLLM_USE_DEEP_GEMM_E8M0": "1",
+        "VLLM_YOCO_FP8_ATTENTION_FUSION": "0",
+        "VLLM_YOCO_FP8_LATENT_NORM_FUSION": "0",
+        "VLLM_YOCO_BF16_RESIDUAL": "0",
+        "VLLM_YOCO_BF16_CHAIN": "1",
+        "VLLM_YOCO_BF16_REDUCTIONS": "0",
+        "VLLM_YOCO_BF16_SAMPLING": "0",
+        "VLLM_YOCO_FP8_W2_TUNING": "0",
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "runtime": {
+        "gpu": "NVIDIA B200",
+        "gpu_uuid": "GPU-464fe39e-1a51-de28-0118-11eac3bc1fbf",
+        "tp": 1,
+        "dp": 1,
+        "enable_expert_parallel": false,
+        "cudagraph_mode": "FULL_AND_PIECEWISE",
+        "deep_gemm": "/usr/local/lib/python3.12/dist-packages/deep_gemm/__init__.py",
+        "experts": [
+          {
+            "name": "model.layers.0.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.1.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.2.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.3.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.4.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.5.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.6.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.7.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.8.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.9.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.10.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.11.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.12.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.13.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.14.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.15.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.16.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.17.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.18.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          },
+          {
+            "name": "model.layers.19.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.bfloat16",
+            "w2_dtype": "torch.bfloat16",
+            "backend": "FlashInferExperts",
+            "small_m_limit": null
+          }
+        ],
+        "latent": [
+          {
+            "name": "model.layers.0.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.0.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.1.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.1.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.2.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.2.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.3.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.3.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.4.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.4.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.5.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.5.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.6.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.6.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.7.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.7.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.8.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.8.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.9.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.9.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.10.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.10.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.11.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.11.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.12.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.12.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.13.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.13.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.14.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.14.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.15.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.15.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.16.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.16.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.17.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.17.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.18.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.18.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.19.mlp.fc1_latent_proj",
+            "dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.19.mlp.fc2_latent_proj",
+            "dtype": "torch.bfloat16"
+          }
+        ],
+        "attention": [
+          {
+            "name": "model.layers.0.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.20.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.40.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.1.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.21.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.41.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.2.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.22.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.42.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.3.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.23.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.43.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.4.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.24.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.44.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.5.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.25.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.45.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.6.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.26.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.46.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.7.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.27.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.47.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.8.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.28.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.48.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.9.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.29.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.49.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.10.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.11.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.12.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.13.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.14.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.15.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.16.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.17.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.18.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          },
+          {
+            "name": "model.layers.19.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "auto",
+            "cache_tensor_dtype": "torch.bfloat16"
+          }
+        ]
+      },
+      "torch": "2.11.0a0+eb65b36914.nv26.02",
+      "cuda": "13.1",
+      "script_sha256": "f319e629fc0eb2caba4a405b606cd2327c252f79e25ff784aa7a4f20d89738d6",
+      "implementation_sha256": "632d5c1ff3c8891fb4c3dcf781a7f01ea9ffee63a1a5c8a8053d0591324e5232",
+      "tokens_sha256": "d4a164ab94f2197a924418dd5f795ac96ec51376f6e853408819908951fd3043",
+      "warmups": 5,
+      "repeats": 7,
+      "completed": true,
+      "benchmark": [
+        {
+          "batch": 1,
+          "prompt_tokens": 512,
+          "output_tokens_per_request": 128,
+          "seconds": [
+            0.7371742818504572,
+            0.7373774936422706,
+            0.7371008060872555,
+            0.7370203118771315,
+            0.7370497854426503,
+            0.7371624121442437,
+            0.7369995946064591
+          ],
+          "median_seconds": 0.7371008060872555,
+          "total_tokens_per_second": 173.65331708082246,
+          "mean_output_step_ms": 5.758600047556683,
+          "cached_prompt_tokens": [
+            [
+              496
+            ],
+            [
+              496
+            ],
+            [
+              496
+            ],
+            [
+              496
+            ],
+            [
+              496
+            ],
+            [
+              496
+            ],
+            [
+              496
+            ]
+          ]
+        },
+        {
+          "batch": 2,
+          "prompt_tokens": 512,
+          "output_tokens_per_request": 128,
+          "seconds": [
+            0.9275255994871259,
+            0.9281538566574454,
+            0.9274949626997113,
+            0.9272739961743355,
+            0.9275751113891602,
+            0.9272185517475009,
+            0.9273999715223908
+          ],
+          "median_seconds": 0.9274949626997113,
+          "total_tokens_per_second": 276.01228070807684,
+          "mean_output_step_ms": 7.246054396091495,
+          "cached_prompt_tokens": [
+            [
+              496,
+              496
+            ],
+            [
+              496,
+              496
+            ],
+            [
+              496,
+              496
+            ],
+            [
+              496,
+              496
+            ],
+            [
+              496,
+              496
+            ],
+            [
+              496,
+              496
+            ],
+            [
+              496,
+              496
+            ]
+          ]
+        },
+        {
+          "batch": 4,
+          "prompt_tokens": 512,
+          "output_tokens_per_request": 128,
+          "seconds": [
+            1.1982500050216913,
+            1.198555807583034,
+            1.1983709810301661,
+            1.1987724304199219,
+            1.198259113356471,
+            1.198306042701006,
+            1.1985111478716135
+          ],
+          "median_seconds": 1.1983709810301661,
+          "total_tokens_per_second": 427.24666076265044,
+          "mean_output_step_ms": 9.362273289298173,
+          "cached_prompt_tokens": [
+            [
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496
+            ]
+          ]
+        },
+        {
+          "batch": 8,
+          "prompt_tokens": 512,
+          "output_tokens_per_request": 128,
+          "seconds": [
+            1.408383421599865,
+            1.4086733516305685,
+            1.408426683396101,
+            1.4088164428249002,
+            1.4084174744784832,
+            1.4088069703429937,
+            1.4087624438107014
+          ],
+          "median_seconds": 1.4086733516305685,
+          "total_tokens_per_second": 726.9250879309237,
+          "mean_output_step_ms": 11.005260559613816,
+          "cached_prompt_tokens": [
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ]
+          ]
+        },
+        {
+          "batch": 16,
+          "prompt_tokens": 512,
+          "output_tokens_per_request": 128,
+          "seconds": [
+            1.7462360449135303,
+            1.7454441981390119,
+            1.745823790319264,
+            1.7456512581557035,
+            1.7454292392358184,
+            1.7466183127835393,
+            1.7468562852591276
+          ],
+          "median_seconds": 1.745823790319264,
+          "total_tokens_per_second": 1173.0851712276622,
+          "mean_output_step_ms": 13.63924836186925,
+          "cached_prompt_tokens": [
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ]
+          ]
+        }
+      ],
+      "profile_audit": [
+        {
+          "batch": 1,
+          "generation_steps": 12,
+          "graph_launches": 12,
+          "trace_sha256": "d219ab404a7e308b0e6caf147dbc5ac5a6b18e55a96a74a345bcb95a5b7f4aed"
+        },
+        {
+          "batch": 8,
+          "generation_steps": 12,
+          "graph_launches": 12,
+          "trace_sha256": "300fd9f2612c37f73af5c9ac54cdbbe286021f32f8caa72923dd8235f599a58b"
+        }
+      ]
+    },
+    "fp8": {
+      "precision": "fp8",
+      "config": {
+        "model": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+        "fast": true,
+        "trust_remote_code": true,
+        "dtype": "bfloat16",
+        "tensor_parallel_size": 1,
+        "data_parallel_size": 1,
+        "enable_expert_parallel": false,
+        "gpu_memory_utilization": 0.65,
+        "max_model_len": 8192,
+        "max_num_batched_tokens": 4096,
+        "max_num_seqs": 16,
+        "enable_prefix_caching": true,
+        "enable_chunked_prefill": true,
+        "kv_sharing_fast_prefill": true,
+        "quantization": "fp8_per_block",
+        "kv_cache_dtype": "fp8",
+        "calculate_kv_scales": false,
+        "attention_config": {
+          "backend": "FLASH_ATTN",
+          "flash_attn_version": 4
+        },
+        "kernel_config": {
+          "enable_flashinfer_autotune": false
+        },
+        "compilation_config": {
+          "cudagraph_mode": "FULL_AND_PIECEWISE",
+          "custom_ops": [],
+          "cudagraph_capture_sizes": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ]
+        },
+        "logprobs_mode": "raw_logprobs",
+        "seed": 918,
+        "worker_extension_cls": "benchmark_fast_fp8_decode.FastDecodeWorker",
+        "profiler_config": {
+          "profiler": "torch",
+          "torch_profiler_dir": "/workspace/results/publish-bf16-decode-20260915-eckzifaz/run-2/fp8-traces",
+          "torch_profiler_with_stack": false,
+          "torch_profiler_record_shapes": true,
+          "ignore_frontend": true,
+          "delay_iterations": 4,
+          "max_iterations": 12
+        }
+      },
+      "env": {
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "MAX_JOBS": "12",
+        "VLLM_WORKER_MULTIPROC_METHOD": "spawn",
+        "VLLM_DP_SIZE": "1",
+        "VLLM_DP_RANK": "0",
+        "VLLM_DP_RANK_LOCAL": "0",
+        "VLLM_USE_DEEP_GEMM": "1",
+        "VLLM_USE_DEEP_GEMM_E8M0": "1",
+        "VLLM_YOCO_FP8_ATTENTION_FUSION": "1",
+        "VLLM_YOCO_FP8_LATENT_NORM_FUSION": "0",
+        "VLLM_YOCO_BF16_RESIDUAL": "0",
+        "VLLM_YOCO_BF16_CHAIN": "1",
+        "VLLM_YOCO_BF16_REDUCTIONS": "0",
+        "VLLM_YOCO_BF16_SAMPLING": "0",
+        "VLLM_YOCO_FP8_W2_TUNING": "1",
+        "CUDA_VISIBLE_DEVICES": "0"
+      },
+      "runtime": {
+        "gpu": "NVIDIA B200",
+        "gpu_uuid": "GPU-464fe39e-1a51-de28-0118-11eac3bc1fbf",
+        "tp": 1,
+        "dp": 1,
+        "enable_expert_parallel": false,
+        "cudagraph_mode": "FULL_AND_PIECEWISE",
+        "deep_gemm": "/usr/local/lib/python3.12/dist-packages/deep_gemm/__init__.py",
+        "experts": [
+          {
+            "name": "model.layers.0.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.1.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.2.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.3.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.4.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.5.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.6.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.7.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.8.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.9.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.10.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.11.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.12.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.13.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.14.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.15.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.16.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.17.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.18.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          },
+          {
+            "name": "model.layers.19.mlp.experts",
+            "local_experts": 128,
+            "w13_dtype": "torch.float8_e4m3fn",
+            "w2_dtype": "torch.float8_e4m3fn",
+            "backend": "TritonOrDeepGemmExperts",
+            "small_m_limit": 16
+          }
+        ],
+        "latent": [
+          {
+            "name": "model.layers.0.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.0.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.1.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.1.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.2.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.2.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.3.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.3.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.4.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.4.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.5.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.5.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.6.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.6.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.7.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.7.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.8.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.8.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.9.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.9.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.10.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.10.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.11.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.11.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.12.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.12.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.13.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.13.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.14.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.14.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.15.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.15.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.16.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.16.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.17.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.17.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.18.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.18.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.19.mlp.fc1_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          },
+          {
+            "name": "model.layers.19.mlp.fc2_latent_proj",
+            "dtype": "torch.float8_e4m3fn"
+          }
+        ],
+        "attention": [
+          {
+            "name": "model.layers.0.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.20.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.40.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.1.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.21.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.41.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.2.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.22.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.42.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.3.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.23.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.43.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.4.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.24.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.44.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.5.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.25.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.45.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.6.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.26.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.46.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.7.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.27.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.47.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.8.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.28.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.48.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.9.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.29.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.49.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.10.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.11.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.12.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.13.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.14.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.15.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.16.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.17.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.18.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          },
+          {
+            "name": "model.layers.19.self_attn.attn",
+            "fa_version": 4,
+            "kv_cache_dtype": "fp8",
+            "cache_tensor_dtype": "torch.uint8"
+          }
+        ]
+      },
+      "torch": "2.11.0a0+eb65b36914.nv26.02",
+      "cuda": "13.1",
+      "script_sha256": "632d5c1ff3c8891fb4c3dcf781a7f01ea9ffee63a1a5c8a8053d0591324e5232",
+      "implementation_sha256": "632d5c1ff3c8891fb4c3dcf781a7f01ea9ffee63a1a5c8a8053d0591324e5232",
+      "tokens_sha256": "d4a164ab94f2197a924418dd5f795ac96ec51376f6e853408819908951fd3043",
+      "warmups": 5,
+      "repeats": 7,
+      "completed": true,
+      "benchmark": [
+        {
+          "batch": 1,
+          "prompt_tokens": 512,
+          "output_tokens_per_request": 128,
+          "seconds": [
+            0.7464980641379952,
+            0.7475373838096857,
+            0.7472108965739608,
+            0.747584693133831,
+            0.7474140003323555,
+            0.7472532792016864,
+            0.7472977582365274
+          ],
+          "median_seconds": 0.7472977582365274,
+          "total_tokens_per_second": 171.28380031816806,
+          "mean_output_step_ms": 5.838263736222871,
+          "cached_prompt_tokens": [
+            [
+              496
+            ],
+            [
+              496
+            ],
+            [
+              496
+            ],
+            [
+              496
+            ],
+            [
+              496
+            ],
+            [
+              496
+            ],
+            [
+              496
+            ]
+          ]
+        },
+        {
+          "batch": 8,
+          "prompt_tokens": 512,
+          "output_tokens_per_request": 128,
+          "seconds": [
+            1.2318196799606085,
+            1.231721866875887,
+            1.232634180225432,
+            1.2321121282875538,
+            1.2310415636748075,
+            1.2315081991255283,
+            1.2322314511984587
+          ],
+          "median_seconds": 1.2318196799606085,
+          "total_tokens_per_second": 831.2905018961426,
+          "mean_output_step_ms": 9.623591249692254,
+          "cached_prompt_tokens": [
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ],
+            [
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496,
+              496
+            ]
+          ]
+        }
+      ],
+      "profile_audit": [
+        {
+          "batch": 1,
+          "generation_steps": 12,
+          "graph_launches": 12,
+          "trace_sha256": "5fb863770e85eb253325a0538632342d1d55b52b2ec1ca5a0f00a6d1a70c96d5"
+        },
+        {
+          "batch": 8,
+          "generation_steps": 12,
+          "graph_launches": 12,
+          "trace_sha256": "c63969424650d9728477372249b5e03a40e74b6917879d0e30a4c25bd5932601"
+        }
+      ]
+    }
+  }
+}
