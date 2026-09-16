@@ -25,6 +25,7 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 从[中文代码导读](docs/yoco/DEVELOPER_GUIDE.zh-CN.md)开始了解模块、执行流程和修改入口。
 [迁移验证](docs/yoco/migration-v029.md)与[本次增量合并](docs/yoco/fhb-dev-9-18-merge.md)分别记录来源和验收范围。
+[推送后的复核](docs/yoco/release-validation-20260916.md)：Align 与训练前向/CE 字节一致；Fast FP8 同卡对照中 B8 小幅回退 1.50%，B16 提升 3.83%。
 
 ### 单卡 Fast BF16 / FP8 decode
 
