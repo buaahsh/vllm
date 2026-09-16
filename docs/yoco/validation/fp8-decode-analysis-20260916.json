@@ -1,0 +1,4128 @@
+{
+  "method": "logical operand bytes and kernel timings, not hardware counters",
+  "analyzer_sha256": "c7a8445d2517619671a0fd543f0b9f78f532c49d5d99a8379a65f12e58380ab9",
+  "benchmark_sha256": "78ffe1ac769478d4f7e889b750a981f859265e51b4b0976f528bc0cc4f574356",
+  "model_config_sha256": "1741520be38735183fd8da25f46765bc9f0a6cdad72c9a63a9dc39741234ade2",
+  "reference": {
+    "scope": "B1 FP8 weights, BF16 router/lambda/head, FP8 KV; not DRAM bytes",
+    "self_calls": 30,
+    "cross_calls": 10,
+    "weight_bytes": {
+      "routed_w13": 2516582400,
+      "routed_w2": 1258291200,
+      "shared_w13": 314572800,
+      "shared_w2": 157286400,
+      "self_qkv": 943718400,
+      "cross_q": 251658240,
+      "attention_o": 503316480,
+      "shared_kv_proj": 6291456,
+      "latent_in": 125829120,
+      "latent_out": 125829120,
+      "router": 31457280,
+      "lambda": 15728640,
+      "shared_gate": 245760,
+      "lm_head": 951582720
+    },
+    "weight_bytes_total": 7202390016,
+    "executed_weight_elements": 6702882816,
+    "kv_scenarios": [
+      {
+        "context": 512,
+        "kv_read_bytes": 41943040,
+        "weight_plus_kv_ms_at_8TBps": 0.905541632
+      },
+      {
+        "context": 576,
+        "kv_read_bytes": 43315200,
+        "weight_plus_kv_ms_at_8TBps": 0.905713152
+      },
+      {
+        "context": 640,
+        "kv_read_bytes": 44625920,
+        "weight_plus_kv_ms_at_8TBps": 0.905876992
+      },
+      {
+        "context": 8192,
+        "kv_read_bytes": 199290880,
+        "weight_plus_kv_ms_at_8TBps": 0.925210112
+      },
+      {
+        "context": 32768,
+        "kv_read_bytes": 702607360,
+        "weight_plus_kv_ms_at_8TBps": 0.988124672
+      },
+      {
+        "context": 80000,
+        "kv_read_bytes": 1669918720,
+        "weight_plus_kv_ms_at_8TBps": 1.109038592
+      }
+    ],
+    "excludes": [
+      "scales, indices, norm parameters, activations and scratch",
+      "cache hits, CTA reloads, transaction rounding and spills"
+    ]
+  },
+  "model_config": {
+    "architectures": [
+      "YOCOForCausalLM"
+    ],
+    "model_type": "yoco",
+    "torch_dtype": "bfloat16",
+    "d_model": 3072,
+    "d_ffn": 9216,
+    "head": 32,
+    "cross_head": 32,
+    "kv_head": 8,
+    "cross_kv_head": 8,
+    "head_dim": 128,
+    "cross_head_dim": 128,
+    "n_layers": 20,
+    "vocab_size": 154880,
+    "max_seq_len": 131072,
+    "norm_eps": 1e-06,
+    "rope_theta": 10000.0,
+    "qk_norm": false,
+    "qk_rms_clip": true,
+    "qk_rms_gamma": true,
+    "qk_rms_limit": 3.0,
+    "attention_bias": false,
+    "weight_tying": false,
+    "headwise_glu": false,
+    "diff_v2": false,
+    "diff_v3": true,
+    "diff_attention": false,
+    "yoco_cross_layers": 10,
+    "yoco_window_size": 512,
+    "universal_loop": 3,
+    "moe": true,
+    "moe_expert_num": 128,
+    "moe_top_k": 8,
+    "moe_ffn_dim": 3840,
+    "moe_latent_dim": 1024,
+    "moe_latent_norm": true,
+    "d_shared_expert": 1280,
+    "dense_layers": 0,
+    "swiglu_limit": 10.0,
+    "router_weights_normalized": true,
+    "quant_mode": "bfloat16",
+    "quant_block_size": 128,
+    "hidden_size": 3072,
+    "intermediate_size": 9216,
+    "num_experts": 128,
+    "num_experts_per_tok": 8,
+    "moe_intermediate_size": 3840,
+    "shared_expert_intermediate_size": 1280,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 8,
+    "num_hidden_layers": 20,
+    "max_position_embeddings": 131072,
+    "rms_norm_eps": 1e-06,
+    "tie_word_embeddings": false,
+    "bos_token_id": 154824,
+    "eos_token_id": 154820,
+    "pad_token_id": 154856,
+    "unk_token_id": 154857,
+    "transformers_version": "4.36.0",
+    "use_cache": true
+  },
+  "benchmark_settings": {
+    "config": {
+      "model": "/mnt/pvc/lidong1/exp/agens/30A3B-180M-L3/0000-28000-hf",
+      "additional_config": {
+        "yoco_execution_mode": "fast"
+      },
+      "trust_remote_code": true,
+      "dtype": "bfloat16",
+      "tensor_parallel_size": 1,
+      "data_parallel_size": 1,
+      "enable_expert_parallel": false,
+      "gpu_memory_utilization": 0.65,
+      "max_model_len": 8192,
+      "max_num_batched_tokens": 4096,
+      "max_num_seqs": 16,
+      "enable_prefix_caching": true,
+      "enable_chunked_prefill": true,
+      "kv_sharing_fast_prefill": true,
+      "quantization": "fp8_per_block",
+      "kv_cache_dtype": "fp8",
+      "attention_config": {
+        "backend": "FLASH_ATTN",
+        "flash_attn_version": 4
+      },
+      "kernel_config": {
+        "enable_flashinfer_autotune": false
+      },
+      "compilation_config": {
+        "cudagraph_mode": "FULL_AND_PIECEWISE",
+        "custom_ops": [],
+        "cudagraph_capture_sizes": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ]
+      },
+      "logprobs_mode": "raw_logprobs",
+      "seed": 918,
+      "worker_extension_cls": "benchmark_fast_decode.FastDecodeWorker",
+      "profiler_config": {
+        "profiler": "torch",
+        "torch_profiler_dir": "/results-root/yoco-migration-20260915/runs/decode-v029-profile-r1/traces",
+        "torch_profiler_with_stack": false,
+        "torch_profiler_record_shapes": true,
+        "ignore_frontend": true,
+        "delay_iterations": 4,
+        "max_iterations": 12
+      }
+    },
+    "env": {
+      "OMP_NUM_THREADS": "4",
+      "MKL_NUM_THREADS": "4",
+      "MAX_JOBS": "4",
+      "VLLM_WORKER_MULTIPROC_METHOD": "spawn",
+      "VLLM_DP_SIZE": "1",
+      "VLLM_DP_RANK": "0",
+      "VLLM_DP_RANK_LOCAL": "0",
+      "VLLM_USE_DEEP_GEMM": "1",
+      "VLLM_USE_DEEP_GEMM_E8M0": "1",
+      "VLLM_YOCO_FP8_ATTENTION_FUSION": "1",
+      "VLLM_YOCO_FP8_LATENT_NORM_FUSION": "0",
+      "VLLM_YOCO_BF16_RESIDUAL": "0",
+      "VLLM_YOCO_BF16_CHAIN": "1",
+      "VLLM_YOCO_BF16_REDUCTIONS": "0",
+      "VLLM_YOCO_BF16_SAMPLING": "0",
+      "VLLM_YOCO_FP8_W2_TUNING": "1",
+      "CUDA_VISIBLE_DEVICES": "0"
+    },
+    "torch": "2.13.0+cu130",
+    "cuda": "13.0",
+    "warmups": 5,
+    "repeats": 15,
+    "source_revision": null,
+    "source_bundle_sha256": "cd73a9adf740fd6a635c18b71beb8a819d1e0672850f1dde5cbb33e3be9b579d",
+    "script_sha256": "a7b5b907f738ba7a498bac82cd2134dad600c21b47c7d2f402fd895ff3f1083f",
+    "implementation_sha256": "c122807ece4baa37638fcd0dd2b33ef05db56af4489ef1e5f8e94d226c5c63ba",
+    "tokens_sha256": "d4a164ab94f2197a924418dd5f795ac96ec51376f6e853408819908951fd3043",
+    "scope": "Warm-prefix offline generation; resume to drained outputs"
+  },
+  "runtime": {
+    "gpu": "NVIDIA B200",
+    "gpu_uuid": "GPU-a1af57eb-3f0a-bd1c-3379-3e735f37113a",
+    "tp": 1,
+    "dp": 1,
+    "enable_expert_parallel": false,
+    "cudagraph_mode": "FULL_AND_PIECEWISE",
+    "runner": "GPUModelRunner",
+    "deep_gemm": "/usr/local/lib/python3.12/dist-packages/vllm/third_party/deep_gemm/__init__.py",
+    "deep_gemm_library": "/usr/local/lib/python3.12/dist-packages/vllm/third_party/deep_gemm/_C.cpython-312-x86_64-linux-gnu.so",
+    "deep_gemm_library_sha256": "73824dc1312e98cf277ae6bc017becf7e963d5b0bfab81e0c6d475d9b769c9e7",
+    "experts": [
+      {
+        "name": "model.layers.0.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.1.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.2.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.3.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.4.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.5.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.6.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.7.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.8.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.9.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.10.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.11.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.12.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.13.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.14.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.15.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.16.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.17.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.18.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      },
+      {
+        "name": "model.layers.19.mlp.experts.routed_experts",
+        "local_experts": 128,
+        "w13_dtype": "torch.float8_e4m3fn",
+        "w2_dtype": "torch.float8_e4m3fn",
+        "backend": "TritonOrDeepGemmExperts",
+        "small_m_limit": 16
+      }
+    ],
+    "latent": [
+      {
+        "name": "model.layers.0.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.0.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.1.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.1.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.2.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.2.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.3.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.3.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.4.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.4.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.5.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.5.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.6.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.6.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.7.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.7.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.8.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.8.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.9.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.9.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.10.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.10.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.11.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.11.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.12.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.12.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.13.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.13.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.14.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.14.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.15.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.15.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.16.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.16.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.17.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.17.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.18.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.18.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.19.mlp.fc1_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      },
+      {
+        "name": "model.layers.19.mlp.fc2_latent_proj",
+        "dtype": "torch.float8_e4m3fn"
+      }
+    ],
+    "attention": [
+      {
+        "name": "model.layers.0.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.20.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.40.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.1.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.21.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.41.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.2.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.22.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.42.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.3.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.23.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.43.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.4.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.24.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.44.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.5.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.25.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.45.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.6.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.26.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.46.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.7.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.27.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.47.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.8.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.28.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.48.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.9.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.29.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.49.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.10.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.11.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.12.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.13.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.14.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.15.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.16.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.17.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.18.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      {
+        "name": "model.layers.19.self_attn.attn",
+        "fa_version": 4,
+        "kv_cache_dtype": "fp8",
+        "cache_tensor_dtype": "torch.uint8",
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      }
+    ]
+  },
+  "benchmark": [
+    {
+      "batch": 1,
+      "prompt_tokens": 512,
+      "output_tokens_per_request": 128,
+      "seconds": [
+        0.7530943108722568,
+        0.7506717042997479,
+        0.7496781302616,
+        0.7501631192862988,
+        0.7501078685745597,
+        0.7502605495974422,
+        0.749990526586771,
+        0.7500230809673667,
+        0.7496758941560984,
+        0.7502968078479171,
+        0.749980435706675,
+        0.7498421939089894,
+        0.750440432690084,
+        0.7504672314971685,
+        0.7499703504145145
+      ],
+      "median_seconds": 0.7501078685745597,
+      "total_tokens_per_second": 170.64212410308423,
+      "mean_output_step_ms": 5.860217723238748,
+      "cached_prompt_tokens": [
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ],
+        [
+          496
+        ]
+      ],
+      "last_generated_token_ids": [
+        [
+          79074,
+          1154,
+          472,
+          13,
+          38235,
+          355,
+          1154,
+          892,
+          374,
+          1602,
+          4428,
+          304,
+          11089,
+          659,
+          576,
+          1378,
+          9415,
+          525,
+          12868,
+          315,
+          24913,
+          4849,
+          1154,
+          323,
+          279,
+          95298,
+          525,
+          68618,
+          659,
+          576,
+          95298,
+          525,
+          803,
+          4185,
+          304,
+          279,
+          10195,
+          315,
+          279,
+          2088,
+          315,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          1154,
+          323,
+          525,
+          803,
+          4185,
+          304,
+          279,
+          9801,
+          315,
+          279,
+          2088,
+          315,
+          472,
+          13,
+          38235,
+          355,
+          659,
+          715,
+          284,
+          284,
+          33746,
+          284,
+          284,
+          31770,
+          13214,
+          49995,
+          9012,
+          5612,
+          355,
+          374,
+          1730,
+          304,
+          279,
+          23086,
+          22318,
+          21524,
+          1154,
+          504,
+          31372,
+          311,
+          57734,
+          1154,
+          2670,
+          279,
+          37489,
+          15017,
+          323,
+          279,
+          5235,
+          15017,
+          659,
+          1084,
+          374,
+          1083,
+          1730,
+          304,
+          279,
+          18463,
+          22318,
+          21524,
+          1154,
+          504,
+          87565,
+          311,
+          4787,
+          12734,
+          659,
+          715,
+          284,
+          284,
+          76658,
+          284,
+          284,
+          31770,
+          13214,
+          49995,
+          9012,
+          5612,
+          355,
+          374,
+          264,
+          366
+        ]
+      ]
+    },
+    {
+      "batch": 8,
+      "prompt_tokens": 512,
+      "output_tokens_per_request": 128,
+      "seconds": [
+        1.2566333869472146,
+        1.2566177444532514,
+        1.2569487616419792,
+        1.2563589811325073,
+        1.2561291120946407,
+        1.256530194543302,
+        1.256248171441257,
+        1.256656700745225,
+        1.2560595879331231,
+        1.2558218548074365,
+        1.2560524670407176,
+        1.2562842788174748,
+        1.2558912467211485,
+        1.2547424100339413,
+        1.2557680513709784
+      ],
+      "median_seconds": 1.256248171441257,
+      "total_tokens_per_second": 815.1255645810768,
+      "mean_output_step_ms": 9.81443883938482,
+      "cached_prompt_tokens": [
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ],
+        [
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496,
+          496
+        ]
+      ],
+      "last_generated_token_ids": [
+        [
+          79074,
+          1154,
+          472,
+          13,
+          38235,
+          355,
+          1154,
+          892,
+          374,
+          1602,
+          4428,
+          304,
+          11089,
+          659,
+          576,
+          1378,
+          9415,
+          525,
+          12868,
+          315,
+          24913,
+          4849,
+          1154,
+          323,
+          279,
+          95298,
+          525,
+          68618,
+          659,
+          715,
+          284,
+          284,
+          33746,
+          284,
+          284,
+          31770,
+          13214,
+          49995,
+          9012,
+          5612,
+          355,
+          374,
+          1730,
+          304,
+          279,
+          23086,
+          22318,
+          21524,
+          1154,
+          504,
+          31372,
+          311,
+          57734,
+          1154,
+          2670,
+          279,
+          37489,
+          15017,
+          323,
+          279,
+          5235,
+          15017,
+          659,
+          1084,
+          374,
+          1083,
+          1730,
+          304,
+          279,
+          18463,
+          22318,
+          21524,
+          1154,
+          504,
+          87565,
+          311,
+          4787,
+          12734,
+          659,
+          715,
+          284,
+          284,
+          76658,
+          284,
+          284,
+          31770,
+          13214,
+          49995,
+          9012,
+          5612,
+          355,
+          374,
+          264,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          374,
+          1730,
+          304,
+          55144,
+          5671,
+          1154,
+          5990,
+          518,
+          42612,
+          315,
+          220,
+          98668,
+          1365,
+          220,
+          99200,
+          36073,
+          320,
+          220,
+          100702,
+          1365,
+          220,
+          126293,
+          10477,
+          873,
+          1154,
+          714,
+          22869,
+          1495,
+          311,
+          220
+        ],
+        [
+          389,
+          279,
+          94423,
+          1154,
+          19815,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          702,
+          6857,
+          659,
+          715,
+          576,
+          366,
+          3122,
+          29,
+          315,
+          472,
+          13,
+          38235,
+          355,
+          29611,
+          825,
+          476,
+          803,
+          978,
+          1543,
+          389,
+          279,
+          94423,
+          1154,
+          19815,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          702,
+          6857,
+          659,
+          715,
+          576,
+          366,
+          3122,
+          29,
+          315,
+          472,
+          13,
+          38235,
+          355,
+          29611,
+          825,
+          476,
+          803,
+          978,
+          1543,
+          389,
+          279,
+          94423,
+          1154,
+          19815,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          702,
+          6857,
+          659,
+          715,
+          576,
+          366,
+          3122,
+          29,
+          315,
+          472,
+          13,
+          38235,
+          355,
+          29611,
+          825,
+          476,
+          803,
+          978,
+          1543,
+          389,
+          279,
+          94423,
+          1154,
+          19815,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          702,
+          6857,
+          659,
+          715,
+          576,
+          366,
+          3122,
+          29,
+          315,
+          472,
+          13,
+          38235,
+          355,
+          29611,
+          825,
+          476,
+          803,
+          978,
+          1543,
+          389,
+          279,
+          94423,
+          1154,
+          19815,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          702,
+          6857
+        ],
+        [
+          2518,
+          476,
+          2518,
+          569,
+          12,
+          31,
+          64895,
+          1154,
+          1393,
+          429,
+          315,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          374,
+          4158,
+          476,
+          4158,
+          569,
+          12,
+          31,
+          64895,
+          659,
+          715,
+          576,
+          94423,
+          315,
+          279,
+          56110,
+          315,
+          472,
+          13,
+          38235,
+          355,
+          29611,
+          825,
+          476,
+          803,
+          978,
+          1543,
+          1154,
+          892,
+          525,
+          30935,
+          304,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          659,
+          715,
+          576,
+          94423,
+          315,
+          279,
+          56110,
+          315,
+          472,
+          13,
+          38235,
+          355,
+          374,
+          2518,
+          476,
+          2518,
+          569,
+          12,
+          31,
+          64895,
+          1154,
+          1393,
+          429,
+          315,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          374,
+          4158,
+          476,
+          4158,
+          569,
+          12,
+          31,
+          64895,
+          659,
+          715,
+          576,
+          94423,
+          315,
+          279,
+          56110,
+          315,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          29611,
+          825,
+          476,
+          803,
+          978,
+          1543,
+          1154,
+          892,
+          525,
+          30935,
+          304,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          659,
+          715,
+          576,
+          94423,
+          315,
+          279,
+          56110,
+          315,
+          472,
+          13
+        ],
+        [
+          220,
+          18,
+          569,
+          58061,
+          220,
+          18,
+          304,
+          873,
+          659,
+          386,
+          3831,
+          5545,
+          7244,
+          46870,
+          518,
+          264,
+          10073,
+          9152,
+          1379,
+          659,
+          715,
+          576,
+          8777,
+          23313,
+          279,
+          18772,
+          369,
+          220,
+          24,
+          1365,
+          220,
+          98886,
+          3951,
+          1154,
+          323,
+          1221,
+          19196,
+          1105,
+          304,
+          279,
+          10459,
+          659,
+          576,
+          18772,
+          525,
+          34940,
+          4056,
+          67845,
+          1154,
+          323,
+          525,
+          11685,
+          553,
+          279,
+          8777,
+          12386,
+          311,
+          279,
+          16177,
+          1174,
+          1415,
+          389,
+          1059,
+          63219,
+          659,
+          576,
+          18772,
+          43009,
+          1119,
+          82077,
+          1154,
+          892,
+          525,
+          5880,
+          1119,
+          279,
+          3015,
+          659,
+          576,
+          82077,
+          525,
+          71534,
+          777,
+          292,
+          1154,
+          323,
+          8328,
+          220,
+          21,
+          1365,
+          220,
+          23,
+          5555,
+          304,
+          419,
+          6430,
+          659,
+          2379,
+          1221,
+          24653,
+          389,
+          279,
+          65014,
+          291,
+          1154,
+          323,
+          36480,
+          264,
+          4013,
+          315,
+          296,
+          10960,
+          2576,
+          1154,
+          7826,
+          311,
+          264,
+          3084,
+          315,
+          220,
+          16,
+          1365,
+          220,
+          17,
+          2889,
+          84564,
+          416,
+          320
+        ],
+        [
+          1154,
+          1573,
+          27770,
+          1105,
+          304,
+          279,
+          10459,
+          659,
+          576,
+          18772,
+          525,
+          11685,
+          304,
+          264,
+          3072,
+          12386,
+          311,
+          279,
+          8777,
+          594,
+          16177,
+          1174,
+          1415,
+          659,
+          576,
+          18772,
+          525,
+          27447,
+          13744,
+          1154,
+          323,
+          525,
+          911,
+          220,
+          15,
+          13,
+          19,
+          2544,
+          84564,
+          416,
+          320,
+          220,
+          15,
+          13,
+          15,
+          99317,
+          304,
+          873,
+          304,
+          22971,
+          659,
+          576,
+          82077,
+          525,
+          5880,
+          304,
+          279,
+          10459,
+          1154,
+          323,
+          525,
+          11685,
+          553,
+          279,
+          59187,
+          369,
+          911,
+          220,
+          21,
+          5555,
+          1573,
+          51504,
+          389,
+          279,
+          5622,
+          659,
+          576,
+          3908,
+          39932,
+          12564,
+          525,
+          911,
+          220,
+          16,
+          2544,
+          318,
+          46599,
+          320,
+          220,
+          15,
+          13,
+          100441,
+          24,
+          304,
+          873,
+          1293,
+          1154,
+          323,
+          525,
+          11685,
+          553,
+          279,
+          59187,
+          369,
+          911,
+          220,
+          21,
+          5555,
+          1573,
+          51504,
+          389,
+          279,
+          5622,
+          659,
+          576,
+          3908,
+          39932,
+          12564,
+          525,
+          911,
+          220,
+          16,
+          2544,
+          318,
+          46599,
+          320,
+          220,
+          15
+        ],
+        [
+          3122,
+          29,
+          1154,
+          323,
+          39443,
+          369,
+          911,
+          220,
+          99082,
+          2849,
+          659,
+          715,
+          576,
+          82077,
+          1221,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480,
+          264,
+          1590,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          36480
+        ],
+        [
+          659,
+          715,
+          576,
+          97611,
+          3658,
+          525,
+          18490,
+          3884,
+          304,
+          279,
+          8379,
+          1154,
+          323,
+          525,
+          30337,
+          3881,
+          1154,
+          7892,
+          807,
+          525,
+          3881,
+          311,
+          387,
+          12868,
+          315,
+          40870,
+          16362,
+          7795,
+          1811,
+          659,
+          715,
+          576,
+          97611,
+          3658,
+          525,
+          18490,
+          3884,
+          304,
+          279,
+          8379,
+          1154,
+          323,
+          525,
+          30337,
+          3881,
+          1154,
+          7892,
+          807,
+          525,
+          3881,
+          311,
+          387,
+          12868,
+          315,
+          40870,
+          16362,
+          7795,
+          1811,
+          659,
+          715,
+          576,
+          97611,
+          3658,
+          525,
+          18490,
+          3884,
+          304,
+          279,
+          8379,
+          1154,
+          323,
+          525,
+          30337,
+          3881,
+          1154,
+          7892,
+          807,
+          525,
+          3881,
+          311,
+          387,
+          12868,
+          315,
+          40870,
+          16362,
+          7795,
+          1811,
+          659,
+          715,
+          576,
+          97611,
+          3658,
+          525,
+          18490,
+          3884,
+          304,
+          279,
+          8379,
+          1154,
+          323,
+          525,
+          30337,
+          3881,
+          1154,
+          7892,
+          807,
+          525,
+          3881,
+          311,
+          387,
+          12868,
+          315,
+          40870,
+          16362,
+          7795,
+          1811,
+          659,
+          715,
+          576,
+          97611,
+          3658,
+          525,
+          18490,
+          3884,
+          304,
+          279,
+          8379,
+          1154
+        ],
+        [
+          76658,
+          284,
+          284,
+          31770,
+          472,
+          13,
+          9012,
+          5612,
+          355,
+          374,
+          264,
+          366,
+          3122,
+          29,
+          1154,
+          323,
+          374,
+          1730,
+          304,
+          264,
+          6884,
+          2088,
+          315,
+          70070,
+          1154,
+          504,
+          279,
+          366,
+          3122,
+          29,
+          311,
+          279,
+          366,
+          3122,
+          29,
+          659,
+          1084,
+          374,
+          1429,
+          43262,
+          304,
+          279,
+          366,
+          3122,
+          29,
+          1154,
+          1380,
+          432,
+          374,
+          1730,
+          304,
+          264,
+          6884,
+          2088,
+          315,
+          70070,
+          1154,
+          504,
+          279,
+          366,
+          3122,
+          29,
+          311,
+          279,
+          366,
+          3122,
+          29,
+          659,
+          1084,
+          374,
+          1083,
+          1730,
+          304,
+          279,
+          366,
+          3122,
+          29,
+          1154,
+          1380,
+          432,
+          374,
+          1730,
+          304,
+          264,
+          6884,
+          2088,
+          315,
+          70070,
+          1154,
+          504,
+          279,
+          366,
+          3122,
+          29,
+          311,
+          279,
+          366,
+          3122,
+          29,
+          659,
+          1084,
+          374,
+          1083,
+          1730,
+          304,
+          279,
+          366,
+          3122,
+          29,
+          1154,
+          1380,
+          432,
+          374,
+          1730,
+          304,
+          264,
+          6884,
+          2088,
+          315,
+          70070,
+          1154,
+          504,
+          279,
+          366,
+          3122,
+          29,
+          311,
+          279
+        ]
+      ]
+    }
+  ],
+  "profiles": [
+    {
+      "batch": 1,
+      "trace": "fast-fp8-b1_dp0_pp0_tp0_dcp0_ep0_rank0.1789578102556197727.pt.trace.json.gz",
+      "trace_sha256": "ba24f14333e9f28fec53fe5cafb6a186f29358aff06913a95a4c18e34f2d0b12",
+      "annotations": "execute_context_0(0)_generation_1(1)",
+      "steps": 12,
+      "kernels_per_step": 1508.0,
+      "kernel_sum_us_per_step": 6508.857833333333,
+      "median_graph_span_us": 5581.85546875,
+      "median_graph_busy_union_us": 5311.6181640625,
+      "outside_model_graph_kernels_per_step": 18.0,
+      "outside_model_graph_kernel_sum_us_per_step": 207.30091666666667,
+      "lm_head_is_outside_model_graph": true,
+      "graphs": [
+        {
+          "correlation": 420,
+          "kernels": 1490,
+          "span_us": 5581.9033203125,
+          "busy_union_us": 5311.46875,
+          "no_kernel_us": 270.4345703125,
+          "kernel_sum_us": 6300.532,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1088,
+          "kernels": 1490,
+          "span_us": 5580.751953125,
+          "busy_union_us": 5309.9638671875,
+          "no_kernel_us": 270.7880859375,
+          "kernel_sum_us": 6305.308,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1759,
+          "kernels": 1490,
+          "span_us": 5585.4541015625,
+          "busy_union_us": 5312.697265625,
+          "no_kernel_us": 272.7568359375,
+          "kernel_sum_us": 6305.709,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 2434,
+          "kernels": 1490,
+          "span_us": 5581.8076171875,
+          "busy_union_us": 5311.9345703125,
+          "no_kernel_us": 269.873046875,
+          "kernel_sum_us": 6299.113,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 3109,
+          "kernels": 1490,
+          "span_us": 5584.015625,
+          "busy_union_us": 5313.17578125,
+          "no_kernel_us": 270.83984375,
+          "kernel_sum_us": 6301.22,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 3784,
+          "kernels": 1490,
+          "span_us": 5580.1748046875,
+          "busy_union_us": 5311.005859375,
+          "no_kernel_us": 269.1689453125,
+          "kernel_sum_us": 6310.571,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 4459,
+          "kernels": 1490,
+          "span_us": 5582.3203125,
+          "busy_union_us": 5310.8828125,
+          "no_kernel_us": 271.4375,
+          "kernel_sum_us": 6293.061,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 5134,
+          "kernels": 1490,
+          "span_us": 5581.3916015625,
+          "busy_union_us": 5312.7392578125,
+          "no_kernel_us": 268.65234375,
+          "kernel_sum_us": 6312.454,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 5809,
+          "kernels": 1490,
+          "span_us": 5578.7041015625,
+          "busy_union_us": 5311.767578125,
+          "no_kernel_us": 266.9365234375,
+          "kernel_sum_us": 6291.351,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 6484,
+          "kernels": 1490,
+          "span_us": 5585.5185546875,
+          "busy_union_us": 5314.5859375,
+          "no_kernel_us": 270.9326171875,
+          "kernel_sum_us": 6298.649,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 7159,
+          "kernels": 1490,
+          "span_us": 5582.318359375,
+          "busy_union_us": 5308.1552734375,
+          "no_kernel_us": 274.1630859375,
+          "kernel_sum_us": 6303.98,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 7834,
+          "kernels": 1490,
+          "span_us": 5578.576171875,
+          "busy_union_us": 5310.2197265625,
+          "no_kernel_us": 268.3564453125,
+          "kernel_sum_us": 6296.735,
+          "attention_calls": 40,
+          "routed_calls": 80
+        }
+      ],
+      "groups": [
+        {
+          "label": "Routed experts",
+          "us_per_step": 1707.66375,
+          "percent": 26.23599706318162
+        },
+        {
+          "label": "Shared expert",
+          "us_per_step": 1025.1044166666666,
+          "percent": 15.749374819908878
+        },
+        {
+          "label": "Latent projections / norm",
+          "us_per_step": 802.607,
+          "percent": 12.330996014226459
+        },
+        {
+          "label": "Attention projections",
+          "us_per_step": 767.6778333333333,
+          "percent": 11.794355522744429
+        },
+        {
+          "label": "Router / gates",
+          "us_per_step": 707.17,
+          "percent": 10.864732616810626
+        },
+        {
+          "label": "FA4 attention / combine",
+          "us_per_step": 547.34775,
+          "percent": 8.409274929879532
+        },
+        {
+          "label": "Attention preparation",
+          "us_per_step": 446.5141666666666,
+          "percent": 6.8601001604300915
+        },
+        {
+          "label": "Residual / norm",
+          "us_per_step": 220.81433333333334,
+          "percent": 3.3925204542414984
+        },
+        {
+          "label": "Sampling / layout / other",
+          "us_per_step": 148.44424999999995,
+          "percent": 2.280649751478414
+        },
+        {
+          "label": "LM head",
+          "us_per_step": 135.51433333333333,
+          "percent": 2.0819986670984543
+        }
+      ],
+      "operators": [
+        {
+          "category": "routed_w13",
+          "kernels_per_step": 40.0,
+          "us_per_step": 623.8294999999999,
+          "mean_kernel_us": 15.5957375,
+          "grids": {
+            "[960, 1, 1]": 480
+          },
+          "kernel_names": [
+            "fused_moe_kernel"
+          ]
+        },
+        {
+          "category": "routed_w2",
+          "kernels_per_step": 40.0,
+          "us_per_step": 607.2980833333334,
+          "mean_kernel_us": 15.182452083333333,
+          "grids": {
+            "[256, 1, 1]": 480
+          },
+          "kernel_names": [
+            "fused_moe_kernel"
+          ]
+        },
+        {
+          "category": "attention_main",
+          "kernels_per_step": 40.0,
+          "us_per_step": 418.076,
+          "mean_kernel_us": 10.4519,
+          "grids": {
+            "[144, 1, 1]": 480
+          },
+          "kernel_names": [
+            "kernel_cutlass_kernel_vllmvllm_flash_attncuteflash_fwd_sm100FlashAttentionForwardSm100_object_at__tensor0000o811121013_tensorptrf8E4M3FNgmemalign16oi64div161i64div16i64div16_tensorptrf8E4_0"
+          ]
+        },
+        {
+          "category": "attention_o",
+          "kernels_per_step": 40.0,
+          "us_per_step": 311.4688333333333,
+          "mean_kernel_us": 7.786720833333333,
+          "grids": {
+            "[148, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 3072u, 4096u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "shared_w2",
+          "kernels_per_step": 40.0,
+          "us_per_step": 288.9750833333333,
+          "mean_kernel_us": 7.224377083333334,
+          "grids": {
+            "[148, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 3072u, 1280u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "routed_activation",
+          "kernels_per_step": 40.0,
+          "us_per_step": 287.988,
+          "mean_kernel_us": 7.1997,
+          "grids": {
+            "[8, 1, 1]": 480
+          },
+          "kernel_names": [
+            "_silu_mul_quant_fp8_packed_kernel"
+          ]
+        },
+        {
+          "category": "shared_w13",
+          "kernels_per_step": 40.0,
+          "us_per_step": 264.18108333333333,
+          "mean_kernel_us": 6.604527083333333,
+          "grids": {
+            "[148, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 2560u, 3072u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "self_qkv",
+          "kernels_per_step": 30.0,
+          "us_per_step": 263.93975,
+          "mean_kernel_us": 8.797991666666666,
+          "grids": {
+            "[148, 1, 1]": 360
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 10240u, 3072u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "router",
+          "kernels_per_step": 80.0,
+          "us_per_step": 260.7993333333333,
+          "mean_kernel_us": 3.2599916666666666,
+          "grids": {
+            "[12, 1, 1]": 480,
+            "[4, 1, 1]": 480
+          },
+          "kernel_names": [
+            "nvjet_sm100_tst_32x64_64x16_4x1_v_bz_splitK_TNN",
+            "void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16, false, float, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, float const*, __nv_bfloat16 const*, float*, __nv_bfloat16*, float const*, float const*, __nv_bfloat16 const*, float const*, __nv_bfloat16*, void*, long, float*, int*, float*, float*, float const*, float const*, float const*, float const*, float const*)"
+          ]
+        },
+        {
+          "category": "latent_in",
+          "kernels_per_step": 40.0,
+          "us_per_step": 253.17325000000002,
+          "mean_kernel_us": 6.32933125,
+          "grids": {
+            "[148, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 1024u, 3072u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "lambda",
+          "kernels_per_step": 80.0,
+          "us_per_step": 243.14275,
+          "mean_kernel_us": 3.039284375,
+          "grids": {
+            "[6, 1, 1]": 480,
+            "[2, 1, 1]": 480
+          },
+          "kernel_names": [
+            "nvjet_sm100_tst_32x64_64x16_2x1_v_bz_splitK_TNN",
+            "void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16, false, float, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, float const*, __nv_bfloat16 const*, float*, __nv_bfloat16*, float const*, float const*, __nv_bfloat16 const*, float const*, __nv_bfloat16*, void*, long, float*, int*, float*, float*, float const*, float const*, float const*, float const*, float const*)"
+          ]
+        },
+        {
+          "category": "shared_activation",
+          "kernels_per_step": 40.0,
+          "us_per_step": 239.212,
+          "mean_kernel_us": 5.9803,
+          "grids": {
+            "[3, 1, 1]": 480
+          },
+          "kernel_names": [
+            "_silu_mul_quant_fp8_packed_kernel"
+          ]
+        },
+        {
+          "category": "_yoco_fused_add_rms_norm_kernel",
+          "kernels_per_step": 79.0,
+          "us_per_step": 212.44091666666668,
+          "mean_kernel_us": 2.6891255274261603,
+          "grids": {
+            "[1, 1, 1]": 948
+          },
+          "kernel_names": [
+            "_yoco_fused_add_rms_norm_kernel"
+          ]
+        },
+        {
+          "category": "latent_out",
+          "kernels_per_step": 40.0,
+          "us_per_step": 198.8555,
+          "mean_kernel_us": 4.9713875,
+          "grids": {
+            "[148, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 3072u, 1024u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "attention_descale",
+          "kernels_per_step": 120.0,
+          "us_per_step": 160.6805,
+          "mean_kernel_us": 1.3390041666666668,
+          "grids": {
+            "[1, 1, 1]": 1440
+          },
+          "kernel_names": [
+            "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1} const&)::{lambda(int)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1} const&)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "lm_head",
+          "kernels_per_step": 1.0,
+          "us_per_step": 135.51433333333333,
+          "mean_kernel_us": 135.51433333333333,
+          "grids": {
+            "[1210, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_yoco_lm_head_kernel"
+          ]
+        },
+        {
+          "category": "attention_combine",
+          "kernels_per_step": 40.0,
+          "us_per_step": 129.27175,
+          "mean_kernel_us": 3.23179375,
+          "grids": {
+            "[8, 1, 1]": 480
+          },
+          "kernel_names": [
+            "kernel_cutlass_kernel_vllmvllm_flash_attncuteflash_fwd_combineFlashAttentionForwardCombine_object_at__tensorptrf32gmemalign16o128i64div41i64div4i64div4_tensorptrf32gmemo1i64i64_tensorptrb_0"
+          ]
+        },
+        {
+          "category": "scale_zero",
+          "kernels_per_step": 40.0,
+          "us_per_step": 119.69775,
+          "mean_kernel_us": 2.99244375,
+          "grids": {
+            "[1, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>)"
+          ]
+        },
+        {
+          "category": "quant_shared_w13",
+          "kernels_per_step": 40.0,
+          "us_per_step": 113.0385,
+          "mean_kernel_us": 2.8259625,
+          "grids": {
+            "[2, 3, 1]": 480
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "_yoco_fused_shared_gate_moe_output_kernel",
+          "kernels_per_step": 40.0,
+          "us_per_step": 108.72866666666665,
+          "mean_kernel_us": 2.7182166666666667,
+          "grids": {
+            "[1, 1, 1]": 480
+          },
+          "kernel_names": [
+            "_yoco_fused_shared_gate_moe_output_kernel"
+          ]
+        },
+        {
+          "category": "quant_latent_out",
+          "kernels_per_step": 40.0,
+          "us_per_step": 105.069,
+          "mean_kernel_us": 2.626725,
+          "grids": {
+            "[2, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "quant_latent_in",
+          "kernels_per_step": 40.0,
+          "us_per_step": 104.46366666666667,
+          "mean_kernel_us": 2.6115916666666665,
+          "grids": {
+            "[2, 3, 1]": 480
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "_yoco_fused_topk_routing_kernel",
+          "kernels_per_step": 40.0,
+          "us_per_step": 94.49925,
+          "mean_kernel_us": 2.36248125,
+          "grids": {
+            "[1, 1, 1]": 480
+          },
+          "kernel_names": [
+            "_yoco_fused_topk_routing_kernel"
+          ]
+        },
+        {
+          "category": "routed_quant",
+          "kernels_per_step": 40.0,
+          "us_per_step": 94.36491666666666,
+          "mean_kernel_us": 2.3591229166666667,
+          "grids": {
+            "[1, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_kernel<c10::BFloat16, c10::Float8_e4m3fn, false, true, float, true>(c10::BFloat16 const*, void*, float*, int, int, int, float, float, float, int, int)"
+          ]
+        },
+        {
+          "category": "routed_reduce",
+          "kernels_per_step": 40.0,
+          "us_per_step": 94.18325,
+          "mean_kernel_us": 2.35458125,
+          "grids": {
+            "[1, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void vllm::moe::moe_sum_vec_kernel<c10::BFloat16, int, 8, false>(c10::BFloat16*, c10::BFloat16 const*, long, int, long, long, int const*, int const*, long, long)"
+          ]
+        },
+        {
+          "category": "cross_q",
+          "kernels_per_step": 10.0,
+          "us_per_step": 81.84224999999999,
+          "mean_kernel_us": 8.184225,
+          "grids": {
+            "[148, 1, 1]": 120
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 8192u, 3072u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "_yoco_qk_rms_clip_rotary_kernel",
+          "kernels_per_step": 30.0,
+          "us_per_step": 81.34375,
+          "mean_kernel_us": 2.7114583333333333,
+          "grids": {
+            "[36, 1, 1]": 360
+          },
+          "kernel_names": [
+            "_yoco_qk_rms_clip_rotary_kernel"
+          ]
+        },
+        {
+          "category": "quant_self_qkv",
+          "kernels_per_step": 30.0,
+          "us_per_step": 75.65474999999999,
+          "mean_kernel_us": 2.521825,
+          "grids": {
+            "[2, 3, 1]": 360
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "triton_per_fused__fused_rms_norm_per_token_group_fp8_quant_packed_1",
+          "kernels_per_step": 40.0,
+          "us_per_step": 71.3415,
+          "mean_kernel_us": 1.7835375,
+          "grids": {
+            "[1, 1, 1]": 480
+          },
+          "kernel_names": [
+            "triton_per_fused__fused_rms_norm_per_token_group_fp8_quant_packed_1"
+          ]
+        },
+        {
+          "category": "triton_per_fused__fused_rms_norm_moe_forward_shared_0",
+          "kernels_per_step": 40.0,
+          "us_per_step": 69.70408333333333,
+          "mean_kernel_us": 1.7426020833333333,
+          "grids": {
+            "[1, 1, 1]": 480
+          },
+          "kernel_names": [
+            "triton_per_fused__fused_rms_norm_moe_forward_shared_0"
+          ]
+        },
+        {
+          "category": "attention_scheduler",
+          "kernels_per_step": 40.0,
+          "us_per_step": 69.03883333333333,
+          "mean_kernel_us": 1.7259708333333332,
+          "grids": {
+            "[1, 1, 1]": 480
+          },
+          "kernel_names": [
+            "kernel_cutlass_kernel_vllmvllm_flash_attncuteprepare_schedulerFlashPrepareScheduler_object_at_____tensorptri32_gmem_o_1_None_None_None_tensorptri32_gmem_o_1_None__148__FastDivmodDivisordi_0"
+          ]
+        },
+        {
+          "category": "_diff_quant_kernel",
+          "kernels_per_step": 40.0,
+          "us_per_step": 63.89633333333333,
+          "mean_kernel_us": 1.5974083333333333,
+          "grids": {
+            "[1, 8, 1]": 480
+          },
+          "kernel_names": [
+            "_diff_quant_kernel"
+          ]
+        },
+        {
+          "category": "_cache_fp8_kernel",
+          "kernels_per_step": 31.0,
+          "us_per_step": 50.66416666666667,
+          "mean_kernel_us": 1.6343279569892473,
+          "grids": {
+            "[1, 1, 1]": 372
+          },
+          "kernel_names": [
+            "_cache_fp8_kernel"
+          ]
+        },
+        {
+          "category": "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>)",
+          "kernels_per_step": 42.0,
+          "us_per_step": 42.196666666666665,
+          "mean_kernel_us": 1.0046825396825396,
+          "grids": {
+            "[1, 1, 1]": 504
+          },
+          "kernel_names": [
+            "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>)"
+          ]
+        },
+        {
+          "category": "quant_cross_q",
+          "kernels_per_step": 10.0,
+          "us_per_step": 25.489416666666667,
+          "mean_kernel_us": 2.548941666666667,
+          "grids": {
+            "[2, 3, 1]": 120
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "_gumbel_sample_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 21.034333333333333,
+          "mean_kernel_us": 21.034333333333333,
+          "grids": {
+            "[1, 152, 1]": 12
+          },
+          "kernel_names": [
+            "_gumbel_sample_kernel"
+          ]
+        },
+        {
+          "category": "_yoco_weighted_rms_clip_kernel",
+          "kernels_per_step": 11.0,
+          "us_per_step": 20.890583333333336,
+          "mean_kernel_us": 1.8991439393939393,
+          "grids": {
+            "[1, 1, 1]": 12,
+            "[4, 1, 1]": 120
+          },
+          "kernel_names": [
+            "_yoco_weighted_rms_clip_kernel"
+          ]
+        },
+        {
+          "category": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})",
+          "kernels_per_step": 2.0,
+          "us_per_step": 13.925416666666665,
+          "mean_kernel_us": 6.9627083333333335,
+          "grids": {
+            "[6, 1, 1]": 24
+          },
+          "kernel_names": [
+            "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<1> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<1> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<1> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<1> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})",
+          "kernels_per_step": 2.0,
+          "us_per_step": 9.506749999999998,
+          "mean_kernel_us": 4.753375,
+          "grids": {
+            "[2, 1, 1]": 24
+          },
+          "kernel_names": [
+            "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<1> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<1> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<1> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<1> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "_yoco_rms_norm_kernel",
+          "kernels_per_step": 3.0,
+          "us_per_step": 8.373416666666666,
+          "mean_kernel_us": 2.791138888888889,
+          "grids": {
+            "[1, 1, 1]": 36
+          },
+          "kernel_names": [
+            "_yoco_rms_norm_kernel"
+          ]
+        },
+        {
+          "category": "memcpy32_post",
+          "kernels_per_step": 6.0,
+          "us_per_step": 6.856083333333333,
+          "mean_kernel_us": 1.1426805555555557,
+          "grids": {
+            "[6, 1, 1]": 36,
+            "[1, 1, 1]": 36
+          },
+          "kernel_names": [
+            "memcpy32_post"
+          ]
+        },
+        {
+          "category": "shared_kv_proj",
+          "kernels_per_step": 1.0,
+          "us_per_step": 6.722833333333333,
+          "mean_kernel_us": 6.722833333333333,
+          "grids": {
+            "[148, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 2048u, 3072u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})",
+          "kernels_per_step": 1.0,
+          "us_per_step": 6.624,
+          "mean_kernel_us": 6.624,
+          "grids": {
+            "[6, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})",
+          "kernels_per_step": 2.0,
+          "us_per_step": 5.876916666666666,
+          "mean_kernel_us": 2.938458333333333,
+          "grids": {
+            "[1, 1, 1]": 24
+          },
+          "kernel_names": [
+            "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "_bias_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 5.416,
+          "mean_kernel_us": 5.416,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_bias_kernel"
+          ]
+        },
+        {
+          "category": "_post_update_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 4.648,
+          "mean_kernel_us": 4.648,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_post_update_kernel"
+          ]
+        },
+        {
+          "category": "_gather_block_tables_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 4.565333333333333,
+          "mean_kernel_us": 4.565333333333333,
+          "grids": {
+            "[31, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_gather_block_tables_kernel"
+          ]
+        },
+        {
+          "category": "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::ArgMaxOps<float>, unsigned int, long, 4, 4> >(at::native::ReduceOp<float, at::native::ArgMaxOps<float>, unsigned int, long, 4, 4>)",
+          "kernels_per_step": 1.0,
+          "us_per_step": 4.448083333333334,
+          "mean_kernel_us": 4.448083333333333,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::ArgMaxOps<float>, unsigned int, long, 4, 4> >(at::native::ReduceOp<float, at::native::ArgMaxOps<float>, unsigned int, long, 4, 4>)"
+          ]
+        },
+        {
+          "category": "_compute_slot_mappings_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 3.435,
+          "mean_kernel_us": 3.435,
+          "grids": {
+            "[31, 2, 1]": 12
+          },
+          "kernel_names": [
+            "_compute_slot_mappings_kernel"
+          ]
+        },
+        {
+          "category": "_combine_sampled_and_draft_tokens_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 3.2159166666666668,
+          "mean_kernel_us": 3.2159166666666668,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_combine_sampled_and_draft_tokens_kernel"
+          ]
+        },
+        {
+          "category": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})",
+          "kernels_per_step": 1.0,
+          "us_per_step": 2.9494166666666666,
+          "mean_kernel_us": 2.9494166666666666,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "_get_num_sampled_and_rejected_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 2.922833333333333,
+          "mean_kernel_us": 2.922833333333333,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_get_num_sampled_and_rejected_kernel"
+          ]
+        },
+        {
+          "category": "quant_shared_kv_proj",
+          "kernels_per_step": 1.0,
+          "us_per_step": 2.56,
+          "mean_kernel_us": 2.56,
+          "grids": {
+            "[2, 3, 1]": 12
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "void at::native::_scatter_gather_elementwise_kernel<128, 8, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<8>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<8>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1})",
+          "kernels_per_step": 1.0,
+          "us_per_step": 2.29075,
+          "mean_kernel_us": 2.29075,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void at::native::_scatter_gather_elementwise_kernel<128, 8, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<8>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<8>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "triton_poi_fused__to_copy_embedding_0",
+          "kernels_per_step": 1.0,
+          "us_per_step": 2.0478333333333336,
+          "mean_kernel_us": 2.047833333333333,
+          "grids": {
+            "[3, 1, 1]": 12
+          },
+          "kernel_names": [
+            "triton_poi_fused__to_copy_embedding_0"
+          ]
+        },
+        {
+          "category": "_prepare_pos_seq_lens_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 1.7036666666666667,
+          "mean_kernel_us": 1.7036666666666667,
+          "grids": {
+            "[2, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_prepare_pos_seq_lens_kernel"
+          ]
+        },
+        {
+          "category": "triton_poi_fused_add_2",
+          "kernels_per_step": 1.0,
+          "us_per_step": 1.3998333333333333,
+          "mean_kernel_us": 1.3998333333333333,
+          "grids": {
+            "[3, 1, 1]": 12
+          },
+          "kernel_names": [
+            "triton_poi_fused_add_2"
+          ]
+        },
+        {
+          "category": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<bool>, std::array<char*, 1ul> >(int, at::native::FillFunctor<bool>, std::array<char*, 1ul>)",
+          "kernels_per_step": 1.0,
+          "us_per_step": 1.2826666666666666,
+          "mean_kernel_us": 1.2826666666666666,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<bool>, std::array<char*, 1ul> >(int, at::native::FillFunctor<bool>, std::array<char*, 1ul>)"
+          ]
+        },
+        {
+          "category": "void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>::result_type*)",
+          "kernels_per_step": 1.0,
+          "us_per_step": 1.1814166666666666,
+          "mean_kernel_us": 1.1814166666666666,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>::result_type*)"
+          ]
+        },
+        {
+          "category": "void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>::result_type*)",
+          "kernels_per_step": 1.0,
+          "us_per_step": 0.9173333333333332,
+          "mean_kernel_us": 0.9173333333333333,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>::result_type*)"
+          ]
+        }
+      ]
+    },
+    {
+      "batch": 8,
+      "trace": "fast-fp8-b1_dp0_pp0_tp0_dcp0_ep0_rank0.1789578143025496254.pt.trace.json.gz",
+      "trace_sha256": "bade6404205bd284673aa431dec0f92d7f3b1ef452348d3385ba38224d40604c",
+      "annotations": "execute_context_0(0)_generation_8(8)",
+      "steps": 12,
+      "kernels_per_step": 1508.0,
+      "kernel_sum_us_per_step": 9527.608,
+      "median_graph_span_us": 8771.09033203125,
+      "median_graph_busy_union_us": 8479.43896484375,
+      "outside_model_graph_kernels_per_step": 18.0,
+      "outside_model_graph_kernel_sum_us_per_step": 231.85866666666666,
+      "lm_head_is_outside_model_graph": true,
+      "graphs": [
+        {
+          "correlation": 1892198,
+          "kernels": 1490,
+          "span_us": 8930.2568359375,
+          "busy_union_us": 8628.97265625,
+          "no_kernel_us": 301.2841796875,
+          "kernel_sum_us": 9456.993,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1892868,
+          "kernels": 1490,
+          "span_us": 8770.162109375,
+          "busy_union_us": 8480.19140625,
+          "no_kernel_us": 289.970703125,
+          "kernel_sum_us": 9305.154,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1893545,
+          "kernels": 1490,
+          "span_us": 8885.296875,
+          "busy_union_us": 8588.779296875,
+          "no_kernel_us": 296.517578125,
+          "kernel_sum_us": 9422.642,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1894222,
+          "kernels": 1490,
+          "span_us": 8802.9296875,
+          "busy_union_us": 8504.0439453125,
+          "no_kernel_us": 298.8857421875,
+          "kernel_sum_us": 9336.755,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1894899,
+          "kernels": 1490,
+          "span_us": 8760.017578125,
+          "busy_union_us": 8464.4775390625,
+          "no_kernel_us": 295.5400390625,
+          "kernel_sum_us": 9287.688,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1895576,
+          "kernels": 1490,
+          "span_us": 8643.857421875,
+          "busy_union_us": 8348.578125,
+          "no_kernel_us": 295.279296875,
+          "kernel_sum_us": 9178.353,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1896253,
+          "kernels": 1490,
+          "span_us": 8696.78515625,
+          "busy_union_us": 8399.4140625,
+          "no_kernel_us": 297.37109375,
+          "kernel_sum_us": 9228.095,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1896930,
+          "kernels": 1490,
+          "span_us": 8577.810546875,
+          "busy_union_us": 8283.3349609375,
+          "no_kernel_us": 294.4755859375,
+          "kernel_sum_us": 9107.455,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1897607,
+          "kernels": 1490,
+          "span_us": 8599.345703125,
+          "busy_union_us": 8300.5732421875,
+          "no_kernel_us": 298.7724609375,
+          "kernel_sum_us": 9124.015,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1898284,
+          "kernels": 1490,
+          "span_us": 8919.0888671875,
+          "busy_union_us": 8623.982421875,
+          "no_kernel_us": 295.1064453125,
+          "kernel_sum_us": 9452.499,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1898961,
+          "kernels": 1490,
+          "span_us": 8772.0185546875,
+          "busy_union_us": 8478.6865234375,
+          "no_kernel_us": 293.33203125,
+          "kernel_sum_us": 9316.873,
+          "attention_calls": 40,
+          "routed_calls": 80
+        },
+        {
+          "correlation": 1899638,
+          "kernels": 1490,
+          "span_us": 8800.560546875,
+          "busy_union_us": 8506.619140625,
+          "no_kernel_us": 293.94140625,
+          "kernel_sum_us": 9332.47,
+          "attention_calls": 40,
+          "routed_calls": 80
+        }
+      ],
+      "groups": [
+        {
+          "label": "Routed experts",
+          "us_per_step": 4584.789333333333,
+          "percent": 48.12109538231771
+        },
+        {
+          "label": "Shared expert",
+          "us_per_step": 895.94975,
+          "percent": 9.403721794599443
+        },
+        {
+          "label": "Latent projections / norm",
+          "us_per_step": 822.2704166666666,
+          "percent": 8.630397227369835
+        },
+        {
+          "label": "FA4 attention / combine",
+          "us_per_step": 800.49775,
+          "percent": 8.40187537102702
+        },
+        {
+          "label": "Attention projections",
+          "us_per_step": 777.7863333333333,
+          "percent": 8.163500569432887
+        },
+        {
+          "label": "Router / gates",
+          "us_per_step": 691.4380833333333,
+          "percent": 7.257205411193799
+        },
+        {
+          "label": "Attention preparation",
+          "us_per_step": 465.7935833333334,
+          "percent": 4.888882743006779
+        },
+        {
+          "label": "Residual / norm",
+          "us_per_step": 231.88816666666665,
+          "percent": 2.4338550312593323
+        },
+        {
+          "label": "LM head",
+          "us_per_step": 137.30891666666665,
+          "percent": 1.441168829224152
+        },
+        {
+          "label": "Sampling / layout / other",
+          "us_per_step": 119.88566666666667,
+          "percent": 1.2582976405690354
+        }
+      ],
+      "operators": [
+        {
+          "category": "routed_w13",
+          "kernels_per_step": 40.0,
+          "us_per_step": 2502.1399166666665,
+          "mean_kernel_us": 62.553497916666664,
+          "grids": {
+            "[7680, 1, 1]": 480
+          },
+          "kernel_names": [
+            "fused_moe_kernel"
+          ]
+        },
+        {
+          "category": "routed_w2",
+          "kernels_per_step": 40.0,
+          "us_per_step": 1390.7361666666666,
+          "mean_kernel_us": 34.76840416666666,
+          "grids": {
+            "[1024, 1, 1]": 480
+          },
+          "kernel_names": [
+            "fused_moe_kernel"
+          ]
+        },
+        {
+          "category": "attention_main",
+          "kernels_per_step": 40.0,
+          "us_per_step": 678.1801666666667,
+          "mean_kernel_us": 16.954504166666666,
+          "grids": {
+            "[128, 1, 1]": 480
+          },
+          "kernel_names": [
+            "kernel_cutlass_kernel_vllmvllm_flash_attncuteflash_fwd_sm100FlashAttentionForwardSm100_object_at__tensor0000o811121013_tensorptrf8E4M3FNgmemalign16oi64div161i64div16i64div16_tensorptrf8E4_0"
+          ]
+        },
+        {
+          "category": "routed_activation",
+          "kernels_per_step": 40.0,
+          "us_per_step": 343.65366666666665,
+          "mean_kernel_us": 8.591341666666667,
+          "grids": {
+            "[8, 8, 1]": 480
+          },
+          "kernel_names": [
+            "_silu_mul_quant_fp8_packed_kernel"
+          ]
+        },
+        {
+          "category": "attention_o",
+          "kernels_per_step": 40.0,
+          "us_per_step": 310.2126666666667,
+          "mean_kernel_us": 7.755316666666666,
+          "grids": {
+            "[148, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 3072u, 4096u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "shared_w13",
+          "kernels_per_step": 40.0,
+          "us_per_step": 270.93516666666665,
+          "mean_kernel_us": 6.7733791666666665,
+          "grids": {
+            "[148, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 2560u, 3072u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "self_qkv",
+          "kernels_per_step": 30.0,
+          "us_per_step": 264.28825,
+          "mean_kernel_us": 8.809608333333333,
+          "grids": {
+            "[148, 1, 1]": 360
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 10240u, 3072u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "router",
+          "kernels_per_step": 80.0,
+          "us_per_step": 259.43649999999997,
+          "mean_kernel_us": 3.24295625,
+          "grids": {
+            "[12, 1, 1]": 480,
+            "[4, 1, 1]": 480
+          },
+          "kernel_names": [
+            "nvjet_sm100_tst_32x64_64x16_4x1_v_bz_splitK_TNN",
+            "void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16, false, float, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, float const*, __nv_bfloat16 const*, float*, __nv_bfloat16*, float const*, float const*, __nv_bfloat16 const*, float const*, __nv_bfloat16*, void*, long, float*, int*, float*, float*, float const*, float const*, float const*, float const*, float const*)"
+          ]
+        },
+        {
+          "category": "latent_in",
+          "kernels_per_step": 40.0,
+          "us_per_step": 251.89833333333334,
+          "mean_kernel_us": 6.297458333333333,
+          "grids": {
+            "[148, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 1024u, 3072u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "shared_activation",
+          "kernels_per_step": 40.0,
+          "us_per_step": 232.22941666666668,
+          "mean_kernel_us": 5.805735416666667,
+          "grids": {
+            "[3, 1, 1]": 480
+          },
+          "kernel_names": [
+            "_silu_mul_quant_fp8_packed_kernel"
+          ]
+        },
+        {
+          "category": "_yoco_fused_add_rms_norm_kernel",
+          "kernels_per_step": 79.0,
+          "us_per_step": 223.4478333333333,
+          "mean_kernel_us": 2.8284535864978904,
+          "grids": {
+            "[8, 1, 1]": 948
+          },
+          "kernel_names": [
+            "_yoco_fused_add_rms_norm_kernel"
+          ]
+        },
+        {
+          "category": "lambda",
+          "kernels_per_step": 80.0,
+          "us_per_step": 209.47141666666667,
+          "mean_kernel_us": 2.6183927083333334,
+          "grids": {
+            "[1, 1, 16]": 480,
+            "[2, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16, false, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, float const*, __nv_bfloat16 const*, __nv_bfloat16*, __nv_bfloat16*, float const*, float const*, __nv_bfloat16 const*, float const*, __nv_bfloat16*, void*, long, float*, int*, float*, float*, float const*, float const*, float const*, float const*, float const*)",
+            "void cutlass::Kernel2<cutlass_80_tensorop_s16816gemm_bf16_64x64_64x6_tn_align8>(cutlass_80_tensorop_s16816gemm_bf16_64x64_64x6_tn_align8::Params)"
+          ]
+        },
+        {
+          "category": "shared_w2",
+          "kernels_per_step": 40.0,
+          "us_per_step": 207.25991666666667,
+          "mean_kernel_us": 5.181497916666666,
+          "grids": {
+            "[148, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 3072u, 1280u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "latent_out",
+          "kernels_per_step": 40.0,
+          "us_per_step": 198.3334166666667,
+          "mean_kernel_us": 4.958335416666666,
+          "grids": {
+            "[148, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 3072u, 1024u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "attention_descale",
+          "kernels_per_step": 120.0,
+          "us_per_step": 161.94908333333333,
+          "mean_kernel_us": 1.3495756944444444,
+          "grids": {
+            "[1, 1, 1]": 1440
+          },
+          "kernel_names": [
+            "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1} const&)::{lambda(int)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1} const&)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "routed_quant",
+          "kernels_per_step": 40.0,
+          "us_per_step": 146.8715,
+          "mean_kernel_us": 3.6717875,
+          "grids": {
+            "[4, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_kernel<c10::BFloat16, c10::Float8_e4m3fn, false, true, float, false>(c10::BFloat16 const*, void*, float*, int, int, int, float, float, float, int, int)"
+          ]
+        },
+        {
+          "category": "lm_head",
+          "kernels_per_step": 1.0,
+          "us_per_step": 137.30891666666665,
+          "mean_kernel_us": 137.30891666666668,
+          "grids": {
+            "[1210, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_yoco_lm_head_kernel"
+          ]
+        },
+        {
+          "category": "_yoco_fused_shared_gate_moe_output_kernel",
+          "kernels_per_step": 40.0,
+          "us_per_step": 131.3945,
+          "mean_kernel_us": 3.2848625,
+          "grids": {
+            "[8, 1, 1]": 480
+          },
+          "kernel_names": [
+            "_yoco_fused_shared_gate_moe_output_kernel"
+          ]
+        },
+        {
+          "category": "attention_combine",
+          "kernels_per_step": 40.0,
+          "us_per_step": 122.31758333333333,
+          "mean_kernel_us": 3.0579395833333334,
+          "grids": {
+            "[71, 1, 1]": 480
+          },
+          "kernel_names": [
+            "kernel_cutlass_kernel_vllmvllm_flash_attncuteflash_fwd_combineFlashAttentionForwardCombine_object_at__tensorptrf32gmemalign16o128i64div41i64div4i64div4_tensorptrf32gmemo1i64i64_tensorptrb_0"
+          ]
+        },
+        {
+          "category": "quant_latent_in",
+          "kernels_per_step": 40.0,
+          "us_per_step": 114.49225,
+          "mean_kernel_us": 2.86230625,
+          "grids": {
+            "[4, 3, 1]": 480
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "quant_shared_w13",
+          "kernels_per_step": 40.0,
+          "us_per_step": 109.61133333333333,
+          "mean_kernel_us": 2.740283333333333,
+          "grids": {
+            "[4, 3, 1]": 480
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "quant_latent_out",
+          "kernels_per_step": 40.0,
+          "us_per_step": 108.2045,
+          "mean_kernel_us": 2.7051125,
+          "grids": {
+            "[4, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "routed_layout",
+          "kernels_per_step": 40.0,
+          "us_per_step": 104.71666666666665,
+          "mean_kernel_us": 2.617916666666667,
+          "grids": {
+            "[1, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void vllm::moe::moe_align_block_size_e128_small_kernel<int>(int const*, int*, int*, int*, int, int, int, int)"
+          ]
+        },
+        {
+          "category": "routed_reduce",
+          "kernels_per_step": 40.0,
+          "us_per_step": 96.67141666666667,
+          "mean_kernel_us": 2.4167854166666665,
+          "grids": {
+            "[4, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void vllm::moe::moe_sum_vec_kernel<c10::BFloat16, int, 8, false>(c10::BFloat16*, c10::BFloat16 const*, long, int, long, long, int const*, int const*, long, long)"
+          ]
+        },
+        {
+          "category": "_yoco_fused_topk_routing_kernel",
+          "kernels_per_step": 40.0,
+          "us_per_step": 91.13566666666667,
+          "mean_kernel_us": 2.278391666666667,
+          "grids": {
+            "[2, 1, 1]": 480
+          },
+          "kernel_names": [
+            "_yoco_fused_topk_routing_kernel"
+          ]
+        },
+        {
+          "category": "_yoco_qk_rms_clip_rotary_kernel",
+          "kernels_per_step": 30.0,
+          "us_per_step": 86.04791666666667,
+          "mean_kernel_us": 2.868263888888889,
+          "grids": {
+            "[288, 1, 1]": 360
+          },
+          "kernel_names": [
+            "_yoco_qk_rms_clip_rotary_kernel"
+          ]
+        },
+        {
+          "category": "quant_self_qkv",
+          "kernels_per_step": 30.0,
+          "us_per_step": 84.069,
+          "mean_kernel_us": 2.8023,
+          "grids": {
+            "[4, 3, 1]": 360
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "cross_q",
+          "kernels_per_step": 10.0,
+          "us_per_step": 81.66975000000001,
+          "mean_kernel_us": 8.166975,
+          "grids": {
+            "[148, 1, 1]": 120
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 8192u, 3072u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "scale_zero",
+          "kernels_per_step": 40.0,
+          "us_per_step": 75.91391666666667,
+          "mean_kernel_us": 1.8978479166666666,
+          "grids": {
+            "[1, 1, 1]": 480
+          },
+          "kernel_names": [
+            "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>)"
+          ]
+        },
+        {
+          "category": "triton_per_fused__fused_rms_norm_per_token_group_fp8_quant_packed_1",
+          "kernels_per_step": 40.0,
+          "us_per_step": 75.38316666666667,
+          "mean_kernel_us": 1.8845791666666667,
+          "grids": {
+            "[8, 1, 1]": 480
+          },
+          "kernel_names": [
+            "triton_per_fused__fused_rms_norm_per_token_group_fp8_quant_packed_1"
+          ]
+        },
+        {
+          "category": "triton_per_fused__fused_rms_norm_moe_forward_shared_0",
+          "kernels_per_step": 40.0,
+          "us_per_step": 73.95875,
+          "mean_kernel_us": 1.84896875,
+          "grids": {
+            "[8, 1, 1]": 480
+          },
+          "kernel_names": [
+            "triton_per_fused__fused_rms_norm_moe_forward_shared_0"
+          ]
+        },
+        {
+          "category": "_diff_quant_kernel",
+          "kernels_per_step": 40.0,
+          "us_per_step": 71.7415,
+          "mean_kernel_us": 1.7935375,
+          "grids": {
+            "[8, 8, 1]": 480
+          },
+          "kernel_names": [
+            "_diff_quant_kernel"
+          ]
+        },
+        {
+          "category": "attention_scheduler",
+          "kernels_per_step": 40.0,
+          "us_per_step": 68.74741666666667,
+          "mean_kernel_us": 1.7186854166666667,
+          "grids": {
+            "[1, 1, 1]": 480
+          },
+          "kernel_names": [
+            "kernel_cutlass_kernel_vllmvllm_flash_attncuteprepare_schedulerFlashPrepareScheduler_object_at_____tensorptri32_gmem_o_1_None_None_None_tensorptri32_gmem_o_1_None__148__FastDivmodDivisordi_0"
+          ]
+        },
+        {
+          "category": "_cache_fp8_kernel",
+          "kernels_per_step": 31.0,
+          "us_per_step": 56.504333333333335,
+          "mean_kernel_us": 1.8227204301075268,
+          "grids": {
+            "[8, 1, 1]": 372
+          },
+          "kernel_names": [
+            "_cache_fp8_kernel"
+          ]
+        },
+        {
+          "category": "_gumbel_sample_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 42.17075,
+          "mean_kernel_us": 42.17075,
+          "grids": {
+            "[8, 152, 1]": 12
+          },
+          "kernel_names": [
+            "_gumbel_sample_kernel"
+          ]
+        },
+        {
+          "category": "quant_cross_q",
+          "kernels_per_step": 10.0,
+          "us_per_step": 28.01608333333333,
+          "mean_kernel_us": 2.8016083333333333,
+          "grids": {
+            "[4, 3, 1]": 120
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "_yoco_weighted_rms_clip_kernel",
+          "kernels_per_step": 11.0,
+          "us_per_step": 20.80333333333333,
+          "mean_kernel_us": 1.8912121212121211,
+          "grids": {
+            "[4, 1, 1]": 12,
+            "[32, 1, 1]": 120
+          },
+          "kernel_names": [
+            "_yoco_weighted_rms_clip_kernel"
+          ]
+        },
+        {
+          "category": "_yoco_rms_norm_kernel",
+          "kernels_per_step": 3.0,
+          "us_per_step": 8.440333333333333,
+          "mean_kernel_us": 2.8134444444444444,
+          "grids": {
+            "[8, 1, 1]": 36
+          },
+          "kernel_names": [
+            "_yoco_rms_norm_kernel"
+          ]
+        },
+        {
+          "category": "memcpy32_post",
+          "kernels_per_step": 6.0,
+          "us_per_step": 7.445166666666666,
+          "mean_kernel_us": 1.2408611111111112,
+          "grids": {
+            "[48, 1, 1]": 36,
+            "[1, 1, 1]": 12,
+            "[8, 1, 1]": 24
+          },
+          "kernel_names": [
+            "memcpy32_post"
+          ]
+        },
+        {
+          "category": "_bias_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 7.050833333333333,
+          "mean_kernel_us": 7.050833333333333,
+          "grids": {
+            "[8, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_bias_kernel"
+          ]
+        },
+        {
+          "category": "shared_kv_proj",
+          "kernels_per_step": 1.0,
+          "us_per_step": 6.6185833333333335,
+          "mean_kernel_us": 6.6185833333333335,
+          "grids": {
+            "[148, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl<(cute::UMMA::Major)0, (cute::UMMA::Major)0, 128u, 128u, 128u, 0u, 2048u, 3072u, 16u, 128u, 128u, 1u, 128u, 128u, 128u, 12u, 128u, 128u, 2u, true, 148u, true, true, (deep_gemm::GemmType)0, false, cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::bfloat16_t, deep_gemm::epilogue::transform::EpilogueIdentity>(int*, unsigned int, unsigned int, unsigned int, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st, CUtensorMap_st)"
+          ]
+        },
+        {
+          "category": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})",
+          "kernels_per_step": 1.0,
+          "us_per_step": 6.512166666666666,
+          "mean_kernel_us": 6.512166666666666,
+          "grids": {
+            "[48, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<2> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})",
+          "kernels_per_step": 2.0,
+          "us_per_step": 6.133416666666666,
+          "mean_kernel_us": 3.066708333333333,
+          "grids": {
+            "[1, 1, 1]": 24
+          },
+          "kernel_names": [
+            "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)",
+          "kernels_per_step": 4.0,
+          "us_per_step": 6.085416666666667,
+          "mean_kernel_us": 1.5213541666666666,
+          "grids": {
+            "[8, 2, 1]": 24,
+            "[8, 1, 1]": 24
+          },
+          "kernel_names": [
+            "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)"
+          ]
+        },
+        {
+          "category": "_post_update_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 5.90675,
+          "mean_kernel_us": 5.90675,
+          "grids": {
+            "[8, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_post_update_kernel"
+          ]
+        },
+        {
+          "category": "_gather_block_tables_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 5.4639999999999995,
+          "mean_kernel_us": 5.464,
+          "grids": {
+            "[31, 8, 1]": 12
+          },
+          "kernel_names": [
+            "_gather_block_tables_kernel"
+          ]
+        },
+        {
+          "category": "_combine_sampled_and_draft_tokens_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 4.57075,
+          "mean_kernel_us": 4.57075,
+          "grids": {
+            "[8, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_combine_sampled_and_draft_tokens_kernel"
+          ]
+        },
+        {
+          "category": "_get_num_sampled_and_rejected_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 4.314666666666667,
+          "mean_kernel_us": 4.314666666666667,
+          "grids": {
+            "[8, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_get_num_sampled_and_rejected_kernel"
+          ]
+        },
+        {
+          "category": "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::ArgMaxOps<float>, unsigned int, long, 4, 4> >(at::native::ReduceOp<float, at::native::ArgMaxOps<float>, unsigned int, long, 4, 4>)",
+          "kernels_per_step": 1.0,
+          "us_per_step": 4.047833333333333,
+          "mean_kernel_us": 4.047833333333333,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::ArgMaxOps<float>, unsigned int, long, 4, 4> >(at::native::ReduceOp<float, at::native::ArgMaxOps<float>, unsigned int, long, 4, 4>)"
+          ]
+        },
+        {
+          "category": "_compute_slot_mappings_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 3.6213333333333337,
+          "mean_kernel_us": 3.6213333333333333,
+          "grids": {
+            "[31, 9, 1]": 12
+          },
+          "kernel_names": [
+            "_compute_slot_mappings_kernel"
+          ]
+        },
+        {
+          "category": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})",
+          "kernels_per_step": 1.0,
+          "us_per_step": 2.9920833333333334,
+          "mean_kernel_us": 2.9920833333333334,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "quant_shared_kv_proj",
+          "kernels_per_step": 1.0,
+          "us_per_step": 2.9120000000000004,
+          "mean_kernel_us": 2.912,
+          "grids": {
+            "[4, 3, 1]": 12
+          },
+          "kernel_names": [
+            "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, int, int, long, float, float, float)"
+          ]
+        },
+        {
+          "category": "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>)",
+          "kernels_per_step": 2.0,
+          "us_per_step": 2.5040833333333334,
+          "mean_kernel_us": 1.2520416666666667,
+          "grids": {
+            "[1, 1, 1]": 24
+          },
+          "kernel_names": [
+            "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>)"
+          ]
+        },
+        {
+          "category": "void at::native::_scatter_gather_elementwise_kernel<128, 8, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<8>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<8>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1})",
+          "kernels_per_step": 1.0,
+          "us_per_step": 2.1759999999999997,
+          "mean_kernel_us": 2.176,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void at::native::_scatter_gather_elementwise_kernel<128, 8, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<8>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<8>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1})"
+          ]
+        },
+        {
+          "category": "triton_poi_fused__to_copy_embedding_0",
+          "kernels_per_step": 1.0,
+          "us_per_step": 2.053166666666667,
+          "mean_kernel_us": 2.053166666666667,
+          "grids": {
+            "[24, 1, 1]": 12
+          },
+          "kernel_names": [
+            "triton_poi_fused__to_copy_embedding_0"
+          ]
+        },
+        {
+          "category": "_prepare_pos_seq_lens_kernel",
+          "kernels_per_step": 1.0,
+          "us_per_step": 1.9066666666666665,
+          "mean_kernel_us": 1.9066666666666667,
+          "grids": {
+            "[9, 1, 1]": 12
+          },
+          "kernel_names": [
+            "_prepare_pos_seq_lens_kernel"
+          ]
+        },
+        {
+          "category": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<bool>, std::array<char*, 1ul> >(int, at::native::FillFunctor<bool>, std::array<char*, 1ul>)",
+          "kernels_per_step": 1.0,
+          "us_per_step": 1.3626666666666667,
+          "mean_kernel_us": 1.3626666666666667,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<bool>, std::array<char*, 1ul> >(int, at::native::FillFunctor<bool>, std::array<char*, 1ul>)"
+          ]
+        },
+        {
+          "category": "triton_poi_fused_add_2",
+          "kernels_per_step": 1.0,
+          "us_per_step": 1.3411666666666668,
+          "mean_kernel_us": 1.3411666666666666,
+          "grids": {
+            "[24, 1, 1]": 12
+          },
+          "kernel_names": [
+            "triton_poi_fused_add_2"
+          ]
+        },
+        {
+          "category": "void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>::result_type*)",
+          "kernels_per_step": 1.0,
+          "us_per_step": 1.152,
+          "mean_kernel_us": 1.152,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>::result_type*)"
+          ]
+        },
+        {
+          "category": "void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>::result_type*)",
+          "kernels_per_step": 1.0,
+          "us_per_step": 1.07475,
+          "mean_kernel_us": 1.07475,
+          "grids": {
+            "[1, 1, 1]": 12
+          },
+          "kernel_names": [
+            "void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>::result_type*)"
+          ]
+        }
+      ]
+    }
+  ]
+}
