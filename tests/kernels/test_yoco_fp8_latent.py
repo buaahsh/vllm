@@ -9,7 +9,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from vllm.config import VllmConfig, set_current_vllm_config
+from vllm.config import VllmConfig, get_current_vllm_config, set_current_vllm_config
 from vllm.config.quantization import resolve_quantization_config
 from vllm.model_executor.layers.linear import ReplicatedLinear
 from vllm.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
@@ -203,3 +203,94 @@ def test_small_fp8_graph_observes_input_and_scale_updates(latent_linear, backend
     # Both legal packed-scale stride layouts must represent the same operation.
     alternate = small_fp8_mm(a, w, sa.contiguous(), sw.contiguous(), config)
     _assert_gemm_matches(alternate, _packed_operand_reference(a, w, sa, sw))
+
+
+@torch.inference_mode()
+def test_m1_linear_dispatch_preserves_quantizer_and_other_batches(latent_linear):
+    """The integrated linear uses GEMV at M1 and exact native output elsewhere."""
+    from vllm.model_executor.layers.yoco_ops.small_fp8 import (
+        SmallFP8Config,
+        small_fp8_mm,
+    )
+    from vllm.model_executor.layers.yoco_ops.small_fp8_linear import (
+        configure_yoco_m1_fp8_linear,
+    )
+
+    layer, weight = latent_linear
+    original = layer.quant_method.fp8_linear
+    inputs = {
+        m: torch.randn(m, weight.shape[1], device="cuda", dtype=torch.bfloat16)
+        for m in (1, 2, 8, 32)
+    }
+    native = {m: layer(x) for m, x in inputs.items()}
+    assert configure_yoco_m1_fp8_linear(layer, "fast")
+    assert layer.quant_method.fp8_linear.quant_fp8 is original.quant_fp8
+    for m, x in inputs.items():
+        actual = layer(x)
+        if m == 1:
+            a, sa = original.quant_fp8(x)
+            candidate = small_fp8_mm(
+                a,
+                layer.weight,
+                sa,
+                layer.weight_scale_inv,
+                SmallFP8Config("direct", 1, 4, 1),
+            )
+            assert torch.equal(actual, candidate)
+        else:
+            assert torch.equal(actual, native[m])
+    x = inputs[1]
+    for _ in range(3):
+        layer(x)
+    torch.accelerator.synchronize()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        captured = layer(x)
+    x.copy_(torch.randn_like(x) * 4)
+    graph.replay()
+    a, sa = original.quant_fp8(x)
+    _assert_gemm_matches(
+        captured, _packed_operand_reference(a, layer.weight, sa, layer.weight_scale_inv)
+    )
+
+
+@pytest.mark.parametrize(
+    "guard", ["flag", "align", "batch_invariant", "tp", "dp", "ep"]
+)
+def test_m1_linear_dispatch_keeps_unvalidated_modes_native(
+    latent_linear, monkeypatch, guard
+):
+    from vllm import envs
+    from vllm.model_executor.layers.yoco_ops.small_fp8_linear import (
+        configure_yoco_m1_fp8_linear,
+    )
+
+    layer, _ = latent_linear
+    original = layer.quant_method.fp8_linear
+    mode = "align" if guard == "align" else "fast"
+    if guard == "flag":
+        monkeypatch.setenv("VLLM_YOCO_FP8_SMALL_M", "0")
+    elif guard == "batch_invariant":
+        monkeypatch.setattr(envs, "VLLM_BATCH_INVARIANT", True)
+    elif guard in ("tp", "dp", "ep"):
+        fields = {
+            "tp": "tensor_parallel_size",
+            "dp": "data_parallel_size",
+            "ep": "enable_expert_parallel",
+        }
+        monkeypatch.setattr(
+            get_current_vllm_config().parallel_config,
+            fields[guard],
+            True if guard == "ep" else 2,
+        )
+    assert not configure_yoco_m1_fp8_linear(layer, mode)
+    assert layer.quant_method.fp8_linear is original
+
+
+def test_m1_dispatch_switch_changes_compilation_identity(monkeypatch):
+    from vllm import envs
+
+    monkeypatch.setenv("VLLM_YOCO_FP8_SMALL_M", "0")
+    assert envs.compile_factors()["VLLM_YOCO_FP8_SMALL_M"] is False
+    monkeypatch.setenv("VLLM_YOCO_FP8_SMALL_M", "1")
+    assert envs.compile_factors()["VLLM_YOCO_FP8_SMALL_M"] is True

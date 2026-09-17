@@ -645,6 +645,8 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "VLLM_YOCO_FP8_W2_TUNING": lambda: bool(
         int(os.getenv("VLLM_YOCO_FP8_W2_TUNING", "1"))
     ),
+    # Fast B200 TP1/DP1 shared/latent M1 GEMV; set before engine/Graph creation.
+    "VLLM_YOCO_FP8_SMALL_M": lambda: bool(int(os.getenv("VLLM_YOCO_FP8_SMALL_M", "1"))),
     # Experimental, environment-matched YOCO Align MoE launch configuration.
     # No profile is selected by default; both inference and training use this path.
     "VLLM_YOCO_ALIGN_MOE_CONFIG": lambda: os.getenv("VLLM_YOCO_ALIGN_MOE_CONFIG"),

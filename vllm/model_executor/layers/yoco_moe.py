@@ -132,6 +132,12 @@ class YOCOSharedExperts(nn.Module):
             reduce_results=reduce_results,
             prefix=f"{prefix}.down_proj",
         )
+        from vllm.model_executor.layers.yoco_ops.small_fp8_linear import (
+            configure_yoco_m1_fp8_linear,
+        )
+
+        configure_yoco_m1_fp8_linear(self.gate_up_proj, execution_mode)
+        configure_yoco_m1_fp8_linear(self.down_proj, execution_mode)
         self.use_fast_down_transpose = self.use_fast_down_transpose and isinstance(
             self.down_proj.quant_method, UnquantizedLinearMethod
         )
@@ -445,6 +451,12 @@ class YOCOMoE(nn.Module):
                 prefix=f"{prefix}.fc2_latent_proj",
                 return_bias=False,
             )
+            from vllm.model_executor.layers.yoco_ops.small_fp8_linear import (
+                configure_yoco_m1_fp8_linear,
+            )
+
+            configure_yoco_m1_fp8_linear(self.fc1_latent_proj, execution_mode)
+            configure_yoco_m1_fp8_linear(self.fc2_latent_proj, execution_mode)
             self.fc1_latent_norm = (
                 RMSNorm(
                     self.moe_latent_dim,
