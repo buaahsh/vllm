@@ -77,10 +77,6 @@ Graph span 约 **5.559 ms**，两者口径不同。不同 stream 的 kernel 时�
 
 ## 固定推理配置
 
-Shared/latent 的 M1 专用 GEMV 默认启用，见
-[整模型接入验证](SHARED_LATENT_M1_INTEGRATION.md)。设置
-`VLLM_YOCO_FP8_SMALL_M=0` 后新建 engine 可进行 native 对照；脚本会记录该值。
-
 | 部分 | 设置 |
 | --- | --- |
 | 模式 / 权重 | `additional_config.yoco_execution_mode=fast`, `quantization=fp8_per_block` |
@@ -90,7 +86,6 @@ Shared/latent 的 M1 专用 GEMV 默认启用，见
 | attention 融合 | `VLLM_YOCO_FP8_ATTENTION_FUSION=1` |
 | latent Norm 融合 | `VLLM_YOCO_FP8_LATENT_NORM_FUSION=0` |
 | 小 batch W2 | `VLLM_YOCO_FP8_W2_TUNING=1`，M1/M2/M4 独立配置 |
-| Shared/latent M1 | `VLLM_YOCO_FP8_SMALL_M=1`，实际 M1 用 direct GEMV，其余 M 用 native |
 | CUDA Graph | `FULL_AND_PIECEWISE`，捕获 `[1,2,4,8,16]` |
 | Scheduler | 最大长度 8192，最大 batch tokens 4096，最多 16 请求 |
 | 显存预算 | `gpu_memory_utilization=0.65` |

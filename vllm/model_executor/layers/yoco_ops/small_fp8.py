@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Small-M FP8 kernels for YOCO shared/latent projections.
+"""Explicit experimental small-M FP8 GEMMs for YOCO shared/latent projections.
 
 Consumes the existing DeepGEMM UE8M0 operands without changing quantization.
-The configurable entry point is for experiments; M1 model dispatch lives in
-small_fp8_linear.
+No model/backend dispatch enables these candidates automatically.
 """
 
 from dataclasses import dataclass

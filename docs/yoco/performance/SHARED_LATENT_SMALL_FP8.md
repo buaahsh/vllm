@@ -1,8 +1,5 @@
 # Shared / latent 专用小矩阵 FP8 路径：准备与实测
 
-后续接入：[M1 默认分派、回退开关与整模型验证](SHARED_LATENT_M1_INTEGRATION.md)。
-下文保留原型阶段的独立算子测量及当时的准备状态。
-
 2026-09-16 PDT，基于 `vllm-yoco-version-0.29` 的分析分支
 `investigate/yoco-v029-fp8-decode-20260916`，起点 `5e4e2cf693`。
 

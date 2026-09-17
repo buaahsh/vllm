@@ -48,7 +48,7 @@ def runtime_manifest(worker: Any) -> dict[str, Any]:
 
     config = worker.vllm_config
     parallel = config.parallel_config
-    experts, latent, small_fp8_linears = [], [], []
+    experts, latent = [], []
     for name, layer in worker.model_runner.get_model().named_modules():
         if isinstance(layer, RoutedExperts):
             impl = layer.quant_method.moe_kernel.fused_experts
@@ -64,22 +64,6 @@ def runtime_manifest(worker: Any) -> dict[str, Any]:
             )
         if name.endswith(("fc1_latent_proj", "fc2_latent_proj")):
             latent.append({"name": name, "dtype": str(layer.weight.dtype)})
-        if name.endswith(
-            (
-                "fc1_latent_proj",
-                "fc2_latent_proj",
-                "shared_experts.gate_up_proj",
-                "shared_experts.down_proj",
-            )
-        ):
-            kernel = getattr(getattr(layer, "quant_method", None), "fp8_linear", None)
-            small_fp8_linears.append(
-                {
-                    "name": name,
-                    "backend": type(kernel).__name__,
-                    "weight_shape": list(layer.weight.shape),
-                }
-            )
     attention = [
         {
             "name": name,
@@ -120,7 +104,6 @@ def runtime_manifest(worker: Any) -> dict[str, Any]:
         ),
         "experts": experts,
         "latent": latent,
-        "small_fp8_linears": small_fp8_linears,
         "attention": attention,
     }
 
@@ -200,13 +183,11 @@ def main(
     env = dict(DEFAULT_ENV)
     # Compilation concurrency affects cold startup, outside the timed runs.
     env["MAX_JOBS"] = os.environ.get("MAX_JOBS", env["MAX_JOBS"])
-    env["VLLM_YOCO_FP8_SMALL_M"] = os.environ.get("VLLM_YOCO_FP8_SMALL_M", "1")
     if not use_fp8:
         env.update(
             VLLM_YOCO_FP8_ATTENTION_FUSION="0",
             VLLM_YOCO_FP8_LATENT_NORM_FUSION="0",
             VLLM_YOCO_FP8_W2_TUNING="0",
-            VLLM_YOCO_FP8_SMALL_M="0",
         )
     # Set before importing Torch/vLLM; this is the measured single-GPU preset.
     os.environ.update(env)

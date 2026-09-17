@@ -1,8 +1,5 @@
 # YOCO 性能结果入口
 
-[Shared/latent M1 FP8 分派](SHARED_LATENT_M1_INTEGRATION.md)：M1 direct GEMV、
-其余 batch 的 native fallback、回退开关及整模型验证。
-
 [单卡 Fast BF16 decode 复现](FAST_BF16_DECODE_BENCHMARK.md)与
 [Fast FP8 decode 复现](FAST_FP8_DECODE_BENCHMARK.md)共用固定输入和计时实现。
 旧分支原始测量保留在各报告；当前版本的适配和复测见[增量合并报告](../fhb-dev-9-18-merge.md)。
