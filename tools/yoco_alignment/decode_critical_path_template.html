@@ -1,0 +1,172 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: Copyright contributors to the vLLM project -->
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YOCO decode：调用关系与执行时间线</title>
+<style>
+  :root { color-scheme:light dark; --fg:light-dark(#17212b,#e6edf3); --bg:light-dark(#fff,#15191e); --line:light-dark(#cbd2da,#46515d); --muted:light-dark(#4a5868,#afbbc7); --attention:light-dark(#2167aa,#79b8ff); --latent:light-dark(#8760a0,#b993d6); --routed:light-dark(#26794c,#69bc89); --shared:light-dark(#c56c21,#f1aa67); --gate:light-dark(#65717f,#a2aebc); }
+  * { box-sizing:border-box; }
+  body { margin:0 auto; max-width:1120px; padding:28px; background:var(--bg); color:var(--fg); font:15px/1.6 system-ui,sans-serif; }
+  h1 { font-size:26px; margin:0 0 6px; } h2 { font-size:19px; margin:30px 0 10px; }
+  p { margin:8px 0; } .muted { color:var(--muted); } a { color:var(--attention); }
+  .controls,.legend { display:flex; flex-wrap:wrap; gap:12px 24px; align-items:center; margin:12px 0; }
+  select { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); padding:5px 9px; max-width:100%; }
+  label { display:flex; gap:9px; align-items:center; flex-wrap:wrap; }
+  .swatch { display:inline-block; width:13px; height:13px; margin-right:7px; }
+  svg { display:block; width:100%; overflow:visible; }
+  svg text { fill:var(--fg); font:12px system-ui,sans-serif; }
+  .flow { display:grid; justify-items:stretch; max-width:640px; margin:18px auto; text-align:center; gap:5px; }
+  .node { padding:8px 12px; border:1px solid var(--line); }
+  .branch { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .branch .node:first-child { background:color-mix(in srgb,var(--shared) 12%,transparent); }
+  .branch .node:last-child { background:color-mix(in srgb,var(--routed) 12%,transparent); }
+  .arrow { color:var(--muted); } .detail { min-height:28px; overflow-wrap:anywhere; }
+  .table-wrap { overflow-x:auto; } table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  th,td { text-align:right; border-bottom:1px solid var(--line); padding:7px 9px; }
+  th:first-child,td:first-child { text-align:left; }
+  .tool { margin:9px 0; } code { overflow-wrap:anywhere; }
+  @media(max-width:540px) { body { padding:16px; } h1 { font-size:22px; } .branch { gap:8px; } .node { padding:6px; } }
+</style>
+<h1>YOCO decode：调用关系与执行时间线</h1>
+<p class="muted">B200 · FP8 · TP1 · 40 个逻辑层 · 2026-09-17 · M1 接入已回退</p>
+<p>Shared 提前完成，单独加速它不会直接提前汇合。先看影响下一层开始时间的串行段与 routed 分支。</p>
+
+<h2>观察到的每层执行顺序</h2>
+<div class="flow" aria-label="Attention 后 latent in 和 router 先执行，shared 与 routed 并行，等待两者结束，再 latent out 和合并">
+  <div class="node">Norm → QKV / Q → FA4 → λ / diff → O → Add + Norm</div>
+  <div class="arrow">↓</div>
+  <div class="node">Latent in + Norm → Router GEMM + reduce</div>
+  <div class="arrow">↙　并行分叉　↘</div>
+  <div class="branch">
+    <div class="node">Shared<br>Quant → W13 → SwiGLU + Quant → W2</div>
+    <div class="node">Routed<br>TopK → Quant / layout → W13 → SwiGLU + Quant → W2 → Sum</div>
+  </div>
+  <div class="arrow">↘　等待两路完成　↙</div>
+  <div class="node">Latent out Norm + Quant + GEMM → Shared gate + 合并 → 下一层</div>
+</div>
+<p class="muted">这是编译后 trace 的顺序。数学上 Router、Shared、Latent in 都依赖同一原始输入，可独立计算；源码的 shared wait 位于 latent out 之前。40 层为 10 个 self 层 × 3 轮，再执行 10 个 cross 层。</p>
+
+<h2>整图时间分配</h2>
+<p class="muted">每组 12 次 Graph 的平均 elapsed time，单位 ms；连续阶段边界相加等于整图时间，未将重叠 kernel 时长相加。LM head、采样与 CPU 调度在图外。</p>
+<div id="allocation" role="img" aria-label="B1 与 B8 原生和 M1 候选的阶段时间对比"></div>
+<div class="legend" id="phase-legend"></div>
+
+<h2>逐层展开</h2>
+<div class="controls">
+  <label>Batch <select id="batch"><option value="1">B1</option><option value="8">B8</option></select></label>
+  <label>逻辑层 <select id="layer"></select></label>
+</div>
+<p class="muted">展示双方各自第 1 次记录到的 Graph；原生与候选使用同一横轴，B1 的生成历史和路由可能不同。点击 kernel 可查看耗时。</p>
+<div id="timeline" role="img" aria-label="所选层的原生与 M1 候选 GPU stream 时间线"></div>
+<div class="legend" id="kernel-legend"></div>
+<p id="detail" class="detail" aria-live="polite"></p>
+<div class="table-wrap"><table><thead><tr><th>当前层，μs</th><th>原生</th><th>M1 候选</th><th>候选 − 原生</th></tr></thead><tbody id="layer-table"></tbody></table></div>
+<p class="muted">Shared 提前量 = routed 结束 − shared 结束。空白表示该 stream 没有记录到 kernel，不能单凭空白认定 CPU launch 瓶颈。同一 stream 部分 kernel 时间戳重叠，不能由时间线反推出完整依赖图。</p>
+
+<h2>进一步定位用什么工具</h2>
+<p class="tool"><strong>PyTorch profiler + Perfetto：</strong>已有原始 trace 与带阶段标注的版本，可核对 overlap、层延迟和图外操作。打开 <a href="https://ui.perfetto.dev/">Perfetto</a> 后载入 <code>work/yoco-critical-path-20260917/perfetto/native-b1.json.gz</code> 等文件。</p>
+<p class="tool"><strong>Nsight Systems：</strong>下一步看 CUDA Graph 节点、CPU/GPU 调度与事件等待。宿主机已安装，GPU Pod 暂无采集器；查看器在服务器 <code>127.0.0.1:18080</code>，需转发 18080 和 13478。现有 PyTorch trace 不是 <code>.nsys-rep</code>。</p>
+<p class="tool"><strong>Nsight Compute：</strong>再看选定 kernel 的 DRAM/L2、SM、occupancy 与 stall。GPU Pod 的硬件计数器权限受限，尚未取得流量数据。查看器在服务器 <code>127.0.0.1:18081</code>，需登录。</p>
+<p class="muted">本图不证明已跑满 HBM，也不证明 M1 GEMV 导致资源争用。因果验证需固定输入/路由，再做 overlap 开关对照和 kernel 计数器采集。</p>
+
+<script type="application/json" id="critical-path-data">__AUDITED_TRACE_DATA__</script>
+<script>
+(() => {
+  const data = JSON.parse(document.getElementById('critical-path-data').textContent).runs;
+  const phaseKeys = ['attention_and_norm','latent_in_and_router','parallel_experts','join_to_latent_out','latent_out_and_merge','final_norm'];
+  const phaseLabels = ['Attention / Norm','Latent in / Router','并行专家','汇合间隔','Latent out / 合并','尾部'];
+  const phaseColors = ['var(--attention)','var(--latent)','var(--routed)','var(--gate)','var(--shared)','var(--gate)'];
+  const ns = 'http://www.w3.org/2000/svg';
+  const allocation = document.getElementById('allocation'), timeline = document.getElementById('timeline');
+  const batch = document.getElementById('batch'), layer = document.getElementById('layer');
+  const detail = document.getElementById('detail');
+  function el(tag, attrs, parent, content) {
+    const node = document.createElementNS(ns,tag);
+    Object.entries(attrs).forEach(([k,v]) => node.setAttribute(k,v));
+    if (content !== undefined) node.textContent = content;
+    parent.append(node); return node;
+  }
+  function text(svg,x,y,value,anchor='start') { return el('text',{x,y,'text-anchor':anchor},svg,value); }
+  function canvas(container,height) {
+    container.replaceChildren(); const width = container.clientWidth;
+    return [el('svg',{viewBox:`0 0 ${width} ${height}`,role:'img'},container),width];
+  }
+  function legend(id,labels,colors) {
+    const parent=document.getElementById(id);
+    labels.forEach((label,i) => { const item=document.createElement('span'),swatch=document.createElement('span');
+      swatch.className='swatch';swatch.style.background=colors[i];item.append(swatch,document.createTextNode(label));parent.append(item); });
+  }
+  legend('phase-legend',phaseLabels,phaseColors);
+  legend('kernel-legend',['Attention / 准备','Latent','Routed / Router','Shared','Norm / 合并 / layout'],['var(--attention)','var(--latent)','var(--routed)','var(--shared)','var(--gate)']);
+  function axis(svg,left,right,y,max,unit,n) {
+    el('line',{x1:left,x2:right,y1:y,y2:y,stroke:'var(--line)'},svg);
+    for(let i=0;i<=n;i++) { const x=left+(right-left)*i/n;
+      text(svg,x,y+18,(max*i/n).toFixed(unit==='ms'?1:0),i===0?'start':i===n?'end':'middle'); }
+    text(svg,right,y+37,`时间 (${unit})`,'end');
+  }
+  function drawAllocation() {
+    const [svg,w]=canvas(allocation,220),left=84,right=w-12;
+    const max=Math.ceil(Math.max(...Object.values(data).map(r=>r.model_graph_us.mean))/1000);
+    ['native_b1','candidate_b1','native_b8','candidate_b8'].forEach((key,i) => {
+      const row=data[key], y=12+i*40; let cursor=left;
+      text(svg,0,y+18,(row.batch===1?'B1 ':'B8 ')+(row.candidate?'M1':'原生'));
+      phaseKeys.forEach((phase,j) => { const value=row.mean_phase_us_per_step[phase]/1000, width=value/max*(right-left);
+        const rect=el('rect',{x:cursor,y,width,height:24,fill:phaseColors[j],opacity:.28},svg);
+        el('title',{},rect,`${phaseLabels[j]}: ${value.toFixed(4)} ms`);
+        if(width>68) text(svg,cursor+width/2,y+17,value.toFixed(2),'middle');
+        cursor+=width; });
+    });
+    axis(svg,left,right,174,max,'ms',w<500?3:6);
+  }
+  for(let i=0;i<40;i++) {
+    const option=document.createElement('option');option.value=i;
+    option.textContent=i<30?`${i+1} · Self ${i%10+1} / 轮 ${Math.floor(i/10)+1}`:`${i+1} · Cross ${i-29}`;
+    layer.append(option);
+  }
+  function color(name) {
+    if(name.includes('shared_kv')) return 'var(--attention)';
+    if(name.includes('shared')) return 'var(--shared)';
+    if(name.includes('latent')) return 'var(--latent)';
+    if(name.includes('routed')||name==='router'||name==='topk') return 'var(--routed)';
+    if(/attention|qkv|cross_q|lambda|cache_fp8|rotary|diff_quant/.test(name)) return 'var(--attention)';
+    return 'var(--gate)';
+  }
+  function drawTimeline() {
+    const rows=[data[`native_b${batch.value}`],data[`candidate_b${batch.value}`]];
+    const index=Number(layer.value), chosen=rows.map(r=>r.representative.layers[index]);
+    const maximum=Math.ceil(Math.max(...chosen.map(l=>l.span_us))/10)*10;
+    const [svg,w]=canvas(timeline,330),left=84,right=w-12,scale=(right-left)/maximum;
+    rows.forEach((row,r) => {
+      const current=chosen[r], ybase=30+r*137, source=row.representative;
+      const selected=source.kernels.filter(k=>k[1]>=current.start_us-0.002 && k[1]<current.start_us+current.span_us-0.002);
+      const streams=[...new Set(selected.map(k=>k[3]))].sort((a,b)=>a-b);
+      text(svg,0,ybase-12,row.candidate?'M1 候选':'原生');
+      streams.forEach((stream,s)=>{
+        text(svg,0,ybase+s*33+17,`Stream ${stream}`);
+        el('line',{x1:left,x2:right,y1:ybase+s*33+24,y2:ybase+s*33+24,stroke:'var(--line)'},svg);
+      });
+      for(const k of selected) {
+        const name=source.categories[k[0]],x=left+(k[1]-current.start_us)*scale,y=ybase+streams.indexOf(k[3])*33;
+        const rect=el('rect',{x,y,width:Math.max(.6,k[2]*scale),height:21,fill:color(name),'data-kernel':name},svg);
+        const description=`${row.candidate?'M1':'原生'} · ${name} · ${k[2].toFixed(3)} μs · 层内 ${(k[1]-current.start_us).toFixed(3)} μs 开始`;
+        el('title',{},rect,description);rect.addEventListener('click',()=>{detail.textContent=description;});
+      }
+      const sharedEnd=current.branch_us[1],routedEnd=current.branch_us[3],y=ybase+78;
+      el('line',{x1:left+sharedEnd*scale,x2:left+routedEnd*scale,y1:y,y2:y,stroke:'var(--fg)'},svg);
+      text(svg,right,ybase+105,`Shared 提前 ${current.shared_slack_us.toFixed(2)} μs；层耗时 ${current.span_us.toFixed(2)} μs`,'end');
+    });
+    axis(svg,left,right,283,maximum,'μs',w<500?3:6);
+    const body=document.getElementById('layer-table'); body.replaceChildren();
+    const metrics=[...phaseKeys.slice(0,5).map((p,i)=>[phaseLabels[i],l=>l.phase_us[p]]),['层总耗时',l=>l.span_us],['Shared 提前量',l=>l.shared_slack_us]];
+    metrics.forEach(([label,get])=>{const tr=document.createElement('tr');const a=get(chosen[0]),b=get(chosen[1]);
+      [label,a.toFixed(3),b.toFixed(3),(b-a).toFixed(3)].forEach(value=>{const td=document.createElement('td');td.textContent=value;tr.append(td);});body.append(tr);});
+    detail.textContent=`B${batch.value} · ${layer.selectedOptions[0].textContent} · 双方第 1 次记录到的 Graph`;
+  }
+  batch.addEventListener('change',drawTimeline); layer.addEventListener('change',drawTimeline);
+  new ResizeObserver(()=>{drawAllocation();drawTimeline();}).observe(document.body);
+  drawAllocation();drawTimeline();
+})();
+</script>
+</html>
