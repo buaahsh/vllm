@@ -1,0 +1,5014 @@
+{
+  "base_commit": "5e4e2cf693e37b0217baa36c3553243640ff0308",
+  "scope": "Explicit operator candidates only; no default model dispatch or whole-model acceptance",
+  "sources": [
+    {
+      "path": "small-fp8-screen-r2/benchmark.json",
+      "sha256": "b91beb2dc6f6b44dde158bf13f1ceca9c29ab14d81eb8816e61811dfb94cc176"
+    },
+    {
+      "path": "small-fp8-screen-m24-r1/benchmark.json",
+      "sha256": "a1ed8807fd27048e893036984d738cc6e3d604e044320bdd54e8fe2261ad3cb4"
+    }
+  ],
+  "native_deep_gemm": {
+    "module": "/usr/local/lib/python3.12/dist-packages/vllm/third_party/deep_gemm/__init__.py",
+    "library": "/usr/local/lib/python3.12/dist-packages/vllm/third_party/deep_gemm/_C.cpython-312-x86_64-linux-gnu.so",
+    "sha256": "73824dc1312e98cf277ae6bc017becf7e963d5b0bfab81e0c6d475d9b769c9e7"
+  },
+  "gpu": "NVIDIA B200",
+  "gpu_uuid": "GPU-a1af57eb-3f0a-bd1c-3379-3e735f37113a",
+  "torch": "2.13.0+cu130",
+  "candidate_sha256": "94b86b8c4af972b242c94a692dc564174ae8e634aa88880f8904d8e1553f50c2",
+  "benchmark_sha256": "4cc7108c6eb43d2b6097c899d2434b8e2b7e178d947832277f6b136ea03d3ddf",
+  "weight_payload_bytes": 361758720,
+  "tests": {
+    "tests": 60,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "test_source_sha256": "79008114597773c23984b96d70c7443ef30005b184208734a8e7ad512379ee8a",
+  "batches": [
+    {
+      "batch": 1,
+      "rotating_matrices": 80,
+      "timings_per_projection": {
+        "native_gemm": {
+          "us": 5.269320011138916,
+          "samples_us": [
+            5.261293252309163,
+            5.268479983011882,
+            5.269333521525065,
+            5.269320011138916,
+            5.271039803822835,
+            5.269333521525065,
+            5.265906651814778
+          ]
+        },
+        "candidate_gemm": {
+          "us": 3.5507198174794516,
+          "samples_us": [
+            3.5498666763305664,
+            3.55242649714152,
+            3.5507198174794516,
+            3.551666736602783,
+            3.5507333278656006,
+            3.5456267992655435,
+            3.5497868061065674
+          ]
+        },
+        "native_quant_gemm": {
+          "us": 7.6509467760721845,
+          "samples_us": [
+            7.6509467760721845,
+            7.649693489074707,
+            7.648746967315674,
+            7.650559743245442,
+            7.654813130696614,
+            7.653120358784993,
+            7.651853561401367
+          ]
+        },
+        "candidate_quant_gemm": {
+          "us": 6.019826730092366,
+          "samples_us": [
+            6.0215067863464355,
+            6.02241317431132,
+            6.018133163452148,
+            6.017706791559855,
+            6.019826730092366,
+            6.023706595102946,
+            6.019399960835774
+          ]
+        }
+      },
+      "selected_tactics": {
+        "shared_w13": {
+          "backend": "direct",
+          "block_n": 1,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "shared_w2": {
+          "backend": "direct",
+          "block_n": 1,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "latent_in": {
+          "backend": "direct",
+          "block_n": 1,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "latent_out": {
+          "backend": "direct",
+          "block_n": 1,
+          "num_warps": 4,
+          "num_stages": 1
+        }
+      },
+      "quant_gemm_time_reduction_percent": 21.319192169536915,
+      "pure_gemm_time_reduction_percent": 32.61521771360408,
+      "max_relative_l2_vs_fp64": 9.486841736361384e-05,
+      "changed_elements_vs_native": 16,
+      "output_elements": 194560,
+      "max_abs_vs_native": 0.015625,
+      "all_finite": true,
+      "hot_screen": [
+        {
+          "batch": 1,
+          "category": "shared_w13",
+          "timings": {
+            "native": {
+              "us": 4.922133187452952,
+              "samples_us": [
+                4.9387335777282715,
+                4.922133187452952,
+                4.91759975751241,
+                4.955933491388957,
+                4.891866445541382
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 10.071532924969992,
+              "samples_us": [
+                10.071532924969992,
+                10.105599959691366,
+                10.065066814422607,
+                10.105666518211365,
+                10.065467158953348
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 8.192066848278046,
+              "samples_us": [
+                8.192066848278046,
+                8.196199933687845,
+                8.191933234532675,
+                8.194200197855631,
+                8.191999793052673
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 10.242133339246115,
+              "samples_us": [
+                10.242133339246115,
+                10.242133339246115,
+                10.240266720453898,
+                10.239932934443155,
+                10.242133339246115
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 7.434399922688802,
+              "samples_us": [
+                7.436866561571757,
+                7.436733444531758,
+                7.432533303896586,
+                7.430399954319,
+                7.434399922688802
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 8.968466520309448,
+              "samples_us": [
+                8.966400225957235,
+                8.968466520309448,
+                8.968466520309448,
+                8.968533078829447,
+                8.968533078829447
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 7.042266428470612,
+              "samples_us": [
+                7.042266428470612,
+                7.044266661008199,
+                7.042066752910614,
+                7.044599950313568,
+                7.0421333114306135
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 4.211733241875966,
+              "samples_us": [
+                4.211733241875966,
+                4.18586681286494,
+                4.222133258978526,
+                4.226533571879069,
+                4.20499990383784
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 4.723666608333588,
+              "samples_us": [
+                4.687199989954631,
+                4.736199975013733,
+                4.716933270295461,
+                4.723666608333588,
+                4.73826676607132
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 6.534400085608165,
+              "samples_us": [
+                6.534400085608165,
+                6.549266477425893,
+                6.555733581384023,
+                6.532200177510579,
+                6.532000005245209
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 6.798933446407318,
+              "samples_us": [
+                6.7925333976745605,
+                6.824533144632976,
+                6.7952002088228864,
+                6.828799843788147,
+                6.798933446407318
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 6.190933287143707,
+              "samples_us": [
+                6.154666841030121,
+                6.2141334017117815,
+                6.154666841030121,
+                6.190933287143707,
+                6.201666593551636
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 6.414933502674103,
+              "samples_us": [
+                6.412733097871144,
+                6.449066599210103,
+                6.4490000406901045,
+                6.406400104363759,
+                6.414933502674103
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            }
+          },
+          "selected": "direct-n1-w4-s1"
+        },
+        {
+          "batch": 1,
+          "category": "shared_w2",
+          "timings": {
+            "native": {
+              "us": 3.588333229223887,
+              "samples_us": [
+                3.588333229223887,
+                3.588400036096573,
+                3.588333229223887,
+                3.588266670703888,
+                3.588400036096573
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 4.996400078137715,
+              "samples_us": [
+                4.997333387533824,
+                4.996400078137715,
+                4.994200170040131,
+                4.996400078137715,
+                4.9985334277153015
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 4.23499991496404,
+              "samples_us": [
+                4.258599877357483,
+                4.23499991496404,
+                4.230666657288869,
+                4.230399926503499,
+                4.235200087229411
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 4.994399845600128,
+              "samples_us": [
+                4.994133114814758,
+                4.993933439254761,
+                4.994399845600128,
+                4.994933307170868,
+                4.994866748650868
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 3.972333421309789,
+              "samples_us": [
+                3.972333421309789,
+                3.972333421309789,
+                3.972333421309789,
+                3.972399979829788,
+                3.9722666144371033
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 4.870600004990895,
+              "samples_us": [
+                4.872933526833852,
+                4.870600004990895,
+                4.874999821186066,
+                4.870466887950897,
+                4.870533446470897
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 4.226466516653697,
+              "samples_us": [
+                4.224066436290741,
+                4.228266576925914,
+                4.226600130399068,
+                4.226133227348328,
+                4.226466516653697
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 3.336666772762934,
+              "samples_us": [
+                3.336666772762934,
+                3.336666772762934,
+                3.3578666547934213,
+                3.3367333312829337,
+                3.3365999658902488
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 4.320266842842102,
+              "samples_us": [
+                4.329066475232442,
+                4.318066438039144,
+                4.349933564662933,
+                4.313733180363973,
+                4.320266842842102
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 4.226466516653697,
+              "samples_us": [
+                4.226333399613698,
+                4.230666657288869,
+                4.228400190671285,
+                4.226466516653697,
+                4.2263999581336975
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 5.38046658039093,
+              "samples_us": [
+                5.380866428216298,
+                5.378200113773346,
+                5.38046658039093,
+                5.3850000103314715,
+                5.378666520118713
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 4.2394667863845825,
+              "samples_us": [
+                4.228466749191284,
+                4.243266582489014,
+                4.230533540248871,
+                4.2394667863845825,
+                4.277533292770386
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 5.2186667919158936,
+              "samples_us": [
+                5.205399791399638,
+                5.237400035063426,
+                5.2397335569063825,
+                5.2186667919158936,
+                5.2055999636650085
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            }
+          },
+          "selected": "direct-n1-w4-s1"
+        },
+        {
+          "batch": 1,
+          "category": "latent_in",
+          "timings": {
+            "native": {
+              "us": 4.614733159542084,
+              "samples_us": [
+                4.620866477489471,
+                4.614600042502086,
+                4.614733159542084,
+                4.614733159542084,
+                4.614733159542084
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 10.754133264223734,
+              "samples_us": [
+                10.754133264223734,
+                10.756333669026693,
+                10.751932859420776,
+                10.754133264223734,
+                10.752000411351522
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 7.938200235366821,
+              "samples_us": [
+                7.940266529719035,
+                7.938133180141449,
+                7.9376667737960815,
+                7.938200235366821,
+                7.940333088239034
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 9.602133433024088,
+              "samples_us": [
+                9.599866469701132,
+                9.602133433024088,
+                9.599999586741129,
+                9.602133433024088,
+                9.602133433024088
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 6.274133423964183,
+              "samples_us": [
+                6.276333332061768,
+                6.274133423964183,
+                6.274133423964183,
+                6.222933530807495,
+                6.274400154749553
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 8.843132853507996,
+              "samples_us": [
+                8.844600121180216,
+                8.844799796740213,
+                8.843066294987997,
+                8.843132853507996,
+                8.842666943868002
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 6.914266447226207,
+              "samples_us": [
+                6.914266447226207,
+                6.9162001212437945,
+                6.914133330186208,
+                6.914133330186208,
+                6.916399796803792
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 2.5640000899632773,
+              "samples_us": [
+                2.5642665723959603,
+                2.5643999377886453,
+                2.5640000899632773,
+                2.5638667245705924,
+                2.5640000899632773
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 2.585600068171819,
+              "samples_us": [
+                2.585600068171819,
+                2.568666636943817,
+                2.5942000250021615,
+                2.5986000895500183,
+                2.5811334451039634
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 3.588333229223887,
+              "samples_us": [
+                3.588333229223887,
+                3.588333229223887,
+                3.588466594616572,
+                3.588466594616572,
+                3.588266670703888
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 3.716800113519033,
+              "samples_us": [
+                3.716800113519033,
+                3.720599909623464,
+                3.7163332104682922,
+                3.7291333079338074,
+                3.716400017340978
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 3.4604000548521676,
+              "samples_us": [
+                3.4604000548521676,
+                3.4601998825867972,
+                3.4604000548521676,
+                3.4605334202448526,
+                3.4606667856375375
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 3.2085334261258445,
+              "samples_us": [
+                3.2092000047365823,
+                3.2085334261258445,
+                3.2129332423210144,
+                3.2044666508833566,
+                3.2044000923633575
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            }
+          },
+          "selected": "direct-n1-w4-s1"
+        },
+        {
+          "batch": 1,
+          "category": "latent_out",
+          "timings": {
+            "native": {
+              "us": 3.332400073607763,
+              "samples_us": [
+                3.332466632127762,
+                3.332466632127762,
+                3.332400073607763,
+                3.332266708215078,
+                3.332266708215078
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 4.23060009876887,
+              "samples_us": [
+                4.230533540248871,
+                4.234800239404042,
+                4.23060009876887,
+                4.2304664850234985,
+                4.230933388074239
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 3.588466594616572,
+              "samples_us": [
+                3.596933434406916,
+                3.588400036096573,
+                3.588599960009257,
+                3.588400036096573,
+                3.588466594616572
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 4.102399945259094,
+              "samples_us": [
+                4.100399961074193,
+                4.100733250379562,
+                4.10246675213178,
+                4.102399945259094,
+                4.102600117524465
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 3.2216000060240426,
+              "samples_us": [
+                3.272533416748047,
+                3.2129332423210144,
+                3.2810665667057037,
+                3.2086665431658425,
+                3.2216000060240426
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 4.228400190671285,
+              "samples_us": [
+                4.228400190671285,
+                4.228666424751282,
+                4.228400190671285,
+                4.230533540248871,
+                4.228266576925914
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 3.716533382733663,
+              "samples_us": [
+                3.716599941253662,
+                3.716666748126348,
+                3.716533382733663,
+                3.716466575860977,
+                3.716533382733663
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 2.8245332340399423,
+              "samples_us": [
+                2.824600040912628,
+                2.8203333417574563,
+                2.829000105460485,
+                2.8244666755199432,
+                2.8245332340399423
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 3.712266683578491,
+              "samples_us": [
+                3.712266683578491,
+                3.703599919875463,
+                3.716533382733663,
+                3.7121998767058053,
+                3.716599941253662
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 3.460333247979482,
+              "samples_us": [
+                3.460333247979482,
+                3.460333247979482,
+                3.460599978764852,
+                3.460333247979482,
+                3.460333247979482
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 4.130200048287709,
+              "samples_us": [
+                4.130200048287709,
+                4.16020005941391,
+                4.113599906365077,
+                4.1837334632873535,
+                4.128200064102809
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 3.3325334390004477,
+              "samples_us": [
+                3.332466632127762,
+                3.3325334390004477,
+                3.332333266735077,
+                3.3365334073702493,
+                3.3367998898029327
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 3.8015998899936676,
+              "samples_us": [
+                3.8315333425998688,
+                3.8015998899936676,
+                3.8188666105270386,
+                3.7376667062441506,
+                3.7718666096528373
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            }
+          },
+          "selected": "direct-n1-w4-s1"
+        }
+      ]
+    },
+    {
+      "batch": 2,
+      "rotating_matrices": 80,
+      "timings_per_projection": {
+        "native_gemm": {
+          "us": 5.264639854431152,
+          "samples_us": [
+            5.2705732981363935,
+            5.2616532643636065,
+            5.265906651814778,
+            5.259093443552653,
+            5.264639854431152,
+            5.265066623687744,
+            5.261640151341756
+          ]
+        },
+        "candidate_gemm": {
+          "us": 5.356359879175822,
+          "samples_us": [
+            5.356359879175822,
+            5.360639890034993,
+            5.354666709899902,
+            5.3555333614349365,
+            5.356373389561971,
+            5.355519851048787,
+            5.3568001588185625
+          ]
+        },
+        "native_quant_gemm": {
+          "us": 7.673239707946777,
+          "samples_us": [
+            7.674400011698405,
+            7.6694003740946455,
+            7.674880027770996,
+            7.668466567993164,
+            7.661226590474446,
+            7.676146825154622,
+            7.673239707946777
+          ]
+        },
+        "candidate_quant_gemm": {
+          "us": 7.89247989654541,
+          "samples_us": [
+            7.891133626302083,
+            7.89247989654541,
+            7.88865327835083,
+            7.888212998708089,
+            7.898946603139241,
+            7.895039717356364,
+            7.894586722056071
+          ]
+        }
+      },
+      "selected_tactics": {
+        "shared_w13": {
+          "backend": "direct",
+          "block_n": 1,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "shared_w2": {
+          "backend": "tensor",
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "latent_in": {
+          "backend": "direct",
+          "block_n": 1,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "latent_out": {
+          "backend": "tensor",
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 4
+        }
+      },
+      "quant_gemm_time_reduction_percent": -2.857205000015539,
+      "pure_gemm_time_reduction_percent": -1.742189917653536,
+      "max_relative_l2_vs_fp64": 6.571279664058238e-05,
+      "changed_elements_vs_native": 26,
+      "output_elements": 389120,
+      "max_abs_vs_native": 0.015625,
+      "all_finite": true,
+      "hot_screen": [
+        {
+          "batch": 2,
+          "category": "shared_w13",
+          "timings": {
+            "native": {
+              "us": 4.917333523432414,
+              "samples_us": [
+                4.9535999695460005,
+                4.90906685590744,
+                4.919733107089996,
+                4.913599789142609,
+                4.917333523432414
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 10.114133358001709,
+              "samples_us": [
+                10.118400057156881,
+                10.114133358001709,
+                10.11199951171875,
+                10.118333498636881,
+                10.11199951171875
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 8.450133601824442,
+              "samples_us": [
+                8.454333742459616,
+                8.450133601824442,
+                8.450133601824442,
+                8.450133601824442,
+                8.452266454696655
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 10.25279959042867,
+              "samples_us": [
+                10.297866662343344,
+                10.25279959042867,
+                10.250266393025717,
+                10.253199934959412,
+                10.248532891273499
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 7.428266604741414,
+              "samples_us": [
+                7.428066432476044,
+                7.426133255163829,
+                7.428266604741414,
+                7.428266604741414,
+                7.428266604741414
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 8.8618665933609,
+              "samples_us": [
+                8.90880028406779,
+                8.853333195050558,
+                8.855467041333517,
+                8.86400043964386,
+                8.8618665933609
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 7.170133292675018,
+              "samples_us": [
+                7.1722666422526045,
+                7.17000017563502,
+                7.170066734155019,
+                7.170133292675018,
+                7.170133292675018
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 6.152600049972534,
+              "samples_us": [
+                6.152600049972534,
+                6.148266792297363,
+                6.167466441790263,
+                6.155066688855489,
+                6.152266760667165
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 6.920533378918965,
+              "samples_us": [
+                6.914333502451579,
+                6.915933390458425,
+                6.920533378918965,
+                6.924800078074138,
+                6.9226667284965515
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 9.077266852060953,
+              "samples_us": [
+                9.079466263453165,
+                9.079466263453165,
+                9.075199564297995,
+                9.058133761088053,
+                9.077266852060953
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 9.090133508046469,
+              "samples_us": [
+                9.090133508046469,
+                9.09226636091868,
+                9.08799966176351,
+                9.09440020720164,
+                9.08799966176351
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 9.132799506187439,
+              "samples_us": [
+                9.115733702977499,
+                9.132799506187439,
+                9.101333220799765,
+                9.1456671555837,
+                9.14346675078074
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 8.588799834251404,
+              "samples_us": [
+                8.588799834251404,
+                8.614400029182434,
+                8.607600132624308,
+                8.584533135096232,
+                8.588799834251404
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            }
+          },
+          "selected": "direct-n1-w4-s1"
+        },
+        {
+          "batch": 2,
+          "category": "shared_w2",
+          "timings": {
+            "native": {
+              "us": 3.588400036096573,
+              "samples_us": [
+                3.588400036096573,
+                3.588266670703888,
+                3.588466594616572,
+                3.588533401489258,
+                3.588400036096573
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 5.000600218772888,
+              "samples_us": [
+                5.001000066598256,
+                5.000600218772888,
+                4.9985334277153015,
+                5.002800126870473,
+                4.996799925963084
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 4.358600080013275,
+              "samples_us": [
+                4.3777331709861755,
+                4.358999927838643,
+                4.356800019741058,
+                4.358600080013275,
+                4.358533521493276
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 4.99426672856013,
+              "samples_us": [
+                4.996599753697713,
+                4.994200170040131,
+                4.994200170040131,
+                4.996799925963084,
+                4.99426672856013
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 3.972399979829788,
+              "samples_us": [
+                3.972399979829788,
+                3.972466786702474,
+                3.972399979829788,
+                3.9722666144371033,
+                3.972599903742472
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 4.870466887950897,
+              "samples_us": [
+                4.868333538373311,
+                4.868333538373311,
+                4.870466887950897,
+                4.870466887950897,
+                4.870733122030894
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 4.228466749191284,
+              "samples_us": [
+                4.228466749191284,
+                4.226600130399068,
+                4.228599866231282,
+                4.228666424751282,
+                4.228333135445912
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 4.6340664227803545,
+              "samples_us": [
+                4.625133176644643,
+                4.623199999332428,
+                4.648533463478088,
+                4.634133478005727,
+                4.6340664227803545
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 6.022400160630544,
+              "samples_us": [
+                6.02453351020813,
+                6.018133461475372,
+                6.022400160630544,
+                6.034933527310689,
+                6.022400160630544
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 5.7706668972969055,
+              "samples_us": [
+                5.766466756661733,
+                5.7791997989018755,
+                5.787799755732219,
+                5.764199793338776,
+                5.7706668972969055
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 7.299999892711639,
+              "samples_us": [
+                7.299999892711639,
+                7.304533322652181,
+                7.298133273919423,
+                7.302399973074595,
+                7.298333446184794
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 5.508400003115336,
+              "samples_us": [
+                5.508400003115336,
+                5.508333444595337,
+                5.50659994284312,
+                5.512600143750508,
+                5.512999991575877
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 6.681666771570842,
+              "samples_us": [
+                6.681666771570842,
+                6.692199905713399,
+                6.683666507403056,
+                6.66240006685257,
+                6.666666766007741
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            }
+          },
+          "selected": "tensor-n32-w4-s4"
+        },
+        {
+          "batch": 2,
+          "category": "latent_in",
+          "timings": {
+            "native": {
+              "us": 4.614733159542084,
+              "samples_us": [
+                4.6165332198143005,
+                4.614733159542084,
+                4.618733127911885,
+                4.614533483982086,
+                4.614533483982086
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 10.754066705703735,
+              "samples_us": [
+                10.752000411351522,
+                10.754133264223734,
+                10.754066705703735,
+                10.752000411351522,
+                10.754133264223734
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 8.070399860541025,
+              "samples_us": [
+                8.070399860541025,
+                8.070466419061026,
+                8.070399860541025,
+                8.06406686703364,
+                8.066333333651224
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 9.471999605496725,
+              "samples_us": [
+                9.471999605496725,
+                9.471999605496725,
+                9.471999605496725,
+                9.471999605496725,
+                9.471799929936727
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 6.77346686522166,
+              "samples_us": [
+                6.779733300209045,
+                6.76693320274353,
+                6.77346686522166,
+                6.711533168951671,
+                6.78193320830663
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 8.831999699274698,
+              "samples_us": [
+                8.831999699274698,
+                8.831999699274698,
+                8.831999699274698,
+                8.831600348154703,
+                8.834133545557657
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 7.0421333114306135,
+              "samples_us": [
+                7.0442001024882,
+                7.04446683327357,
+                7.042066752910614,
+                7.0421333114306135,
+                7.0421333114306135
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 3.336666772762934,
+              "samples_us": [
+                3.3367333312829337,
+                3.332333266735077,
+                3.3365334073702493,
+                3.336666772762934,
+                3.3367998898029327
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 3.8488000631332397,
+              "samples_us": [
+                3.848599890867869,
+                3.844399998585383,
+                3.8531333208084106,
+                3.8488000631332397,
+                3.8488000631332397
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 4.618800183137258,
+              "samples_us": [
+                4.61679995059967,
+                4.655066629250844,
+                4.655333360036214,
+                4.61706668138504,
+                4.618800183137258
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 4.749333361784617,
+              "samples_us": [
+                4.744799931844075,
+                4.789866507053375,
+                4.749333361784617,
+                4.794199764728546,
+                4.749333361784617
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 4.226733247439067,
+              "samples_us": [
+                4.219866792360942,
+                4.2267998059590655,
+                4.228400190671285,
+                4.226266841093699,
+                4.226733247439067
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 4.098599900801976,
+              "samples_us": [
+                4.100533326466878,
+                4.098266611496608,
+                4.100733250379562,
+                4.098599900801976,
+                4.098266611496608
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            }
+          },
+          "selected": "direct-n1-w4-s1"
+        },
+        {
+          "batch": 2,
+          "category": "latent_out",
+          "timings": {
+            "native": {
+              "us": 3.332400073607763,
+              "samples_us": [
+                3.332466632127762,
+                3.332333266735077,
+                3.332333266735077,
+                3.332400073607763,
+                3.332400073607763
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 4.236799975236257,
+              "samples_us": [
+                4.235133528709412,
+                4.277733465035756,
+                4.232733448346456,
+                4.239333172639211,
+                4.236799975236257
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 3.588599960009257,
+              "samples_us": [
+                3.592466562986374,
+                3.588533401489258,
+                3.588400036096573,
+                3.588599960009257,
+                3.588599960009257
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 3.9874665439128876,
+              "samples_us": [
+                4.070800046126048,
+                3.9874665439128876,
+                3.9852000772953033,
+                3.9853334426879883,
+                3.989800065755844
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 3.332333266735077,
+              "samples_us": [
+                3.332333266735077,
+                3.323733309904734,
+                3.3327999214331308,
+                3.2125999530156455,
+                3.332333266735077
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 4.141200085481008,
+              "samples_us": [
+                4.136733214060466,
+                4.141200085481008,
+                4.203133285045624,
+                4.160333424806595,
+                4.12240003546079
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 3.716400017340978,
+              "samples_us": [
+                3.716400017340978,
+                3.716400017340978,
+                3.716266651948293,
+                3.716400017340978,
+                3.71573343873024
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 3.720599909623464,
+              "samples_us": [
+                3.716266651948293,
+                3.716533382733663,
+                3.720599909623464,
+                3.720733275016149,
+                3.7206667164961496
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 5.137066543102264,
+              "samples_us": [
+                5.134999752044678,
+                5.126666525999705,
+                5.15419989824295,
+                5.153733491897583,
+                5.137066543102264
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 4.873066643873851,
+              "samples_us": [
+                4.870533446470897,
+                4.900333285331726,
+                4.903000096480052,
+                4.870933294296265,
+                4.873066643873851
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 5.775000154972076,
+              "samples_us": [
+                5.772733191649119,
+                5.838933090368907,
+                5.775000154972076,
+                5.826533337434133,
+                5.7747334241867065
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 4.100399961074193,
+              "samples_us": [
+                4.100399961074193,
+                4.098533342281978,
+                4.098266611496608,
+                4.100466767946879,
+                4.104866584142049
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 5.126466850439708,
+              "samples_us": [
+                5.132933457692464,
+                5.126466850439708,
+                5.128733317057292,
+                5.122200151284535,
+                5.124799907207489
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            }
+          },
+          "selected": "tensor-n32-w4-s4"
+        }
+      ]
+    },
+    {
+      "batch": 4,
+      "rotating_matrices": 80,
+      "timings_per_projection": {
+        "native_gemm": {
+          "us": 5.2629466851552325,
+          "samples_us": [
+            5.269320011138916,
+            5.264600118001302,
+            5.26805321375529,
+            5.262493292490642,
+            5.26250680287679,
+            5.2629466851552325,
+            5.259106556574504
+          ]
+        },
+        "candidate_gemm": {
+          "us": 6.862506866455078,
+          "samples_us": [
+            6.862506866455078,
+            6.863786379496257,
+            6.861666838328044,
+            6.866772969563802,
+            6.866333484649658,
+            6.861226558685303,
+            6.8603865305582685
+          ]
+        },
+        "native_quant_gemm": {
+          "us": 7.733333110809326,
+          "samples_us": [
+            7.745640277862549,
+            7.7290670077006025,
+            7.733333110809326,
+            7.735040187835693,
+            7.72653341293335,
+            7.737613519032796,
+            7.7299197514851885
+          ]
+        },
+        "candidate_quant_gemm": {
+          "us": 9.509519735972086,
+          "samples_us": [
+            9.500946998596191,
+            9.512106577555338,
+            9.509546756744385,
+            9.500173727671305,
+            9.509519735972086,
+            9.512106577555338,
+            9.505293369293213
+          ]
+        }
+      },
+      "selected_tactics": {
+        "shared_w13": {
+          "backend": "tensor",
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "shared_w2": {
+          "backend": "tensor",
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "latent_in": {
+          "backend": "direct",
+          "block_n": 1,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "latent_out": {
+          "backend": "tensor",
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 4
+        }
+      },
+      "quant_gemm_time_reduction_percent": -22.967931158688625,
+      "pure_gemm_time_reduction_percent": -30.39286310483813,
+      "max_relative_l2_vs_fp64": 0.00016712071374058723,
+      "changed_elements_vs_native": 41,
+      "output_elements": 778240,
+      "max_abs_vs_native": 0.0625,
+      "all_finite": true,
+      "hot_screen": [
+        {
+          "batch": 4,
+          "category": "shared_w13",
+          "timings": {
+            "native": {
+              "us": 4.921933511892955,
+              "samples_us": [
+                4.987800121307373,
+                4.919866720835368,
+                4.921933511892955,
+                4.940933485825856,
+                4.919933279355367
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 10.116066535313925,
+              "samples_us": [
+                10.114133358001709,
+                10.116266210873922,
+                10.11400024096171,
+                10.118400057156881,
+                10.116066535313925
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 8.458999792734781,
+              "samples_us": [
+                8.475733796755472,
+                8.456533153851828,
+                8.460467060407003,
+                8.458999792734781,
+                8.454400300979614
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 10.250666737556458,
+              "samples_us": [
+                10.267733534177145,
+                10.248532891273499,
+                10.250666737556458,
+                10.248600443204245,
+                10.257066289583841
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 7.426133255163829,
+              "samples_us": [
+                7.4282000462214155,
+                7.426133255163829,
+                7.426133255163829,
+                7.426133255163829,
+                7.4282000462214155
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 8.966400225957235,
+              "samples_us": [
+                8.966400225957235,
+                8.966400225957235,
+                8.966400225957235,
+                8.966400225957235,
+                8.966466784477234
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 7.171733180681865,
+              "samples_us": [
+                7.171733180681865,
+                7.170133292675018,
+                7.172200083732605,
+                7.169866561889648,
+                7.17466672261556
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 9.570133686065674,
+              "samples_us": [
+                9.563733140627543,
+                9.570133686065674,
+                9.572199980417887,
+                9.58726704120636,
+                9.555266300837198
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 11.04206641515096,
+              "samples_us": [
+                11.033599575360617,
+                11.038066943486532,
+                11.04420026143392,
+                11.04206641515096,
+                11.052800218264261
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 13.506133357683817,
+              "samples_us": [
+                13.487399617830912,
+                13.527333736419678,
+                13.527466853459677,
+                13.501866658528646,
+                13.506133357683817
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 13.828266660372416,
+              "samples_us": [
+                13.82206678390503,
+                13.834933439890543,
+                13.828266660372416,
+                13.838932911554972,
+                13.821867108345032
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 13.587266206741333,
+              "samples_us": [
+                13.58086665471395,
+                13.591266671816507,
+                13.582932949066162,
+                13.589333494504293,
+                13.587266206741333
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 12.840132912000021,
+              "samples_us": [
+                12.838400403658548,
+                12.868266304334005,
+                12.861532966295878,
+                12.827666600545248,
+                12.840132912000021
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0002076844102703035,
+              "max_abs": 0.0625,
+              "changed_elements": 2,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0002076861128443852,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            }
+          },
+          "selected": "tensor-n64-w4-s4"
+        },
+        {
+          "batch": 4,
+          "category": "shared_w2",
+          "timings": {
+            "native": {
+              "us": 3.5841998954614005,
+              "samples_us": [
+                3.588266670703888,
+                3.583933413028717,
+                3.584066778421402,
+                3.588400036096573,
+                3.5841998954614005
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 5.004933476448059,
+              "samples_us": [
+                5.004933476448059,
+                5.011799931526184,
+                5.002866685390472,
+                5.007733404636383,
+                4.998866717020671
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 4.358866810798645,
+              "samples_us": [
+                4.39086655775706,
+                4.358733197053273,
+                4.358799755573273,
+                4.358866810798645,
+                4.358866810798645
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 4.9944669008255005,
+              "samples_us": [
+                4.994133114814758,
+                4.996333519617717,
+                4.996400078137715,
+                4.99426672856013,
+                4.9944669008255005
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 3.972466786702474,
+              "samples_us": [
+                3.972800076007843,
+                3.972533345222473,
+                3.972466786702474,
+                3.972333421309789,
+                3.972399979829788
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 4.86846665541331,
+              "samples_us": [
+                4.868266483147939,
+                4.86846665541331,
+                4.86846665541331,
+                4.870466887950897,
+                4.870733122030894
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 4.228599866231282,
+              "samples_us": [
+                4.228599866231282,
+                4.228333135445912,
+                4.230666657288869,
+                4.228400190671285,
+                4.230399926503499
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 7.048533360163371,
+              "samples_us": [
+                7.04859991868337,
+                7.044266661008199,
+                7.050666709740956,
+                7.048533360163371,
+                7.048533360163371
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 9.34606691201528,
+              "samples_us": [
+                9.348266323407492,
+                9.348466992378235,
+                9.34399962425232,
+                9.34606691201528,
+                9.344200293223063
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 8.83626639842987,
+              "samples_us": [
+                8.808466792106628,
+                8.851200342178345,
+                8.83626639842987,
+                8.851133783658346,
+                8.827733000119528
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 11.74613336722056,
+              "samples_us": [
+                11.743999520937601,
+                11.750400066375732,
+                11.754666765530905,
+                11.729066570599874,
+                11.74613336722056
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 9.218133489290873,
+              "samples_us": [
+                9.218066930770874,
+                9.220266342163086,
+                9.20746624469757,
+                9.230933586756388,
+                9.218133489290873
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 9.983932971954346,
+              "samples_us": [
+                9.994666775067648,
+                9.981333216031393,
+                9.990400075912476,
+                9.964799880981445,
+                9.983932971954346
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            }
+          },
+          "selected": "tensor-n32-w4-s4"
+        },
+        {
+          "batch": 4,
+          "category": "latent_in",
+          "timings": {
+            "native": {
+              "us": 4.634133478005727,
+              "samples_us": [
+                4.640133182207744,
+                4.634133478005727,
+                4.620933532714844,
+                4.635933538277944,
+                4.614933331807454
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 10.754266381263733,
+              "samples_us": [
+                10.754266381263733,
+                10.756267110506693,
+                10.752000411351522,
+                10.752000411351522,
+                10.756333669026693
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 8.072533210118612,
+              "samples_us": [
+                8.074733118216196,
+                8.070399860541025,
+                8.072533210118612,
+                8.070399860541025,
+                8.072533210118612
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 9.474133451779684,
+              "samples_us": [
+                9.474133451779684,
+                9.474066893259684,
+                9.471999605496725,
+                9.474133451779684,
+                9.474133451779684
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 6.786666810512543,
+              "samples_us": [
+                6.788266698519389,
+                6.788266698519389,
+                6.786666810512543,
+                6.758533418178558,
+                6.786133348941803
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 8.900066216786703,
+              "samples_us": [
+                8.889599641164144,
+                8.90666643778483,
+                8.917333682378134,
+                8.898066480954489,
+                8.900066216786703
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 7.0421333114306135,
+              "samples_us": [
+                7.0421333114306135,
+                7.044266661008199,
+                7.0421333114306135,
+                7.042466600735982,
+                7.0421333114306135
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 4.877000053723653,
+              "samples_us": [
+                4.877399901549022,
+                4.866533478101094,
+                4.878999789555867,
+                4.877000053723653,
+                4.872600237528483
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 6.158933540185292,
+              "samples_us": [
+                6.152333319187164,
+                6.152600049972534,
+                6.158933540185292,
+                6.167466441790263,
+                6.167466441790263
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 6.276266773541768,
+              "samples_us": [
+                6.274133423964183,
+                6.278400123119354,
+                6.282666822274526,
+                6.276066601276398,
+                6.276266773541768
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 6.796800096829732,
+              "samples_us": [
+                6.792466839154561,
+                6.828866899013519,
+                6.7925333976745605,
+                6.8350667754809065,
+                6.796800096829732
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 5.940933525562286,
+              "samples_us": [
+                5.9093331297238665,
+                5.940933525562286,
+                5.911466479301453,
+                5.962599813938141,
+                5.966799954573314
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 5.672666430473328,
+              "samples_us": [
+                5.67253331343333,
+                5.6938668092091875,
+                5.672666430473328,
+                5.642666419347127,
+                5.676800012588501
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 1.20363992550665e-07,
+              "max_abs": 3.0517578125e-05,
+              "changed_elements": 1,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.20363992550665e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            }
+          },
+          "selected": "direct-n1-w4-s1"
+        },
+        {
+          "batch": 4,
+          "category": "latent_out",
+          "timings": {
+            "native": {
+              "us": 3.332466632127762,
+              "samples_us": [
+                3.332466632127762,
+                3.3327333629131317,
+                3.3327333629131317,
+                3.332400073607763,
+                3.332266708215078
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 4.347866773605347,
+              "samples_us": [
+                4.347866773605347,
+                4.354399939378102,
+                4.343800246715546,
+                4.354399939378102,
+                4.311800003051758
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 3.588466594616572,
+              "samples_us": [
+                3.618266681830088,
+                3.588533401489258,
+                3.588266670703888,
+                3.588466594616572,
+                3.588333229223887
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 4.098200052976608,
+              "samples_us": [
+                4.098266611496608,
+                4.098133246103923,
+                4.100533326466878,
+                4.098200052976608,
+                4.098133246103923
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 3.332400073607763,
+              "samples_us": [
+                3.332466632127762,
+                3.332333266735077,
+                3.332400073607763,
+                3.302533427874247,
+                3.332400073607763
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 4.228533307711284,
+              "samples_us": [
+                4.228533307711284,
+                4.230666657288869,
+                4.228533307711284,
+                4.226666688919067,
+                4.230533540248871
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 3.7163332104682922,
+              "samples_us": [
+                3.716266651948293,
+                3.7163332104682922,
+                3.716266651948293,
+                3.716666748126348,
+                3.716400017340978
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 5.604133506615956,
+              "samples_us": [
+                5.589333176612854,
+                5.595733225345612,
+                5.619400242964427,
+                5.604133506615956,
+                5.608533322811127
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 8.179200192292532,
+              "samples_us": [
+                8.181266486644745,
+                8.187733093897501,
+                8.157466848691305,
+                8.179200192292532,
+                8.16899985074997
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 7.842133442560832,
+              "samples_us": [
+                7.839933534463246,
+                7.88266658782959,
+                7.863466441631317,
+                7.842133442560832,
+                7.833600044250488
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 8.968599637349447,
+              "samples_us": [
+                8.96239976088206,
+                8.97279977798462,
+                8.968599637349447,
+                8.974533279736837,
+                8.964266379674276
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 5.892333388328552,
+              "samples_us": [
+                5.892266829808553,
+                5.892333388328552,
+                5.870933334032695,
+                5.896533528963725,
+                5.896533528963725
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 8.665600419044495,
+              "samples_us": [
+                8.68066648642222,
+                8.646399776140848,
+                8.676133553187052,
+                8.612199624379477,
+                8.665600419044495
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 2.811847288342051e-08,
+              "max_abs": 7.62939453125e-06,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 2.811847288342051e-08,
+                "max_abs": 7.62939453125e-06,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 2.811847288342051e-08,
+              "max_abs": 7.62939453125e-06,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 2.811847288342051e-08,
+                "max_abs": 7.62939453125e-06,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 2.811847288342051e-08,
+              "max_abs": 7.62939453125e-06,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 2.811847288342051e-08,
+                "max_abs": 7.62939453125e-06,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 2.811847288342051e-08,
+              "max_abs": 7.62939453125e-06,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 2.811847288342051e-08,
+                "max_abs": 7.62939453125e-06,
+                "changed_elements": 1,
+                "finite": true
+              }
+            }
+          },
+          "selected": "tensor-n32-w4-s4"
+        }
+      ]
+    },
+    {
+      "batch": 8,
+      "rotating_matrices": 80,
+      "timings_per_projection": {
+        "native_gemm": {
+          "us": 5.266840060551961,
+          "samples_us": [
+            5.257786512374878,
+            5.263359944025676,
+            5.262866814931233,
+            5.27018666267395,
+            5.266840060551961,
+            5.271026690800984,
+            5.271079937616984
+          ]
+        },
+        "candidate_gemm": {
+          "us": 7.413346767425537,
+          "samples_us": [
+            7.413346767425537,
+            7.409493128458659,
+            7.413333257039388,
+            7.419293721516927,
+            7.41546630859375,
+            7.409919897715251,
+            7.414613564809163
+          ]
+        },
+        "native_quant_gemm": {
+          "us": 7.756799856821696,
+          "samples_us": [
+            7.749066352844238,
+            7.747413317362468,
+            7.758080164591472,
+            7.756799856821696,
+            7.759359677632649,
+            7.766613165537517,
+            7.756799856821696
+          ]
+        },
+        "candidate_quant_gemm": {
+          "us": 10.127747058868408,
+          "samples_us": [
+            10.1337202390035,
+            10.128626823425293,
+            10.126933256785074,
+            10.12777328491211,
+            10.127747058868408,
+            10.12773354848226,
+            10.1201065381368
+          ]
+        }
+      },
+      "selected_tactics": {
+        "shared_w13": {
+          "backend": "tensor",
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "shared_w2": {
+          "backend": "tensor",
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "latent_in": {
+          "backend": "tensor",
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "latent_out": {
+          "backend": "tensor",
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 4
+        }
+      },
+      "quant_gemm_time_reduction_percent": -30.56604844537261,
+      "pure_gemm_time_reduction_percent": -40.75511468348299,
+      "max_relative_l2_vs_fp64": 0.00011821605585282668,
+      "changed_elements_vs_native": 73,
+      "output_elements": 1556480,
+      "max_abs_vs_native": 0.0625,
+      "all_finite": true,
+      "hot_screen": [
+        {
+          "batch": 8,
+          "category": "shared_w13",
+          "timings": {
+            "native": {
+              "us": 4.9216002225875854,
+              "samples_us": [
+                4.936666786670685,
+                4.917066792647044,
+                4.9216002225875854,
+                4.934599995613098,
+                4.915666580200195
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 10.578667124112448,
+              "samples_us": [
+                10.568533341089884,
+                10.589866836865744,
+                10.585533579190573,
+                10.578667124112448,
+                10.566332936286926
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 8.076866467793783,
+              "samples_us": [
+                8.106799920399984,
+                8.072533210118612,
+                8.07259976863861,
+                8.076866467793783,
+                8.079266548156738
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 9.862333536148071,
+              "samples_us": [
+                9.86240009466807,
+                9.862333536148071,
+                9.860466917355856,
+                9.862333536148071,
+                9.868799646695456
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 6.276066601276398,
+              "samples_us": [
+                6.278466681639354,
+                6.274199982484181,
+                6.2739332516988116,
+                6.276333332061768,
+                6.276066601276398
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 9.348400433858236,
+              "samples_us": [
+                9.349999825159708,
+                9.352533022562662,
+                9.348266323407492,
+                9.348400433858236,
+                9.348266323407492
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 7.298133273919423,
+              "samples_us": [
+                7.2980667153994245,
+                7.298133273919423,
+                7.298133273919423,
+                7.300333182017009,
+                7.302399973074595
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 16.499200463294983,
+              "samples_us": [
+                16.501333316167194,
+                16.501333316167194,
+                16.499200463294983,
+                16.499200463294983,
+                16.48426651954651
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 20.480000972747803,
+              "samples_us": [
+                20.480400323867798,
+                20.484066009521484,
+                20.480000972747803,
+                20.477867126464844,
+                20.477867126464844
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 22.632533311843872,
+              "samples_us": [
+                22.651733954747517,
+                22.615466515223186,
+                22.61120080947876,
+                22.645399967829388,
+                22.632533311843872
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 24.362667401631672,
+              "samples_us": [
+                24.407466252644856,
+                24.358399709065754,
+                24.364866813023884,
+                24.35413400332133,
+                24.362667401631672
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 23.17013343175252,
+              "samples_us": [
+                23.202399412790935,
+                23.165865739186604,
+                23.195733626683552,
+                23.165667057037354,
+                23.17013343175252
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 21.504000822703045,
+              "samples_us": [
+                21.504000822703045,
+                21.50599956512451,
+                21.50613268216451,
+                21.499733130137127,
+                21.501600742340088
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0001487938134232536,
+              "max_abs": 0.0625,
+              "changed_elements": 2,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0001487944246036932,
+                "max_abs": 0.0625,
+                "changed_elements": 2,
+                "finite": true
+              }
+            }
+          },
+          "selected": "tensor-n32-w4-s4"
+        },
+        {
+          "batch": 8,
+          "category": "shared_w2",
+          "timings": {
+            "native": {
+              "us": 3.588266670703888,
+              "samples_us": [
+                3.588266670703888,
+                3.5800665616989136,
+                3.588400036096573,
+                3.586599975824356,
+                3.588466594616572
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 5.250599980354309,
+              "samples_us": [
+                5.25026669104894,
+                5.250733097394307,
+                5.250599980354309,
+                5.250200132528941,
+                5.250666538874309
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 4.226533571879069,
+              "samples_us": [
+                4.229066769282023,
+                4.226266841093699,
+                4.228400190671285,
+                4.2263999581336975,
+                4.226533571879069
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 4.851800203323364,
+              "samples_us": [
+                4.868333538373311,
+                4.834400117397308,
+                4.865733285744985,
+                4.851800203323364,
+                4.789599776268005
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 3.460466613372167,
+              "samples_us": [
+                3.460466613372167,
+                3.4604000548521676,
+                3.4601998825867972,
+                3.460466613372167,
+                3.4605334202448526
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 5.026199916998546,
+              "samples_us": [
+                5.047733088334401,
+                5.028599997361501,
+                5.0160666306813555,
+                5.00926673412323,
+                5.026199916998546
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 4.3549999594688416,
+              "samples_us": [
+                4.356333116690318,
+                4.354600111643474,
+                4.3541332085927325,
+                4.356333116690318,
+                4.3549999594688416
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 12.648333112398783,
+              "samples_us": [
+                12.64613370100657,
+                12.646333376566568,
+                12.650533517201742,
+                12.648533781369528,
+                12.648333112398783
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 16.098666191101074,
+              "samples_us": [
+                16.104533274968464,
+                16.098666191101074,
+                16.081066926320393,
+                16.089600324630737,
+                16.121533513069153
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 16.147200266520183,
+              "samples_us": [
+                16.147200266520183,
+                16.151466965675354,
+                16.157933076222736,
+                16.14079972108205,
+                16.13659958044688
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 20.146934191385906,
+              "samples_us": [
+                20.1771338780721,
+                20.146934191385906,
+                20.130133628845215,
+                20.14080087343852,
+                20.16613284746806
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 15.758933623631796,
+              "samples_us": [
+                15.758933623631796,
+                15.756733218828836,
+                15.754666924476624,
+                15.761066476504007,
+                15.767467021942139
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 16.416000326474506,
+              "samples_us": [
+                16.416000326474506,
+                16.42026702562968,
+                16.41813317934672,
+                16.401066382726032,
+                16.401132941246033
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            }
+          },
+          "selected": "tensor-n32-w4-s4"
+        },
+        {
+          "batch": 8,
+          "category": "latent_in",
+          "timings": {
+            "native": {
+              "us": 4.6232665578524275,
+              "samples_us": [
+                4.61713323990504,
+                4.6232665578524275,
+                4.623333116372426,
+                4.625133176644643,
+                4.6231334408124285
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 9.599999586741129,
+              "samples_us": [
+                9.602133433024088,
+                9.59993302822113,
+                9.599999586741129,
+                9.602133433024088,
+                9.59993302822113
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 6.786266465981801,
+              "samples_us": [
+                6.7925333976745605,
+                6.786266465981801,
+                6.788333257039388,
+                6.786133348941803,
+                6.786133348941803
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 9.730066855748495,
+              "samples_us": [
+                9.730066855748495,
+                9.730133414268494,
+                9.730133414268494,
+                9.727999567985535,
+                9.71119999885559
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 6.154666841030121,
+              "samples_us": [
+                6.15473339955012,
+                6.152533491452535,
+                6.154666841030121,
+                6.150400141874949,
+                6.158933540185292
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 9.228799740473429,
+              "samples_us": [
+                9.22886629899343,
+                9.228799740473429,
+                9.22873318195343,
+                9.224533041318258,
+                9.234866499900818
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 7.17026690642039,
+              "samples_us": [
+                7.1722666422526045,
+                7.170199851195018,
+                7.170133292675018,
+                7.17026690642039,
+                7.1722666422526045
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 7.7056000630060835,
+              "samples_us": [
+                7.703066865603129,
+                7.688533266385396,
+                7.712000111738841,
+                7.707733412583669,
+                7.7056000630060835
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 10.365866621335348,
+              "samples_us": [
+                10.365866621335348,
+                10.368000467618307,
+                10.34879982471466,
+                10.363733768463135,
+                10.371733705202738
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 15.404733022054037,
+              "samples_us": [
+                15.398400028546652,
+                15.41759967803955,
+                15.404733022054037,
+                15.396333734194437,
+                15.404867132504782
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 16.48859977722168,
+              "samples_us": [
+                16.482200225194294,
+                16.486533482869465,
+                16.494933764139812,
+                16.492799917856853,
+                16.48859977722168
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 9.476266304651896,
+              "samples_us": [
+                9.474066893259684,
+                9.476266304651896,
+                9.474133451779684,
+                9.478400150934855,
+                9.48906640211741
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 8.968533078829447,
+              "samples_us": [
+                8.966400225957235,
+                8.975000182787577,
+                8.968533078829447,
+                8.959999680519104,
+                8.970733483632406
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 8.541685048157888e-08,
+              "max_abs": 3.0517578125e-05,
+              "changed_elements": 1,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 8.541685048157888e-08,
+              "max_abs": 3.0517578125e-05,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.207976652040088e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 8.541685048157888e-08,
+              "max_abs": 3.0517578125e-05,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.207976652040088e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 8.541685048157888e-08,
+              "max_abs": 3.0517578125e-05,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.207976652040088e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 8.541685048157888e-08,
+              "max_abs": 3.0517578125e-05,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.207976652040088e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 8.541685048157888e-08,
+              "max_abs": 3.0517578125e-05,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.207976652040088e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 8.541685048157888e-08,
+              "max_abs": 3.0517578125e-05,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.207976652040088e-07,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 5.33855315509868e-09,
+              "max_abs": 1.9073486328125e-06,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 8.558351538567877e-08,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 5.33855315509868e-09,
+              "max_abs": 1.9073486328125e-06,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 8.558351538567877e-08,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 2,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 8.541685048157888e-08,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 8.541685048157888e-08,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 8.541685048157888e-08,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 8.541685048157888e-08,
+                "max_abs": 3.0517578125e-05,
+                "changed_elements": 1,
+                "finite": true
+              }
+            }
+          },
+          "selected": "tensor-n32-w4-s4"
+        },
+        {
+          "batch": 8,
+          "category": "latent_out",
+          "timings": {
+            "native": {
+              "us": 3.332400073607763,
+              "samples_us": [
+                3.332333266735077,
+                3.332466632127762,
+                3.332466632127762,
+                3.332333266735077,
+                3.332400073607763
+              ]
+            },
+            "tensor-n16-w4-s2": {
+              "us": 4.484466711680095,
+              "samples_us": [
+                4.484800000985463,
+                4.486666619777679,
+                4.484333097934723,
+                4.484333097934723,
+                4.484466711680095
+              ]
+            },
+            "tensor-n16-w4-s4": {
+              "us": 3.827333450317383,
+              "samples_us": [
+                3.844333440065384,
+                3.823200116554896,
+                3.8274665673573813,
+                3.8186666866143546,
+                3.827333450317383
+              ]
+            },
+            "tensor-n32-w4-s2": {
+              "us": 4.098466783761978,
+              "samples_us": [
+                4.098466783761978,
+                4.098333418369293,
+                4.098266611496608,
+                4.100466767946879,
+                4.098599900801976
+              ]
+            },
+            "tensor-n32-w4-s4": {
+              "us": 3.076333304246267,
+              "samples_us": [
+                3.0806665619214377,
+                3.0762667457262673,
+                3.076333304246267,
+                3.0764666696389518,
+                3.0762667457262673
+              ]
+            },
+            "tensor-n64-w4-s2": {
+              "us": 4.354666670163472,
+              "samples_us": [
+                4.356800019741058,
+                4.354199767112732,
+                4.354466497898102,
+                4.354666670163472,
+                4.356466730435689
+              ]
+            },
+            "tensor-n64-w4-s4": {
+              "us": 3.8103332122166953,
+              "samples_us": [
+                3.8103332122166953,
+                3.7934000293413797,
+                3.8062666853268943,
+                3.844533363978068,
+                3.8449332118034363
+              ]
+            },
+            "direct-n1-w4-s1": {
+              "us": 9.606066346168518,
+              "samples_us": [
+                9.604266285896301,
+                9.599999586741129,
+                9.608532985051474,
+                9.606066346168518,
+                9.60640013217926
+              ]
+            },
+            "direct-n1-w8-s1": {
+              "us": 14.491732915242514,
+              "samples_us": [
+                14.491732915242514,
+                14.493866761525473,
+                14.491732915242514,
+                14.504533012708029,
+                14.481066664059957
+              ]
+            },
+            "direct-n2-w4-s1": {
+              "us": 14.265533288319906,
+              "samples_us": [
+                14.265533288319906,
+                14.299733440081278,
+                14.276267091433207,
+                14.248466491699219,
+                14.263466993967691
+              ]
+            },
+            "direct-n2-w8-s1": {
+              "us": 16.72319968541463,
+              "samples_us": [
+                16.74026648203532,
+                16.72319968541463,
+                16.716667016347248,
+                16.746666034062702,
+                16.72113339106242
+              ]
+            },
+            "direct-n4-w4-s1": {
+              "us": 9.348266323407492,
+              "samples_us": [
+                9.346133470535278,
+                9.35040016969045,
+                9.346133470535278,
+                9.34833288192749,
+                9.348266323407492
+              ]
+            },
+            "direct-n4-w8-s1": {
+              "us": 15.492266416549683,
+              "samples_us": [
+                15.492332975069681,
+                15.494400262832642,
+                15.492266416549683,
+                15.485866864522299,
+                15.49020012219747
+              ]
+            }
+          },
+          "errors": {
+            "native": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true
+            },
+            "tensor-n16-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n16-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n32-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s2": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "tensor-n64-w4-s4": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w4-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n1-w8-s1": {
+              "relative_l2": 0.0,
+              "max_abs": 0.0,
+              "changed_elements": 0,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 0.0,
+                "max_abs": 0.0,
+                "changed_elements": 0,
+                "finite": true
+              }
+            },
+            "direct-n2-w4-s1": {
+              "relative_l2": 1.9748210178249792e-08,
+              "max_abs": 7.62939453125e-06,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.9748210178249792e-08,
+                "max_abs": 7.62939453125e-06,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n2-w8-s1": {
+              "relative_l2": 1.9748210178249792e-08,
+              "max_abs": 7.62939453125e-06,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.9748210178249792e-08,
+                "max_abs": 7.62939453125e-06,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n4-w4-s1": {
+              "relative_l2": 1.9748210178249792e-08,
+              "max_abs": 7.62939453125e-06,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.9748210178249792e-08,
+                "max_abs": 7.62939453125e-06,
+                "changed_elements": 1,
+                "finite": true
+              }
+            },
+            "direct-n4-w8-s1": {
+              "relative_l2": 1.9748210178249792e-08,
+              "max_abs": 7.62939453125e-06,
+              "changed_elements": 1,
+              "finite": true,
+              "versus_native": {
+                "relative_l2": 1.9748210178249792e-08,
+                "max_abs": 7.62939453125e-06,
+                "changed_elements": 1,
+                "finite": true
+              }
+            }
+          },
+          "selected": "tensor-n32-w4-s4"
+        }
+      ]
+    }
+  ]
+}

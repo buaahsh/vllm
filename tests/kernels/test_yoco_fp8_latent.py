@@ -51,12 +51,19 @@ def _quantized_reference(x, weight):
 def _assert_gemm_matches(actual, expected):
     assert actual.dtype == torch.bfloat16
     assert bool(torch.isfinite(actual).all())
-    relative = (actual.float() - expected.float()).norm() / expected.float().norm()
+    relative = (
+        actual.float() - expected.float()
+    ).norm() / expected.float().norm().clamp_min(1e-30)
     assert relative.item() < 1e-3, relative.item()
 
 
 @pytest.fixture(
-    params=[(3072, 1024, "fc1_latent_proj"), (1024, 3072, "fc2_latent_proj")]
+    params=[
+        (3072, 1024, "fc1_latent_proj"),
+        (1024, 3072, "fc2_latent_proj"),
+        (3072, 2560, "shared_experts.gate_up_proj"),
+        (1280, 3072, "shared_experts.down_proj"),
+    ]
 )
 def latent_linear(request, dist_init):
     k, n, name = request.param
@@ -124,3 +131,75 @@ def test_latent_fp8_graph_replays_new_inputs(latent_linear):
         x.copy_(torch.randn_like(x) * magnitude)
         graph.replay()
         _assert_gemm_matches(actual, _quantized_reference(x, weight))
+
+
+def _packed_operand_reference(a, w, sa, sw):
+    """FP64 matmul of actual quantized operands, independent of GEMM tiling."""
+    groups = torch.arange(a.shape[1] // 128, device=a.device)
+
+    def dequant(tensor, packed):
+        exponents = (packed[:, groups // 4].long() >> (groups % 4 * 8)) & 255
+        scales = torch.ldexp(
+            torch.ones_like(exponents, dtype=torch.float64), exponents.int() - 127
+        )
+        return tensor.double() * scales.repeat_interleave(128, dim=1)
+
+    return (dequant(a, sa) @ dequant(w, sw).T).to(torch.bfloat16)
+
+
+@pytest.mark.parametrize("rows", [1, 2, 4, 8])
+@pytest.mark.parametrize("backend", ["tensor", "direct"])
+@torch.inference_mode()
+def test_small_fp8_reuses_native_quantized_operands(latent_linear, rows, backend):
+    """Changing GEMM must not require changing quantization or its packed scales."""
+    from vllm.model_executor.layers.yoco_ops.small_fp8 import (
+        SmallFP8Config,
+        small_fp8_mm,
+    )
+
+    layer, weight = latent_linear
+    x = torch.randn(rows, weight.shape[1], device="cuda", dtype=torch.bfloat16)
+    a, sa = layer.quant_method.fp8_linear.quant_fp8(x)
+    w, sw = layer.weight, layer.weight_scale_inv
+    config = SmallFP8Config(backend, 32 if backend == "tensor" else 2)
+    before = [tensor.view(torch.uint8).clone() for tensor in (a, w)]
+    before_scales = [tensor.clone() for tensor in (sa, sw)]
+    result = small_fp8_mm(a, w, sa, sw, config)
+    _assert_gemm_matches(result, _packed_operand_reference(a, w, sa, sw))
+    assert all(torch.equal(t.view(torch.uint8), b) for t, b in zip((a, w), before))
+    assert all(torch.equal(t, b) for t, b in zip((sa, sw), before_scales))
+
+
+@pytest.mark.parametrize("backend", ["tensor", "direct"])
+@torch.inference_mode()
+def test_small_fp8_graph_observes_input_and_scale_updates(latent_linear, backend):
+    """Captured candidates must read updated packed scales and quantized inputs."""
+    from vllm.model_executor.layers.yoco_ops.small_fp8 import (
+        SmallFP8Config,
+        small_fp8_mm,
+    )
+
+    layer, weight = latent_linear
+    x = torch.randn(2, weight.shape[1], device="cuda", dtype=torch.bfloat16)
+    a, sa = layer.quant_method.fp8_linear.quant_fp8(x)
+    w, sw = layer.weight, layer.weight_scale_inv
+    config = SmallFP8Config(backend, 32 if backend == "tensor" else 2)
+    for _ in range(3):
+        small_fp8_mm(a, w, sa, sw, config)
+    torch.accelerator.synchronize()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        actual = small_fp8_mm(a, w, sa, sw, config)
+    original_weight_scale = sw.clone()
+    for magnitude in (0.0, 0.001, 16.0):
+        new_a, new_sa = layer.quant_method.fp8_linear.quant_fp8(
+            torch.randn_like(x) * magnitude
+        )
+        a.copy_(new_a)
+        sa.copy_(new_sa)
+        sw.copy_(original_weight_scale + (0x01010101 if magnitude else 0))
+        graph.replay()
+        _assert_gemm_matches(actual, _packed_operand_reference(a, w, sa, sw))
+    # Both legal packed-scale stride layouts must represent the same operation.
+    alternate = small_fp8_mm(a, w, sa.contiguous(), sw.contiguous(), config)
+    _assert_gemm_matches(alternate, _packed_operand_reference(a, w, sa, sw))
