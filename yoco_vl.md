@@ -50,10 +50,15 @@ CUDA_VISIBLE_DEVICES=0,1 .venv/bin/vllm serve /path/to/0000-2900-hf-vl \
   --max-model-len 32768 \
   --max-num-batched-tokens 4096 \
   --max-num-seqs 8 \
-  --gpu-memory-utilization 0.88 \
+  --gpu-memory-utilization 0.85 \
   --enforce-eager \
   --disable-custom-all-reduce \
   --kv-sharing-fast-prefill \
+  --attention-backend FLASHINFER \
+  --moe-backend triton \
+  --enable-prefix-caching \
+  --enable-chunked-prefill \
+  --async-scheduling \
   --limit-mm-per-prompt '{"image":2,"video":0}' \
   --chat-template-content-format openai
 ```

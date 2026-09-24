@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import torch
 from PIL import Image
-from tokenizers import Tokenizer, models, pre_tokenizers
+from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 from transformers import PreTrainedTokenizerFast
 
 from vllm.config import ModelConfig
@@ -185,3 +185,41 @@ def test_config_round_trip_preserves_k3_projector_width(tmp_path, config):
     assert reloaded.vision_config.num_attention_heads == 12
     assert reloaded.vision_config.norm_type == "rmsnorm"
     assert reloaded.get_text_config().model_type == "yoco"
+
+
+@pytest.mark.parametrize("prompt", ["<image><image>", "(<image>),<image>!"])
+def test_bpe_marker_boundaries_preserve_all_embedding_tokens(tmp_path, config, prompt):
+    tokenizer = Tokenizer(models.BPE(unk_token="[UNK]"))
+    tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+    tokenizer.decoder = decoders.ByteLevel()
+    tokenizer.train_from_iterator(
+        ["<image><image> (<image>),<image>! !!!!"] * 10,
+        trainers.BpeTrainer(
+            vocab_size=100,
+            special_tokens=["[UNK]", "[BEGIN]", "[END]", "[PAD]"],
+        ),
+    )
+    hf_tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=tokenizer,
+        unk_token="[UNK]",
+        pad_token="[PAD]",
+    )
+    config.image_placeholder_token_id = hf_tokenizer.convert_tokens_to_ids("!")
+    config.image_start_token_id = hf_tokenizer.convert_tokens_to_ids("[BEGIN]")
+    config.image_end_token_id = hf_tokenizer.convert_tokens_to_ids("[END]")
+    config.pad_token_id = hf_tokenizer.pad_token_id
+    config.text_config.vocab_size = len(hf_tokenizer)
+    assert hf_tokenizer.encode("!!!!") != [config.image_placeholder_token_id] * 4
+    hf_tokenizer.save_pretrained(tmp_path)
+    config.save_pretrained(tmp_path)
+    model = ModelConfig(model=str(tmp_path), max_model_len=256)
+    processor = MULTIMODAL_REGISTRY.create_processor(
+        model, cache=MultiModalProcessorOnlyCache(model)
+    )
+    media = {"image": [Image.new("RGB", (56, 28)), Image.new("RGB", (56, 28))]}
+    for _ in range(2):
+        output = processor(prompt, mm_items=processor.info.parse_mm_data(media))
+        locations = output["mm_placeholders"]["image"]
+        assert len(locations) == 2
+        assert all(int(location.is_embed.sum()) == 2 for location in locations)
+        assert locations[0].offset < locations[1].offset

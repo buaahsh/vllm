@@ -10,6 +10,7 @@ from dataclasses import replace
 from typing import Annotated, Any, Literal, cast
 
 import numpy as np
+import regex as re
 import torch
 from PIL import Image
 from torch import nn
@@ -43,6 +44,10 @@ from vllm.multimodal.processing import (
     PromptReplacement,
     PromptUpdate,
     PromptUpdateDetails,
+)
+from vllm.multimodal.processing.processor import (
+    MultiModalPromptUpdates,
+    PlaceholderFeaturesInfo,
 )
 from vllm.sequence import IntermediateTensors
 from vllm.transformers_utils.configs.kimi_k3 import KimiK3VisionConfig
@@ -438,6 +443,39 @@ class YOCOVLDummyInputsBuilder(BaseDummyInputsBuilder[YOCOVLProcessingInfo]):
 
 
 class YOCOVLMultiModalProcessor(BaseMultiModalProcessor[YOCOVLProcessingInfo]):
+    def _apply_prompt_updates(
+        self,
+        token_ids: list[int],
+        mm_prompt_updates: MultiModalPromptUpdates,
+    ) -> tuple[list[int], Mapping[str, list[PlaceholderFeaturesInfo]]]:
+        updated, matches, placeholders = self._apply_token_matches_with_placeholders(
+            token_ids, mm_prompt_updates
+        )
+        if all(all(idx is not None for idx in indices) for indices in matches.values()):
+            return updated, {key: value for key, value in placeholders.items() if value}
+
+        # Adjacent markers can share BPE tokens, e.g. the "><" in
+        # "<image><image>". Split the original text at marker boundaries before
+        # token replacement. Re-encoding expanded image tokens is unsafe:
+        # repeated placeholder ID 0 ("!") can merge into fewer BPE tokens.
+        tokenizer = self.info.get_tokenizer()
+        markers = {
+            "image": self.info.image_placeholder,
+            "video": self.info.video_placeholder,
+        }
+        pattern = (
+            "("
+            + "|".join(re.escape(markers[modality]) for modality in mm_prompt_updates)
+            + ")"
+        )
+        segments = re.split(pattern, tokenizer.decode(token_ids))
+        separated_ids = [
+            token_id
+            for segment in segments
+            for token_id in tokenizer.encode(segment, add_special_tokens=False)
+        ]
+        return super()._apply_prompt_updates(separated_ids, mm_prompt_updates)
+
     def _get_mm_fields_config(
         self,
         hf_inputs: BatchFeature,
