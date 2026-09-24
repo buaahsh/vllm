@@ -105,7 +105,7 @@ class NixlBaseConnectorScheduler:
         )
         self._has_mamba = kv_cache_config.has_mamba_layers
         self._use_yoco_final_prompt_block_split = (
-            vllm_config.model_config.hf_config.model_type == "yoco"
+            vllm_config.model_config.hf_text_config.model_type == "yoco"
             and vllm_config.cache_config.kv_sharing_fast_prefill
         )
 

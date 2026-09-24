@@ -22,7 +22,10 @@ from vllm.v1.request import Request
 def scheduler(role, yoco=True):
     config = SimpleNamespace(
         cache_config=SimpleNamespace(block_size=16, kv_sharing_fast_prefill=yoco),
-        model_config=SimpleNamespace(hf_config=SimpleNamespace(model_type="yoco")),
+        model_config=SimpleNamespace(
+            hf_config=SimpleNamespace(model_type="yoco"),
+            hf_text_config=SimpleNamespace(model_type="yoco"),
+        ),
         kv_transfer_config=SimpleNamespace(kv_role=role),
         scheduler_config=SimpleNamespace(disable_hybrid_kv_cache_manager=False),
     )

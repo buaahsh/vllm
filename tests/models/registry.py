@@ -1470,6 +1470,10 @@ _MULTIMODAL_EXAMPLE_MODELS = {
         enforce_eager=True,
         tokenizer_mode="mistral",
     ),
+    "YOCOVLForConditionalGeneration": _HfExamplesInfo(
+        "yoco/yoco-vl-kimi-k3",
+        is_available_online=False,
+    ),
     # [Encoder-decoder]
     "CohereAsrForConditionalGeneration": _HfExamplesInfo(
         "CohereLabs/cohere-transcribe-03-2026", trust_remote_code=True
