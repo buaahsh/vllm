@@ -102,3 +102,28 @@ comparisons passed cosine > 0.995 and relative L2 < 0.1 for TP=1 and TP=2.
 These are tolerance-based numerical checks, not bitwise GPU output equality.
 The actual Agens tokenizer also passed 18 image/cache cases and text-template
 compatibility checks with reasoning enabled and disabled.
+
+### Deployed checkpoint smoke results (2026-09-24)
+
+The BF16 150A9B-52M step-2900 export was hosted on two B200 GPUs with TP=2,
+32,768-token context, and the options above. Model loading used 140.35 GiB per
+GPU; the complete service used approximately 155 GiB per GPU. The runtime
+allocated about 8.9 GiB per GPU for KV cache.
+
+- 72 focused processing, configuration, runner, connector, and registry tests
+  passed, including BPE boundary regression tests. All applicable pre-commit
+  checks, including mypy, passed.
+- Seven public API smoke cases passed: text, red/blue image discrimination,
+  repeated-image caching, OCR of `7319`, and both orders of a two-image prompt.
+- A 4096-visual-token image was processed correctly (4114 total prompt tokens).
+- Text and image requests with 32,032 and 32,095 prompt tokens completed
+  without capacity errors. A 32,085-token request with the image at the end
+  correctly identified its color, including with a fresh prefix-cache salt.
+
+Long-input answer accuracy did **not** pass all checks: the 32K text arithmetic
+case answered `2` to `2 + 2`, and an image placed before a 32K document was not
+identified correctly. The arithmetic failure also occurred in a 3103-token
+case, while a 6205-token case passed; using a fresh cache salt did not change
+the failures. These results do not establish a specific root cause or prove
+that the problem is unique to the 32K setting. The deployment validates 32K
+serving capacity, not reliable long-context task accuracy.
