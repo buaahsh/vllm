@@ -42,6 +42,37 @@ them under `language_model`. It maps trained projector names `proj.0` and
 
 ## Serving on two B200 GPUs
 
+### Docker image
+
+`docker/Dockerfile.b200.vl` packages this branch over the digest-pinned
+`buaahsh/pytorch:26.02-b200-vllm-20260917` image, whose base is
+`donglixp/pytorch:26.02-b200`. It reuses the native extensions from base commit
+`28d82e2e464f0464332d742140ad62453f9eddd8`; this branch's runtime changes are
+Python-only. Changes to native code require rebuilding the native base first.
+The image includes the HF VL exporter and this guide, with the source commit
+recorded in the OCI revision label and `/opt/vllm/source/VLLM_BUILD_COMMIT`.
+
+```bash
+docker build -f docker/Dockerfile.b200.vl \
+  --build-arg VLLM_BUILD_COMMIT="$(git rev-parse HEAD)" \
+  -t buaahsh/pytorch:26.02-b200-vllm-20260925 .
+docker push buaahsh/pytorch:26.02-b200-vllm-20260925
+```
+
+The inference environment is `/opt/vllm/.venv` (PyTorch 2.13.0+cu130);
+NVIDIA's system Python environment remains separate. Use
+`/opt/vllm/.venv/bin/python` for Python scripts and `/opt/vllm/.venv/bin/vllm`
+for serving. Mount the HF model directory into the container; model weights
+are not part of the image.
+
+For four B200 GPUs with EP=4, use `--tensor-parallel-size 4
+--data-parallel-size 1 --enable-expert-parallel` in place of TP=2 below.
+Step-10000 was validated with that configuration and a 32768-token context:
+all ten public API smoke cases passed, including OCR, image order,
+32032-token text and 32095-token image-plus-text inputs.
+
+### Launch options
+
 ```bash
 CUDA_VISIBLE_DEVICES=0,1 .venv/bin/vllm serve /path/to/0000-2900-hf-vl \
   --served-model-name Agens-150B-52M-2900 \

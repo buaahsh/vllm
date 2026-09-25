@@ -1,0 +1,35 @@
+# YOCO-VL Python runtime over the validated v0.29 B200 native extensions.
+# Build from the repository root; see yoco_vl.md for the complete command.
+FROM buaahsh/pytorch:26.02-b200-vllm-20260917@sha256:7d9d91333b9b4324533ad8b6aa4f902744b4ead5509513d1622658c17d9bd028
+
+ARG VLLM_BUILD_COMMIT
+ARG VLLM_IMAGE_TAG=buaahsh/pytorch:26.02-b200-vllm-20260925
+
+WORKDIR /opt/vllm/source
+
+# The base installs vLLM in this editable source tree and keeps its inference
+# dependencies in /opt/vllm/.venv, separate from the NVIDIA system Python.
+# Native sources must remain compatible with base commit 28d82e2e464f0464.
+COPY vllm /opt/vllm/source/vllm
+COPY tools/yoco_serving /opt/vllm/source/tools/yoco_serving
+COPY yoco_vl.md /opt/vllm/source/yoco_vl.md
+COPY docker/Dockerfile.b200.vl /opt/vllm/source/docker/Dockerfile.b200.vl
+
+RUN test -n "${VLLM_BUILD_COMMIT}" \
+    && /opt/vllm/.venv/bin/python -m compileall -q \
+        /opt/vllm/source/vllm /opt/vllm/source/tools/yoco_serving \
+    && /opt/vllm/.venv/bin/python -c \
+        "from vllm.transformers_utils.configs.yoco_vl import YOCOVLConfig; c = YOCOVLConfig(); assert c.model_type == 'yoco_vl'; assert c.vision_config.model_type == 'kimi_k3_vision'" \
+    && printf '%s\n' "${VLLM_BUILD_COMMIT}" > /opt/vllm/source/VLLM_BUILD_COMMIT
+
+LABEL org.opencontainers.image.title="YOCO-VL v0.29 B200 runtime" \
+      org.opencontainers.image.description="YOCO language backbone with Kimi-K3 vision; BF16 tensor and expert parallel serving" \
+      org.opencontainers.image.source="https://github.com/msrallm/vllm" \
+      org.opencontainers.image.revision="${VLLM_BUILD_COMMIT}" \
+      org.opencontainers.image.version="${VLLM_IMAGE_TAG}" \
+      org.opencontainers.image.base.name="buaahsh/pytorch:26.02-b200-vllm-20260917" \
+      org.opencontainers.image.base.digest="sha256:7d9d91333b9b4324533ad8b6aa4f902744b4ead5509513d1622658c17d9bd028" \
+      io.msrallm.vllm.branch="vllm-yoco-version-0.29-vl" \
+      io.msrallm.vllm.python="/opt/vllm/.venv/bin/python"
+
+CMD ["bash"]
