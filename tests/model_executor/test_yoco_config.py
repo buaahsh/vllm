@@ -530,3 +530,83 @@ def test_yoco_specialized_features_select_retained_runner(
     if feature == "bf16":
         runtime.additional_config["yoco_execution_mode"] = "align"
         assert yoco_v1_runner_features(runtime) == []
+
+
+def test_yoco_mtp_config_resolves_standalone_dense_drafter():
+    from typing import get_args
+
+    from vllm.config.speculative import MTPModelTypes
+    from vllm.transformers_utils.configs.yoco import YOCOMTPConfig
+
+    config = YOCOMTPConfig(num_hidden_layers=1, moe_expert_num=0)
+    assert config.model_type in get_args(MTPModelTypes)
+    assert config.architectures == ["YOCOMTPModel"]
+    assert config.n_predict == config.num_nextn_predict_layers == 1
+    assert config.num_experts == 0
+
+
+def test_yoco_dense_mtp_preserves_target_tp_without_inheriting_ep(
+    tmp_path, monkeypatch
+):
+    from vllm.config import (
+        CacheConfig,
+        ModelConfig,
+        ParallelConfig,
+        SpeculativeConfig,
+        VllmConfig,
+    )
+    from vllm.transformers_utils.configs.yoco import YOCOConfig, YOCOMTPConfig
+
+    common = dict(
+        hidden_size=128,
+        num_attention_heads=8,
+        num_key_value_heads=4,
+        vocab_size=256,
+        max_position_embeddings=128,
+    )
+    target_path, draft_path = tmp_path / "target", tmp_path / "draft"
+    YOCOConfig(num_hidden_layers=2, moe_expert_num=8, **common).save_pretrained(
+        target_path
+    )
+    YOCOMTPConfig(num_hidden_layers=1, moe_expert_num=0, **common).save_pretrained(
+        draft_path
+    )
+    monkeypatch.setattr(vllm.platforms.current_platform, "device_count", lambda: 4)
+    target_parallel = ParallelConfig(
+        tensor_parallel_size=4, enable_expert_parallel=True
+    )
+    spec = SpeculativeConfig(
+        method="mtp",
+        model=str(draft_path),
+        num_speculative_tokens=1,
+        target_model_config=ModelConfig(
+            model=str(target_path), dtype="bfloat16", max_model_len=128
+        ),
+        target_parallel_config=target_parallel,
+    )
+    assert target_parallel.enable_expert_parallel
+    assert spec.draft_parallel_config.tensor_parallel_size == 4
+    assert not spec.draft_parallel_config.enable_expert_parallel
+    engine = VllmConfig(
+        model_config=spec.target_model_config,
+        parallel_config=target_parallel,
+        speculative_config=spec,
+        cache_config=CacheConfig(kv_sharing_fast_prefill=True),
+    )
+    assert engine.cache_config.kv_sharing_fast_prefill
+
+
+def test_yoco_mtp_metadata_preserves_engine_resolved_kv_layout():
+    from vllm.config import CacheConfig
+    from vllm.v1.worker.gpu.spec_decode.mtp.yoco import YOCOMTPSpeculator
+
+    cache = CacheConfig(kv_sharing_fast_prefill=True)
+    cache.kv_cache_layout = "LBHNC"
+    speculator = object.__new__(YOCOMTPSpeculator)
+    speculator.vllm_config = SimpleNamespace(cache_config=cache)
+    metadata_config = speculator.attn_vllm_config
+    assert not metadata_config.cache_config.kv_sharing_fast_prefill
+    assert cache.kv_sharing_fast_prefill
+    assert metadata_config.cache_config.get_resolved_kv_cache_layout() == (
+        cache.get_resolved_kv_cache_layout()
+    )

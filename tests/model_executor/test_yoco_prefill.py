@@ -154,3 +154,33 @@ def test_kv_only_prefill_skips_every_cross_layer() -> None:
         )
 
     torch.testing.assert_close(output, torch.full((4, 8), 2.0))
+
+
+def test_mtp_fast_prefill_captures_cross_residual_before_output_norm():
+    from types import SimpleNamespace
+
+    from vllm.model_executor.models.yoco_prefill import _fast_prefill_forward
+
+    hidden = torch.arange(32, dtype=torch.float32).reshape(4, 8)
+    model = SimpleNamespace(
+        self_block=lambda *args: (hidden, torch.zeros(4, 2), torch.zeros(4, 2), None),
+        cross_block=lambda positions, h, *args: h + 10,
+        norm=lambda x: x * 3,
+        fp_positions=torch.empty(4, dtype=torch.long),
+        fp_hidden_states=torch.empty(4, 8),
+        fp_yoco_key=torch.empty(4, 2),
+        fp_yoco_value=torch.empty(4, 2),
+        fuse_fp8_shared_kv=False,
+        mtp_hidden_states=torch.empty(4, 8),
+    )
+    lm = SimpleNamespace(
+        model=model,
+        _get_fast_prefill_indices=lambda: (torch.tensor([1, 3]), 2, None),
+    )
+    context = ForwardContext(no_compile_layers={}, attn_metadata={}, slot_mapping={})
+    with override_forward_context(context):
+        result = _fast_prefill_forward(lm, torch.arange(4), torch.arange(4))
+    expected = hidden.clone()
+    expected[[1, 3]] += 10
+    torch.testing.assert_close(result, expected * 3)
+    torch.testing.assert_close(model.mtp_hidden_states, expected)

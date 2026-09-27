@@ -689,6 +689,11 @@ class YOCOVLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP):
                 architectures=["YOCOForCausalLM"],
             )
 
+        if hasattr(self.language_model, "get_mtp_target_hidden_states"):
+            self.get_mtp_target_hidden_states = (
+                self.language_model.get_mtp_target_hidden_states
+            )
+
         self.make_empty_intermediate_tensors = (
             self.language_model.make_empty_intermediate_tensors
         )

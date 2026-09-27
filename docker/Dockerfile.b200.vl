@@ -19,11 +19,11 @@ RUN test -n "${VLLM_BUILD_COMMIT}" \
     && /opt/vllm/.venv/bin/python -m compileall -q \
         /opt/vllm/source/vllm /opt/vllm/source/tools/yoco_serving \
     && /opt/vllm/.venv/bin/python -c \
-        "from vllm.transformers_utils.configs.yoco_vl import YOCOVLConfig; c = YOCOVLConfig(); assert c.model_type == 'yoco_vl'; assert c.vision_config.model_type == 'kimi_k3_vision'" \
+        "from vllm.transformers_utils.configs.yoco_vl import YOCOVLConfig; from vllm.transformers_utils.configs.yoco import YOCOMTPConfig; c = YOCOVLConfig(); assert c.model_type == 'yoco_vl'; assert c.vision_config.model_type == 'kimi_k3_vision'; assert YOCOMTPConfig().n_predict == 1" \
     && printf '%s\n' "${VLLM_BUILD_COMMIT}" > /opt/vllm/source/VLLM_BUILD_COMMIT
 
 LABEL org.opencontainers.image.title="YOCO-VL v0.29 B200 runtime" \
-      org.opencontainers.image.description="YOCO language backbone with Kimi-K3 vision; BF16 tensor and expert parallel serving" \
+      org.opencontainers.image.description="YOCO language backbone with Kimi-K3 vision and MTP=1; BF16 tensor and expert parallel serving" \
       org.opencontainers.image.source="https://github.com/msrallm/vllm" \
       org.opencontainers.image.revision="${VLLM_BUILD_COMMIT}" \
       org.opencontainers.image.version="${VLLM_IMAGE_TAG}" \

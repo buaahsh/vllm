@@ -155,6 +155,8 @@ def _fast_prefill_forward(
     else:
         out_hidden[logits_indices_padded] = decode_hidden
 
+    if getattr(model, "mtp_hidden_states", None) is not None:
+        model.mtp_hidden_states[: out_hidden.shape[0]].copy_(out_hidden)
     return model.norm(out_hidden)
 
 

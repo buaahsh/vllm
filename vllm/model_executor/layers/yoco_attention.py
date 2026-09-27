@@ -660,8 +660,8 @@ class YOCOCrossAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        yoco_key: torch.Tensor,
-        yoco_value: torch.Tensor,
+        yoco_key: torch.Tensor | None,
+        yoco_value: torch.Tensor | None,
         kv_cache_dummy_dep: torch.Tensor | None = None,
         skip_kv_cache_update: bool = False,
     ) -> torch.Tensor:

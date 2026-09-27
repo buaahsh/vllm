@@ -111,6 +111,52 @@ YOCO KV sharing and prefill logic inspect the nested text configuration. This
 preserves the language model's existing optimized path when wrapped in a
 multimodal model.
 
+## One-token MTP
+
+Checkpoints trained with `mtp_n=1` can use their MTP block for speculative
+decoding. Export the draft from the text HF export that retains
+`auxiliary/vision_and_mtp.safetensors`:
+
+```bash
+.venv/bin/python tools/yoco_serving/prepare_yoco_mtp_hf.py \
+  --source /path/to/checkpoint-hf \
+  --output /path/to/checkpoint-hf-mtp
+```
+
+The exporter checks all 13 training tensors for completeness, shape, BF16 dtype,
+and finite values, then writes 12 inference tensors and a provenance manifest.
+It preserves interleaved differential-attention heads and packs the dense FFN
+gate/up projections. The existing text/vision export remains the target model.
+
+Add these options to the serving command above:
+
+```bash
+--enforce-eager \
+--speculative-config '{"method":"mtp","model":"/path/to/checkpoint-hf-mtp","num_speculative_tokens":1}'
+```
+
+The MTP block consumes the target's FP32 residual before its final normalization
+and the next token embedded using the target **output** embedding. After separate
+normalization, these inputs are added and projected. Its Q-only differential
+attention reads the target's shared cross-attention KV cache at the original
+position; it creates no draft KV cache. The output head is shared with the
+target. The regular rejection sampler verifies draft tokens with the target.
+
+Supported settings are BF16 weights, one speculative token, eager execution,
+and PP=PCP=DCP=1. Draft TP must match target TP. The target may use EP and YOCO
+fast prefill, and may be either `YOCOForCausalLM` or
+`YOCOVLForConditionalGeneration`. The MTP FFN is dense even when the target uses
+MoE. Vision reaches the draft through target hidden states and shared KV.
+
+Run the focused export, configuration, and prefill regression tests with:
+
+```bash
+.venv/bin/python -m pytest -q \
+  tests/model_executor/test_yoco_conversion.py \
+  tests/model_executor/test_yoco_config.py \
+  tests/model_executor/test_yoco_prefill.py
+```
+
 ## Validation
 
 The focused processing/configuration/KV-transfer tests cover pixel ordering,

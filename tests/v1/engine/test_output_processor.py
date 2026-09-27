@@ -61,6 +61,80 @@ def test_delta_output_without_new_tokens_returns_empty_logprobs(
     assert len(output.logprobs) == 0
 
 
+@pytest.mark.parametrize("output_kind", list(RequestOutputKind))
+@pytest.mark.parametrize("include_stop", [False, True])
+@pytest.mark.parametrize("engine_finish", [FinishReason.STOP, FinishReason.LENGTH])
+def test_stop_string_discards_inflight_tokens_but_keeps_final_kv_metadata(
+    monkeypatch, output_kind, include_stop, engine_finish
+):
+    from vllm.v1.engine.detokenizer import (
+        BaseIncrementalDetokenizer,
+        IncrementalDetokenizer,
+    )
+
+    class Detokenizer(BaseIncrementalDetokenizer):
+        def decode_next(self, token_id):
+            return {1: "hello", 2: "STOP", 3: "leaked"}[token_id]
+
+    monkeypatch.setattr(
+        IncrementalDetokenizer,
+        "from_new_request",
+        lambda tokenizer, request: Detokenizer(request),
+    )
+    processor = OutputProcessor(None, log_stats=False)
+    request = EngineCoreRequest(
+        request_id="stop-int",
+        external_req_id="stop",
+        prompt_token_ids=[0],
+        mm_features=None,
+        sampling_params=SamplingParams(
+            stop=["STOP"],
+            include_stop_str_in_output=include_stop,
+            output_kind=output_kind,
+        ),
+        pooling_params=None,
+        arrival_time=0,
+        lora_request=None,
+        cache_salt=None,
+        data_parallel_rank=None,
+    )
+    processor.add_request(request, "prompt")
+    stopped = processor.process_outputs(
+        [EngineCoreOutput(request_id="stop-int", new_token_ids=[1, 2])]
+    )
+    assert stopped.reqs_to_stop == ["stop-int"]
+    state = processor.request_states["stop-int"]
+    inflight = processor.process_outputs(
+        [EngineCoreOutput(request_id="stop-int", new_token_ids=[3, 3])]
+    )
+    assert not inflight.request_outputs
+    assert state.detokenizer.output_token_ids == [1, 2]
+    final = processor.process_outputs(
+        [
+            EngineCoreOutput(
+                request_id="stop-int",
+                new_token_ids=[3],
+                finish_reason=engine_finish,
+                kv_transfer_params={"transfer": "complete"},
+            )
+        ]
+    )
+    result = final.request_outputs[0]
+    assert result.finished
+    assert result.kv_transfer_params == {"transfer": "complete"}
+    assert result.outputs[0].finish_reason == "stop"
+    assert result.outputs[0].stop_reason == "STOP"
+    expected = "helloSTOP" if include_stop else "hello"
+    if output_kind == RequestOutputKind.DELTA:
+        outputs = stopped.request_outputs + final.request_outputs
+        assert "".join(o.outputs[0].text for o in outputs) == expected
+        assert [t for o in outputs for t in o.outputs[0].token_ids] == [1, 2]
+    else:
+        assert result.outputs[0].text == expected
+        assert result.outputs[0].token_ids == [1, 2]
+    assert not processor.has_unfinished_requests()
+
+
 def _ref_convert_id_to_token(
     tokenizer: TokenizerLike,
     token_id: int,

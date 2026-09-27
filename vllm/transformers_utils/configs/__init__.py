@@ -106,6 +106,7 @@ _CLASS_TO_MODULE: dict[str, str] = {
     "Qwen3_5MoeConfig": "vllm.transformers_utils.configs.qwen3_5_moe",
     "Qwen3_5MoeTextConfig": "vllm.transformers_utils.configs.qwen3_5_moe",
     "YOCOConfig": "vllm.transformers_utils.configs.yoco",
+    "YOCOMTPConfig": "vllm.transformers_utils.configs.yoco",
     "YOCOVLConfig": "vllm.transformers_utils.configs.yoco_vl",
     "InklingModelConfig": "vllm.models.inkling.configs",
     "InklingAudioConfig": "vllm.models.inkling.configs",

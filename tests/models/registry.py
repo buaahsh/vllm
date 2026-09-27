@@ -1862,6 +1862,11 @@ _SPECULATIVE_DECODING_EXAMPLE_MODELS = {
         hf_overrides={"num_hidden_layers": 4},
         is_available_online=False,
     ),
+    "YOCOMTPModel": _HfExamplesInfo(
+        "yoco/yoco-mtp",
+        speculative_model="yoco/yoco-mtp",
+        is_available_online=False,
+    ),
 }
 
 _TRANSFORMERS_BACKEND_MODELS = {

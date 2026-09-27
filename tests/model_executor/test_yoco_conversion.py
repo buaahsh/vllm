@@ -218,3 +218,60 @@ def test_yoco_expert_checkpoint_aliases_reload_without_replacing_storage():
     )
     with pytest.raises(ValueError, match="Ambiguous YOCO checkpoint parameter alias"):
         causal_lm.load_weights([])
+
+
+def _mtp_training_tensors():
+    from tools.yoco_serving.prepare_yoco_mtp_hf import PREFIX
+    from vllm.transformers_utils.configs.yoco_mtp import expected_mtp_shapes
+
+    config = dict(hidden_size=8, cross_head=2, head_dim=4, d_ffn=4, diff_v3=True)
+    tensors = {}
+    for name, shape in expected_mtp_shapes(config).items():
+        value = torch.arange(torch.tensor(shape).prod()).reshape(shape).bfloat16()
+        if name == "norm.weight":
+            tensors[PREFIX + "mtp_norm.weight"] = value
+            continue
+        suffix = name.removeprefix("mtp.")
+        if suffix == "ffn.gate_up_proj.weight":
+            tensors[PREFIX + "mtp_block.ffn.gate_proj.weight"] = value[:4]
+            tensors[PREFIX + "mtp_block.ffn.up_proj.weight"] = value[4:]
+            continue
+        if suffix == "self_attn.q_proj.weight":
+            value = value.reshape(4, 4, 8)
+        suffix = suffix.replace("self_attn.lambda_proj.", "self_attn.gate_proj.")
+        tensors[PREFIX + "mtp_block." + suffix] = value
+    return config, tensors
+
+
+def test_mtp_conversion_preserves_head_order_and_gate_up_values():
+    from tools.yoco_serving.prepare_yoco_mtp_hf import PREFIX, convert_mtp_weights
+
+    config, tensors = _mtp_training_tensors()
+    actual = convert_mtp_weights(tensors, config)
+    assert len(actual) == 12
+    assert torch.equal(
+        actual["mtp.self_attn.q_proj.weight"].reshape(4, 4, 8),
+        tensors[PREFIX + "mtp_block.self_attn.q_proj.weight"],
+    )
+    gate, up = actual["mtp.ffn.gate_up_proj.weight"].chunk(2)
+    assert torch.equal(gate, tensors[PREFIX + "mtp_block.ffn.gate_proj.weight"])
+    assert torch.equal(up, tensors[PREFIX + "mtp_block.ffn.up_proj.weight"])
+    assert torch.equal(
+        actual["mtp.self_attn.lambda_proj.weight"],
+        tensors[PREFIX + "mtp_block.self_attn.gate_proj.weight"],
+    )
+
+
+def test_mtp_conversion_rejects_missing_q_norm_and_nonfinite_weight():
+    import pytest
+
+    from tools.yoco_serving.prepare_yoco_mtp_hf import PREFIX, convert_mtp_weights
+
+    config, tensors = _mtp_training_tensors()
+    tensors.pop(PREFIX + "mtp_block.self_attn.q_norm.weight")
+    with pytest.raises(ValueError, match="inventory"):
+        convert_mtp_weights(tensors, config)
+    config, tensors = _mtp_training_tensors()
+    tensors[PREFIX + "mtp_block.proj.weight"][0, 0] = float("nan")
+    with pytest.raises(ValueError, match="Nonfinite"):
+        convert_mtp_weights(tensors, config)

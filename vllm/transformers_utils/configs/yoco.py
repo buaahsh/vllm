@@ -14,6 +14,7 @@ copies every entry from ``config.json`` onto the instance as an attribute.
 Registered under ``model_type = "yoco"`` via
 ``vllm.transformers_utils.config._CONFIG_REGISTRY``.
 """
+
 from transformers import PretrainedConfig
 
 
@@ -34,4 +35,14 @@ class YOCOConfig(PretrainedConfig):
     def __init__(self, **kwargs):
         if "architectures" not in kwargs:
             kwargs["architectures"] = ["YOCOForCausalLM"]
+        super().__init__(**kwargs)
+
+
+class YOCOMTPConfig(YOCOConfig):
+    model_type = "yoco_mtp"
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("architectures", ["YOCOMTPModel"])
+        kwargs.setdefault("n_predict", 1)
+        kwargs.setdefault("num_nextn_predict_layers", 1)
         super().__init__(**kwargs)

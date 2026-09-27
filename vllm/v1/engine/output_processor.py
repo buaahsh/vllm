@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import numpy as np
 import torch
+from msgspec.structs import replace
 
 from vllm.lora.request import LoRARequest
 from vllm.outputs import (
@@ -664,6 +665,23 @@ class OutputProcessor:
             if req_state is None:
                 # Ignore output for already-aborted request.
                 continue
+
+            if req_state.pending_stop_reason is not None:
+                # Async scheduling may already have another decode in flight
+                # when the frontend detects a stop string. Preserve the
+                # truncated text/tokens while awaiting the engine's final KV
+                # metadata, including a LENGTH finish racing the STOP RPC.
+                if not engine_core_output.finished:
+                    continue
+                engine_core_output = replace(
+                    engine_core_output,
+                    new_token_ids=[],
+                    new_logprobs=None,
+                    new_prompt_logprobs_tensors=None,
+                    new_sampling_mask=None,
+                    routed_experts=None,
+                    finish_reason=FinishReason.STOP,
+                )
 
             # 1) Compute stats for this iteration.
             self._update_stats_from_output(

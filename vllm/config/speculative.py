@@ -35,6 +35,7 @@ else:
 logger = init_logger(__name__)
 
 MTPModelTypes = Literal[
+    "yoco_mtp",
     "deepseek_mtp",
     "dots3_note_mtp",
     "mimo_mtp",
@@ -1551,6 +1552,10 @@ class SpeculativeConfig:
                         self.target_parallel_config, self.draft_tensor_parallel_size
                     )
                 )
+                if self.draft_model_config.hf_config.model_type == "yoco_mtp":
+                    # YOCO's MTP block has a dense FFN even when its target
+                    # shards MoE experts across ranks. It still uses target TP.
+                    self.draft_parallel_config.enable_expert_parallel = False
 
         if self.index_share_for_mtp_iteration is not None:
             if self.method != "mtp" or self.draft_model_config is None:
