@@ -2,10 +2,81 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """YOCO prefill regression tests."""
 
+import pytest
 import torch
 
 from vllm.forward_context import ForwardContext, override_forward_context
-from vllm.model_executor.models.yoco import YOCOCrossBlock, YOCOForCausalLM
+from vllm.model_executor.models.yoco import YOCOCrossBlock, YOCOForCausalLM, YOCOModel
+
+
+@pytest.mark.parametrize("mode", ["align", "fast"])
+def test_aux_features_use_final_encoder_pass_and_pre_final_norm(mode):
+    class Layer(torch.nn.Module):
+        def __init__(self, increment):
+            super().__init__()
+            self.increment = increment
+
+        def forward(self, positions, hidden, *args):
+            return hidden + self.increment
+
+        def forward_with_residual(self, positions, hidden, *args, input_residual=None):
+            residual = hidden if input_residual is None else hidden + input_residual
+            return torch.full_like(hidden, self.increment), residual
+
+    class Norm(torch.nn.Module):
+        def __init__(self, scale):
+            super().__init__()
+            self.scale = scale
+
+        def forward(self, hidden, residual=None):
+            if residual is None:
+                return (hidden * self.scale).to(torch.bfloat16)
+            value = hidden + residual
+            return (value * self.scale).to(torch.bfloat16), value
+
+    model = YOCOModel.__new__(YOCOModel)
+    torch.nn.Module.__init__(model)
+    model.do_not_compile = True
+    model.execution_mode = mode
+    model.residual_dtype = torch.float32
+    model.universal_loop = 2
+    model.first_cross_layer_idx = 3
+    model.num_hidden_layers = 6
+    model.yoco_cross_layers = 3
+    model.layers = torch.nn.ModuleList(Layer(i + 1) for i in range(6))
+    model.yoco_norm = Norm(1)
+    model.norm = Norm(2)
+    model.project_yoco_kv = lambda h: (h, h)
+    model.normalize_yoco_kv = lambda k, v: (k, v)
+    model.aux_hidden_state_layers = (3, 5, 6)
+    result, features = model(None, torch.arange(2), inputs_embeds=torch.ones(2, 4))
+    assert len(features) == 3
+    for actual, value in zip(features, [13, 22, 28], strict=True):
+        torch.testing.assert_close(
+            actual, torch.full((2, 4), float(value), dtype=torch.bfloat16)
+        )
+    torch.testing.assert_close(result, torch.full((2, 4), 56.0, dtype=torch.bfloat16))
+    model._fourval_export_postnorm = True
+    postnorm_result, postnorm_features = model(
+        None, torch.arange(2), inputs_embeds=torch.ones(2, 4)
+    )
+    assert len(postnorm_features) == 4
+    torch.testing.assert_close(postnorm_features[-1], postnorm_result)
+    for before, after in zip(features, postnorm_features[:-1], strict=True):
+        torch.testing.assert_close(before, after)
+    model._fourval_export_postnorm = False
+    model.aux_hidden_state_layers = ()
+    torch.testing.assert_close(
+        model(None, torch.arange(2), inputs_embeds=torch.ones(2, 4)), result
+    )
+
+
+def test_aux_extraction_rejects_decoder_skipping_prefill():
+    model = YOCOForCausalLM.__new__(YOCOForCausalLM)
+    torch.nn.Module.__init__(model)
+    model.fast_prefill_enabled = True
+    with pytest.raises(ValueError, match="full decoder execution"):
+        model.set_aux_hidden_state_layers((14, 21, 27, 28))
 
 
 def test_fast_prefill_runs_all_cross_layers_on_compact_tokens() -> None:

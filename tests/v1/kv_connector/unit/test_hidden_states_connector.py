@@ -20,6 +20,46 @@ from vllm.v1.kv_cache_interface import (
     MLAAttentionSpec,
     SlidingWindowMLASpec,
 )
+from vllm.v1.request import RequestStatus
+
+
+@pytest.mark.parametrize("registered", [False, True])
+@pytest.mark.parametrize(
+    "status",
+    [
+        RequestStatus.FINISHED_ABORTED,
+        RequestStatus.FINISHED_ERROR,
+        RequestStatus.FINISHED_IGNORED,
+    ],
+)
+def test_cancelled_or_failed_request_never_exports_partial_states(registered, status):
+    connector = ExampleHiddenStatesConnector.__new__(ExampleHiddenStatesConnector)
+    connector._request_filenames = (
+        {"request": "/unused/state.safetensors"} if registered else {}
+    )
+    connector._pending_saves = {}
+    request = SimpleNamespace(request_id="request", status=status)
+    assert connector.request_finished_all_groups(request, ()) == (False, None)
+    assert not connector._request_filenames
+    assert not connector._pending_saves
+
+
+def test_completed_request_still_exports_computed_output_states():
+    connector = ExampleHiddenStatesConnector.__new__(ExampleHiddenStatesConnector)
+    connector._request_filenames = {"request": "/unused/state.safetensors"}
+    connector._pending_saves = {}
+    request = SimpleNamespace(
+        request_id="request",
+        status=RequestStatus.FINISHED_LENGTH_CAPPED,
+        kv_transfer_params={"include_output_tokens": True},
+        all_token_ids=[1, 2, 3, 4],
+        prompt_token_ids=[1, 2],
+    )
+    assert connector.request_finished(request, [7]) == (
+        True,
+        {"hidden_states_path": "/unused/state.safetensors"},
+    )
+    assert connector._pending_saves["request"].token_ids.tolist() == [1, 2, 3]
 
 
 def _full(block_size: int) -> FullAttentionSpec:

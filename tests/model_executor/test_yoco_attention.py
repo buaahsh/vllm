@@ -28,6 +28,65 @@ from vllm.model_executor.models.yoco_config import (
 )
 
 
+@pytest.mark.skip_global_cleanup
+@pytest.mark.parametrize(
+    "model_type,loops", [("yoco", 1), ("yoco", 2), ("yoco", 3), ("qwen3", 3)]
+)
+def test_dspark_cache_names_do_not_collide_with_looped_yoco(
+    monkeypatch, model_type, loops
+):
+    from vllm.model_executor.models import qwen3_dspark
+
+    occupied = {f"model.layers.{i}.self_attn.attn" for i in range(20)}
+    if model_type == "yoco":
+        for loop in range(1, loops):
+            occupied.update(
+                f"model.layers.{i}.self_attn.attn"
+                for i in range(loop * 20, loop * 20 + 10)
+            )
+    target_names = occupied.copy()
+
+    class DraftBackbone(torch.nn.Module):
+        def __init__(self, *, vllm_config, prefix, start_layer_id):
+            super().__init__()
+            self.layers = []
+            for i in range(start_layer_id, start_layer_id + 2):
+                name = f"{prefix}.layers.{i}.self_attn.attn"
+                if name in occupied:
+                    raise ValueError(f"Duplicate layer name: {name}")
+                occupied.add(name)
+                self.layers.append(
+                    SimpleNamespace(
+                        self_attn=SimpleNamespace(attn=SimpleNamespace(layer_name=name))
+                    )
+                )
+
+    monkeypatch.setattr(qwen3_dspark, "Qwen3DSparkModel", DraftBackbone)
+    monkeypatch.setattr(
+        qwen3_dspark, "ParallelLMHead", lambda *a, **kw: torch.nn.Identity()
+    )
+    monkeypatch.setattr(
+        qwen3_dspark, "LogitsProcessor", lambda *a, **kw: torch.nn.Identity()
+    )
+    config = SimpleNamespace(
+        model_config=SimpleNamespace(
+            get_total_num_hidden_layers=lambda: 20,
+            get_vocab_size=lambda: 32,
+            hf_text_config=SimpleNamespace(model_type=model_type, universal_loop=loops),
+        ),
+        speculative_config=SimpleNamespace(
+            draft_model_config=SimpleNamespace(
+                hf_config=SimpleNamespace(vocab_size=32, hidden_size=8)
+            )
+        ),
+    )
+    model = qwen3_dspark.Qwen3DSparkForCausalLM(vllm_config=config)
+    names = model.get_draft_kv_cache_layer_names()
+    assert len(names) == 2 and not target_names.intersection(names)
+    if model_type != "yoco" or loops == 1:
+        assert names[0] == "model.layers.20.self_attn.attn"
+
+
 def test_yoco_fast_selects_flashinfer_only_for_pure_prefill(
     monkeypatch, tmp_path
 ) -> None:

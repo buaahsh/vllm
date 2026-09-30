@@ -99,6 +99,9 @@ class YOCOSelfAttention(nn.Module):
         self.total_num_kv_heads = _cfg_int(config, "num_key_value_heads", "kv_head")
         self.head_dim = _cfg_int(config, "head_dim")
         self.diff_v3 = bool(getattr(config, "diff_v3", False))
+        self.use_diff = self.diff_v3 or bool(
+            getattr(config, "diff_v2", getattr(config, "diff_attention", True))
+        )
         self.layer_idx = layer_idx
         self.universal_loop = universal_loop
         self.num_hidden_layers = num_hidden_layers
@@ -115,7 +118,7 @@ class YOCOSelfAttention(nn.Module):
             f"by TP size {tp_size} so diff-attention head pairs stay local"
         )
         # ``2 * head`` Q-heads because of diff-attention.
-        q_heads = 2 * self.total_num_heads
+        q_heads = (2 if self.use_diff else 1) * self.total_num_heads
         assert q_heads % tp_size == 0, (
             f"2*num_attention_heads={q_heads} must be divisible by TP size {tp_size}"
         )
@@ -147,6 +150,7 @@ class YOCOSelfAttention(nn.Module):
             (self.q_size, self.kv_size, self.kv_size, gate_heads),
         )
         use_merged_qkv_lambda &= torch.get_default_dtype() == torch.bfloat16
+        use_merged_qkv_lambda &= self.use_diff
         if use_merged_qkv_lambda:
             self.qkv_lambda_proj = MergedColumnParallelLinear(
                 input_size=self.hidden_size,
@@ -177,16 +181,20 @@ class YOCOSelfAttention(nn.Module):
             # Keep the legacy HF name ``lambda_proj`` for checkpoint
             # compatibility. Diff-v2 has one gate per head pair; diff-v3 has
             # one per attention head.
-            self.lambda_proj = ColumnParallelLinear(
-                input_size=self.hidden_size,
-                output_size=gate_heads,
-                bias=False,
-                gather_output=False,
-                # llm-train constructs lambda_proj with default
-                # MixPrecisionLinear, so it stays BF16 even when the rest of
-                # attention uses MXFP8.
-                quant_config=None,
-                prefix=f"{prefix}.lambda_proj",
+            self.lambda_proj = (
+                ColumnParallelLinear(
+                    input_size=self.hidden_size,
+                    output_size=gate_heads,
+                    bias=False,
+                    gather_output=False,
+                    # llm-train constructs lambda_proj with default
+                    # MixPrecisionLinear, so it stays BF16 even when the rest of
+                    # attention uses MXFP8.
+                    quant_config=None,
+                    prefix=f"{prefix}.lambda_proj",
+                )
+                if self.use_diff
+                else None
             )
         self.o_proj = RowParallelLinear(
             input_size=self.total_num_heads * self.head_dim,
@@ -417,6 +425,9 @@ class YOCOSelfAttention(nn.Module):
             output_dtype=torch.bfloat16 if q.dtype == torch.float8_e4m3fn else None,
         )
 
+        if not self.use_diff:
+            out, _ = self.o_proj(attn_out)
+            return out
         if gate is None:
             gate = self._project_lambda(hidden_states)
         if self.fuse_fp8_output:
@@ -469,11 +480,14 @@ class YOCOCrossAttention(nn.Module):
         )
         self.head_dim = _cfg_int(config, "head_dim")
         self.diff_v3 = bool(getattr(config, "diff_v3", False))
+        self.use_diff = self.diff_v3 or bool(
+            getattr(config, "diff_v2", getattr(config, "diff_attention", True))
+        )
         self.layer_idx = layer_idx
         self.first_cross_layer_idx = first_cross_layer_idx
 
         tp_size = get_tensor_model_parallel_world_size()
-        q_heads = 2 * self.total_num_heads
+        q_heads = (2 if self.use_diff else 1) * self.total_num_heads
         assert q_heads % tp_size == 0
         assert self.total_num_heads % tp_size == 0
         self.num_heads = q_heads // tp_size
@@ -494,7 +508,7 @@ class YOCOCrossAttention(nn.Module):
             self.hidden_size,
             (self.q_size, gate_heads),
         )
-        if use_merged_q_lambda:
+        if use_merged_q_lambda and self.use_diff:
             self.q_lambda_proj = MergedColumnParallelLinear(
                 input_size=self.hidden_size,
                 output_sizes=[q_heads * self.head_dim, gate_heads],
@@ -515,14 +529,18 @@ class YOCOCrossAttention(nn.Module):
                 quant_config=quant_config,
                 prefix=f"{prefix}.q_proj",
             )
-            self.lambda_proj = ColumnParallelLinear(
-                input_size=self.hidden_size,
-                output_size=gate_heads,
-                bias=False,
-                gather_output=False,
-                # llm-train leaves lambda_proj at default BF16 precision.
-                quant_config=None,
-                prefix=f"{prefix}.lambda_proj",
+            self.lambda_proj = (
+                ColumnParallelLinear(
+                    input_size=self.hidden_size,
+                    output_size=gate_heads,
+                    bias=False,
+                    gather_output=False,
+                    # llm-train leaves lambda_proj at default BF16 precision.
+                    quant_config=None,
+                    prefix=f"{prefix}.lambda_proj",
+                )
+                if self.use_diff
+                else None
             )
         self.o_proj = RowParallelLinear(
             input_size=self.total_num_heads * self.head_dim,
@@ -544,6 +562,10 @@ class YOCOCrossAttention(nn.Module):
         # Cross layers apply the same per-head Q norm/clip as self layers (the
         # shared K is normed once at the model level on ``yoco_key``).
         self.q_norm = _build_qk_norm(config, self.head_dim, rms_eps, execution_mode)
+        if getattr(config, "qk_norm_self_only", False) and not getattr(
+            config, "qk_rms_clip", False
+        ):
+            self.q_norm = None
 
         if layer_idx == first_cross_layer_idx:
             kv_sharing_target = None
@@ -675,6 +697,9 @@ class YOCOCrossAttention(nn.Module):
             skip_kv_cache_update=skip_kv_cache_update,
             output_dtype=torch.bfloat16 if q.dtype == torch.float8_e4m3fn else None,
         )
+        if not self.use_diff:
+            out, _ = self.o_proj(attn_out)
+            return out
         if gate is None:
             gate = self._project_lambda(hidden_states)
         if self.fuse_fp8_output:

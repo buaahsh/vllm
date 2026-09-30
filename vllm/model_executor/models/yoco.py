@@ -49,6 +49,7 @@ from vllm.model_executor.layers.yoco_attention import (
 from vllm.model_executor.layers.yoco_fast import (
     yoco_fast_linear_fusion,
 )
+from vllm.model_executor.layers.yoco_moe import YOCODenseMLP
 from vllm.model_executor.layers.yoco_moe import YOCOMoE as YOCOMoE
 from vllm.model_executor.layers.yoco_ops.norm import RMSClip as RMSClip
 from vllm.model_executor.layers.yoco_ops.norm import RMSNorm as RMSNorm
@@ -84,7 +85,11 @@ from vllm.model_executor.layers.yoco_ops.projection import (
     _YocoAlignLinearMethod as _YocoAlignLinearMethod,
 )
 from vllm.model_executor.models import yoco_prefill, yoco_weights
-from vllm.model_executor.models.interfaces import SupportsPP
+from vllm.model_executor.models.interfaces import (
+    EagleModelMixin,
+    SupportsEagle3,
+    SupportsPP,
+)
 from vllm.model_executor.models.utils import (
     make_empty_intermediate_tensors_factory,
     maybe_prefix,
@@ -200,14 +205,19 @@ class YOCODecoderLayer(nn.Module):
                 execution_mode=execution_mode,
             )
 
-        # All layers in this checkpoint are MoE (``dense_layers = 0``).
-        self.mlp = YOCOMoE(
-            config=config,
-            quant_config=quant_config,
-            prefix=f"{prefix}.mlp",
-            execution_mode=execution_mode,
-            moe_backend_override=moe_backend_override,
-            layer_idx=layer_idx,
+        num_experts = _cfg_int(config, "num_experts", "moe_expert_num", default=0)
+        dense_layers = _cfg_int(config, "dense_layers", default=0)
+        self.mlp = (
+            YOCOMoE(
+                config=config,
+                quant_config=quant_config,
+                prefix=f"{prefix}.mlp",
+                execution_mode=execution_mode,
+                moe_backend_override=moe_backend_override,
+                layer_idx=layer_idx,
+            )
+            if num_experts > 0 and layer_idx >= dense_layers
+            else YOCODenseMLP(config, quant_config, f"{prefix}.mlp")
         )
 
     def forward_with_residual(
@@ -474,7 +484,8 @@ class YOCOSelfBlock(nn.Module):
         "inputs_embeds": 0,
     },
 )
-class YOCOModel(nn.Module):
+class YOCOModel(nn.Module, EagleModelMixin):
+    start_layer = 0
     yoco_norm: RMSNorm | None
     yoco_kv_proj: MergedColumnParallelLinear | None
     self_block: YOCOSelfBlock | None
@@ -535,6 +546,10 @@ class YOCOModel(nn.Module):
             self.yoco_k_norm = _build_qk_norm(
                 config, head_dim, rms_eps, self.execution_mode
             )
+            if getattr(config, "qk_norm_self_only", False) and not getattr(
+                config, "qk_rms_clip", False
+            ):
+                self.yoco_k_norm = None
             self.yoco_norm = RMSNorm(
                 self.hidden_size,
                 eps=rms_eps,
@@ -796,9 +811,14 @@ class YOCOModel(nn.Module):
 
         # Universal loop: run layers 0..first_cross_layer_idx-1
         # ``universal_loop`` times.
+        aux_hidden_states: list[torch.Tensor] = []
         residual = None
         for loop_idx in range(self.universal_loop):
             for layer_idx in range(self.first_cross_layer_idx):
+                if loop_idx == self.universal_loop - 1:
+                    self._maybe_add_hidden_state(
+                        aux_hidden_states, layer_idx, hidden_states, residual
+                    )
                 if self.execution_mode == "fast":
                     hidden_states, residual = self.decoder_layers[
                         layer_idx
@@ -834,6 +854,9 @@ class YOCOModel(nn.Module):
             yoco_key, yoco_value = self.normalize_yoco_kv(yoco_key, yoco_value)
             # No RoPE on cross-layer K (``rope_dim = 0`` in HF config).
             for layer_idx in range(self.first_cross_layer_idx, self.num_hidden_layers):
+                self._maybe_add_hidden_state(
+                    aux_hidden_states, layer_idx, hidden_states, residual
+                )
                 if self.execution_mode == "fast":
                     hidden_states, residual = self.decoder_layers[
                         layer_idx
@@ -854,6 +877,11 @@ class YOCOModel(nn.Module):
                         yoco_value,
                     )
 
+        # Capture encoder layer inputs on the final universal pass. Boundary n
+        # is the residual after block n-1, before the final normalization.
+        self._maybe_add_hidden_state(
+            aux_hidden_states, self.num_hidden_layers, hidden_states, residual
+        )
         if residual is None:
             output = self.norm(hidden_states)
             assert isinstance(output, torch.Tensor)
@@ -861,6 +889,13 @@ class YOCOModel(nn.Module):
             norm_output = self.norm(hidden_states, residual)
             assert isinstance(norm_output, tuple)
             output, _ = norm_output
+        if self.aux_hidden_state_layers:
+            # YOCO accumulates residuals in FP32; draft projections and the
+            # Speculators training inputs use the target's compute dtype.
+            features = [state.to(output.dtype) for state in aux_hidden_states]
+            if getattr(self, "_fourval_export_postnorm", False):
+                features.append(output)
+            return output, features
         return output
 
 
@@ -869,7 +904,7 @@ class YOCOModel(nn.Module):
 # --------------------------------------------------------------------------- #
 
 
-class YOCOForCausalLM(nn.Module, SupportsPP):
+class YOCOForCausalLM(nn.Module, SupportsPP, SupportsEagle3):
     # Self-attention layers ship q/k/v separately; we fuse into qkv_proj.
     packed_modules_mapping = YOCO_PACKED_MODULES_MAPPING
 
@@ -943,6 +978,21 @@ class YOCOForCausalLM(nn.Module, SupportsPP):
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
+
+    def set_aux_hidden_state_layers(self, layers: tuple[int, ...]) -> None:
+        if self.fast_prefill_enabled:
+            raise ValueError(
+                "YOCO auxiliary features require full decoder execution; "
+                "disable kv_sharing_fast_prefill for speculative decoding/extraction"
+            )
+        postnorm_id = self.model.num_hidden_layers + 1
+        self.model._fourval_export_postnorm = postnorm_id in layers
+        layers = tuple(i for i in layers if i != postnorm_id)
+        if not layers or min(layers) < 0 or max(layers) > self.model.num_hidden_layers:
+            raise ValueError(
+                "YOCO auxiliary layer ids must be in [0, num_hidden_layers]"
+            )
+        self.model._set_aux_hidden_state_layers(layers)
 
     def _initialize_rotary_caches(self) -> None:
         return yoco_weights._initialize_rotary_caches(self)

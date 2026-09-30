@@ -27,6 +27,7 @@ from vllm.model_executor.layers.activation import SiluAndMul, SiluAndMulWithClam
 from vllm.model_executor.layers.fused_moe import FusedMoEFactory
 from vllm.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 from vllm.model_executor.layers.linear import (
+    ColumnParallelLinear,
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
@@ -328,6 +329,46 @@ class YOCOCombinedOutputTransform(nn.Module):
         # Keep the same operand order as llm-train's
         # ``final_hidden_states + shared_gate_score * self.shared(x)``.
         return routed_output + gated_shared
+
+
+class YOCODenseMLP(nn.Module):
+    """Dense SwiGLU used by the original YOCO checkpoints."""
+
+    def __init__(self, config, quant_config, prefix):
+        super().__init__()
+        width = _cfg_int(config, "hidden_size", "d_model")
+        intermediate = _cfg_int(config, "intermediate_size", "d_ffn")
+        self.limit = _swiglu_limit(config)
+        self.up_proj = ColumnParallelLinear(
+            width,
+            intermediate,
+            bias=False,
+            quant_config=quant_config,
+            prefix=f"{prefix}.up_proj",
+        )
+        self.gate_proj = ColumnParallelLinear(
+            width,
+            intermediate,
+            bias=False,
+            quant_config=quant_config,
+            prefix=f"{prefix}.gate_proj",
+        )
+        self.down_proj = RowParallelLinear(
+            intermediate,
+            width,
+            bias=False,
+            quant_config=quant_config,
+            prefix=f"{prefix}.down_proj",
+        )
+
+    def forward(self, hidden_states, loop_idx=0):
+        up, _ = self.up_proj(hidden_states)
+        gate, _ = self.gate_proj(hidden_states)
+        if self.limit > 0:
+            up = up.clamp(-self.limit, self.limit)
+            gate = gate.clamp(max=self.limit)
+        out, _ = self.down_proj(up * F.silu(gate))
+        return out
 
 
 class YOCOMoE(nn.Module):

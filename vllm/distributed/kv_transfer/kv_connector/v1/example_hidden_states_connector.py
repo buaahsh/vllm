@@ -24,6 +24,7 @@ from vllm.logger import init_logger
 from vllm.utils.gpu_sync_debug import gpu_sync_allowed
 from vllm.v1.attention.backend import AttentionMetadata
 from vllm.v1.core.sched.output import SchedulerOutput
+from vllm.v1.request import RequestStatus
 
 if TYPE_CHECKING:
     from vllm.v1.core.kv_cache_manager import KVCacheBlocks
@@ -31,6 +32,12 @@ if TYPE_CHECKING:
     from vllm.v1.request import Request
 
 logger = init_logger(__name__)
+
+_NON_EXPORTABLE_STATUSES = (
+    RequestStatus.FINISHED_ABORTED,
+    RequestStatus.FINISHED_ERROR,
+    RequestStatus.FINISHED_IGNORED,
+)
 
 
 def extract_from_kv_cache(
@@ -517,6 +524,12 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         the hidden states from the KV cache.
         """
         req_id = request.request_id
+        if request.status in _NON_EXPORTABLE_STATUSES:
+            # A queued cancellation has no filename or cache rows yet. Even
+            # after scheduling, an aborted request may have only a partial
+            # prompt cache; never publish it as a complete training sample.
+            self._request_filenames.pop(req_id, None)
+            return False, None
         filename = self._request_filenames.pop(req_id)
         kv_params = request.kv_transfer_params or {}
         if kv_params.get("include_output_tokens", False):
@@ -583,6 +596,8 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         request: "Request",
         block_ids: tuple[list[int], ...],
     ) -> tuple[bool, dict[str, Any] | None]:
+        if request.status in _NON_EXPORTABLE_STATUSES:
+            return self.request_finished(request, [])
         return self.request_finished(request, block_ids[self._cache_kv_group_id])
 
     @classmethod

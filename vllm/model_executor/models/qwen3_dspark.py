@@ -238,6 +238,11 @@ class Qwen3DSparkForCausalLM(DFlashQwen3ForCausalLM):
         if getattr(self.config, "draft_vocab_size", None) is None:
             self.config.draft_vocab_size = getattr(self.config, "vocab_size", None)
         target_layer_num = vllm_config.model_config.get_total_num_hidden_layers()
+        target_config = vllm_config.model_config.hf_text_config
+        if getattr(target_config, "model_type", None) == "yoco":
+            # YOCO reserves n_layers cache names for each universal loop,
+            # even though its parameter layers are shared across loops.
+            target_layer_num *= max(1, int(getattr(target_config, "universal_loop", 1)))
         self.model = Qwen3DSparkModel(
             vllm_config=vllm_config,
             prefix=maybe_prefix(prefix, "model"),
