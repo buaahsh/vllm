@@ -24,7 +24,9 @@ VLLM_USE_V2_MODEL_RUNNER=1 VLLM_BATCH_INVARIANT=0 OMP_NUM_THREADS=4 \
     --dtype bfloat16 --max-model-len 131072 \
     --max-num-seqs 8 --max-num-batched-tokens 8192 \
     --gpu-memory-utilization 0.75 \
-    --no-enable-prefix-caching --enforce-eager
+    --no-enable-prefix-caching \
+    --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}' \
+    --max-cudagraph-capture-size 72
 ```
 
 The exported config uses the existing Qwen3 DSpark config schema with an
@@ -68,13 +70,41 @@ tokens per request. All 72 greedy output tokens match a separate ordinary
 decode run. These checks establish plumbing and small-model correctness;
 they do not establish the real checkpoint's acceptance rate or speedup.
 
-The initial draft runs **eagerly** with TP1/PP1/DP1 and no context parallelism,
-quantization, LoRA, or top-k draft approximation. K may be 1 through 8 because
-local attention is causal. Target CUDA graphs are independent, but the initial
-smoke command above disables them. Full-checkpoint B200 serving, acceptance and
-performance validation remain necessary before using this as a benchmark.
+The draft supports TP1/PP1/DP1 without context parallelism, quantization, LoRA,
+or top-k draft approximation. K may be 1 through 8 because local attention is
+causal. Full-checkpoint B200 serving, acceptance and performance validation remain
+necessary before using this as a benchmark.
 
-The next performance work is to capture the draft step, fuse block-local
-projections/norms and Markov sampling, and evaluate shared-cache attention at
-matched assistant-turn workloads. Compare accepted draft tokens separately from
+## CUDA graphs
+
+The draft uses vLLM's graph manager to capture its complete backbone and sequential
+Markov sampler, including probabilistic draft logits and trained confidence output.
+Graph memory profiling uses the normal throwaway pool; after the real KV allocation,
+the manager and block-table buffers are recreated before recapture.
+
+A single Triton preparation kernel runs outside the graph. It selects raw h20 after
+rejection, fills bonus/mask tokens, positions, prefix lengths, request indices,
+temperatures/seeds and the block table in persistent buffers. Graph replay reads
+the target cache directly. Prefix lengths and physical page IDs can change without
+recapturing; the attention length bound is fixed to `max_model_len` during capture.
+Padding requests have an empty prefix and sample index -1, so they cannot read a
+history or overwrite a live request's draft logits.
+
+A target graph mode with FULL decode support enables draft graphs. The existing
+capture token sizes are rounded to multiples of K and capped by `max_num_seqs`.
+Requests use the smallest compatible captured batch; batches beyond graph coverage
+and `--enforce-eager` retain an eager fallback. The example above permits 8 requests
+with K8: target verification needs `8 * 9 = 72` tokens and drafting needs 64.
+For 128 requests, raise `--max-cudagraph-capture-size` to at least 1152.
+
+CUDA tests compare replay against eager for greedy and probabilistic sampling,
+changing rejection counts, prefix lengths, page mappings, seeds/temperatures,
+chunked-prefill anchors and active request counts; tokens and logits agree exactly.
+The small V2 end-to-end fixture captures draft batches 1/2/4, actually replays 4
+and 1, and matches all 72 ordinary-decode tokens with both target and draft graphs
+enabled. The automatic graph-memory profiling and real-cache recapture path also
+passes. These tests run on A6000/FA2, not B200/FA4.
+
+The next performance work is to fuse block-local projections/norms and Markov
+sampling, and evaluate shared-cache attention at matched assistant-turn workloads. Compare accepted draft tokens separately from
 the bonus/correction token, and report decode-only latency as well as throughput.
