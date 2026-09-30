@@ -81,3 +81,9 @@ For assistant-response evaluation, finish complete user/tool messages, supply
 the assistant generation prefix, and honor the checkpoint's EOS/role termination
 IDs. Keep input panels and output limits consistent across compared concurrency
 levels; report accepted draft tokens separately from the correction/bonus token.
+
+## Shared-KV checkpoints
+
+The four-layer balanced SharedKVDraft uses a separate V2 speculator. See
+[Shared-KV DSpark](shared-kv-dspark.md) for its export, serving command, validation
+and current limitations. It cannot be loaded as an ordinary Dense2 checkpoint.

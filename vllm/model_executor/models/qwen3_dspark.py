@@ -235,6 +235,8 @@ class Qwen3DSparkForCausalLM(DFlashQwen3ForCausalLM):
         nn.Module.__init__(self)
         self.draft_model_config = vllm_config.speculative_config.draft_model_config
         self.config = self.draft_model_config.hf_config
+        if getattr(self.config, "shared_kv_config", None):
+            raise ValueError("Shared-KV checkpoints require the V2 SharedKVSpeculator")
         if getattr(self.config, "draft_vocab_size", None) is None:
             self.config.draft_vocab_size = getattr(self.config, "vocab_size", None)
         target_layer_num = vllm_config.model_config.get_total_num_hidden_layers()

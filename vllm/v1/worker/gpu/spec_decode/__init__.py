@@ -27,6 +27,14 @@ def init_speculator(vllm_config: VllmConfig, device: torch.device):
 
         return DFlashSpeculator(vllm_config, device)
     elif speculative_config.method == "dspark":
+        if getattr(
+            speculative_config.draft_model_config.hf_config, "shared_kv_config", None
+        ):
+            from vllm.v1.worker.gpu.spec_decode.dspark.shared_kv import (
+                SharedKVSpeculator,
+            )
+
+            return SharedKVSpeculator(vllm_config, device)
         from vllm.v1.worker.gpu.spec_decode.dspark.speculator import (
             DSparkSpeculator,
         )
