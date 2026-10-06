@@ -14,7 +14,7 @@
 | 用途 | 脚本或路径 |
 | --- | --- |
 | 草稿导出脚本 | [`examples/offline_inference/spec_decode/export_yoco_shared_kv.py`](examples/offline_inference/spec_decode/export_yoco_shared_kv.py) |
-| vLLM 启动入口 | [`vllm/entrypoints/cli/main.py`](vllm/entrypoints/cli/main.py)，命令为 `python -m vllm.entrypoints.cli.main serve`，等价于 `vllm serve` |
+| SWA8K 启动脚本 | [`examples/offline_inference/spec_decode/serve_yoco_swa8k.py`](examples/offline_inference/spec_decode/serve_yoco_swa8k.py)，内部调用 `vllm.entrypoints.cli.main serve` |
 | 主模型 checkpoint：balanced YOCO | `/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf` |
 | SWA8K 原始训练 checkpoint：step-7750 | `/mnt/pvc/lidong1/dspark-shared-kv-swa8k-full20k-20261003/training/sharedkv4-swa8k-dp16-full20k/checkpoints/step-007750` |
 | 使用 PVC 主模型路径重新导出的草稿目录（执行第 1 步后生成） | `/mnt/pvc/lidong1/sharedkv-swa8k-serving-20261006/draft-step-007750-pvc` |
@@ -51,35 +51,28 @@ export SWA_DRAFT=/mnt/pvc/lidong1/sharedkv-swa8k-serving-20261006/draft-step-007
 ## 2. 用主模型和已导出的 SWA8K 草稿启动 vLLM
 
 ```bash
-VLLM_USE_V2_MODEL_RUNNER=1 VLLM_BATCH_INVARIANT=0 OMP_NUM_THREADS=4 \
-  "$VLLM_PYTHON" -m vllm.entrypoints.cli.main serve "$TARGET_MODEL" \
-    --served-model-name yoco-swa8k \
-    --spec-model "$SWA_DRAFT" \
-    --spec-method dspark --spec-tokens 8 \
-    --speculative-config '{"draft_sample_method":"probabilistic"}' \
-    --trust-remote-code --dtype bfloat16 \
-    --max-model-len 131072 \
-    --max-num-seqs 8 --max-num-batched-tokens 8192 \
-    --gpu-memory-utilization 0.75 \
-    --no-enable-prefix-caching \
-    --attention-config '{"backend":"FLASHINFER"}' \
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72]}' \
-    --max-cudagraph-capture-size 72 \
-    --host 127.0.0.1 --port 8000
+"$VLLM_PYTHON" examples/offline_inference/spec_decode/serve_yoco_swa8k.py \
+  --target "$TARGET_MODEL" \
+  --draft "$SWA_DRAFT" \
+  --max-num-seqs 8 \
+  --port 8000
 ```
 
-这是单卡 TP1/PP1/DP1、BF16、C8/K8 示例。程序从草稿配置中的 `draft_kv_window=8192`
-自动选择 SWA8K 路径，无需另加窗口参数。目标验证需要 `8 × (8 + 1) = 72` 个 token 的 Graph 覆盖。
-启动时显式给出捕获列表，避免 CLI 自动推导的列表与上限不一致。
-改为 C128/K8 时，同时设置 `--max-num-seqs 128`、`--max-cudagraph-capture-size 1152`，
-并把上述 compilation 配置替换为：
+脚本默认使用上面的 PVC 主模型和草稿路径，也可通过 `TARGET_MODEL` / `SWA_DRAFT`
+环境变量或 `--target` / `--draft` 参数覆盖。启动前检查草稿确为 SWA8K，且主模型路径与导出配置匹配。
+服务名默认 `yoco-swa8k`，单卡 TP1/PP1/DP1、BF16、K8、FlashInfer 目标和 CUDA Graph。
+
+脚本自动生成 Graph 捕获列表和一致的上限：C8/K8 为72、C128/K8 为1152，
+包括默认列表容易遗漏的 C4/K8 所需36。无需再手写两个互相约束的参数。
+改为 C128 只需更换并发参数：
 
 ```bash
---compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72,128,256,512,1024,1152]}'
+"$VLLM_PYTHON" examples/offline_inference/spec_decode/serve_yoco_swa8k.py \
+  --target "$TARGET_MODEL" --draft "$SWA_DRAFT" --max-num-seqs 128
 ```
 
-捕获列表最大值必须等于 `--max-cudagraph-capture-size`。其他并发也需核对实际捕获尺寸；
-C4/K8 需要覆盖 36 个验证 token，不能只依赖可能截到 32 的默认列表。
+`--spec-tokens 6` 可切换为 K6，Graph 上限随之调整；`--dry-run` 只打印完整启动命令，
+不加载模型或使用 GPU。默认 C8/K8 参数与 PVC 路径短测已跑通的启动配置一致。
 
 ## 3. 调用服务
 
