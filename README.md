@@ -63,16 +63,23 @@ VLLM_USE_V2_MODEL_RUNNER=1 VLLM_BATCH_INVARIANT=0 OMP_NUM_THREADS=4 \
     --gpu-memory-utilization 0.75 \
     --no-enable-prefix-caching \
     --attention-config '{"backend":"FLASHINFER"}' \
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72]}' \
     --max-cudagraph-capture-size 72 \
     --host 127.0.0.1 --port 8000
 ```
 
 这是单卡 TP1/PP1/DP1、BF16、C8/K8 示例。程序从草稿配置中的 `draft_kv_window=8192`
 自动选择 SWA8K 路径，无需另加窗口参数。目标验证需要 `8 × (8 + 1) = 72` 个 token 的 Graph 覆盖。
-改为 C128/K8 时，同时设置 `--max-num-seqs 128` 和 `--max-cudagraph-capture-size 1152`。
-其他并发需核对实际捕获尺寸；C4/K8 的上限 36 可能被默认列表截成 32，
-需要显式将 36 加入 `cudagraph_capture_sizes`。
+启动时显式给出捕获列表，避免 CLI 自动推导的列表与上限不一致。
+改为 C128/K8 时，同时设置 `--max-num-seqs 128`、`--max-cudagraph-capture-size 1152`，
+并把上述 compilation 配置替换为：
+
+```bash
+--compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72,128,256,512,1024,1152]}'
+```
+
+捕获列表最大值必须等于 `--max-cudagraph-capture-size`。其他并发也需核对实际捕获尺寸；
+C4/K8 需要覆盖 36 个验证 token，不能只依赖可能截到 32 的默认列表。
 
 ## 3. 调用服务
 
