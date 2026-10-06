@@ -178,7 +178,8 @@ def test_shared_kv_propose_handles_bonus_column_and_chunked_prefill():
     assert spec.sample_idx_mapping.tolist() == [2, 2, 2, 2, 0, 0, 0, 0]
 
 
-def test_shared_kv_export_pins_checkpoint_and_rejects_changed_weights(tmp_path):
+@pytest.mark.parametrize("window", [0, 8192])
+def test_shared_kv_export_pins_checkpoint_and_rejects_changed_weights(tmp_path, window):
     import hashlib
     import json
     import runpy
@@ -207,8 +208,11 @@ def test_shared_kv_export_pins_checkpoint_and_rejects_changed_weights(tmp_path):
         json.dumps(
             {
                 "architecture": "SharedKVDraft",
-                "config": asdict(SharedKVConfig()),
+                "config": asdict(SharedKVConfig(draft_kv_window=window)),
                 "frozen_target": str(target),
+                "initialization_schema": "sharedkv-swa8k-full20k-v1"
+                if window
+                else None,
             }
         )
     )
@@ -216,7 +220,11 @@ def test_shared_kv_export_pins_checkpoint_and_rejects_changed_weights(tmp_path):
     receipt = {
         "status": "PASS",
         "step": 3750,
-        "config": {"run_name": "sharedkv-balanced-dp16-8k10k-full10k"},
+        "config": {
+            "run_name": "sharedkv4-swa8k-dp16-full20k"
+            if window
+            else "sharedkv-balanced-dp16-8k10k-full10k"
+        },
         "files": {
             "draft/" + p.name: {"sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
             for p in source.iterdir()
@@ -229,10 +237,23 @@ def test_shared_kv_export_pins_checkpoint_and_rejects_changed_weights(tmp_path):
     assert config["eagle_aux_hidden_state_layer_ids"] == [20]
     assert config["shared_kv_step"] == 3750
     assert config["shared_kv_target"] == str(target.resolve())
+    assert config["shared_kv_config"]["draft_kv_window"] == window
+    assert config["shared_kv_receipt_scope"] == "published"
     assert (output / "model.safetensors").read_bytes() == b"hash-verification-fixture"
+    (checkpoint / "publication.json").unlink()
+    with pytest.raises(ValueError, match="Publication receipt missing"):
+        export(checkpoint, target, tmp_path / "unpublished-rejected")
+    config = export(checkpoint, target, tmp_path / "committed", committed_only=True)
+    assert config["shared_kv_receipt_scope"] == "committed-only"
+    # A present, contradictory publication can never be bypassed by the flag.
+    conflicting = dict(receipt, step=3751)
+    (checkpoint / "publication.json").write_text(json.dumps(conflicting))
+    with pytest.raises(ValueError, match="publication step mismatch"):
+        export(checkpoint, target, tmp_path / "conflicting", committed_only=True)
+    (checkpoint / "publication.json").unlink()
     (source / "model.safetensors").write_bytes(b"changed")
     with pytest.raises(ValueError, match="Checkpoint hash mismatch"):
-        export(checkpoint, target, tmp_path / "must-not-exist")
+        export(checkpoint, target, tmp_path / "must-not-exist", committed_only=True)
     assert not (tmp_path / "must-not-exist").exists()
 
 
@@ -358,3 +379,91 @@ def test_shared_kv_graph_replay_updates_prefix_pages_and_sampling(probabilistic)
         if spec.draft_logits is not None:
             torch.testing.assert_close(spec.draft_logits, logits, rtol=0, atol=0)
     torch.testing.assert_close(cache, before, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA window pages")
+@pytest.mark.parametrize("physical_layout", ["HND", "NHD"])
+@torch.inference_mode()
+def test_swa8192_reads_exact_window_and_replays_changed_pages(physical_layout):
+    """Check exact windows, immutable cache, shared slots and changing graphs."""
+    from vllm.model_executor.models.yoco_shared_kv_swa import paged_window_attention
+
+    torch.manual_seed(42)
+    page, heads, kvheads, dim = 256, 4, 2, 64
+    cache = torch.randn(80, kvheads, page, 2 * dim, device="cuda", dtype=torch.bfloat16)
+    if physical_layout == "NHD":
+        cache = cache.transpose(1, 2).contiguous().transpose(1, 2)
+    # Different mappings exercise physical pages, including non-page-aligned starts.
+    table = torch.stack(
+        [torch.randperm(80, device="cuda")[:70] for _ in range(8)]
+    ).int()
+    ends = torch.tensor(
+        [0, 1, 8191, 8192, 8193, 8255, 8449, 17003], device="cuda", dtype=torch.int32
+    )
+    q = torch.randn(8, 8, heads, dim, device="cuda", dtype=torch.bfloat16)
+    before = cache.clone()
+
+    def reference(query):
+        outputs = []
+        for i, end in enumerate(ends.tolist()):
+            if not end:
+                outputs.append(torch.zeros_like(query[i]).float())
+                continue
+            history = (
+                cache[table[i].long()].permute(1, 0, 2, 3).reshape(kvheads, -1, 2 * dim)
+            )
+            keys, values = history[:, max(0, end - 8192) : end].split(dim, -1)
+            outputs.append(
+                F.scaled_dot_product_attention(
+                    query[i].transpose(0, 1).float(),
+                    keys.float(),
+                    values.float(),
+                    enable_gqa=True,
+                ).transpose(0, 1)
+            )
+        return torch.stack(outputs)
+
+    for block in [1, 6, 8]:
+        query = q[:, :block].contiguous()
+        actual = paged_window_attention(query, cache, table, ends)
+        torch.testing.assert_close(
+            actual.float(), reference(query), atol=0.006, rtol=0.03
+        )
+    torch.testing.assert_close(cache, before, rtol=0, atol=0)
+    # Every slot uses the SAME interval; identical queries must produce equal rows.
+    identical = q[:, :1].expand(-1, 8, -1, -1).contiguous()
+    output = paged_window_attention(identical, cache, table, ends)
+    torch.testing.assert_close(output, output[:, :1].expand_as(output), rtol=0, atol=0)
+    # Poison positions strictly outside one window, including rejection/future tail.
+    end = 17003
+    one_table = table[7:8].clone()
+    one_end = ends[7:8].clone()
+    one_q = q[7:8].clone()
+    expected = paged_window_attention(one_q, cache, one_table, one_end)
+    poisoned = cache.clone()
+    for pos in list(range(end - 8192)) + list(range(end, 70 * page)):
+        poisoned[one_table[0, pos // page], :, pos % page] = 100
+    actual = paged_window_attention(one_q, poisoned, one_table, one_end)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        for _ in range(2):
+            paged_window_attention(q, cache, table, ends)
+    torch.cuda.current_stream().wait_stream(stream)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph, stream=stream):
+        captured = paged_window_attention(q, cache, table, ends)
+    for values in [
+        [0, 5, 8193, 8300, 8448, 16385, 16999, 17001],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+    ]:
+        ends.copy_(torch.tensor(values, device="cuda", dtype=torch.int32))
+        table.copy_(table.roll(1, 1))
+        eager = paged_window_attention(q, cache, table, ends)
+        graph.replay()
+        torch.accelerator.synchronize()
+        torch.testing.assert_close(captured, eager, rtol=0, atol=0)
+        torch.testing.assert_close(
+            captured.float(), reference(q), atol=0.006, rtol=0.03
+        )

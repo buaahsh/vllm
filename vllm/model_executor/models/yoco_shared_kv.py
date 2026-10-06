@@ -26,6 +26,11 @@ class SharedKVConfig:
     eps: float = 1e-6
     initial_hidden_gate: float = 0.05
     initial_global_gate: float = 0.1
+    draft_kv_window: int = 0
+
+    def __post_init__(self):
+        if self.draft_kv_window not in (0, 8192):
+            raise ValueError("Shared-KV supports full history or trained SWA8192")
 
 
 class SharedKVRMSNorm(nn.Module):

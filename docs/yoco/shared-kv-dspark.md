@@ -108,3 +108,51 @@ passes. These tests run on A6000/FA2, not B200/FA4.
 The next performance work is to fuse block-local projections/norms and Markov
 sampling, and evaluate shared-cache attention at matched assistant-turn workloads. Compare accepted draft tokens separately from
 the bonus/correction token, and report decode-only latency as well as throughput.
+
+## SWA8K shared-KV checkpoints
+
+The exporter and V2 speculator also support
+`dspark-shared-kv-swa8k-full20k-20261003/sharedkv4-swa8k-dp16-full20k`.
+These four-layer drafts set `draft_kv_window=8192`; existing full-history drafts
+retain the default value `0`. The balanced target still uses its full history.
+For anchor `a`, **every draft slot** reads the same interval
+`[max(0, a - 8192), a)`. This is not a sliding mask relative to each slot.
+Absolute local RoPE positions and the raw `h20[a-1]` selection are unchanged.
+
+The SWA kernel reads the target's physical pages directly, with FP32 online
+softmax and BF16 dot products. It copies no KV history, writes no target cache,
+and visits at most 129 tiles of 64 positions regardless of total history length.
+It handles both HND and NHD storage strides. Empty graph-padding prefixes produce
+finite zero outputs. Dynamic endpoints and page mappings work during graph replay.
+
+Export a checkpoint from this exact training family with the command above.
+By default, both `complete.json` and `publication.json` are required. If the
+publisher is behind training, explicitly passing `--committed-only` permits a
+completed training checkpoint without a publication receipt. The exporter still
+checks its file hashes and target pairing and records
+`shared_kv_receipt_scope="committed-only"` in the exported config. A present but
+contradictory publication receipt is always rejected; this flag does not create
+or imply publication.
+
+Use the paired YOCO native extension: a stock vLLM extension may lack
+`silu_and_mul_with_clamp_fp32`. Keep DeepGEMM from the Docker image. For the
+full-history draft's FlashAttention path, source-only installations also need
+the image's `vllm.vllm_flash_attn.cute` package; copying only `.so` files is
+insufficient.
+
+B200 tests cover K1/K6/K8, empty and short prefixes, endpoints 8191/8192/8193,
+non-page-aligned starts, long prefixes, immutable KV, poisoned positions outside
+the window, identical-slot queries, and graph replay after endpoint/page changes.
+Four-layer small-model checks against this experiment's training implementation
+produce identical hidden states and logits with the same SDPA path. The paged
+SWA path has maximum hidden/logit absolute differences 0.0091863/0.0078125; all
+eight argmax tokens match. These are fixture-level checks, not a proof of
+full-model output equivalence.
+
+Real step7750 weights have loaded and generated on B200 with a FlashInfer target,
+BF16 KV, and target/draft graphs. The full C1–128 benchmark remains in progress;
+no completed throughput or speedup claim is made here. Ensure graph capture
+covers target verification: C128/K8 needs 1152 tokens. For small configurations
+such as C4/K8, setting a maximum of 36 alone can be rounded down to 32 by the
+default capture list; explicitly include 36 in `cudagraph_capture_sizes` and
+verify actual four-request target replay.

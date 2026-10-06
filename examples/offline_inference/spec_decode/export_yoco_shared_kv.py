@@ -9,19 +9,33 @@ import shutil
 from pathlib import Path
 
 
-def export(checkpoint: Path, target: Path, output: Path):
+def export(checkpoint: Path, target: Path, output: Path, committed_only=False):
     checkpoint, target = checkpoint.resolve(), target.resolve()
     source = checkpoint / "draft"
     config = json.loads((source / "config.json").read_text())
     complete = json.loads((checkpoint / "complete.json").read_text())
-    published = json.loads((checkpoint / "publication.json").read_text())
+    published_path = checkpoint / "publication.json"
+    if published_path.exists():
+        published = json.loads(published_path.read_text())
+    elif committed_only:
+        published = complete
+    else:
+        raise ValueError("Publication receipt missing; committed-only mode is explicit")
     if complete["status"] != "PASS" or published["status"] != "PASS":
         raise ValueError("Checkpoint must be committed and independently published")
     if complete["step"] != published["step"]:
         raise ValueError("Checkpoint publication step mismatch")
     if config["architecture"] != "SharedKVDraft" or "frozen_target" not in config:
         raise ValueError("Expected balanced SharedKVDraft checkpoint")
-    if complete["config"]["run_name"] != "sharedkv-balanced-dp16-8k10k-full10k":
+    run = complete["config"]["run_name"]
+    window = config["config"].get("draft_kv_window", 0)
+    if run == "sharedkv4-swa8k-dp16-full20k":
+        if (
+            window != 8192
+            or config.get("initialization_schema") != "sharedkv-swa8k-full20k-v1"
+        ):
+            raise ValueError("SWA8K checkpoint schema/window mismatch")
+    elif run != "sharedkv-balanced-dp16-8k10k-full10k" or window != 0:
         raise ValueError("Checkpoint belongs to a different training run")
     # The training target directory may contain symlinked shards rather than
     # itself being a symlink. Compare the actual weight files in that case.
@@ -84,6 +98,9 @@ def export(checkpoint: Path, target: Path, output: Path):
         ],
         "shared_kv_source": str(checkpoint),
         "shared_kv_step": complete["step"],
+        "shared_kv_receipt_scope": "committed-only"
+        if not published_path.exists()
+        else "published",
     }
     output.mkdir(parents=True, exist_ok=False)
     shutil.copyfile(source / "model.safetensors", output / "model.safetensors")
@@ -97,6 +114,7 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--target", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--committed-only", action="store_true")
     args = parser.parse_args()
-    result = export(args.checkpoint, args.target, args.output)
+    result = export(args.checkpoint, args.target, args.output, args.committed_only)
     print(json.dumps({"output": str(args.output), "step": result["shared_kv_step"]}))

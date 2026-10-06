@@ -186,6 +186,18 @@ class SharedKVSpeculator(DSparkSpeculator):
         k = self.num_speculative_steps
 
         def attend_prefix(q):
+            if self.model.c.draft_kv_window:
+                from vllm.model_executor.models.yoco_shared_kv_swa import (
+                    paged_window_attention,
+                )
+
+                return paged_window_attention(
+                    q.to(self.dtype),
+                    cache,
+                    table,
+                    self._prefix_lens[:n],
+                    self.model.c.draft_kv_window,
+                )
             return paged_prefix_attention(
                 q.to(self.dtype), cache, table, self._prefix_lens[:n], upper
             )
