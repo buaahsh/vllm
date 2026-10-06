@@ -1,4 +1,94 @@
 <!-- markdownlint-disable MD001 MD041 -->
+# SWA8K 投机解码：PVC checkpoint、导出脚本与启动命令
+
+本分支 `MTP-DSpark-test` 支持四层草稿模型
+`dspark-shared-kv-swa8k-full20k-20261003/sharedkv4-swa8k-dp16-full20k`。
+草稿所有预测位置共同读取锚点之前最近 8192 个 KV，主模型仍保留完整历史。
+以下使用 **2026-10-06 本次测试固定的 step-7750**，不是自动追踪最新 checkpoint。
+
+## 对应的脚本和 PVC 路径
+
+下面所有模型路径都以 **PVC 根目录挂载到 `/mnt/pvc`** 为前提。
+主模型和原始草稿 checkpoint 路径已核对存在；权重不包含在 Git 仓库中。
+
+| 用途 | 脚本或路径 |
+| --- | --- |
+| 草稿导出脚本 | [`examples/offline_inference/spec_decode/export_yoco_shared_kv.py`](examples/offline_inference/spec_decode/export_yoco_shared_kv.py) |
+| vLLM 启动入口 | [`vllm/entrypoints/cli/main.py`](vllm/entrypoints/cli/main.py)，命令为 `python -m vllm.entrypoints.cli.main serve`，等价于 `vllm serve` |
+| 主模型 checkpoint：balanced YOCO | `/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf` |
+| SWA8K 原始训练 checkpoint：step-7750 | `/mnt/pvc/lidong1/dspark-shared-kv-swa8k-full20k-20261003/training/sharedkv4-swa8k-dp16-full20k/checkpoints/step-007750` |
+| 使用 PVC 主模型路径重新导出的草稿目录（执行第 1 步后生成） | `/mnt/pvc/lidong1/sharedkv-swa8k-serving-20261006/draft-step-007750-pvc` |
+
+已有测试导出也位于 PVC：`/mnt/pvc/lidong1/sharedkv-swa8k-serving-20261006/draft-step-007750`，
+但其配置绑定了测试 Pod 内部的主模型路径。因此，下面先按 PVC 路径导出到新的 `-pvc` 目录，
+再启动服务；导出和启动使用同一个 `TARGET_MODEL`，满足配对目标路径校验。
+
+先安装本分支、匹配的 YOCO 编译扩展及运行依赖。普通官方 vLLM 扩展可能缺少
+`silu_and_mul_with_clamp_fp32`；DeepGEMM 使用部署镜像自带版本。
+以下命令依次在仓库根目录、同一个 shell 执行。导出需要 PVC 写权限，推理可以只读挂载。
+`VLLM_PYTHON` 指向已安装本分支依赖的 Python 环境；测试 Pod 对应 `/workspace/venv/bin/python`。
+
+## 1. 从 PVC 上的训练 checkpoint 导出
+
+```bash
+export VLLM_PYTHON="$PWD/.venv/bin/python"
+export TARGET_MODEL=/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf
+export SWA_CHECKPOINT=/mnt/pvc/lidong1/dspark-shared-kv-swa8k-full20k-20261003/training/sharedkv4-swa8k-dp16-full20k/checkpoints/step-007750
+export SWA_DRAFT=/mnt/pvc/lidong1/sharedkv-swa8k-serving-20261006/draft-step-007750-pvc
+
+"$VLLM_PYTHON" examples/offline_inference/spec_decode/export_yoco_shared_kv.py \
+  --checkpoint "$SWA_CHECKPOINT" \
+  --target "$TARGET_MODEL" \
+  --output "$SWA_DRAFT" \
+  --committed-only
+```
+
+`--checkpoint` 指向包含 `complete.json` 和 `draft/` 的步骤目录，`--output` 必须是尚不存在的新目录。
+本次 step-7750 来自完整提交的训练 checkpoint，使用 `--committed-only` 独立校验配置和权重哈希，
+并在导出配置中记录回执范围，不伪造发布回执。有冲突的 `publication.json` 仍会被拒绝。
+若已成功生成上述 `-pvc` 导出目录，可跳过导出命令，保留环境变量后直接执行第 2 步。
+
+## 2. 用主模型和已导出的 SWA8K 草稿启动 vLLM
+
+```bash
+VLLM_USE_V2_MODEL_RUNNER=1 VLLM_BATCH_INVARIANT=0 OMP_NUM_THREADS=4 \
+  "$VLLM_PYTHON" -m vllm.entrypoints.cli.main serve "$TARGET_MODEL" \
+    --served-model-name yoco-swa8k \
+    --spec-model "$SWA_DRAFT" \
+    --spec-method dspark --spec-tokens 8 \
+    --speculative-config '{"draft_sample_method":"probabilistic"}' \
+    --trust-remote-code --dtype bfloat16 \
+    --max-model-len 131072 \
+    --max-num-seqs 8 --max-num-batched-tokens 8192 \
+    --gpu-memory-utilization 0.75 \
+    --no-enable-prefix-caching \
+    --attention-config '{"backend":"FLASHINFER"}' \
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
+    --max-cudagraph-capture-size 72 \
+    --host 127.0.0.1 --port 8000
+```
+
+这是单卡 TP1/PP1/DP1、BF16、C8/K8 示例。程序从草稿配置中的 `draft_kv_window=8192`
+自动选择 SWA8K 路径，无需另加窗口参数。目标验证需要 `8 × (8 + 1) = 72` 个 token 的 Graph 覆盖。
+改为 C128/K8 时，同时设置 `--max-num-seqs 128` 和 `--max-cudagraph-capture-size 1152`。
+其他并发需核对实际捕获尺寸；C4/K8 的上限 36 可能被默认列表截成 32，
+需要显式将 36 加入 `cudagraph_capture_sizes`。
+
+## 3. 调用服务
+
+服务就绪后调用普通 OpenAI 兼容接口；请求里的 `model` 对应启动参数 `--served-model-name`：
+
+```bash
+curl http://127.0.0.1:8000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"yoco-swa8k","messages":[{"role":"user","content":"用 Python 写一个二分查找函数。"}],"temperature":0,"max_tokens":512}'
+```
+
+窗口语义、导出校验、GPU 测试及限制见 [Shared-KV / SWA8K 说明](docs/yoco/shared-kv-dspark.md)。
+分支也支持 [Dense2](docs/yoco/dspark-serving.md) 和[全历史 Shared-KV](docs/yoco/shared-kv-dspark.md)。
+
+---
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vllm-project/vllm/main/docs/assets/logos/vllm-logo-text-dark.png">
