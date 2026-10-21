@@ -43,7 +43,8 @@ def _window(
     for tile in range(lower // N, tl.cdiv(end, N)):
         pos = tile * N + col
         valid = (pos >= lower) & (pos < end)
-        page = tl.load(TABLE + req * TS + pos // PAGE, valid, 0)
+        # Physical page strides can exceed signed-int32 addressing in large pools.
+        page = tl.load(TABLE + req * TS + pos // PAGE, valid, 0).to(tl.int64)
         offset = page[:, None] * SP + head * SH
         offset += (pos % PAGE)[:, None] * ST + dim[None, :] * SC
         key = tl.load(KV + offset, valid[:, None], 0)

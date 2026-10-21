@@ -14,6 +14,63 @@ from vllm.model_executor.models.yoco_shared_kv import (
 from vllm.v1.worker.gpu.spec_decode.dspark.shared_kv import select_shared_kv_context
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA proposal sampling")
+def test_shared_kv_rejection_cache_preserves_fp32_markov_logits():
+    from types import SimpleNamespace
+
+    from vllm.v1.worker.gpu.sample.gumbel import gumbel_sample
+    from vllm.v1.worker.gpu.spec_decode.dspark.shared_kv import SharedKVSpeculator
+
+    spec = SharedKVSpeculator.__new__(SharedKVSpeculator)
+    dtype, fill = spec.draft_logits_spec(
+        SimpleNamespace(model_config=SimpleNamespace(head_dtype=torch.bfloat16))
+    )
+    logits = torch.tensor([[0.123456, -0.987654, 1.000123]], device="cuda")
+    assert not torch.equal(logits, logits.bfloat16().float())
+    cache = torch.full((1, 1, 3), fill, dtype=dtype, device="cuda")
+    gumbel_sample(
+        logits,
+        torch.tensor([0], device="cuda", dtype=torch.int32),
+        torch.tensor([0.7], device="cuda"),
+        torch.tensor([42], device="cuda", dtype=torch.int64),
+        torch.tensor([10], device="cuda", dtype=torch.int64),
+        is_drafting=True,
+        apply_temperature=True,
+        logits_cache=cache,
+        logits_cache_col=torch.tensor(0, device="cuda", dtype=torch.int32),
+    )
+    assert cache.dtype == torch.float32
+    torch.testing.assert_close(cache[:, 0], logits, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA paged attention")
+def test_swa_physical_page_addresses_cross_signed_int32_boundary():
+    """Physical pages 65536+ must be widened before multiplying a 32768 stride."""
+    from vllm.model_executor.models.yoco_shared_kv_swa import paged_window_attention
+
+    cache = torch.empty(65538, 1, 128, 256, device="cuda", dtype=torch.bfloat16)
+    assert cache.stride(0) == 32768
+    pages = [65535, 65536, 65537]
+    for page, value in zip(pages, [0.25, 0.5, 0.75]):
+        cache[page, ..., :128] = 0
+        cache[page, ..., 128:] = value
+    q = torch.zeros(3, 8, 4, 128, device="cuda", dtype=torch.bfloat16)
+    table = torch.tensor(pages, device="cuda", dtype=torch.int32).view(3, 1)
+    ends = torch.ones(3, device="cuda", dtype=torch.int32)
+    actual = paged_window_attention(q, cache, table, ends)
+    expected = torch.tensor([0.25, 0.5, 0.75], device="cuda", dtype=q.dtype)
+    torch.testing.assert_close(actual, expected[:, None, None, None].expand_as(actual))
+    cross = paged_window_attention(
+        q[:1],
+        cache,
+        torch.tensor([[65535, 65536]], device="cuda", dtype=torch.int32),
+        torch.tensor([129], device="cuda", dtype=torch.int32),
+    )
+    torch.testing.assert_close(
+        cross.float(), torch.full_like(cross.float(), 32.5 / 129), atol=0.002, rtol=0
+    )
+
+
 def test_shared_kv_rejection_selects_previous_hidden_not_bonus_or_suffix():
     positions = torch.tensor([100, 101, 102, 103, 9, 10, 11])
     hidden = torch.arange(7 * 4).reshape(7, 4)

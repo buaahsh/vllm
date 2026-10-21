@@ -29,6 +29,11 @@ def select_shared_kv_context(positions, query_start_loc, num_rejected, raw_hidde
 
 
 class SharedKVSpeculator(DSparkSpeculator):
+    def draft_logits_spec(self, vllm_config):
+        # Shared-KV computes the sum of base and Markov logits in FP32.
+        # Rejection must see those same logits, not a BF16-rounded proposal.
+        return torch.float32, 0.0
+
     def __init__(self, vllm_config, device):
         super().__init__(vllm_config, device)
         p = vllm_config.parallel_config
@@ -47,11 +52,30 @@ class SharedKVSpeculator(DSparkSpeculator):
             raise ValueError("Shared-KV requires the paired BF16 YOCO target")
         if vllm_config.cache_config.cache_dtype not in ("auto", "bfloat16"):
             raise ValueError("Shared-KV does not support quantized target KV")
-        if (
-            c.quantization is not None
-            or self.draft_model_config.quantization is not None
-        ):
-            raise ValueError("Shared-KV requires unquantized target and draft weights")
+        if self.draft_model_config.quantization is not None:
+            raise ValueError("Shared-KV requires unquantized draft weights")
+        if c.quantization is not None:
+            # Quantized target linears still export BF16 hidden states and KV.
+            # Draft vocabulary tensors are shared, so validate their storage
+            # below instead of silently treating a quantized head as BF16.
+            from vllm.model_executor.layers.quantization.online.base import (
+                OnlineQuantizationConfig,
+            )
+            from vllm.model_executor.layers.quantization.utils.quant_utils import (
+                kFp8Static128BlockSym,
+                kFp8StaticChannelSym,
+                kFp8StaticTensorSym,
+            )
+
+            quant = vllm_config.quant_config
+            if not isinstance(quant, OnlineQuantizationConfig):
+                raise ValueError("Shared-KV supports only online FP8 target weights")
+            allowed = {kFp8Static128BlockSym, kFp8StaticChannelSym, kFp8StaticTensorSym}
+            specs = [quant.args.linear, quant.args.moe]
+            if quant.args.targets or any(
+                spec is not None and spec.weight not in allowed for spec in specs
+            ):
+                raise ValueError("Shared-KV target quantization must be FP8")
         if (
             not self.sample_from_anchor
             or not 1 <= self.num_speculative_steps <= hf.shared_kv_config["block"]
@@ -109,6 +133,11 @@ class SharedKVSpeculator(DSparkSpeculator):
             raise ValueError(f"Incomplete Shared-KV weights: {missing}, {unexpected}")
         model.embed_tokens = target.embed_tokens
         model.lm_head = target_model.lm_head
+        if any(
+            module.weight.dtype != torch.bfloat16
+            for module in (model.embed_tokens, model.lm_head)
+        ):
+            raise ValueError("Shared-KV frozen embedding and LM head must stay BF16")
         if model.embed_tokens.weight.shape != (
             c.vocab,
             c.hidden,
