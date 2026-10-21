@@ -2,10 +2,12 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """YOCO prefill regression tests."""
 
+from types import SimpleNamespace
+
 import pytest
 import torch
 
-from vllm.forward_context import ForwardContext, override_forward_context
+from vllm.forward_context import DPMetadata, ForwardContext, override_forward_context
 from vllm.model_executor.models.yoco import YOCOCrossBlock, YOCOForCausalLM, YOCOModel
 
 
@@ -225,3 +227,160 @@ def test_kv_only_prefill_skips_every_cross_layer() -> None:
         )
 
     torch.testing.assert_close(output, torch.full((4, 8), 2.0))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("hidden_dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize(
+    "kv_dtype", [torch.float32, torch.bfloat16, torch.float8_e4m3fn]
+)
+@pytest.mark.parametrize("strided", [False, True])
+@pytest.mark.parametrize("num_selected", [0, 1, 7, 257])
+def test_fused_prefill_gather_preserves_bits_and_unused_storage(
+    hidden_dtype, kv_dtype, strided, num_selected
+) -> None:
+    """Copy arbitrary bits, repeated/negative indices and tails without conversion."""
+    from vllm.model_executor.layers.yoco_ops.prefill import gather_prefill_inputs
+
+    torch.manual_seed(20261020)
+    step = 2 if strided else 1
+
+    def storage(rows, width, dtype):
+        result = torch.empty((rows * step, width * step), device="cuda", dtype=dtype)
+        raw = result.view(torch.uint8)
+        raw.copy_(torch.randint(256, raw.shape, dtype=torch.uint8, device="cuda"))
+        return result
+
+    source_storage = [
+        storage(263, width, dtype)
+        for width, dtype in [(513, hidden_dtype), (129, kv_dtype), (67, kv_dtype)]
+    ]
+    output_storage = [
+        storage(num_selected + 2, width, dtype)
+        for width, dtype in [(513, hidden_dtype), (129, kv_dtype), (67, kv_dtype)]
+    ]
+    expected = [x.clone() for x in output_storage]
+    sources = [x[::step, ::step] for x in source_storage]
+    outputs = [x[::step, ::step] for x in output_storage]
+    indices = torch.zeros(num_selected * step, dtype=torch.int64, device="cuda")[::step]
+    indices[::2] = -1
+    positions = torch.arange(263 * step, device="cuda")[::step]
+    out_positions = torch.full(((num_selected + 2) * step,), -9, device="cuda")
+    expected_positions = out_positions.clone()
+    expected_positions[::step][:num_selected] = positions[indices]
+    bit_dtypes = {1: torch.uint8, 2: torch.int16, 4: torch.int32}
+    for source, target in zip(sources, expected):
+        bits = bit_dtypes[source.element_size()]
+        target.view(bits)[::step, ::step][:num_selected] = source.view(bits)[indices]
+
+    gather_prefill_inputs(indices, positions, *sources, out_positions[::step], *outputs)
+
+    assert torch.equal(out_positions, expected_positions)
+    for actual, reference in zip(output_storage, expected):
+        assert torch.equal(actual.view(torch.uint8), reference.view(torch.uint8))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("kv_dtype", [torch.bfloat16, torch.float8_e4m3fn])
+def test_fused_prefill_gather_graph_reads_updated_inputs(kv_dtype) -> None:
+    """Replay must retain buffer addresses while reading new row IDs and source bits."""
+    from vllm.model_executor.layers.yoco_ops.prefill import gather_prefill_inputs
+
+    indices = torch.tensor([4, 1, 1], device="cuda")
+    sources = [
+        torch.arange(8, device="cuda"),
+        torch.randn(8, 513, device="cuda"),
+        torch.zeros(8, 129, device="cuda", dtype=kv_dtype),
+        torch.zeros(8, 129, device="cuda", dtype=kv_dtype),
+    ]
+    outputs = [torch.empty_like(x[:3]) for x in sources]
+    addresses = [x.data_ptr() for x in outputs]
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        for _ in range(3):
+            gather_prefill_inputs(indices, *sources, *outputs)
+    torch.cuda.current_stream().wait_stream(stream)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        gather_prefill_inputs(indices, *sources, *outputs)
+    for row_ids in ([7, 0, 3], [2, 2, 6]):
+        indices.copy_(torch.tensor(row_ids, device="cuda"))
+        for source in sources:
+            raw = source.view(torch.uint8)
+            raw.copy_(torch.randint(256, raw.shape, device="cuda", dtype=torch.uint8))
+        graph.replay()
+        assert [x.data_ptr() for x in outputs] == addresses
+        for source, output in zip(sources, outputs):
+            assert torch.equal(
+                output.view(torch.uint8).reshape(3, -1),
+                source.view(torch.uint8).reshape(8, -1)[indices],
+            )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("fail_cross", [False, True])
+def test_prefill_gather_preserves_clone_padding_and_dp_context(fail_cross) -> None:
+    """Cross-block reuse cannot corrupt untouched rows or leak compact DP metadata."""
+    from vllm.model_executor.models.yoco_prefill import _fast_prefill_forward
+
+    hidden = torch.arange(40, device="cuda", dtype=torch.float32).reshape(5, 8)
+    original = hidden.clone()
+    key = torch.arange(20, device="cuda", dtype=torch.float32).reshape(5, 4)
+    value = key + 20
+    positions = torch.arange(5, device="cuda")
+    indices = torch.tensor([1, 4, 0], device="cuda")
+    compact_dp = torch.tensor([3, 3])
+    original_dp = DPMetadata(torch.tensor([5, 5]))
+    context = ForwardContext(
+        no_compile_layers={},
+        attn_metadata=None,  # type: ignore[arg-type]
+        slot_mapping={},
+        dp_metadata=original_dp,
+    )
+    dependency = torch.empty(0, device="cuda")
+    model = SimpleNamespace(
+        self_block=lambda *args: (hidden, key, value, dependency),
+        fuse_fp8_shared_kv=False,
+        fp_positions=torch.empty_like(positions),
+        fp_hidden_states=torch.empty_like(hidden),
+        fp_yoco_key=torch.empty_like(key),
+        fp_yoco_value=torch.empty_like(value),
+        norm=lambda x: x * 0.5,
+    )
+
+    def cross(p, h, k, v, dep):
+        assert torch.equal(context.dp_metadata.num_tokens_across_dp_cpu, compact_dp)
+        assert dep is dependency
+        for actual, source, buffer in zip(
+            (p, h, k, v),
+            (positions, original, key, value),
+            (
+                model.fp_positions,
+                model.fp_hidden_states,
+                model.fp_yoco_key,
+                model.fp_yoco_value,
+            ),
+        ):
+            assert actual.data_ptr() == buffer.data_ptr()
+            assert torch.equal(actual, source[indices])
+        hidden.fill_(-123)
+        if fail_cross:
+            raise RuntimeError("cross failed")
+        return h + 10
+
+    model.cross_block = cross
+    causal_lm = SimpleNamespace(
+        model=model,
+        _get_fast_prefill_indices=lambda: (indices, 2, compact_dp),
+    )
+    with override_forward_context(context):
+        if fail_cross:
+            with pytest.raises(RuntimeError, match="cross failed"):
+                _fast_prefill_forward(causal_lm, None, positions)
+        else:
+            output = _fast_prefill_forward(causal_lm, None, positions)
+            expected = original.clone()
+            expected[indices[:2]] += 10
+            assert torch.equal(output, expected * 0.5)
+        assert context.dp_metadata is original_dp

@@ -230,6 +230,102 @@ def test_align_transfer_regions_uses_layer_name_occurrences():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("compact", [False, True])
+@pytest.mark.parametrize("physical_blocks", [1, 2])
+async def test_sender_reuses_group_maps_without_cross_request_or_region_corruption(
+    compact, physical_blocks
+):
+    """Repeated layers/head regions must copy each request's own trimmed pages."""
+
+    class PlanningWorker(MooncakeConnectorWorker):
+        def shutdown(self):
+            pass
+
+    worker = PlanningWorker.__new__(PlanningWorker)
+    worker.tp_rank, worker.tp_size, worker.use_mla = 0, 1, False
+    worker._physical_blocks_per_logical_kv_block = physical_blocks
+    worker.kv_cache_config = SimpleNamespace(
+        transfer_groups=[SimpleNamespace(kv_cache_spec=None) for _ in range(2)],
+        has_mamba_layers=False,
+    )
+    worker.transfer_topo = SimpleNamespace(
+        local_replicates_kv_cache=False, total_num_kv_heads=4
+    )
+    payload, region_size = 8, 4096
+    stride = payload if compact else 2 * payload
+    src_base, dst_base = 0x100000, 0x200000
+    source = bytes((i * 37 + i // 8) % 127 for i in range(4 * region_size))
+    destination = bytearray([255] * len(source))
+    expected = destination.copy()
+    local = [
+        TransferRegion(
+            f"layer{i}",
+            i,
+            src_base + i * region_size,
+            stride,
+            payload,
+            group_index=i // 2,
+        )
+        for i in range(4)
+    ]
+    remote = [
+        TransferRegion(
+            f"layer{i}",
+            i,
+            dst_base + i * region_size,
+            stride,
+            payload,
+            group_index=i // 2,
+        )
+        for i in range(4)
+    ]
+    mappings = [
+        ([[6, 7, 9], [4, 6]], [[1, 2], [8]]),
+        ([[1, 2], [2, 3]], [[4, 5], [9, 10]]),
+    ]
+    ready, req_blocks = [], {}
+    for index, (p_groups, d_groups) in enumerate(mappings):
+        key = str(index)
+        ready.append((key, SendBlockMeta(key, key, p_groups, asyncio.Event())))
+        req_blocks[key] = (key, d_groups)
+        for region in range(4):
+            group = region // 2
+            for p_page, d_page in zip(
+                p_groups[group][-len(d_groups[group]) :], d_groups[group]
+            ):
+                for subpage in range(physical_blocks):
+                    src = (
+                        region * region_size
+                        + (p_page * physical_blocks + subpage) * stride
+                    )
+                    dst = (
+                        region * region_size
+                        + (d_page * physical_blocks + subpage) * stride
+                    )
+                    expected[dst : dst + payload] = source[src : src + payload]
+    metadata = MooncakeXferMetadata(
+        remote_hostname="consumer",
+        remote_port=1,
+        remote_tp_size=1,
+        remote_tp_rank=0,
+        req_blocks=req_blocks,
+        kv_caches_base_addr=[r.base_addr for r in remote],
+        block_lens=[stride] * 4,
+        kv_block_lens=[payload] * 4,
+    )
+    src, dst, lengths, errors, message = await worker._build_transfer_params(
+        ready, metadata, local, remote
+    )
+    assert not errors and message is None
+    for p, d, nbytes in zip(src, dst, lengths):
+        destination[d - dst_base : d - dst_base + nbytes] = source[
+            p - src_base : p - src_base + nbytes
+        ]
+    assert destination == expected
+    assert sum(lengths) == 14 * physical_blocks * payload
+
+
+@pytest.mark.asyncio
 async def test_build_transfer_params_separates_prefill_pp_layers():
     """Each producer PP stage should send only its registered layer shard."""
 

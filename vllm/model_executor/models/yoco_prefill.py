@@ -117,18 +117,33 @@ def _fast_prefill_forward(
     # Feed the cross block through static buffers — vLLM runs with
     # cudagraph_copy_inputs=False, so inputs need stable addresses.
     n = logits_indices_padded.size(0)
-    model.fp_positions[:n].copy_(positions[logits_indices_padded])
-    model.fp_hidden_states[:n].copy_(hidden_states[logits_indices_padded])
-    if model.fuse_fp8_shared_kv:
-        model.fp_yoco_key[:n].view(torch.uint8).copy_(
-            yoco_key.view(torch.uint8)[logits_indices_padded]
-        )
-        model.fp_yoco_value[:n].view(torch.uint8).copy_(
-            yoco_value.view(torch.uint8)[logits_indices_padded]
+    if hidden_states.is_cuda:
+        from vllm.model_executor.layers.yoco_ops.prefill import gather_prefill_inputs
+
+        gather_prefill_inputs(
+            logits_indices_padded,
+            positions,
+            hidden_states,
+            yoco_key,
+            yoco_value,
+            model.fp_positions,
+            model.fp_hidden_states,
+            model.fp_yoco_key,
+            model.fp_yoco_value,
         )
     else:
-        model.fp_yoco_key[:n].copy_(yoco_key[logits_indices_padded])
-        model.fp_yoco_value[:n].copy_(yoco_value[logits_indices_padded])
+        model.fp_positions[:n].copy_(positions[logits_indices_padded])
+        model.fp_hidden_states[:n].copy_(hidden_states[logits_indices_padded])
+        if model.fuse_fp8_shared_kv:
+            model.fp_yoco_key[:n].view(torch.uint8).copy_(
+                yoco_key.view(torch.uint8)[logits_indices_padded]
+            )
+            model.fp_yoco_value[:n].view(torch.uint8).copy_(
+                yoco_value.view(torch.uint8)[logits_indices_padded]
+            )
+        else:
+            model.fp_yoco_key[:n].copy_(yoco_key[logits_indices_padded])
+            model.fp_yoco_value[:n].copy_(yoco_value[logits_indices_padded])
 
     original_dp_metadata = fwd_ctx.dp_metadata
     if (

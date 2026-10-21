@@ -1,0 +1,44 @@
+{
+  "parent_commit": "5da665ab51215b2204b03d309b26e2506e0b9670",
+  "variants": {
+    "source": {
+      "checked_source_files": 7988,
+      "source_mismatches": [],
+      "checked_runtime_support_files": 1996,
+      "runtime_support_mismatches": [],
+      "override_hashes": {
+        "vllm/distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_connector.py": "a60f624d675ad4ea2069d10c2123a380932d490a1fc6298620f8d13e1cca1d8f",
+        "vllm/model_executor/models/yoco_prefill.py": "c12dc17606ffef356b5e5bcd551596027974d2aa551948d0cf832a3b4e7eaa11"
+      }
+    },
+    "baseline-source": {
+      "checked_source_files": 7986,
+      "source_mismatches": [],
+      "checked_runtime_support_files": 1996,
+      "runtime_support_mismatches": [],
+      "override_hashes": {
+        "vllm/distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_connector.py": "ad310d615d2d6140e4ef2b7afbd8bf27b15113dea0bb0be5dcb457f0718b2f0d",
+        "vllm/model_executor/models/yoco_prefill.py": "0540555e43438a4f124a58bf13775a4b0b36ae74a3978e0bb68a43c4695cafea"
+      }
+    }
+  },
+  "source_manifest_sha256": "df3d2102a582e0d6c4f6d0ce22097333e18357ca6ccb749f7eeee0f56f963aab",
+  "runtime_support_manifest_sha256": "3b8f356830ea9d4b52dcf4d4ae2475873f66d5f76f92cdadbe782a9727b2d6b4",
+  "status": "PASS",
+  "pod_after": {
+    "name": "living-cobra-b200g4-dev-f5def941-master-0",
+    "uid": "9a026fd8-e732-4fcb-b855-85ea6a6358ed",
+    "node": "slc01-cl02-hgx-0347",
+    "restart_counts": {
+      "master": 0
+    }
+  },
+  "gpu_after": {
+    "index": 6,
+    "uuid": "GPU-ef7d6ee6-0fce-4e0b-b14c-87bd8a36c5fe",
+    "memory_used_mib": 0,
+    "advisory_lock_available": true,
+    "evidence": "final-source-audit.log"
+  },
+  "raw_artifact_root": "/data/vllm_test/work/yoco-kv-movement-20261021"
+}

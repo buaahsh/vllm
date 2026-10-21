@@ -1579,6 +1579,7 @@ class MooncakeConnectorWorker:
                 remote_block_ids_by_group
             )
 
+            block_groups: dict[int, tuple[list[list[int]], list[list[int]]]] = {}
             for local_region, remote_region in zip(local_regions, remote_regions):
                 assert local_region.group_index == remote_region.group_index, (
                     "Aligned Mooncake transfer regions must belong to the same "
@@ -1593,10 +1594,6 @@ class MooncakeConnectorWorker:
                 if not local_block_ids:
                     continue
 
-                # Group by indices within this region's KV-cache group only.
-                group_local_block_ids, group_remote_block_ids = (
-                    group_concurrent_contiguous(local_block_ids, remote_block_ids)
-                )
                 (
                     should_transfer,
                     src_region_offset,
@@ -1615,6 +1612,16 @@ class MooncakeConnectorWorker:
                     # get_target_remote_ranks() so we can avoid sending
                     # unnecessary ZMQ requests and remove this branch.
                     continue
+
+                # Layers/head regions in one KV group share the same block map.
+                # Scope reuse to this request, after trimming and kernel expansion.
+                if group_index not in block_groups:
+                    block_groups[group_index] = group_concurrent_contiguous(
+                        local_block_ids, remote_block_ids
+                    )
+                group_local_block_ids, group_remote_block_ids = block_groups[
+                    group_index
+                ]
 
                 assert src_region_offset + transfer_len <= local_region.kv_block_len, (
                     "Computed source transfer region exceeds local KV block size."

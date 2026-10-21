@@ -1,0 +1,46 @@
+{
+  "config": {
+    "model": "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf",
+    "dtype": "bfloat16",
+    "quantization": "fp8_per_block",
+    "tensor_parallel_size": 1,
+    "max_model_len": 33344,
+    "max_num_seqs": 4,
+    "max_num_batched_tokens": 4096,
+    "kv_cache_memory_bytes": 8589934592,
+    "gpu_memory_utilization": 0.75,
+    "enable_prefix_caching": false,
+    "kv_sharing_fast_prefill": true,
+    "async_scheduling": false,
+    "disable_log_stats": false,
+    "additional_config": {
+      "yoco_execution_mode": "fast",
+      "yoco_mega_moe": "off"
+    },
+    "compilation_config": {
+      "cudagraph_mode": "FULL_DECODE_ONLY",
+      "cudagraph_capture_sizes": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32
+      ],
+      "max_cudagraph_capture_size": 32
+    },
+    "worker_extension_cls": "tools.yoco_alignment.benchmark_kv_prefill.PrefillBenchmarkWorker"
+  },
+  "variant": "baseline",
+  "lengths": [
+    1024,
+    8192,
+    32768
+  ],
+  "concurrencies": [
+    1,
+    4
+  ],
+  "trials": 3,
+  "tokens": 64
+}

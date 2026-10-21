@@ -1,0 +1,2744 @@
+{
+  "scope": "CPU transfer descriptor construction only; synthetic layouts; no network",
+  "baseline_sha256": "ad310d615d2d6140e4ef2b7afbd8bf27b15113dea0bb0be5dcb457f0718b2f0d",
+  "candidate_sha256": "a60f624d675ad4ea2069d10c2123a380932d490a1fc6298620f8d13e1cca1d8f",
+  "cases": [
+    {
+      "context": 512,
+      "regions": 1,
+      "requests": 1,
+      "fragmented": false,
+      "descriptors": 1,
+      "bytes": 2097152,
+      "identical": true,
+      "median_us": {
+        "baseline": 40.522999999999996,
+        "candidate": 40.963
+      },
+      "speedup": 0.9892585992236895,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 41.62133333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 41.891333333333336
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 41.77466666666667
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 40.448
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 47.644666666666666
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 41.328
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 40.598
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 40.598
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 40.121
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 40.55466666666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 40.498
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 40.438
+        }
+      ]
+    },
+    {
+      "context": 512,
+      "regions": 1,
+      "requests": 1,
+      "fragmented": true,
+      "descriptors": 32,
+      "bytes": 2097152,
+      "identical": true,
+      "median_us": {
+        "baseline": 117.98883333333333,
+        "candidate": 120.08699999999999
+      },
+      "speedup": 0.9825279450176401,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 118.217
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 117.90366666666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 121.21066666666667
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 117.864
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 116.517
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 120.797
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 119.377
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 116.77033333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 120.957
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 116.927
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 120.84066666666666
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 118.11366666666666
+        }
+      ]
+    },
+    {
+      "context": 512,
+      "regions": 1,
+      "requests": 8,
+      "fragmented": false,
+      "descriptors": 8,
+      "bytes": 16777216,
+      "identical": true,
+      "median_us": {
+        "baseline": 348.42600000000004,
+        "candidate": 352.52116666666666
+      },
+      "speedup": 0.9883832034672151,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 384.9723333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 362.978
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 353.001
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 347.6976666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 348.341
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 350.091
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 350.438
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 347.7443333333333
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 353.731
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 362.5416666666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 352.04133333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 348.511
+        }
+      ]
+    },
+    {
+      "context": 512,
+      "regions": 1,
+      "requests": 8,
+      "fragmented": true,
+      "descriptors": 256,
+      "bytes": 16777216,
+      "identical": true,
+      "median_us": {
+        "baseline": 996.788,
+        "candidate": 1009.6935000000001
+      },
+      "speedup": 0.9872183984545805,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 953.79
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1048.483
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1067.067
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 1036.0593333333334
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 984.6476666666666
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1011.6386666666667
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 986.371
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 1009.3186666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 1008.9283333333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1007.7483333333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 961.9
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 955.5003333333333
+        }
+      ]
+    },
+    {
+      "context": 512,
+      "regions": 11,
+      "requests": 1,
+      "fragmented": false,
+      "descriptors": 11,
+      "bytes": 23068672,
+      "identical": true,
+      "median_us": {
+        "baseline": 382.257,
+        "candidate": 92.303
+      },
+      "speedup": 4.141328017507557,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 451.7176666666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 91.85633333333334
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 103.51633333333334
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 441.12733333333335
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 383.0853333333333
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 95.91966666666667
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 90.473
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 380.44533333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 377.642
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 90.47633333333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 92.74966666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 381.4286666666667
+        }
+      ]
+    },
+    {
+      "context": 512,
+      "regions": 11,
+      "requests": 1,
+      "fragmented": true,
+      "descriptors": 352,
+      "bytes": 23068672,
+      "identical": true,
+      "median_us": {
+        "baseline": 1255.7513333333334,
+        "candidate": 333.52216666666664
+      },
+      "speedup": 3.7651210589201223,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 1256.053
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 333.2436666666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 333.71066666666667
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 1253.5463333333332
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 1265.9633333333334
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 333.33366666666666
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 336.24733333333336
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 1256.9263333333333
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 1244.096
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 333.967
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 333.1736666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 1255.4496666666666
+        }
+      ]
+    },
+    {
+      "context": 512,
+      "regions": 11,
+      "requests": 8,
+      "fragmented": false,
+      "descriptors": 88,
+      "bytes": 184549376,
+      "identical": true,
+      "median_us": {
+        "baseline": 3422.8195,
+        "candidate": 808.8523333333333
+      },
+      "speedup": 4.231698863863491,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 3407.741
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 810.0723333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 811.6053333333333
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 3401.3706666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 3432.5813333333335
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 825.1726666666667
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 793.4983333333333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 3484.073
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 3506.974333333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 799.982
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 807.6323333333333
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 3413.0576666666666
+        }
+      ]
+    },
+    {
+      "context": 512,
+      "regions": 11,
+      "requests": 8,
+      "fragmented": true,
+      "descriptors": 2816,
+      "bytes": 184549376,
+      "identical": true,
+      "median_us": {
+        "baseline": 10232.691166666667,
+        "candidate": 2807.2801666666664
+      },
+      "speedup": 3.645055199038738,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 10228.119333333334
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 2820.3723333333332
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 2726.3526666666667
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 10202.378666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 10707.117666666667
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 2794.188
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 2850.0833333333335
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 10237.263
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 10264.060666666666
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 2845.773
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 2701.4853333333335
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 10118.846
+        }
+      ]
+    },
+    {
+      "context": 512,
+      "regions": 88,
+      "requests": 1,
+      "fragmented": false,
+      "descriptors": 88,
+      "bytes": 23068672,
+      "identical": true,
+      "median_us": {
+        "baseline": 3285.237,
+        "candidate": 223.67033333333333
+      },
+      "speedup": 14.687853105239705,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 3450.1723333333334
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 308.103
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 223.77366666666666
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 3296.9706666666666
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 3252.6656666666668
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 224.304
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 216.65366666666668
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 3285.8836666666666
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 3284.5903333333335
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 223.567
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 222.85033333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 3236.522
+        }
+      ]
+    },
+    {
+      "context": 512,
+      "regions": 88,
+      "requests": 1,
+      "fragmented": true,
+      "descriptors": 2816,
+      "bytes": 23068672,
+      "identical": true,
+      "median_us": {
+        "baseline": 10142.118333333332,
+        "candidate": 1168.6568333333332
+      },
+      "speedup": 8.678440106669465,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 10220.122666666666
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1182.7273333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1164.3666666666666
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 10418.422
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 10394.988
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1172.947
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1176.274
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 10064.114
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 9954.811
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1158.0196666666666
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1136.126
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 10039.51
+        }
+      ]
+    },
+    {
+      "context": 512,
+      "regions": 88,
+      "requests": 8,
+      "fragmented": false,
+      "descriptors": 704,
+      "bytes": 184549376,
+      "identical": true,
+      "median_us": {
+        "baseline": 27466.801333333337,
+        "candidate": 1781.0945000000002
+      },
+      "speedup": 15.421304896137366,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 29834.044333333335
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1738.9916666666666
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1688.2866666666666
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 27025.396
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 27439.772333333334
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1814.1473333333333
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1811.047
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 28000.876666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 27493.830333333335
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1787.6763333333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1774.5126666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 27268.783666666666
+        }
+      ]
+    },
+    {
+      "context": 512,
+      "regions": 88,
+      "requests": 8,
+      "fragmented": true,
+      "descriptors": 22528,
+      "bytes": 184549376,
+      "identical": true,
+      "median_us": {
+        "baseline": 86613.18733333334,
+        "candidate": 10859.9725
+      },
+      "speedup": 7.975451810152681,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 84265.41166666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 10724.948333333334
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 10871.359666666667
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 86505.479
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 84075.53933333333
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 14047.673
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 10808.681
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 88598.49533333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 86720.89566666666
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 10913.411
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 10848.585333333333
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 88520.94233333334
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 1,
+      "requests": 1,
+      "fragmented": false,
+      "descriptors": 1,
+      "bytes": 33554432,
+      "identical": true,
+      "median_us": {
+        "baseline": 138.44099999999997,
+        "candidate": 136.60766666666666
+      },
+      "speedup": 1.0134204278432395,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 139.61433333333332
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 136.83766666666668
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 135.671
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 140.34766666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 137.36433333333332
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 142.17433333333332
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 136.37766666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 136.461
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 139.51766666666666
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 136.34766666666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 148.398
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 136.52433333333335
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 1,
+      "requests": 1,
+      "fragmented": true,
+      "descriptors": 512,
+      "bytes": 33554432,
+      "identical": true,
+      "median_us": {
+        "baseline": 1495.999,
+        "candidate": 1496.8088333333333
+      },
+      "speedup": 0.9994589600787365,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 1508.0443333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 2934.7393333333334
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1483.15
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 1484.3803333333333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 1491.9603333333334
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1507.204
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1531.5416666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 1495.4673333333333
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 1496.5306666666668
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1485.9233333333334
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1486.4136666666666
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 1507.8976666666667
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 1,
+      "requests": 8,
+      "fragmented": false,
+      "descriptors": 8,
+      "bytes": 268435456,
+      "identical": true,
+      "median_us": {
+        "baseline": 1236.3723333333332,
+        "candidate": 1264.5263333333332
+      },
+      "speedup": 0.9777355368110168,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 1263.8466666666666
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1228.882
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1262.3163333333334
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 1214.345
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 1232.5156666666667
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1319.7583333333334
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1616.5043333333333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 1425.315
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 1225.0053333333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1210.5913333333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1266.7363333333333
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 1240.229
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 1,
+      "requests": 8,
+      "fragmented": true,
+      "descriptors": 4096,
+      "bytes": 268435456,
+      "identical": true,
+      "median_us": {
+        "baseline": 12432.402166666667,
+        "candidate": 12348.171333333334
+      },
+      "speedup": 1.0068213204254752,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 12280.307333333334
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 12509.324666666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 12439.932333333334
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 12550.229
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 12395.864333333333
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 12565.263
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 12256.410333333333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 15769.410666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 12468.94
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 12251.393
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 12201.888333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 12067.070666666667
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 11,
+      "requests": 1,
+      "fragmented": false,
+      "descriptors": 11,
+      "bytes": 55181312,
+      "identical": true,
+      "median_us": {
+        "baseline": 489.087,
+        "candidate": 191.736
+      },
+      "speedup": 2.5508355238452873,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 485.2753333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 189.03933333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 190.976
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 489.952
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 490.5656666666667
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 220.53033333333335
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 192.496
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 488.222
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 491.519
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 188.896
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 192.82266666666666
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 485.812
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 11,
+      "requests": 1,
+      "fragmented": true,
+      "descriptors": 842,
+      "bytes": 55181312,
+      "identical": true,
+      "median_us": {
+        "baseline": 2722.769166666667,
+        "candidate": 1758.9855
+      },
+      "speedup": 1.5479201884646956,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 2686.285
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1731.6346666666666
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1754.382
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 2710.018666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 2710.292
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1763.589
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1716.0543333333333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 2735.2463333333335
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 2797.8883333333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1774.1993333333332
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1841.3046666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 2775.9676666666664
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 11,
+      "requests": 8,
+      "fragmented": false,
+      "descriptors": 88,
+      "bytes": 441450496,
+      "identical": true,
+      "median_us": {
+        "baseline": 4394.885333333334,
+        "candidate": 1725.4445
+      },
+      "speedup": 2.5471032730020196,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 4305.365666666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1713.6876666666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1711.024
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 4302.555666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 4425.3296666666665
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1737.2013333333334
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1675.9626666666666
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 4364.441
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 4492.691666666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 2206.449666666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 2540.77
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 6254.520666666666
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 11,
+      "requests": 8,
+      "fragmented": true,
+      "descriptors": 6736,
+      "bytes": 441450496,
+      "identical": true,
+      "median_us": {
+        "baseline": 22356.823666666667,
+        "candidate": 15920.283833333333
+      },
+      "speedup": 1.4042980577932118,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 22352.318666666666
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 14253.749666666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 16566.586
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 22170.426
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 23221.042333333335
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 17093.306
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 14386.474
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 22361.328666666668
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 21639.906
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 15273.981666666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 17670.787333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 24759.998
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 88,
+      "requests": 1,
+      "fragmented": false,
+      "descriptors": 88,
+      "bytes": 55181312,
+      "identical": true,
+      "median_us": {
+        "baseline": 4125.681833333334,
+        "candidate": 331.8705
+      },
+      "speedup": 12.431601583549408,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 4389.798333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 332.5973333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 331.14366666666666
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 4115.866666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 4185.455333333333
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 340.654
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 325.057
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 4100.2463333333335
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 4135.497
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 339.31733333333335
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 324.9603333333333
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 4089.7523333333334
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 88,
+      "requests": 1,
+      "fragmented": true,
+      "descriptors": 6736,
+      "bytes": 55181312,
+      "identical": true,
+      "median_us": {
+        "baseline": 21272.624666666667,
+        "candidate": 3590.0966666666664
+      },
+      "speedup": 5.9253626411173705,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 21275.318
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 3627.6046666666666
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 3552.5886666666665
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 21431.192666666666
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 21248.213333333333
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 3539.0286666666666
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 3481.4363333333336
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 21269.931333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 21218.296333333332
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 3660.7386666666666
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 3807.13
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 21938.888666666666
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 88,
+      "requests": 8,
+      "fragmented": false,
+      "descriptors": 704,
+      "bytes": 441450496,
+      "identical": true,
+      "median_us": {
+        "baseline": 31821.439,
+        "candidate": 2566.3526666666667
+      },
+      "speedup": 12.399480170171467,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 34027.61033333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 2571.317666666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 2561.3876666666665
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 32803.99133333333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 31921.444
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 2488.6883333333335
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 2497.652
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 31430.878333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 31107.304666666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 2589.975
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 2576.7346666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 31721.434
+        }
+      ]
+    },
+    {
+      "context": 8192,
+      "regions": 88,
+      "requests": 8,
+      "fragmented": true,
+      "descriptors": 53888,
+      "bytes": 441450496,
+      "identical": true,
+      "median_us": {
+        "baseline": 341570.95383333333,
+        "candidate": 124526.00183333334
+      },
+      "speedup": 2.742968928613759,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 253200.76133333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 100670.48266666666
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 83286.701
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 254540.82333333333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 299533.41266666667
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 124870.746
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 161938.96233333333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 401043.10866666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 383608.495
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 124181.25766666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 140475.22166666668
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 1361572.4006666667
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 1,
+      "requests": 1,
+      "fragmented": false,
+      "descriptors": 1,
+      "bytes": 134217728,
+      "identical": true,
+      "median_us": {
+        "baseline": 926.5191666666667,
+        "candidate": 986.9243333333334
+      },
+      "speedup": 0.9387945310228106,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 1125.862
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 681.248
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 954.3933333333333
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 864.264
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 999.175
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1019.4553333333333
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 669.4146666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 899.0516666666666
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 911.262
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1108.9883333333332
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 1074.0806666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 941.7763333333334
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 1,
+      "requests": 1,
+      "fragmented": true,
+      "descriptors": 2048,
+      "bytes": 134217728,
+      "identical": true,
+      "median_us": {
+        "baseline": 13079.267666666667,
+        "candidate": 12805.153999999999
+      },
+      "speedup": 1.0214065107429922,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 8750.249333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 6996.614333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 10463.560333333333
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 11916.676
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 18823.350333333332
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 16882.079
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 16894.742666666665
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 16646.712
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 14241.859333333334
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 15146.747666666666
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 10360.186666666666
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 9757.544333333333
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 1,
+      "requests": 8,
+      "fragmented": false,
+      "descriptors": 8,
+      "bytes": 1073741824,
+      "identical": true,
+      "median_us": {
+        "baseline": 7190.6085,
+        "candidate": 8197.958666666667
+      },
+      "speedup": 0.8771218290276814,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 10923.508
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 6998.657666666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 9397.259666666667
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 7390.333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 6990.884
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 4139.350666666666
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 4424.683
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 4301.122333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 4313.266
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 9835.567
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 11171.545666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 9206.630333333333
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 1,
+      "requests": 8,
+      "fragmented": true,
+      "descriptors": 16384,
+      "bytes": 1073741824,
+      "identical": true,
+      "median_us": {
+        "baseline": 126578.18483333333,
+        "candidate": 128650.937
+      },
+      "speedup": 0.9838885575573642,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 902456.1103333334
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 90415.19233333334
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 128986.28933333333
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 689977.1266666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 98313.02166666667
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 90712.00166666666
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 794347.1226666666
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 120192.33833333333
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 108608.89966666666
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 128315.58466666666
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 941738.226
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 132964.03133333335
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 11,
+      "requests": 1,
+      "fragmented": false,
+      "descriptors": 11,
+      "bytes": 155844608,
+      "identical": true,
+      "median_us": {
+        "baseline": 1344.4755,
+        "candidate": 811.4406666666666
+      },
+      "speedup": 1.6568993337775364,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 1419.3113333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 652.644
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 643.7636666666667
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 1127.4586666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 1127.609
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1092.0046666666667
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 914.3653333333333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 1301.1373333333333
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 1387.8136666666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 903.8986666666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 718.9826666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 1767.629
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 11,
+      "requests": 1,
+      "fragmented": true,
+      "descriptors": 2378,
+      "bytes": 155844608,
+      "identical": true,
+      "median_us": {
+        "baseline": 10779.171833333334,
+        "candidate": 9112.010666666667
+      },
+      "speedup": 1.1829630394052801,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 10702.734333333334
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 7450.088333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 12707.990666666667
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 10855.609333333334
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 10105.702333333333
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 9828.153333333334
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 6723.028666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 13723.413
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 10088.431333333334
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 8395.868
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 12530.738666666666
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 14710.744333333334
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 11,
+      "requests": 8,
+      "fragmented": false,
+      "descriptors": 88,
+      "bytes": 1246756864,
+      "identical": true,
+      "median_us": {
+        "baseline": 11973.876166666665,
+        "candidate": 6038.5455
+      },
+      "speedup": 1.9829073353287914,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 15071.378666666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 7734.804
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 4792.561
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 8357.623666666666
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 10680.280333333334
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 5328.044666666667
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 4840.676333333334
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 12805.897333333332
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 15842.003
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 8533.322333333334
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 6749.046333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 11141.855
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 11,
+      "requests": 8,
+      "fragmented": true,
+      "descriptors": 19024,
+      "bytes": 1246756864,
+      "identical": true,
+      "median_us": {
+        "baseline": 120734.359,
+        "candidate": 88012.65666666666
+      },
+      "speedup": 1.371784054391874,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 112555.834
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 75190.652
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 90968.14666666667
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 97865.86733333333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 127280.812
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 89767.772
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 86257.54133333333
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 704713.6283333333
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 120007.146
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 112870.58433333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 68433.78566666666
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 121461.572
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 88,
+      "requests": 1,
+      "fragmented": false,
+      "descriptors": 88,
+      "bytes": 155844608,
+      "identical": true,
+      "median_us": {
+        "baseline": 14145.899666666666,
+        "candidate": 1424.36
+      },
+      "speedup": 9.931407556142174,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 15541.343666666668
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1958.665
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 1591.4803333333334
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 14495.844
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 13795.955333333333
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1466.2863333333332
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 1382.4336666666666
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 15021.887333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 10717.698
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 704.5853333333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 692.9483333333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 7702.499666666667
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 88,
+      "requests": 1,
+      "fragmented": true,
+      "descriptors": 19024,
+      "bytes": 155844608,
+      "identical": true,
+      "median_us": {
+        "baseline": 108431.24566666667,
+        "candidate": 28771.474166666667
+      },
+      "speedup": 3.7687066376421625,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 657826.5896666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 25487.927333333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 35689.42933333333
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 92952.28566666666
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 118350.967
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 30162.128
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 35373.092666666664
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 657599.8856666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 98511.52433333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 27380.820333333333
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 23040.757
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 82069.02933333334
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 88,
+      "requests": 8,
+      "fragmented": false,
+      "descriptors": 704,
+      "bytes": 1246756864,
+      "identical": true,
+      "median_us": {
+        "baseline": 69416.97649999999,
+        "candidate": 7131.366666666667
+      },
+      "speedup": 9.734035528486825,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 76598.62633333333
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 6778.173666666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 5883.515666666666
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 65241.208333333336
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 68251.91633333333
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 6275.158
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 7484.559666666667
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 69696.68533333333
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 69137.26766666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 8125.759666666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 8745.242666666667
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 74702.42666666667
+        }
+      ]
+    },
+    {
+      "context": 32768,
+      "regions": 88,
+      "requests": 8,
+      "fragmented": true,
+      "descriptors": 152192,
+      "bytes": 1246756864,
+      "identical": true,
+      "median_us": {
+        "baseline": 1546860.8528333334,
+        "candidate": 148924.71666666667
+      },
+      "speedup": 10.386864500777406,
+      "samples": [
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 2650306.060666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 226944.36966666667
+        },
+        {
+          "round": 0,
+          "variant": "candidate",
+          "us": 222499.20566666668
+        },
+        {
+          "round": 0,
+          "variant": "baseline",
+          "us": 1678225.7903333334
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 2028705.4373333333
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 148224.02966666667
+        },
+        {
+          "round": 1,
+          "variant": "candidate",
+          "us": 149625.40366666668
+        },
+        {
+          "round": 1,
+          "variant": "baseline",
+          "us": 1415495.9153333334
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 801492.835
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 106008.78766666667
+        },
+        {
+          "round": 2,
+          "variant": "candidate",
+          "us": 110009.264
+        },
+        {
+          "round": 2,
+          "variant": "baseline",
+          "us": 887780.9206666667
+        }
+      ]
+    }
+  ],
+  "status": "PASS"
+}

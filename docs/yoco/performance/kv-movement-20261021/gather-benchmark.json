@@ -1,0 +1,4020 @@
+{
+  "scope": "gather only, warmed inputs and graph replay, no model or TTFT",
+  "device": "NVIDIA B200",
+  "uuid": "ef7d6ee6-0fce-4e0b-b14c-87bd8a36c5fe",
+  "sm_count": 148,
+  "torch": "2.13.0+cu130",
+  "seed": 20261020,
+  "rounds": 3,
+  "iterations": 50,
+  "cases": [
+    {
+      "rows": 1024,
+      "selected": 1,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 17.5382399559021,
+          "fused": 1.9148799777030945,
+          "ratio_fused_over_baseline": 0.10918313254453363
+        },
+        "eager_wall": {
+          "baseline": 49.71507005393505,
+          "fused": 29.29425798356533,
+          "ratio_fused_over_baseline": 0.5892430193055039
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.586560249328613
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9590400159358978
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9270400702953339
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.519999742507935
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.4892795085907
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.916159987449646
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.913599967956543
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.56160020828247
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.541120052337646
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9091199338436127
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9129599630832672
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.535359859466553
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.853189408779144
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 30.70702776312828
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.25412729382515
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.82419312000275
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.33087155222893
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.535088688135147
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.03630957007408
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.75307732820511
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.53380674123764
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.33438867330551
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.718579560518265
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.67706277966499
+        }
+      ]
+    },
+    {
+      "rows": 1024,
+      "selected": 1,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 17.85375952720642,
+          "fused": 1.9488000124692917,
+          "ratio_fused_over_baseline": 0.10915348162383481
+        },
+        "eager_wall": {
+          "baseline": 52.60223522782326,
+          "fused": 28.99657003581524,
+          "ratio_fused_over_baseline": 0.5512421650948758
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.914880514144897
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9334399700164795
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.953279972076416
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.85599946975708
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.842559814453125
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9443200528621674
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9244800508022308
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.860480546951294
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.848960161209106
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.953279972076416
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.953279972076416
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.85151958465576
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 54.016318172216415
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.9026258289814
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.993654996156693
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 54.92985248565674
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 52.36297845840454
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.999485075473785
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.69660034775734
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 52.57854238152504
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 52.27480083703995
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.110442847013474
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.49360927939415
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 52.625928074121475
+        }
+      ]
+    },
+    {
+      "rows": 1024,
+      "selected": 4,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.41759991645813,
+          "fused": 1.966399997472763,
+          "ratio_fused_over_baseline": 0.17222533736168633
+        },
+        "eager_wall": {
+          "baseline": 48.763323575258255,
+          "fused": 28.902990743517876,
+          "ratio_fused_over_baseline": 0.5927198686305869
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.444480419158936
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9782400131225586
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9545599818229675
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.436799764633179
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.418240070343018
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.969279944896698
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9635200500488281
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.416959762573242
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.390719413757324
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9417600333690643
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.969279944896698
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.416319608688354
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.8453713953495
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.855482280254364
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.46725285053253
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.25474524497986
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 48.74035716056824
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.21314910054207
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.55191007256508
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 48.779845237731934
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.746801912784576
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.232706874608994
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.592832386493683
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.50924015045166
+        }
+      ]
+    },
+    {
+      "rows": 1024,
+      "selected": 4,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.3401597738266,
+          "fused": 1.97952002286911,
+          "ratio_fused_over_baseline": 0.17455838915408378
+        },
+        "eager_wall": {
+          "baseline": 51.83943547308445,
+          "fused": 28.936797752976418,
+          "ratio_fused_over_baseline": 0.5582004797872595
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.399680376052856
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9750399887561798
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9935999810695648
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.34335994720459
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.341439485549927
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9603200256824493
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.992959976196289
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.338880062103271
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.331199407577515
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9840000569820404
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9654400646686554
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.337599754333496
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.76506766676903
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.648728668689728
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.841979801654816
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 51.854103803634644
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.19062960147858
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.03161570429802
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.62798050045967
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.824767142534256
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.686130464076996
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.099024832248688
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.512850403785706
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 52.04770714044571
+        }
+      ]
+    },
+    {
+      "rows": 1024,
+      "selected": 32,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.674879789352417,
+          "fused": 2.037760019302368,
+          "ratio_fused_over_baseline": 0.17454226990506758
+        },
+        "eager_wall": {
+          "baseline": 48.888642340898514,
+          "fused": 29.063262045383453,
+          "ratio_fused_over_baseline": 0.5944788125374092
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.72544002532959
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.0473599433898926
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.046079933643341
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.677440404891968
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.669759750366211
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.040960043668747
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.0287999510765076
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.67423963546753
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.667840480804443
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.0345599949359894
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.025599926710129
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.675519943237305
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.80737343430519
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.687918722629547
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.636567294597626
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.36385899782181
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 48.872027546167374
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.304586350917816
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.82193773984909
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 48.78954961895943
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.250872641801834
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.419083148241043
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.57295796275139
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.905257135629654
+        }
+      ]
+    },
+    {
+      "rows": 1024,
+      "selected": 32,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.583999991416931,
+          "fused": 2.078400030732155,
+          "ratio_fused_over_baseline": 0.1794198922886851
+        },
+        "eager_wall": {
+          "baseline": 51.96589045226574,
+          "fused": 28.864983469247818,
+          "ratio_fused_over_baseline": 0.5554601916378649
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.64031982421875
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.088959962129593
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.0684799551963806
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.585279703140259
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.583360433578491
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.0742399990558624
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.1036800742149353
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.578880548477173
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.582720279693604
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.0825600624084473
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.04352006316185
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.584639549255371
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.833035588264465
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.54898402094841
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.650108724832535
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.1770678460598
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.8178753554821
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.17848527431488
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.743203729391098
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.93416029214859
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.60832777619362
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.986763209104538
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.552338480949402
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.99762061238289
+        }
+      ]
+    },
+    {
+      "rows": 1024,
+      "selected": 256,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 13.678719997406006,
+          "fused": 2.8889600932598114,
+          "ratio_fused_over_baseline": 0.21120105490920682
+        },
+        "eager_wall": {
+          "baseline": 49.34748634696007,
+          "fused": 28.888052329421043,
+          "ratio_fused_over_baseline": 0.585400685382643
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.744640350341797
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.889600098133087
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.869119942188263
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.681279420852661
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.67616057395935
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.89792001247406
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.8883200883865356
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.671679496765137
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.682559728622437
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.879999876022339
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.8915199637413025
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.675520420074463
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 50.349850207567215
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.768217355012894
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.73871475458145
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.44091662764549
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.04875531792641
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.38833087682724
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.52264791727066
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.25405606627464
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.21555519104004
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.037389904260635
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.719324618577957
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.52104762196541
+        }
+      ]
+    },
+    {
+      "rows": 1024,
+      "selected": 256,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 13.424000144004822,
+          "fused": 2.90367990732193,
+          "ratio_fused_over_baseline": 0.21630511592468343
+        },
+        "eager_wall": {
+          "baseline": 51.92158743739128,
+          "fused": 29.24078144133091,
+          "ratio_fused_over_baseline": 0.5631719460925647
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.466880321502686
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.9068800806999207
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.90367990732193
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.42527985572815
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.418879508972168
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.9094401001930237
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.9023998975753784
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.529599905014038
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.422720432281494
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.887040078639984
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.90367990732193
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.421440124511719
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.98241972923279
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 30.078943818807602
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.176753014326096
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.07749083638191
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.55470222234726
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.397625476121902
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.00507301092148
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.76568403840065
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.64388567209244
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.304809868335724
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.103215783834457
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 52.0847924053669
+        }
+      ]
+    },
+    {
+      "rows": 8192,
+      "selected": 1,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 17.81663954257965,
+          "fused": 1.9103999435901642,
+          "ratio_fused_over_baseline": 0.10722560441459993
+        },
+        "eager_wall": {
+          "baseline": 49.7195590287447,
+          "fused": 29.036737978458405,
+          "ratio_fused_over_baseline": 0.5840103682671683
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.86944031715393
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9379200041294098
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9046400487422943
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.841919660568237
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.816959619522095
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.91103994846344
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9180800020694733
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.764480113983154
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.816319465637207
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9097599387168884
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.8963199853897095
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.797759771347046
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 50.50133913755417
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.670093208551407
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.919856995344162
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 50.02211779356003
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.57374185323715
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.247179627418518
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.92032265663147
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.84227940440178
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.50573667883873
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.15315330028534
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.73355522751808
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.596838653087616
+        }
+      ]
+    },
+    {
+      "rows": 8192,
+      "selected": 1,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 17.936959862709045,
+          "fused": 1.9392000138759613,
+          "ratio_fused_over_baseline": 0.10811196706235374
+        },
+        "eager_wall": {
+          "baseline": 52.11313255131245,
+          "fused": 28.975429013371468,
+          "ratio_fused_over_baseline": 0.5560101186556234
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.990399599075317
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.969279944896698
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.923840045928955
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.935999631881714
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.92639970779419
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.955839991569519
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9193600118160248
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.94559955596924
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.937920093536377
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9545599818229675
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.916159987449646
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.93344020843506
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 53.182318806648254
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.747169464826584
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.927046805620193
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.12118849158287
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 52.17645317316055
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.02381122112274
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.735250234603882
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 52.103810012340546
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 52.03010514378548
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.044076800346375
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.827190399169922
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 52.10507661104202
+        }
+      ]
+    },
+    {
+      "rows": 8192,
+      "selected": 4,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.579520106315613,
+          "fused": 1.9977600127458572,
+          "ratio_fused_over_baseline": 0.17252528553892785
+        },
+        "eager_wall": {
+          "baseline": 48.87928254902363,
+          "fused": 29.197148978710175,
+          "ratio_fused_over_baseline": 0.597331782630541
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.619199514389038
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.0076799392700195
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9840000569820404
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.57696008682251
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.582080125808716
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.0051200687885284
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9961600005626678
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.576319932937622
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.54304027557373
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9820800423622131
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9993600249290466
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.585279703140259
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.88944157958031
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.571112245321274
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.238518327474594
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.04724657535553
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.180127680301666
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.294565320014954
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.155779629945755
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 48.71131852269173
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.396605998277664
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.977468609809875
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.685089200735092
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.592351377010345
+        }
+      ]
+    },
+    {
+      "rows": 8192,
+      "selected": 4,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.173440217971802,
+          "fused": 1.9564799964427948,
+          "ratio_fused_over_baseline": 0.17510094995594241
+        },
+        "eager_wall": {
+          "baseline": 51.39135755598545,
+          "fused": 29.154997318983078,
+          "ratio_fused_over_baseline": 0.5673132352501448
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.225600242614746
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9724799692630768
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9635200500488281
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.174399852752686
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.168639659881592
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.958400011062622
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.918720006942749
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.172480583190918
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.208319664001465
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9545599818229675
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9148799777030945
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.154559850692749
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.01954394578934
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.75916489958763
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.11912277340889
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 51.761213690042496
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.1929951608181
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.301419854164124
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.577186167240143
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.5897199511528
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.11483857035637
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.190871864557266
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.726551681756973
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.06177181005478
+        }
+      ]
+    },
+    {
+      "rows": 8192,
+      "selected": 32,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.832000017166138,
+          "fused": 2.0668799430131912,
+          "ratio_fused_over_baseline": 0.17468559330751474
+        },
+        "eager_wall": {
+          "baseline": 48.78588952124119,
+          "fused": 28.80815416574478,
+          "ratio_fused_over_baseline": 0.5905017710746429
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.885440349578857
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.0601600408554077
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.0691199600696564
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.83616042137146
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.827839612960815
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.085759937763214
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.083200067281723
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.826560497283936
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.836800575256348
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.046079933643341
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.064639925956726
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.825920343399048
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.54451695084572
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.679518193006516
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.36385741829872
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.1342693567276
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 48.74859005212784
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.159337282180786
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.647761791944504
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 48.60749468207359
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.59752953052521
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.96854653954506
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.57699990272522
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.82318899035454
+        }
+      ]
+    },
+    {
+      "rows": 8192,
+      "selected": 32,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.511679887771606,
+          "fused": 2.0259200036525726,
+          "ratio_fused_over_baseline": 0.17598821574291915
+        },
+        "eager_wall": {
+          "baseline": 51.475586369633675,
+          "fused": 29.042046517133713,
+          "ratio_fused_over_baseline": 0.5641906885448538
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.56224012374878
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.0185600221157074
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.0339199900627136
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.504640579223633
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.512320041656494
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.035840004682541
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.032639980316162
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.508480310440063
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.550719738006592
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.0083199441432953
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.019200026988983
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.511039733886719
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.47235298156738
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.590856283903122
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.902627527713776
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 51.78062245249748
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 50.98635330796242
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.280390590429306
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.57578918337822
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.40386521816254
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.25774070620537
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.18146550655365
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.87910231947899
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.54730752110481
+        }
+      ]
+    },
+    {
+      "rows": 8192,
+      "selected": 256,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 13.757120370864868,
+          "fused": 2.9072000086307526,
+          "ratio_fused_over_baseline": 0.2113232951561349
+        },
+        "eager_wall": {
+          "baseline": 49.591064453125,
+          "fused": 29.22038547694683,
+          "ratio_fused_over_baseline": 0.5892268254206731
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.80031943321228
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.9183998703956604
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.910720109939575
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.749760389328003
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.767039775848389
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.90367990732193
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.9023998975753784
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.75040054321289
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.763840198516846
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.903040051460266
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.927359938621521
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.74783992767334
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 50.56224763393402
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.833950102329254
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.162131249904633
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.92390051484108
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.59849640727043
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.3084979057312
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.064249247312546
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.58363249897957
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.54556003212929
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.27863970398903
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.748083859682083
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.19860512018204
+        }
+      ]
+    },
+    {
+      "rows": 8192,
+      "selected": 256,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 13.473920226097107,
+          "fused": 2.8966400027275085,
+          "ratio_fused_over_baseline": 0.21498123442330616
+        },
+        "eager_wall": {
+          "baseline": 51.49411037564278,
+          "fused": 29.04915250837803,
+          "ratio_fused_over_baseline": 0.5641257280972187
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.54688048362732
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.917119860649109
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.8857600688934326
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.467520475387573
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.468159437179565
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.8992000222206116
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.8908801078796387
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.475840091705322
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.531520366668701
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.898559868335724
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.894720137119293
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.472000360488892
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.40805447101593
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.61760386824608
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.811786323785782
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 51.45687609910965
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 50.9578175842762
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.41608428955078
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.887148946523666
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.549188792705536
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.22095346450806
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.21115607023239
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.676539659500122
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.5313446521759
+        }
+      ]
+    },
+    {
+      "rows": 32768,
+      "selected": 1,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 17.186880111694336,
+          "fused": 1.9126399606466293,
+          "ratio_fused_over_baseline": 0.11128488406370081
+        },
+        "eager_wall": {
+          "baseline": 49.863243475556374,
+          "fused": 28.91259267926216,
+          "ratio_fused_over_baseline": 0.5798377855912141
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.214080095291138
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9219200313091278
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9270400702953339
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.15008020401001
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.166719436645508
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9148799777030945
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9103999435901642
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.20128059387207
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.19040036201477
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9072000682353973
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.8988800048828125
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.1833598613739
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 50.582606345415115
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.850881546735764
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.682276606559753
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.880947917699814
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.54759031534195
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.14290875196457
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.588026762008667
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 50.06611347198486
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.51406270265579
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.17880192399025
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.61304208636284
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.84553903341293
+        }
+      ]
+    },
+    {
+      "rows": 32768,
+      "selected": 1,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 17.64512002468109,
+          "fused": 1.9616000354290009,
+          "ratio_fused_over_baseline": 0.11116954901328045
+        },
+        "eager_wall": {
+          "baseline": 52.18258127570152,
+          "fused": 29.43580038845539,
+          "ratio_fused_over_baseline": 0.5640924551611244
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.670400142669678
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9641600549221039
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9641600549221039
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 17.646080255508423
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.64415979385376
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9711999595165253
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9590400159358978
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 17.64672040939331
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.638399600982666
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9436800479888916
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9456000626087189
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 17.643519639968872
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 53.34937945008278
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 30.13329580426216
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.18379381299019
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.21722647547722
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 52.1688349545002
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.617249965667725
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.308144003152847
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 52.19632759690285
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 52.045248448848724
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.563456773757935
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.274113476276398
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 52.050184458494186
+        }
+      ]
+    },
+    {
+      "rows": 32768,
+      "selected": 4,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.388159990310669,
+          "fused": 1.9548799842596054,
+          "ratio_fused_over_baseline": 0.17165898493899506
+        },
+        "eager_wall": {
+          "baseline": 48.851193860173225,
+          "fused": 28.9849191904068,
+          "ratio_fused_over_baseline": 0.5933308257188215
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.473280191421509
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9788800179958344
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9577600061893463
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.392639875411987
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.381759643554688
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9519999623298645
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9500799477100372
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.38368010520935
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.37984037399292
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9462400674819946
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.9808000326156616
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.408640146255493
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.7656874358654
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.87682819366455
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.748158365488052
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 48.841312527656555
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 48.374105244874954
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.264744371175766
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.687696903944016
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 48.841461539268494
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.86092618107796
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.05000001192093
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.91983836889267
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.88385534286499
+        }
+      ]
+    },
+    {
+      "rows": 32768,
+      "selected": 4,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.096960306167603,
+          "fused": 1.9280000030994415,
+          "ratio_fused_over_baseline": 0.1737412723759924
+        },
+        "eager_wall": {
+          "baseline": 51.718251779675484,
+          "fused": 29.05694767832756,
+          "ratio_fused_over_baseline": 0.5618315909461293
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.151360273361206
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.9456000626087189
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 1.926400065422058
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.088000535964966
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.087360382080078
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9545599818229675
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 1.9116799533367157
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.09760046005249
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.096320152282715
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.929599940776825
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 1.921280026435852
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.098239421844482
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.30370908975601
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.619019478559494
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.99209037423134
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.1528534591198
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.41584202647209
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.278527945280075
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.9042666554451
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.7130084335804
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.23112350702286
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.121804982423782
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.71764823794365
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.72349512577057
+        }
+      ]
+    },
+    {
+      "rows": 32768,
+      "selected": 32,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.712960004806519,
+          "fused": 2.0764800161123276,
+          "ratio_fused_over_baseline": 0.17728055207737628
+        },
+        "eager_wall": {
+          "baseline": 48.8242506980896,
+          "fused": 29.028160497546196,
+          "ratio_fused_over_baseline": 0.5945439014936488
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.773439645767212
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.0902399718761444
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.072959989309311
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.70367956161499
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.706880331039429
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.0787200331687927
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.0716799795627594
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.749119758605957
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.712640523910522
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.0844799280166626
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.0742399990558624
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.713279485702515
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.89074543118477
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.421523213386536
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.021259397268295
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 48.997700214385986
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 48.44320937991142
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.069073498249054
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.61086279153824
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 48.851706087589264
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.55446517467499
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.035061597824097
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.575919568538666
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 48.796795308589935
+        }
+      ]
+    },
+    {
+      "rows": 32768,
+      "selected": 32,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 11.385279893875122,
+          "fused": 2.0790400356054306,
+          "ratio_fused_over_baseline": 0.18260772286537116
+        },
+        "eager_wall": {
+          "baseline": 51.21653899550438,
+          "fused": 28.91150303184986,
+          "ratio_fused_over_baseline": 0.564495446175846
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.45151972770691
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.065279930830002
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.0793600380420685
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 11.386239528656006
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.384320259094238
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.0735999941825867
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.0844799280166626
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 11.365760564804077
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.424640417098999
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.0787200331687927
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.091519981622696
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 11.376639604568481
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.337925881147385
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.59245815873146
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.893668204545975
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 51.22242495417595
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.08356475830078
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.104631394147873
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.63571047782898
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.21065303683281
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.19955167174339
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.929337859153748
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.73288467526436
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.282402127981186
+        }
+      ]
+    },
+    {
+      "rows": 32768,
+      "selected": 256,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.bfloat16",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 13.665279746055603,
+          "fused": 2.8992000222206116,
+          "ratio_fused_over_baseline": 0.21215811722094072
+        },
+        "eager_wall": {
+          "baseline": 49.509452655911446,
+          "fused": 28.976602479815483,
+          "ratio_fused_over_baseline": 0.5852741431257908
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.727999925613403
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.9043200612068176
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.911359965801239
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.678079843521118
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.667199611663818
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.8908801078796387
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.8940799832344055
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.662079572677612
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.653119802474976
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.89216011762619
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.905600070953369
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.663359880447388
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 50.54837092757225
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 29.79407086968422
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.63490954041481
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 49.47353154420853
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.14166405797005
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.144827276468277
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.942972421646118
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 49.545373767614365
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.10629242658615
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.010232537984848
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.577838093042374
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 49.54785108566284
+        }
+      ]
+    },
+    {
+      "rows": 32768,
+      "selected": 256,
+      "hidden_width": 3072,
+      "kv_width": 1024,
+      "hidden_dtype": "float32",
+      "kv_dtype": "torch.float8_e4m3fn",
+      "byte_equality": true,
+      "summary": {
+        "graph_device": {
+          "baseline": 13.241600394248962,
+          "fused": 2.903999984264374,
+          "ratio_fused_over_baseline": 0.21930883713464328
+        },
+        "eager_wall": {
+          "baseline": 51.390714943408966,
+          "fused": 28.909388929605484,
+          "ratio_fused_over_baseline": 0.56254109251915
+        }
+      },
+      "samples": [
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.285119533538818
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.910720109939575
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 2.9120001196861267
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 13.219200372695923
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.223680257797241
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.8908801078796387
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 2.8972798585891724
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 13.260159492492676
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.215359449386597
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.8832000494003296
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 2.911359965801239
+        },
+        {
+          "mode": "graph_device",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 13.259520530700684
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 52.1661713719368
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 30.02651035785675
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "fused",
+          "us": 28.710681945085526
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 0,
+          "variant": "baseline",
+          "us": 51.671210676431656
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 50.8047454059124
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 29.09427508711815
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "fused",
+          "us": 28.711259365081787
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 1,
+          "variant": "baseline",
+          "us": 51.42915993928909
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.35226994752884
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 29.060859233140945
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "fused",
+          "us": 28.757918626070023
+        },
+        {
+          "mode": "eager_wall",
+          "repeat": 2,
+          "variant": "baseline",
+          "us": 51.10396072268486
+        }
+      ]
+    }
+  ]
+}
