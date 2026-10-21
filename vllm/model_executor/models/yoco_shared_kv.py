@@ -159,6 +159,40 @@ class SharedKVMLP(nn.Module):
         return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
 
 
+class _SharedKVInferenceMLP(SharedKVMLP):
+    """Pack frozen gate/up compute weights without changing checkpoint keys."""
+
+    def __init__(self, mlp: SharedKVMLP):
+        if mlp.training or any(p.requires_grad for p in mlp.parameters()):
+            raise ValueError("Shared-KV packed MLP requires frozen parameters")
+        nn.Module.__init__(self)
+        self.gate_proj = mlp.gate_proj
+        self.up_proj = mlp.up_proj
+        self.down_proj = mlp.down_proj
+        self.register_buffer(
+            "_bf16_gate_up_weight",
+            torch.cat((self.gate_proj.weight, self.up_proj.weight)).to(torch.bfloat16),
+            persistent=False,
+        )
+        self.register_load_state_dict_post_hook(self._refresh_compute_weight)
+        self.eval()
+
+    @torch.no_grad()
+    def _refresh_compute_weight(self, module, incompatible_keys):
+        gate, up = self._bf16_gate_up_weight.chunk(2)
+        if (
+            gate.shape != self.gate_proj.weight.shape
+            or up.shape != self.up_proj.weight.shape
+        ):
+            raise ValueError("Shared-KV MLP shape changed; rebuild the draft graphs")
+        gate.copy_(self.gate_proj.weight)
+        up.copy_(self.up_proj.weight)
+
+    def forward(self, x):
+        gate, up = F.linear(x, self._bf16_gate_up_weight).chunk(2, dim=-1)
+        return self.down_proj(F.silu(gate) * up)
+
+
 class SharedKVLayer(nn.Module):
     def __init__(self, c: SharedKVConfig):
         super().__init__()
@@ -237,7 +271,14 @@ class SharedKVDraft(nn.Module):
         """Cache only autocast linears; keep norms, residuals and confidence FP32."""
         for root in (self.layers, self.markov_head):
             for name, module in list(root.named_modules()):
-                if type(module) is nn.Linear:
+                if type(module) is SharedKVMLP:
+                    root.set_submodule(name, _SharedKVInferenceMLP(module))
+                elif type(module) is nn.Linear:
+                    parent, _, child = name.rpartition(".")
+                    if isinstance(
+                        root.get_submodule(parent), _SharedKVInferenceMLP
+                    ) and child in ("gate_proj", "up_proj"):
+                        continue
                     root.set_submodule(name, _SharedKVInferenceLinear(module))
 
     def prepare_norms_for_inference(self):

@@ -89,9 +89,9 @@ def test_shared_kv_compute_cache_preserves_autocast_and_checkpoint_on_reload():
     caches = {
         name: value.data_ptr()
         for name, value in model.named_buffers()
-        if name.endswith("_bf16_weight")
+        if name.endswith(("_bf16_weight", "_bf16_gate_up_weight"))
     }
-    assert len(caches) == 11
+    assert len(caches) == 10
     assert all(value.dtype == torch.float32 for value in model.layers.parameters())
     assert model.confidence_head.proj.weight.dtype == torch.float32
     # Model reload updates derived bytes in place, including assign=True loading.
@@ -106,7 +106,7 @@ def test_shared_kv_compute_cache_preserves_autocast_and_checkpoint_on_reload():
         assert caches == {
             name: value.data_ptr()
             for name, value in model.named_buffers()
-            if name.endswith("_bf16_weight")
+            if name.endswith(("_bf16_weight", "_bf16_gate_up_weight"))
         }
         for name, module in model.named_modules():
             if hasattr(module, "_bf16_weight"):
@@ -132,6 +132,63 @@ def test_shared_kv_confidence_keeps_fp32_embed_when_hidden_is_bf16():
         rtol=0,
         atol=0,
     )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA packed MLP replay")
+@pytest.mark.parametrize("rows", [8, 32, 64])
+@torch.inference_mode()
+def test_shared_kv_packed_mlp_preserves_checkpoint_and_captured_reload(rows):
+    """Packed compute weights must refresh in place after checkpoint reload."""
+    from vllm.model_executor.models.yoco_shared_kv import (
+        SharedKVMLP,
+        _SharedKVInferenceLinear,
+        _SharedKVInferenceMLP,
+    )
+
+    torch.manual_seed(42)
+    original = SharedKVMLP(SharedKVConfig()).cuda().eval().requires_grad_(False)
+    for parameter in original.parameters():
+        parameter.normal_(std=0.01)
+    packed = _SharedKVInferenceMLP(original)
+    packed.down_proj = _SharedKVInferenceLinear(packed.down_proj)
+    checkpoint = {key: value.clone() for key, value in original.state_dict().items()}
+    pointer = packed._bf16_gate_up_weight.data_ptr()
+    inputs = torch.randn(rows, 3072, device="cuda", dtype=torch.bfloat16)
+
+    def run(model):
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            return model(inputs)
+
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        for _ in range(2):
+            run(packed)
+    torch.cuda.current_stream().wait_stream(stream)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph, stream=stream):
+        captured = run(packed)
+    for assign in (False, True):
+        replacement = {key: value + 0.0005 for key, value in checkpoint.items()}
+        packed.load_state_dict(replacement, assign=assign)
+        original.load_state_dict(replacement)
+        assert packed._bf16_gate_up_weight.data_ptr() == pointer
+        assert set(packed.state_dict()) == set(checkpoint)
+        for key, value in packed.state_dict().items():
+            torch.testing.assert_close(value, replacement[key], rtol=0, atol=0)
+        torch.testing.assert_close(
+            packed._bf16_gate_up_weight,
+            torch.cat(
+                (replacement["gate_proj.weight"], replacement["up_proj.weight"])
+            ).bfloat16(),
+            rtol=0,
+            atol=0,
+        )
+        inputs.normal_()
+        graph.replay()
+        expected = run(original)
+        torch.accelerator.synchronize()
+        torch.testing.assert_close(captured, expected, rtol=0.02, atol=0.002)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA fused norms")
