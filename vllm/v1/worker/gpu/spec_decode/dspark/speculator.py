@@ -156,6 +156,17 @@ class DSparkSpeculator(DFlashSpeculator):
             )
         return sampled
 
+    def _sample_markov_logits(
+        self,
+        base_logits: torch.Tensor,
+        markov_embed: torch.Tensor,
+        idx_map: torch.Tensor,
+        sample_pos: torch.Tensor,
+        step: int,
+    ) -> torch.Tensor:
+        logits = base_logits + self.model.markov_bias(markov_embed)
+        return self._sample_logits(logits, idx_map, sample_pos, step)
+
     def _sample_sequential(self, num_reqs: int, head_hidden: torch.Tensor) -> None:
         if self._draft_topk is not None:
             self._sample_sequential_topk(num_reqs, head_hidden)
@@ -184,10 +195,8 @@ class DSparkSpeculator(DFlashSpeculator):
             markov_embed = self.model.markov_embed(prev)
             if self.use_confidence_head:
                 confidence_markov_embeds.append(markov_embed)
-            bias = self.model.markov_bias(markov_embed)
-            logits_i = base_logits[:, i] + bias
-            draft_sampled_i = self._sample_logits(
-                logits_i, idx_map[:, i], sample_pos[:, i], i
+            draft_sampled_i = self._sample_markov_logits(
+                base_logits[:, i], markov_embed, idx_map[:, i], sample_pos[:, i], i
             )
             self.draft_tokens[:num_reqs, i] = draft_sampled_i
             prev = draft_sampled_i

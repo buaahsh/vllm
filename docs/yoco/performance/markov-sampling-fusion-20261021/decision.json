@@ -1,0 +1,35 @@
+{
+  "status": "candidate-not-adopted",
+  "reason": "Component latency improves, native end-to-end panel has no demonstrated throughput benefit and small negative estimates.",
+  "base_branch": "fhb-dev-aligndeepinfer-startpoint",
+  "base_commit": "7b525571d0af65f89d72970c9a3462fac1f5c990",
+  "candidate_branch": "fhb-dev-markov-sampling-fusion-20261021",
+  "candidate_worktree": "/data/vllm_test/work/yoco-markov-sampling-fusion-20261021/source-final",
+  "b200_selected_tests_passed": 205,
+  "b200_skips": 0,
+  "legacy_gumbel_large_statistical_tests_deselected": 6,
+  "kernel_ms_reduction_pct": [
+    18.5,
+    20.88,
+    27.39
+  ],
+  "native_throughput_change_pct": [
+    -0.5688,
+    -0.2546,
+    -0.1994,
+    -0.1449,
+    0.1904,
+    -0.5374
+  ],
+  "formal_native_pairs_exact": 36,
+  "production_target_graphs": 4,
+  "production_draft_graphs": 6,
+  "gpu_after_mib": 0,
+  "gpu_after_utilization_pct": 0,
+  "advisory_lock_free_after": true,
+  "pod_uid": "9a026fd8-e732-4fcb-b855-85ea6a6358ed",
+  "node": "slc01-cl02-hgx-0347",
+  "pod_restart_count": 0,
+  "pid7_alive": true,
+  "live_service_switched": false
+}

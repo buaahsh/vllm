@@ -22,6 +22,7 @@ if not torch.cuda.is_available():
     pytest.skip("CUDA required for Gumbel sampler tests", allow_module_level=True)
 
 from vllm.v1.worker.gpu.sample.gumbel import gumbel_sample
+from vllm.v1.worker.gpu.sample.gumbel_bias import gumbel_sample_with_bias
 
 DEVICE = "cuda"
 VOCAB_SIZE = 200_000
@@ -423,4 +424,93 @@ def test_logits_cache_narrower_than_logits_is_rejected():
             is_drafting=True,
             logits_cache=cache,
             logits_cache_col=torch.tensor(0, dtype=torch.int32, device=DEVICE),
+        )
+
+
+@pytest.mark.parametrize("bias_dtype", [torch.bfloat16, torch.float32])
+@pytest.mark.parametrize("vocab_size", [1, 4099, 154880])
+@pytest.mark.parametrize("use_fp64", [False, True])
+@pytest.mark.parametrize("per_token_col", [False, True])
+@torch.inference_mode()
+def test_fused_bias_preserves_samples_and_fp32_q_on_graph_replay(
+    bias_dtype, vocab_size, use_fp64, per_token_col
+):
+    """Fusion must preserve q/noise keys across remapping, padding and new bias."""
+    torch.manual_seed(42)
+    base = torch.randn(8, 2, vocab_size, device=DEVICE)[:, 0]
+    bias = torch.randn(8, 2 * vocab_size, device=DEVICE, dtype=bias_dtype)[:, ::2]
+    mapping = torch.tensor([3, 0, 6, 1, 7, 2, 5, -1], device=DEVICE, dtype=torch.int32)
+    temp = torch.tensor([0, 0.1, 0.5, 1, 1.5, 2, 0.7, 1], device=DEVICE)
+    seeds = torch.arange(8, device=DEVICE, dtype=torch.int64) + 1234
+    positions = torch.arange(8, device=DEVICE, dtype=torch.int64) + (1 << 33)
+    cols = (
+        torch.arange(8, device=DEVICE, dtype=torch.int32) % 3
+        if per_token_col
+        else torch.tensor(1, device=DEVICE, dtype=torch.int32)
+    )
+    actual_cache = torch.full((8, 3, vocab_size + 1), 17.0, device=DEVICE)
+    legacy_cache = torch.empty_like(actual_cache)
+
+    def sample(logits, cache, additive=None):
+        sampler = gumbel_sample if additive is None else gumbel_sample_with_bias
+        kwargs = {} if additive is None else {"logits_bias": additive}
+        return sampler(
+            logits,
+            mapping,
+            temp,
+            seeds,
+            positions,
+            apply_temperature=True,
+            is_drafting=True,
+            logits_cache=cache,
+            logits_cache_col=cols,
+            use_fp64=use_fp64,
+            **kwargs,
+        )
+
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        for _ in range(2):
+            sample(base, actual_cache, bias)
+    torch.cuda.current_stream().wait_stream(stream)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph, stream=stream):
+        captured = sample(base, actual_cache, bias)
+
+    for _ in range(2):
+        base.copy_(torch.randn_like(base))
+        bias.copy_(torch.randn_like(bias))
+        # Include exact cancellation, which catches altered rounding boundaries.
+        base[:, 0] = -bias[:, 0].float()
+        mapping.copy_(mapping.roll(1))
+        seeds.add_(17)
+        positions.add_(19)
+        actual_cache.fill_(17)
+        legacy_cache.fill_(17)
+        expected = sample(base + bias.float(), legacy_cache)
+        graph.replay()
+        torch.accelerator.synchronize()
+        torch.testing.assert_close(
+            captured[mapping >= 0], expected[mapping >= 0], rtol=0, atol=0
+        )
+        assert torch.equal(_float_bits(actual_cache), _float_bits(legacy_cache))
+
+
+@pytest.mark.parametrize("cache_dtype", [torch.bfloat16, torch.float16])
+def test_fused_bias_rejects_rounded_proposal_cache(cache_dtype):
+    """The FP32 sum used to draw a proposal must not be rounded in its q-cache."""
+    logits = torch.zeros(1, 4, device=DEVICE)
+    mapping = torch.zeros(1, device=DEVICE, dtype=torch.int32)
+    with pytest.raises(AssertionError, match="FP32 proposal cache"):
+        gumbel_sample_with_bias(
+            logits,
+            mapping,
+            torch.ones(1, device=DEVICE),
+            torch.zeros(1, device=DEVICE, dtype=torch.int64),
+            torch.zeros(1, device=DEVICE, dtype=torch.int64),
+            apply_temperature=True,
+            is_drafting=True,
+            logits_cache=torch.zeros(1, 1, 4, device=DEVICE, dtype=cache_dtype),
+            logits_bias=torch.zeros_like(logits),
         )

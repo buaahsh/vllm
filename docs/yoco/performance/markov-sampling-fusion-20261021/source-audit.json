@@ -1,0 +1,15 @@
+{
+  "parent": {
+    "files_checked": 8046,
+    "mismatches": [],
+    "runtime_support_checked": 1996,
+    "runtime_mismatches": []
+  },
+  "candidate2": {
+    "files_checked": 8048,
+    "mismatches": [],
+    "runtime_support_checked": 1996,
+    "runtime_mismatches": []
+  },
+  "status": "PASS"
+}

@@ -1,0 +1,38 @@
+{
+  "b200_model_passed": 91,
+  "b200_gumbel_passed": 40,
+  "b200_runner_passed": 74,
+  "b200_total_passed": 205,
+  "b200_skipped": 0,
+  "gumbel_deselected": 6,
+  "gumbel_deselection_scope": "Six pre-existing very large statistical distribution tests; changed biased path checked by exact legacy sample/q-cache comparisons including full vocabulary.",
+  "local_model_passed": 91,
+  "local_gumbel_passed": 40,
+  "local_runner_passed": 70,
+  "local_runner_skipped": 4,
+  "local_skip_scope": "SM90+ sampler cases covered by B200.",
+  "remote_commands": [
+    "\"$runtime\" -m pytest --confcutdir=tests/model_executor -q tests/model_executor/test_yoco_prefill.py tests/model_executor/test_yoco_shared_kv.py > ../results/b200-model.log 2>&1",
+    "\"$runtime\" -m pytest --confcutdir=tests/v1/worker -q tests/v1/worker/test_gpu_gumbel_sample.py -k \"fused_bias or logits_cache or greedy_temperature_zero or vocab_size_not_multiple\" > ../results/b200-gumbel.log 2>&1",
+    "\"$runtime\" -m pytest --confcutdir=tests/v1/worker -q tests/v1/worker/test_gpu_model_runner_v2.py tests/v1/worker/test_gpu_sampler_flags.py tests/v1/worker/test_attn_utils.py tests/v1/worker/test_gpu_rejection_sampler_chunking.py tests/v1/worker/test_gpu_rejection_sampler_i64.py > ../results/b200-runner.log 2>&1",
+    "\"$runtime\" source/benchmarks/kernels/benchmark_yoco_markov_sampling.py --output results/markov-benchmark.json > results/markov-benchmark.log 2>&1",
+    " timeout --signal=TERM --kill-after=30 1800 \"$runtime\" -u -m tools.yoco_alignment.benchmark_mega_moe --backend hybrid --output \"results/$run_name\" --max-model-len 12288 --tokens 128 --quality-tokens 64 --trials 3 --extra-prompt-tokens 8193 --concurrencies 1 4 8 --synchronous-engine --fast-prefill > \"results/$run_name.log\" 2>&1"
+  ],
+  "source_audit": {
+    "parent": {
+      "files_checked": 8046,
+      "mismatches": [],
+      "runtime_support_checked": 1996,
+      "runtime_mismatches": []
+    },
+    "source": {
+      "files_checked": 8047,
+      "mismatches": [],
+      "runtime_support_checked": 1996,
+      "runtime_mismatches": []
+    },
+    "status": "PASS"
+  },
+  "base_logits_fp32_conversion_preserved": true,
+  "watermark_estimator_and_no_q_cache_paths_preserved": true
+}

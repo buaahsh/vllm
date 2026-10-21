@@ -1,0 +1,583 @@
+{
+  "status": "PASS",
+  "scope": "Candidate1, one engine, fixed target/KV/target graphs, 6 paired seeds/cell, balanced mode order; additional baseline draft graph pool is audit-only. Not the final candidate2 native config.",
+  "formal_pairs": 36,
+  "warmup_pairs": 12,
+  "cells": [
+    {
+      "length": 0,
+      "concurrency": 1,
+      "throughput": {
+        "baseline": 338.87426654617775,
+        "fused": 339.2204757328693
+      },
+      "change_pct": 0.10216449605930933
+    },
+    {
+      "length": 0,
+      "concurrency": 4,
+      "throughput": {
+        "baseline": 874.0478362956819,
+        "fused": 873.2672257738126
+      },
+      "change_pct": -0.08930981686056105
+    },
+    {
+      "length": 0,
+      "concurrency": 8,
+      "throughput": {
+        "baseline": 1441.5429130636421,
+        "fused": 1441.138701305176
+      },
+      "change_pct": -0.02804021682621949
+    },
+    {
+      "length": 8193,
+      "concurrency": 1,
+      "throughput": {
+        "baseline": 173.26940999206033,
+        "fused": 173.53854788880486
+      },
+      "change_pct": 0.15532914711076096
+    },
+    {
+      "length": 8193,
+      "concurrency": 4,
+      "throughput": {
+        "baseline": 239.65061567303073,
+        "fused": 239.9713386624527
+      },
+      "change_pct": 0.13382940349278005
+    },
+    {
+      "length": 8193,
+      "concurrency": 8,
+      "throughput": {
+        "baseline": 257.0759522758765,
+        "fused": 257.2051836686822
+      },
+      "change_pct": 0.05026973221791131
+    }
+  ],
+  "checks": [
+    {
+      "length": 0,
+      "concurrency": 1,
+      "trial": -2,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 1,
+      "trial": -1,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 1,
+      "trial": 0,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 1,
+      "trial": 1,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 1,
+      "trial": 2,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 1,
+      "trial": 3,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 1,
+      "trial": 4,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 1,
+      "trial": 5,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 4,
+      "trial": -2,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 4,
+      "trial": -1,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 4,
+      "trial": 0,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 4,
+      "trial": 1,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 4,
+      "trial": 2,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 4,
+      "trial": 3,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 4,
+      "trial": 4,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 4,
+      "trial": 5,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 8,
+      "trial": -2,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 8,
+      "trial": -1,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 8,
+      "trial": 0,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 8,
+      "trial": 1,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 8,
+      "trial": 2,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 8,
+      "trial": 3,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 8,
+      "trial": 4,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 0,
+      "concurrency": 8,
+      "trial": 5,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 1,
+      "trial": -2,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 1,
+      "trial": -1,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 1,
+      "trial": 0,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 1,
+      "trial": 1,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 1,
+      "trial": 2,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 1,
+      "trial": 3,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 1,
+      "trial": 4,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 1,
+      "trial": 5,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 4,
+      "trial": -2,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 4,
+      "trial": -1,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 4,
+      "trial": 0,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 4,
+      "trial": 1,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 4,
+      "trial": 2,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 4,
+      "trial": 3,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 4,
+      "trial": 4,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 4,
+      "trial": 5,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 8,
+      "trial": -2,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 8,
+      "trial": -1,
+      "warmup": true,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 8,
+      "trial": 0,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 8,
+      "trial": 1,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 8,
+      "trial": 2,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 8,
+      "trial": 3,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 8,
+      "trial": 4,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    },
+    {
+      "length": 8193,
+      "concurrency": 8,
+      "trial": 5,
+      "warmup": false,
+      "outputs_equal": true,
+      "counts_equal": true
+    }
+  ],
+  "worker": {
+    "status": "PASS",
+    "worker": [
+      {
+        "worker": {
+          "backend": "mega",
+          "layers": [
+            "model.layers.0.mlp",
+            "model.layers.1.mlp",
+            "model.layers.2.mlp",
+            "model.layers.3.mlp",
+            "model.layers.4.mlp",
+            "model.layers.5.mlp",
+            "model.layers.6.mlp",
+            "model.layers.7.mlp",
+            "model.layers.8.mlp",
+            "model.layers.9.mlp",
+            "model.layers.10.mlp",
+            "model.layers.11.mlp",
+            "model.layers.12.mlp",
+            "model.layers.13.mlp",
+            "model.layers.14.mlp",
+            "model.layers.15.mlp",
+            "model.layers.16.mlp",
+            "model.layers.17.mlp",
+            "model.layers.18.mlp",
+            "model.layers.19.mlp"
+          ],
+          "mega_layers": 20,
+          "workspace_count": 1,
+          "shared_workspace_bytes": 525678464,
+          "torch": "2.13.0+cu130",
+          "deep_gemm": "2.8.2",
+          "deep_gemm_file": "/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/__init__.py",
+          "allocated": 70435326976,
+          "draft_type": "SharedKVSpeculator",
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "fast_prefill": true,
+          "aux_hidden_layers": [
+            20
+          ],
+          "draft_logits_dtype": "torch.float32",
+          "additional_config": {
+            "yoco_execution_mode": "fast",
+            "yoco_mega_moe": "fp8_group32"
+          },
+          "shared_kv_attention_fa_version": 4,
+          "dispatch": {
+            "profile": "b200-l3-fp8-tp1-k8",
+            "triton_max_tokens": 16,
+            "mega_min_tokens": 17,
+            "mega_prefill": false
+          },
+          "mega_capture_decisions": {
+            "72": true,
+            "36": true,
+            "18": true,
+            "9": false
+          },
+          "triton_max_tokens": 16,
+          "graphs": {
+            "target": {
+              "widest_mode": "FULL",
+              "widest_captured": true,
+              "captured_tokens": [
+                9,
+                18,
+                36,
+                72
+              ],
+              "replays": {}
+            },
+            "draft": {
+              "widest_mode": "FULL",
+              "widest_captured": true,
+              "captured_tokens": [
+                8,
+                16,
+                24,
+                32,
+                40,
+                64
+              ],
+              "replays": {}
+            }
+          },
+          "target_graph_backends": {
+            "8x9/72": "mega",
+            "4x9/36": "mega",
+            "2x9/18": "mega",
+            "1x9/9": "triton"
+          }
+        },
+        "audit_graphs": {
+          "fused": {
+            "tokens": [
+              8,
+              16,
+              24,
+              32,
+              40,
+              64
+            ],
+            "replays": {
+              "8": 628,
+              "32": 444,
+              "24": 186,
+              "16": 227,
+              "64": 492,
+              "40": 101
+            }
+          },
+          "baseline": {
+            "tokens": [
+              8,
+              16,
+              24,
+              32,
+              40,
+              64
+            ],
+            "replays": {
+              "8": 628,
+              "32": 444,
+              "24": 186,
+              "16": 227,
+              "64": 492,
+              "40": 101
+            }
+          }
+        },
+        "scope": "Additional isolated baseline draft graph pool is audit-only; same target weights/KV/target graphs."
+      }
+    ]
+  }
+}

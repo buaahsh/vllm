@@ -17,6 +17,7 @@ from vllm.model_executor.models.yoco_shared_kv import (
 )
 from vllm.triton_utils import tl, triton
 from vllm.v1.worker.gpu.cudagraph_utils import CudaGraphManager
+from vllm.v1.worker.gpu.sample.gumbel_bias import gumbel_sample_with_bias
 from vllm.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
 
 logger = init_logger(__name__)
@@ -150,6 +151,34 @@ class SharedKVSpeculator(DSparkSpeculator):
         if self.use_confidence_head:
             self.use_acceptance_estimator = False
         return model
+
+    def _sample_markov_logits(
+        self, base_logits, markov_embed, idx_map, sample_pos, step
+    ):
+        if (
+            self.draft_logits is None
+            or self.acceptance_estimator is not None
+            or self.draft_watermarker is not None
+        ):
+            # These consumers require the materialized full logits.
+            return super()._sample_markov_logits(
+                base_logits, markov_embed, idx_map, sample_pos, step
+            )
+        # Retain the BF16 GEMM output; the sampler adds it in FP32 before caching q.
+        bias = self.model.markov_head.markov_w2(markov_embed)
+        return gumbel_sample_with_bias(
+            base_logits,
+            idx_map,
+            self.temperature,
+            self.seeds,
+            sample_pos - 1,
+            apply_temperature=True,
+            is_drafting=True,
+            logits_cache=self.draft_logits,
+            logits_cache_col=self._step_cols[step],
+            use_fp64=self.use_fp64_gumbel,
+            logits_bias=bias,
+        )
 
     def set_attn(
         self,

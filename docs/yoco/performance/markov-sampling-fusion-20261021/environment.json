@@ -1,0 +1,18 @@
+{
+  "gpu_immediate_post_exit": "index, uuid, memory.used [MiB], utilization.gpu [%]\n6, GPU-ef7d6ee6-0fce-4e0b-b14c-87bd8a36c5fe, 0 MiB, 19 %\n",
+  "gpu_after_cooldown": "uuid, memory.used [MiB], utilization.gpu [%]\nGPU-ef7d6ee6-0fce-4e0b-b14c-87bd8a36c5fe, 0 MiB, 0 %\n",
+  "note": "The immediate utilization window still included the completed run; later snapshot is idle.",
+  "pod_uid": "9a026fd8-e732-4fcb-b855-85ea6a6358ed",
+  "node": "slc01-cl02-hgx-0347",
+  "restart_count": 0,
+  "pid7_alive": true,
+  "gpu_lock_free": true,
+  "live_service_changed": false,
+  "native_exit_code": 0,
+  "torch_allocated_bytes_after_workload": {
+    "parent-a3": 70401766400,
+    "candidate2-c1": 70401766400,
+    "candidate2-c2": 70401766400,
+    "parent-a4": 70401766400
+  }
+}

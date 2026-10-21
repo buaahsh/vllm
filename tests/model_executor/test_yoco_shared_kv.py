@@ -468,15 +468,16 @@ def test_shared_kv_export_pins_checkpoint_and_rejects_changed_weights(tmp_path, 
 @pytest.mark.parametrize("window", [0, 8192])
 @torch.inference_mode()
 def test_shared_kv_graph_replay_updates_prefix_pages_and_sampling(
-    probabilistic, window
+    probabilistic, window, monkeypatch
 ):
     """A captured backbone + Markov sampler must follow new inputs and inert padding."""
-    from types import SimpleNamespace
+    from types import MethodType, SimpleNamespace
 
     from vllm.v1.worker.gpu.spec_decode.dspark.shared_kv import (
         SharedKVSpeculator,
         prepare_shared_kv_inputs,
     )
+    from vllm.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
 
     torch.manual_seed(17)
     device, dtype = torch.device("cuda"), torch.bfloat16
@@ -588,6 +589,19 @@ def test_shared_kv_graph_replay_updates_prefix_pages_and_sampling(
         expected = spec.draft_tokens.clone()
         confidence = spec.draft_token_confidence_probs.clone()
         logits = spec.draft_logits.clone() if probabilistic else None
+        with monkeypatch.context() as reference:
+            reference.setattr(
+                spec,
+                "_sample_markov_logits",
+                MethodType(DSparkSpeculator._sample_markov_logits, spec),
+            )
+            spec._run_shared_kv(4, cache, spec._prefix_block_table, 512)
+        torch.testing.assert_close(spec.draft_tokens[:n], expected[:n], rtol=0, atol=0)
+        torch.testing.assert_close(
+            spec.draft_token_confidence_probs[:n], confidence[:n], rtol=0, atol=0
+        )
+        if spec.draft_logits is not None:
+            torch.testing.assert_close(spec.draft_logits, logits, rtol=0, atol=0)
         if spec.draft_logits is not None:
             spec.draft_logits.fill_(123)
         spec.draft_tokens.fill_(-1)
@@ -697,3 +711,50 @@ def test_swa8192_reads_exact_window_and_replays_changed_pages(physical_layout, p
         torch.testing.assert_close(
             captured.float(), reference(q), atol=0.006, rtol=0.03
         )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA Markov sampling")
+@pytest.mark.parametrize("consumer", ["estimator", "watermark"])
+@torch.inference_mode()
+def test_shared_kv_markov_preserves_full_logits_for_consumers(consumer):
+    """Consumers of dense logits must receive the original FP32 Markov sum."""
+    from types import SimpleNamespace
+
+    from vllm.v1.worker.gpu.spec_decode.dspark.shared_kv import SharedKVSpeculator
+
+    spec = SharedKVSpeculator.__new__(SharedKVSpeculator)
+    base = torch.tensor([[0.123456, 1.5, -2.0, 3.25]], device="cuda")
+    bias = torch.tensor(
+        [[0.1001, -0.2002, 1.5, 0.3]], device="cuda", dtype=torch.bfloat16
+    )
+    expected = base + bias.float()
+    observed = []
+    spec.model = SimpleNamespace(markov_bias=lambda embed: bias.float())
+    spec._d2t_scatter_index = None
+    spec._step_cols = torch.zeros(1, device="cuda", dtype=torch.int32)
+    spec.draft_logits = torch.zeros(1, 1, 4, device="cuda")
+    spec.draft_token_confidence_probs = torch.zeros(1, 1, device="cuda")
+    spec.temperature = torch.ones(1, device="cuda")
+    spec.seeds = torch.tensor([17], device="cuda", dtype=torch.int64)
+    spec.use_fp64_gumbel = False
+
+    def consume(logits, *args):
+        observed.append(logits.clone())
+        return args[0]
+
+    spec.acceptance_estimator = (
+        SimpleNamespace(predict=consume) if consumer == "estimator" else None
+    )
+    spec.draft_watermarker = (
+        SimpleNamespace(sample=consume) if consumer == "watermark" else None
+    )
+    spec._sample_markov_logits(
+        base,
+        torch.empty(0, device="cuda"),
+        torch.zeros(1, device="cuda", dtype=torch.int32),
+        torch.tensor([5], device="cuda", dtype=torch.int64),
+        0,
+    )
+    assert len(observed) == 1
+    torch.testing.assert_close(observed[0], expected, rtol=0, atol=0)
+    torch.testing.assert_close(spec.draft_logits[:, 0], expected, rtol=0, atol=0)

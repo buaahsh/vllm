@@ -1,0 +1,17 @@
+{
+  "parent_commit": "7b525571d0af65f89d72970c9a3462fac1f5c990",
+  "files": {
+    "vllm/v1/worker/gpu/sample/gumbel_bias.py": "53696d9730a6801c69a01e0eada0407f9b2d44f0155f8ab39fe1f3b00e13a713",
+    "vllm/v1/worker/gpu/spec_decode/dspark/speculator.py": "55713891273c00752fb594b332327e6a9470aee826566e8ae10517e52ac3592b",
+    "vllm/v1/worker/gpu/spec_decode/dspark/shared_kv.py": "baedcd20f86f25676881245801ae0d4bdb36af097b5c773879a3be2adb6e671d",
+    "tests/v1/worker/test_gpu_gumbel_sample.py": "fe8bf681d372749437ccfe3ed074749bed6eecf14990a8fc6dbe57cbbe17929f",
+    "tests/model_executor/test_yoco_shared_kv.py": "595c18ab6c28843404a60856a648e8629c6629bcef022a5d35c82de6e0eafaf1",
+    "benchmarks/kernels/benchmark_yoco_markov_sampling.py": "98a70d59344ab04c64af507d36f66f1ac73781d987e2997edf124fc8bd4c7ddd"
+  },
+  "source_manifest_sha256": "8baf75d98a41542ed344199598b2afb126029e8b9c8434e23f9a72f35e2d79e0",
+  "full_source_manifest": "/data/vllm_test/work/yoco-markov-sampling-fusion-20261021/source-manifest-candidate2.json",
+  "runtime_support_manifest": "/data/vllm_test/work/yoco-markov-sampling-fusion-20261021/runtime-support-candidate2.json",
+  "ordinary_target_sampler_byte_identical_to_parent": true,
+  "ordinary_target_sampler_sha256": "3ec1df510bdad13e8b0a457b5b67c98affdf6e57369e56cb471246cc8f40dd34",
+  "tested_remote_source": "/home/fhb/yoco-markov-sampling-fusion-20261021/candidate2"
+}

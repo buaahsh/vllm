@@ -1,0 +1,23 @@
+{
+  "REPORT.md": "9dd7ae689cc98c523113ce376dcb593178a2e3b73d73bf007dcfb3a20b6b61e7",
+  "candidate1/REPORT.md": "661c8c82c3128ba3c02af9043d7516ce6abd7e449891f41b043f7d388b8c1022",
+  "candidate1/markov-benchmark.json": "51c5eec27ec53ce765e1b29068968109c715c5b345aa60ba2f5842f294efd678",
+  "candidate1/paired-control.json": "42601b99a9e3ac3341c4a933dfa71b2b54a30b2be742527264ac1e5d2b33e641",
+  "candidate1/source-audit.json": "4980d7a6a53a2314ac3b151d3970f034b1a7bf891f74cce310c38bba360d9693",
+  "candidate1/source-receipt.json": "3a9e06eda368fdfc31499fcf25ddbee411a7620bd6957b699f34edffc88e8d7c",
+  "candidate1/summary.csv": "bd58c28d954cedba1753266c5aee87567a4b4986dcbdcef112c8c441c48d8c06",
+  "candidate1/summary.json": "bc349be13ed2be9626c642158c1a114f8b6dc93147c5253c888e963dd882b3ff",
+  "candidate1/trials.csv": "36a03fe69248511888f1ff7876d7dc534b9a47f8efee4006dcc0c096c22c4a21",
+  "candidate1/validation.json": "74975d37416f8876a376c133413885b7a884717412193c4dfa77ef08fc58ddc3",
+  "candidate1/worker-receipts.json": "c6debb897fb685e1ceec30c079a3ee7a806a6f486fe17460b7546f2d3d4f481b",
+  "decision.json": "ec70973de63e9fe2fd7198f0f64bad31d9910b43b5aecce1816293bc60b7c7a7",
+  "environment.json": "039da0ba19ada6ce69f497e995d0ad6fc7f23c6c83fb978957d335fb416c6d91",
+  "markov-benchmark.json": "b04367d5eb46c87e679954e9f1baef8ab96bbf281458ddcd3a1121ca5e24218d",
+  "source-audit.json": "45ac4c7cf3946af52dee6a081aa7a7df7414901b20d8784c106ac0cab064520b",
+  "source-receipt.json": "a0f55a3d6aa53334e4341ed9f6aa9b3d5748075919367aad166c9c2b82037510",
+  "summary.csv": "0375f5a9f01e37c54b133fe102a67600c27045f925f569417928f069f863a4b7",
+  "summary.json": "55e3235ea766d7e1e3c923d362d200757a1e9632b38210e8cf02fe18a0d86a3b",
+  "trials.csv": "c48894c015aa8a78bdfea29b5604a766be399e1601928a9f9a6b4dc89bd1ecc6",
+  "validation.json": "d88252d5dc74d3d0e191b623a145eee129982aa5ac4129f6780c326ee947f767",
+  "worker-receipts.json": "596dcd53537fce9b51582b7d0233a73dcc87da4d87b6f6c9c4a1f00017760c90"
+}
