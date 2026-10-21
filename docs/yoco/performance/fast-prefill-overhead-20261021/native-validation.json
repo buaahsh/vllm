@@ -1,0 +1,291 @@
+{
+  "order": [
+    "native-final-dense",
+    "native-final-fast"
+  ],
+  "config_differences": {
+    "kv_sharing_fast_prefill": [
+      false,
+      true
+    ]
+  },
+  "cells": [
+    {
+      "profile": "short",
+      "concurrency": 1,
+      "dense_throughput": 329.1897564577962,
+      "dense_ttft_ms": 93.06573867797852,
+      "fast_throughput": 329.00683661575385,
+      "fast_ttft_ms": 92.68641471862793,
+      "throughput_change_pct": -0.055566687132257986,
+      "outputs_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 4,
+      "dense_throughput": 890.2054788063932,
+      "dense_ttft_ms": 94.80273723602295,
+      "fast_throughput": 884.279578833873,
+      "fast_ttft_ms": 94.24006938934326,
+      "throughput_change_pct": -0.66567776918941,
+      "outputs_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 8,
+      "dense_throughput": 1481.868394798386,
+      "dense_ttft_ms": 95.86334228515625,
+      "fast_throughput": 1467.9803347028126,
+      "fast_ttft_ms": 94.99788284301758,
+      "throughput_change_pct": -0.9371992914028571,
+      "outputs_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 1,
+      "dense_throughput": 160.13706542151579,
+      "dense_ttft_ms": 467.4065113067627,
+      "fast_throughput": 175.79230562142527,
+      "fast_ttft_ms": 393.14794540405273,
+      "throughput_change_pct": 9.776150298933906,
+      "outputs_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 4,
+      "dense_throughput": 233.39967578926579,
+      "dense_ttft_ms": 1064.6696090698242,
+      "fast_throughput": 242.22240120039666,
+      "fast_ttft_ms": 985.3637218475342,
+      "throughput_change_pct": 3.7800932590398295,
+      "outputs_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 8,
+      "dense_throughput": 261.52691769488223,
+      "dense_ttft_ms": 1864.6070957183838,
+      "fast_throughput": 269.0680323602551,
+      "fast_ttft_ms": 1771.2101936340332,
+      "throughput_change_pct": 2.883494644391016,
+      "outputs_equal": true
+    }
+  ],
+  "workers": {
+    "native-final-dense": {
+      "status": "PASS",
+      "rows": 30,
+      "worker": [
+        {
+          "backend": "mega",
+          "layers": [
+            "model.layers.0.mlp",
+            "model.layers.1.mlp",
+            "model.layers.2.mlp",
+            "model.layers.3.mlp",
+            "model.layers.4.mlp",
+            "model.layers.5.mlp",
+            "model.layers.6.mlp",
+            "model.layers.7.mlp",
+            "model.layers.8.mlp",
+            "model.layers.9.mlp",
+            "model.layers.10.mlp",
+            "model.layers.11.mlp",
+            "model.layers.12.mlp",
+            "model.layers.13.mlp",
+            "model.layers.14.mlp",
+            "model.layers.15.mlp",
+            "model.layers.16.mlp",
+            "model.layers.17.mlp",
+            "model.layers.18.mlp",
+            "model.layers.19.mlp"
+          ],
+          "mega_layers": 20,
+          "workspace_count": 1,
+          "shared_workspace_bytes": 525678464,
+          "torch": "2.13.0+cu130",
+          "deep_gemm": "2.8.2",
+          "deep_gemm_file": "/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/__init__.py",
+          "allocated": 69081431040,
+          "draft_type": "SharedKVSpeculator",
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "fast_prefill": false,
+          "aux_hidden_layers": [
+            20
+          ],
+          "draft_logits_dtype": "torch.float32",
+          "additional_config": {
+            "yoco_execution_mode": "fast",
+            "yoco_mega_moe": "fp8_group32"
+          },
+          "shared_kv_attention_fa_version": 4,
+          "dispatch": {
+            "profile": "b200-l3-fp8-tp1-k8",
+            "triton_max_tokens": 16,
+            "mega_min_tokens": 17,
+            "mega_prefill": false
+          },
+          "mega_capture_decisions": {
+            "72": true,
+            "36": true,
+            "18": true,
+            "9": false
+          },
+          "triton_max_tokens": 16,
+          "graphs": {
+            "target": {
+              "widest_mode": "FULL",
+              "widest_captured": true,
+              "captured_tokens": [
+                9,
+                18,
+                36,
+                72
+              ],
+              "replays": {
+                "1x9/9": 389,
+                "4x9/36": 297,
+                "2x9/18": 97,
+                "8x9/72": 279
+              }
+            },
+            "draft": {
+              "widest_mode": "FULL",
+              "widest_captured": true,
+              "captured_tokens": [
+                8,
+                16,
+                24,
+                32,
+                40,
+                64
+              ],
+              "replays": {
+                "4x8/32": 287,
+                "1x8/8": 459,
+                "3x8/24": 102,
+                "2x8/16": 137,
+                "8x8/64": 312,
+                "5x8/40": 62
+              }
+            }
+          },
+          "target_graph_backends": {
+            "8x9/72": "mega",
+            "4x9/36": "mega",
+            "2x9/18": "mega",
+            "1x9/9": "triton"
+          }
+        }
+      ]
+    },
+    "native-final-fast": {
+      "status": "PASS",
+      "rows": 30,
+      "worker": [
+        {
+          "backend": "mega",
+          "layers": [
+            "model.layers.0.mlp",
+            "model.layers.1.mlp",
+            "model.layers.2.mlp",
+            "model.layers.3.mlp",
+            "model.layers.4.mlp",
+            "model.layers.5.mlp",
+            "model.layers.6.mlp",
+            "model.layers.7.mlp",
+            "model.layers.8.mlp",
+            "model.layers.9.mlp",
+            "model.layers.10.mlp",
+            "model.layers.11.mlp",
+            "model.layers.12.mlp",
+            "model.layers.13.mlp",
+            "model.layers.14.mlp",
+            "model.layers.15.mlp",
+            "model.layers.16.mlp",
+            "model.layers.17.mlp",
+            "model.layers.18.mlp",
+            "model.layers.19.mlp"
+          ],
+          "mega_layers": 20,
+          "workspace_count": 1,
+          "shared_workspace_bytes": 525678464,
+          "torch": "2.13.0+cu130",
+          "deep_gemm": "2.8.2",
+          "deep_gemm_file": "/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/__init__.py",
+          "allocated": 69099305984,
+          "draft_type": "SharedKVSpeculator",
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "fast_prefill": true,
+          "aux_hidden_layers": [
+            20
+          ],
+          "draft_logits_dtype": "torch.float32",
+          "additional_config": {
+            "yoco_execution_mode": "fast",
+            "yoco_mega_moe": "fp8_group32"
+          },
+          "shared_kv_attention_fa_version": 4,
+          "dispatch": {
+            "profile": "b200-l3-fp8-tp1-k8",
+            "triton_max_tokens": 16,
+            "mega_min_tokens": 17,
+            "mega_prefill": false
+          },
+          "mega_capture_decisions": {
+            "72": true,
+            "36": true,
+            "18": true,
+            "9": false
+          },
+          "triton_max_tokens": 16,
+          "graphs": {
+            "target": {
+              "widest_mode": "FULL",
+              "widest_captured": true,
+              "captured_tokens": [
+                9,
+                18,
+                36,
+                72
+              ],
+              "replays": {
+                "1x9/9": 389,
+                "4x9/36": 297,
+                "2x9/18": 97,
+                "8x9/72": 279
+              }
+            },
+            "draft": {
+              "widest_mode": "FULL",
+              "widest_captured": true,
+              "captured_tokens": [
+                8,
+                16,
+                24,
+                32,
+                40,
+                64
+              ],
+              "replays": {
+                "4x8/32": 287,
+                "1x8/8": 399,
+                "3x8/24": 102,
+                "2x8/16": 137,
+                "8x8/64": 312,
+                "5x8/40": 62
+              }
+            }
+          },
+          "target_graph_backends": {
+            "8x9/72": "mega",
+            "4x9/36": "mega",
+            "2x9/18": "mega",
+            "1x9/9": "triton"
+          }
+        }
+      ]
+    }
+  },
+  "first_token_and_teacher_exact": true
+}

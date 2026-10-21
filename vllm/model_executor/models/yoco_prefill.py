@@ -65,16 +65,16 @@ def _fast_prefill_forward(
             fwd_ctx.dp_metadata.num_tokens_across_dp_cpu,
         )
 
-    if (
-        not global_fast_prefill
-        and fwd_ctx.cudagraph_runtime_mode == CUDAGraphMode.NONE
-        and not model.full_model_warmed
-    ):
-        model(
-            input_ids=input_ids,
-            positions=positions,
-            inputs_embeds=inputs_embeds,
-        )
+    if not global_fast_prefill and fwd_ctx.cudagraph_runtime_mode == CUDAGraphMode.NONE:
+        if model.full_model_warmed:
+            # Ordinary eager tails have no compact rows. Keep their original
+            # full-model execution instead of gathering/scattering every row.
+            return model(
+                input_ids=input_ids,
+                positions=positions,
+                inputs_embeds=inputs_embeds,
+            )
+        model(input_ids=input_ids, positions=positions, inputs_embeds=inputs_embeds)
         model.full_model_warmed = True
 
     if not global_fast_prefill and fwd_ctx.cudagraph_runtime_mode == CUDAGraphMode.FULL:
@@ -101,7 +101,12 @@ def _fast_prefill_forward(
     # Its sampled token is ignored by the proxy, so use the self-decoder
     # state as a disposable logits input and avoid all ten cross layers.
     if kv_only_prefill:
-        return model.norm(hidden_states)
+        output = model.norm(hidden_states)
+        if getattr(model, "aux_hidden_state_layers", ()):
+            # Incomplete Shared-KV prompt chunks cannot emit tokens, and the
+            # runner skips drafting. This placeholder is never a final feature.
+            return output, [output]
+        return output
 
     if logits_indices_padded is None:
         logits_indices_padded = torch.arange(
@@ -110,8 +115,7 @@ def _fast_prefill_forward(
             device=positions.device,
         )
 
-    # Clone the self-decoder output before it is potentially freed by the
-    # piecewise cudagraph machinery when multiple compile units are used.
+    # Clone the self-decoder output across independently compiled blocks.
     out_hidden = hidden_states.clone()
 
     # Feed the cross block through static buffers — vLLM runs with

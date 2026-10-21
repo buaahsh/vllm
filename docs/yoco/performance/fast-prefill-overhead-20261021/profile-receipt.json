@@ -1,0 +1,158 @@
+{
+  "oldfast": {
+    "0": [
+      {
+        "name": "yoco_probe/self",
+        "count": 1,
+        "cpu_total_us": 101954.861,
+        "self_cpu_us": 4455.526999999973,
+        "device_total_us": 8445.208999999883,
+        "self_device_us": 0.0
+      },
+      {
+        "name": "vllm::moe_forward_shared",
+        "count": 40,
+        "cpu_total_us": 61492.741000000016,
+        "self_cpu_us": 39149.81000000004,
+        "device_total_us": 6648.478000000017,
+        "self_device_us": 5536.130999999996
+      },
+      {
+        "name": "yoco_probe/gather",
+        "count": 1,
+        "cpu_total_us": 121.81100000000151,
+        "self_cpu_us": 107.47400000001653,
+        "device_total_us": 0,
+        "self_device_us": 0
+      },
+      {
+        "name": "yoco_probe/cross",
+        "count": 1,
+        "cpu_total_us": 30634.658999999985,
+        "self_cpu_us": 1050.7149999999529,
+        "device_total_us": 1396.133999999889,
+        "self_device_us": 0.0
+      },
+      {
+        "name": "yoco_probe/final_norm",
+        "count": 1,
+        "cpu_total_us": 109.50500000000466,
+        "self_cpu_us": 36.91400000001886,
+        "device_total_us": 2.687999999994645,
+        "self_device_us": 0.0
+      },
+      {
+        "name": "cudaGraphLaunch",
+        "count": 1,
+        "cpu_total_us": 1234.758999999991,
+        "self_cpu_us": 1234.758999999991,
+        "device_total_us": 0,
+        "self_device_us": 0
+      }
+    ],
+    "8193": [
+      {
+        "name": "yoco_probe/self",
+        "count": 5,
+        "cpu_total_us": 486429.14200000005,
+        "self_cpu_us": 12541.08399999894,
+        "device_total_us": 95716.9970000024,
+        "self_device_us": 0.0
+      },
+      {
+        "name": "vllm::moe_forward_shared",
+        "count": 200,
+        "cpu_total_us": 296404.9039999994,
+        "self_cpu_us": 188504.0110000071,
+        "device_total_us": 58536.945000000254,
+        "self_device_us": 49525.40099999978
+      },
+      {
+        "name": "yoco_probe/gather",
+        "count": 5,
+        "cpu_total_us": 541.359000000084,
+        "self_cpu_us": 485.23300000012387,
+        "device_total_us": 0,
+        "self_device_us": 0
+      },
+      {
+        "name": "yoco_probe/cross",
+        "count": 5,
+        "cpu_total_us": 152401.35500000004,
+        "self_cpu_us": 5030.000000000757,
+        "device_total_us": 7302.5649999994785,
+        "self_device_us": 0.0
+      },
+      {
+        "name": "yoco_probe/final_norm",
+        "count": 5,
+        "cpu_total_us": 540.4180000000051,
+        "self_cpu_us": 196.37999999997555,
+        "device_total_us": 42.175999999948544,
+        "self_device_us": 0.0
+      },
+      {
+        "name": "cudaGraphLaunch",
+        "count": 5,
+        "cpu_total_us": 2865.225999999995,
+        "self_cpu_us": 2865.225999999995,
+        "device_total_us": 0,
+        "self_device_us": 0
+      }
+    ]
+  },
+  "newfast": {
+    "0": [
+      {
+        "name": "vllm::moe_forward_shared",
+        "count": 40,
+        "cpu_total_us": 59458.81100000001,
+        "self_cpu_us": 37825.30899999983,
+        "device_total_us": 7989.099999999968,
+        "self_device_us": 6853.685999999938
+      },
+      {
+        "name": "cudaGraphLaunch",
+        "count": 1,
+        "cpu_total_us": 636.6509999999835,
+        "self_cpu_us": 636.6509999999835,
+        "device_total_us": 0,
+        "self_device_us": 0
+      }
+    ],
+    "8193": [
+      {
+        "name": "yoco_probe/self",
+        "count": 4,
+        "cpu_total_us": 392776.43399999995,
+        "self_cpu_us": 10544.27999999981,
+        "device_total_us": 86795.65099999867,
+        "self_device_us": 0.0
+      },
+      {
+        "name": "vllm::moe_forward_shared",
+        "count": 160,
+        "cpu_total_us": 239705.17399999982,
+        "self_cpu_us": 150726.94200000315,
+        "device_total_us": 57219.95099999921,
+        "self_device_us": 49238.31799999968
+      },
+      {
+        "name": "yoco_probe/final_norm",
+        "count": 4,
+        "cpu_total_us": 488.73199999993085,
+        "self_cpu_us": 147.8389999999199,
+        "device_total_us": 37.72700000004261,
+        "self_device_us": 0.0
+      },
+      {
+        "name": "cudaGraphLaunch",
+        "count": 1,
+        "cpu_total_us": 670.4719999999506,
+        "self_cpu_us": 670.4719999999506,
+        "device_total_us": 0,
+        "self_device_us": 0
+      }
+    ]
+  }
+}

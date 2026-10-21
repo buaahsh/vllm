@@ -17,13 +17,13 @@ full-target comparison. Existing MoE YAML dispatch settings remain available.
 
 ## Hidden states for K8
 
-Fast prefill runs the self decoder on all new tokens and writes the complete
+Compact fast prefill runs the self decoder on all new tokens and writes the complete
 shared KV. It gathers selected rows into the cross decoder's stable buffers.
 The target now also returns the final **raw residual before final normalization**
 in BF16 for Shared-KV drafting. For the current target, this stream is h20.
 
 The returned auxiliary tensor retains the full token-row indexing expected by
-the speculator. Only selected logits rows contain final-layer features; skipped
+the speculator. On the compact path, only selected logits rows contain final-layer features; skipped
 prompt rows must not be used as final-layer features. Shared-KV reads
 `query_end - num_rejected - 1`, which is among the retained rows, including in
 mixed prefill/verification batches and partial rejection.
@@ -38,6 +38,15 @@ Uniform FULL decode reuses the ordinary target forward and its existing auxiliar
 output buffers. No additional target/draft graph manager or workload-dependent
 backend threshold is introduced. The validation profile with max-seqs=8 and K8
 retains target `[9,18,36,72]` and draft `[8,16,24,32,40,64]` FULL graph sizes.
+
+For Shared-KV, batches consisting entirely of unfinished prompt chunks produce
+the complete KV and skip unused cross decoding and draft proposals. Prompt
+logprobs retain complete-row execution. In the measured `b200-l3-fp8-tp1-k8`
+auto profile, batches that need output use the ordinary full target, including
+its raw h20 output. This avoids split-block overhead during host-bound prefill;
+manual and unprofiled configurations retain compact cross execution. Eager tails
+without compact metadata also use the ordinary full target. See the
+[overhead fix and measurements](fast-prefill-overhead-20261021/REPORT.md).
 
 ## P/D behavior
 

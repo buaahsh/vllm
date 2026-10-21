@@ -201,6 +201,14 @@ class ModelState(ABC):
             draft_lookahead=draft_lookahead,
         )
 
+    def should_skip_speculation(self, input_batch: InputBatch) -> bool:
+        """Whether this step cannot emit tokens or consume draft proposals."""
+        return False
+
+    def requires_full_prefill(self, input_batch: InputBatch) -> bool:
+        """Whether the model needs ordinary full-row prefill for this step."""
+        return False
+
     @abstractmethod
     def prepare_inputs(
         self, input_batch: InputBatch, req_states: RequestState

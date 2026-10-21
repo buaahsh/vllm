@@ -1490,6 +1490,11 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 else None
             ),
         )
+        if (
+            input_batch.fast_prefill is not None
+            and self.model_state.requires_full_prefill(input_batch)
+        ):
+            input_batch.fast_prefill = None
         input_batch = pcp.maybe_partition_pcp_batch(
             self.pcp_manager,
             input_batch,
@@ -2075,6 +2080,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             return ModelRunnerOutput.with_ec_conn_output(output, ec_connector_output)
 
         # Last rank: sample tokens
+        skip_speculation = self.model_state.should_skip_speculation(input_batch)
         draft_hidden_states = hidden_states
         assert draft_hidden_states is not None
         hidden_states, input_batch = pcp.maybe_restore_pcp_for_sampling(
@@ -2161,7 +2167,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             input_batch.query_start_loc,
         )
 
-        if self.speculator is not None:
+        if self.speculator is not None and not skip_speculation:
             assert self.sampler is not None
             if isinstance(self.speculator, DraftModelSpeculator):
                 self.speculator.observe_verification(
@@ -2201,6 +2207,9 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 self.adaptive_verification.record_confidences(
                     self.speculator.draft_token_confidence_probs, input_batch
                 )
+        elif self.speculator is not None:
+            # These proposals cannot be scheduled before the prompt finishes.
+            self.req_states.draft_tokens[input_batch.idx_mapping] = 0
 
         if self.num_speculative_steps > 0:
             # Spec-decode and diffusion LLMs both use draft tokens but the latter does

@@ -4,6 +4,7 @@
 import contextlib
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import torch
 
@@ -37,8 +38,97 @@ def test_yoco_v2_producer_skips_cross_layers_on_real_and_dummy_ranks(role):
     expected = {"kv_only_prefill": True} if role == "kv_producer" else {}
     assert state.prepare_inputs(None, None) == expected
     assert state.prepare_dummy_inputs(1, 16) == expected
+    assert state.should_skip_speculation(None) == (role == "kv_producer")
     support, _ = state.get_additional_cg_support()
     assert (support == AttentionCGSupport.NEVER) == (role == "kv_producer")
+
+
+@pytest.mark.parametrize(
+    "computed,scheduled,prefilling,compact,shared,expected",
+    [
+        ([0, 2048], [2048, 2048], [True, True], True, True, True),
+        ([6144, 8192], [2048, 1], [True, True], True, True, False),
+        ([0, 8193], [2048, 9], [True, False], True, True, False),
+        ([0, 2048], [2048, 2048], [True, True], False, True, False),
+        ([0, 2048], [2048, 2048], [True, True], True, False, False),
+    ],
+)
+def test_yoco_skips_only_unused_intermediate_shared_kv_chunks(
+    computed, scheduled, prefilling, compact, shared, expected
+):
+    """Final, mixed decode and full-row logprob batches still require h20/drafting."""
+    from vllm.v1.worker.gpu.model_states.yoco import YOCOModelState
+
+    state = YOCOModelState.__new__(YOCOModelState)
+    state.vllm_config = SimpleNamespace(
+        cache_config=SimpleNamespace(kv_sharing_fast_prefill=True),
+        kv_transfer_config=None,
+        model_config=SimpleNamespace(hf_text_config=SimpleNamespace(model_type="yoco")),
+        speculative_config=SimpleNamespace(
+            method="dspark",
+            draft_model_config=SimpleNamespace(
+                hf_config=SimpleNamespace(
+                    shared_kv_config={"block": 8} if shared else None
+                )
+            ),
+        ),
+    )
+    state.rope_state = None
+    state.supports_mm_inputs = False
+    state.prompt_embeds_state = None
+    batch = SimpleNamespace(
+        fast_prefill=object() if compact else None,
+        has_prefill=any(prefilling),
+        num_computed_prefill_tokens_np=np.array(computed),
+        num_scheduled_tokens=np.array(scheduled),
+        prefill_len_np=np.array([8193, 8193]),
+        is_prefilling_np=np.array(prefilling),
+    )
+    assert state.should_skip_speculation(batch) == expected
+    assert state.prepare_inputs(batch, None) == (
+        {"kv_only_prefill": True} if expected else {}
+    )
+    state.full_prefill_on_output = True
+    assert state.requires_full_prefill(batch) == (not expected)
+
+
+@pytest.mark.parametrize(
+    "profile,shared,expected",
+    [
+        ("b200-l3-fp8-tp1-k8", True, True),
+        ("manual", True, False),
+        (None, True, False),
+        ("b200-l3-fp8-tp1-k8", False, False),
+    ],
+)
+def test_full_prefill_output_policy_uses_only_the_measured_shared_kv_profile(
+    profile, shared, expected
+):
+    from vllm.v1.worker.gpu.model_states.yoco import YOCOModelState
+
+    state = YOCOModelState.__new__(YOCOModelState)
+    state.vllm_config = SimpleNamespace(
+        model_config=SimpleNamespace(hf_text_config=SimpleNamespace(model_type="yoco")),
+        speculative_config=SimpleNamespace(
+            method="dspark",
+            draft_model_config=SimpleNamespace(
+                hf_config=SimpleNamespace(
+                    shared_kv_config={"block": 8} if shared else None
+                )
+            ),
+        ),
+    )
+    routed = SimpleNamespace(_yoco_moe_dispatch=SimpleNamespace(profile=profile))
+    state.model = SimpleNamespace(
+        model=SimpleNamespace(
+            decoder_layers=[
+                SimpleNamespace(
+                    mlp=SimpleNamespace(experts=SimpleNamespace(routed_experts=routed))
+                )
+            ]
+        )
+    )
+    assert state.full_prefill_on_output == expected
 
 
 def test_qsa_circular_group_uses_custom_slot_mapping(monkeypatch):

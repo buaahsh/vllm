@@ -1,0 +1,19 @@
+{
+  "parent": "4fd4c9b777c6fa99398b2037339db85bd27595f5",
+  "branch": "fhb-dev-aligndeepinfer-startpoint",
+  "files": {
+    "tests/model_executor/test_yoco_prefill.py": "12358e5a10df886f9d49f44a43a25dc4a0f3c6b8e1c185836f72cba4ce9b3a10",
+    "tests/v1/worker/test_gpu_model_runner_v2.py": "1e426e095ec61f5c5349782f8c1afd242f92d5b4b0bee3485963e5743313431c",
+    "tools/yoco_alignment/benchmark_v2_pd.py": "8e6d8a1530b00d032dc241abc65f85512b9a44068df41df21d3cbc3d6b21aed7",
+    "vllm/model_executor/models/yoco_prefill.py": "2e7a4f734a41b2dcff1b96c0d1b8ff01b79b8ae7f7fd7e84fc420d72f39bea69",
+    "vllm/v1/worker/gpu/model_runner.py": "cbcb648458c8375e65be50566a6bad46ace65eb247b6618ab2e783dd6dad9f4c",
+    "vllm/v1/worker/gpu/model_states/interface.py": "a02c1c8f8531c8fa9778d9cc3e407155b2a9fbeb5c3006b0baa72bd37e200c7b",
+    "vllm/v1/worker/gpu/model_states/yoco.py": "85b1b2f6d27b3fdeb819f894b76df2978f27e46e6636abd67d8fb4071eb00925"
+  },
+  "benchmark_tools": {
+    "probe.py": "d1d9d867c4947a2a9971887a3ae134f365d4ab63d4d3aa8029599e1ef245d43c",
+    "paired.py": "288cd9be32d20af853fe5abd7fb619e6f92f2c18ae78614a449f85b2a058cd17",
+    "backend_probe.py": "0f8275c063e10b42e84f819e4a113ba181b0ff18c79b427220af6f7137479337",
+    "run-paired.sh": "729f64a32011eeff11a76999b174789c69874d224e0f30e8f7289e9093154e16"
+  }
+}

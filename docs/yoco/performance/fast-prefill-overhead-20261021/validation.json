@@ -1,0 +1,102 @@
+{
+  "status": "PASS",
+  "b200_units": {
+    "prefill_and_shared_kv": 79,
+    "v2_runner_attention_sampler_rejection": 74,
+    "skips": 0
+  },
+  "bf16_k8_smoke": {
+    "worker": [
+      {
+        "runner": "vllm.v1.worker.gpu.model_runner",
+        "sampler": "YocoBf16GreedySampler",
+        "draft": "SharedKVSpeculator",
+        "fast": true,
+        "aux": [
+          20
+        ],
+        "full_prefill_on_output": true,
+        "draft_logits_dtype": "torch.float32"
+      }
+    ],
+    "cases": [
+      {
+        "length": 26,
+        "output_ids": [
+          16,
+          13,
+          220,
+          3070,
+          16236,
+          2685,
+          279,
+          39730,
+          66475,
+          576,
+          1196,
+          6801,
+          311,
+          1414,
+          279,
+          1985
+        ]
+      },
+      {
+        "length": 8192,
+        "output_ids": [
+          154842,
+          1249,
+          1477,
+          279,
+          1985,
+          315,
+          3070,
+          99419,
+          24692,
+          220,
+          99619,
+          96403,
+          582,
+          646,
+          990,
+          279
+        ]
+      }
+    ],
+    "status": "PASS"
+  },
+  "pod": {
+    "pod": "living-cobra-b200g4-dev-f5def941-master-0",
+    "uid": "9a026fd8-e732-4fcb-b855-85ea6a6358ed",
+    "node": "slc01-cl02-hgx-0347",
+    "containers": [
+      {
+        "name": "master",
+        "ready": true,
+        "restartCount": 0
+      }
+    ]
+  },
+  "resource_receipt": "2026-10-21T14:12:22Z\n6, GPU-ef7d6ee6-0fce-4e0b-b14c-87bd8a36c5fe, 0 MiB, 0 %\nlock_check_exit=0\n      7 bash             204429\n",
+  "source_audit": {
+    "status": "PASS",
+    "source_files": 8003,
+    "source_mismatches": [],
+    "runtime_support_files": 1996,
+    "runtime_mismatches": [],
+    "source_manifest_sha256": "99dca5b988a09a288606090ae4be891b20534e789846996bb4bf149c1a6157c0"
+  },
+  "nixl_mega_initialization_retry": {
+    "initial_result": "UCX configuration parser error before model execution; NIXL_ERR_BACKEND",
+    "retry_result": "KV_BYTES_PASS_NUMERICS_DIFFER; all transferred bytes equal",
+    "environment_change": "Process-local UCX library aliases and UCX_MODULE_DIR; no shared library mutations",
+    "cpu_only_import_control_reproduced_initial_error": false,
+    "aliases": {
+      "/home/fhb/yoco-fast-prefill-overhead-20261021/ucx-unified/ucx": "/home/fhb/yoco-v2-fast-prefill-20261021/transport-deps/nixl_cu13.libs/ucx",
+      "/home/fhb/yoco-fast-prefill-overhead-20261021/ucx-unified/libuct.so.0": "/home/fhb/yoco-v2-fast-prefill-20261021/transport-deps/nixl_cu13.libs/libuct-94d3c196.so.0.0.0",
+      "/home/fhb/yoco-fast-prefill-overhead-20261021/ucx-unified/libucm.so.0": "/home/fhb/yoco-v2-fast-prefill-20261021/transport-deps/nixl_cu13.libs/libucm-3ea3de7b.so.0.0.0",
+      "/home/fhb/yoco-fast-prefill-overhead-20261021/ucx-unified/libucs.so.0": "/home/fhb/yoco-v2-fast-prefill-20261021/transport-deps/nixl_cu13.libs/libucs-c7f4ca70.so.0.0.0",
+      "/home/fhb/yoco-fast-prefill-overhead-20261021/ucx-unified/libucp.so.0": "/home/fhb/yoco-v2-fast-prefill-20261021/transport-deps/nixl_cu13.libs/libucp-72ad654d.so.0.0.0"
+    }
+  }
+}

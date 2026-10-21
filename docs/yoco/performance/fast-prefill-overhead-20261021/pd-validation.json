@@ -1,0 +1,804 @@
+{
+  "pd-final-align-mooncakeconnector": {
+    "status": "PASS",
+    "workers": {
+      "d": {
+        "status": "ready",
+        "worker": {
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "engine_id": "yoco-v2-mooncakeconnector-d",
+          "model_state": "YOCOModelState",
+          "force_eager": false,
+          "fast_prefill": true,
+          "full_prefill_on_output": false,
+          "aux_layers": [
+            20
+          ],
+          "registered_layers": [
+            "model.layers.0.self_attn.attn",
+            "model.layers.20.self_attn.attn",
+            "model.layers.40.self_attn.attn",
+            "model.layers.1.self_attn.attn",
+            "model.layers.21.self_attn.attn",
+            "model.layers.41.self_attn.attn",
+            "model.layers.2.self_attn.attn",
+            "model.layers.22.self_attn.attn",
+            "model.layers.42.self_attn.attn",
+            "model.layers.3.self_attn.attn",
+            "model.layers.23.self_attn.attn",
+            "model.layers.43.self_attn.attn",
+            "model.layers.4.self_attn.attn",
+            "model.layers.24.self_attn.attn",
+            "model.layers.44.self_attn.attn",
+            "model.layers.5.self_attn.attn",
+            "model.layers.25.self_attn.attn",
+            "model.layers.45.self_attn.attn",
+            "model.layers.6.self_attn.attn",
+            "model.layers.26.self_attn.attn",
+            "model.layers.46.self_attn.attn",
+            "model.layers.7.self_attn.attn",
+            "model.layers.27.self_attn.attn",
+            "model.layers.47.self_attn.attn",
+            "model.layers.8.self_attn.attn",
+            "model.layers.28.self_attn.attn",
+            "model.layers.48.self_attn.attn",
+            "model.layers.9.self_attn.attn",
+            "model.layers.29.self_attn.attn",
+            "model.layers.49.self_attn.attn",
+            "model.layers.10.self_attn.attn"
+          ],
+          "connector": "MooncakeConnector",
+          "compatibility_hash": null,
+          "cg_mode": "FULL_DECODE_ONLY",
+          "backend_name": null,
+          "cache_dtype": "bfloat16",
+          "cache_layout": "KVCacheLayout.LBHNC"
+        },
+        "config": {
+          "model": "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf",
+          "dtype": "bfloat16",
+          "kv_cache_dtype": "bfloat16",
+          "quantization": null,
+          "attention_config": {
+            "backend": "FLASH_ATTN",
+            "flash_attn_version": 4
+          },
+          "max_model_len": 4096,
+          "block_size": 16,
+          "max_num_seqs": 2,
+          "max_num_batched_tokens": 2048,
+          "gpu_memory_utilization": 0.35,
+          "kv_cache_memory_bytes": 536870912,
+          "enable_prefix_caching": false,
+          "kv_sharing_fast_prefill": true,
+          "async_scheduling": false,
+          "disable_log_stats": false,
+          "additional_config": {
+            "yoco_execution_mode": "align",
+            "yoco_mega_moe": "off"
+          },
+          "worker_extension_cls": "tools.yoco_alignment.benchmark_v2_pd.PDValidationWorker",
+          "compilation_config": {
+            "cudagraph_mode": "FULL_DECODE_ONLY",
+            "cudagraph_capture_sizes": [
+              1,
+              2,
+              4,
+              8,
+              9,
+              16,
+              18
+            ],
+            "max_cudagraph_capture_size": 18
+          },
+          "kv_transfer_config": {
+            "kv_connector": "MooncakeConnector",
+            "kv_role": "kv_consumer",
+            "engine_id": "yoco-v2-mooncakeconnector-d",
+            "kv_connector_extra_config": {
+              "mooncake_protocol": "rdma",
+              "num_workers": 2,
+              "backends": [
+                "UCX"
+              ],
+              "kv_lease_duration": 120
+            }
+          },
+          "speculative_config": {
+            "model": "/mnt/pvc/lidong1/opd-fast-rollout-20261016/draft-parent-30000",
+            "method": "dspark",
+            "num_speculative_tokens": 8,
+            "draft_sample_method": "probabilistic",
+            "rejection_sample_method": "standard"
+          }
+        }
+      },
+      "p": {
+        "status": "ready",
+        "worker": {
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "engine_id": "yoco-v2-mooncakeconnector-p",
+          "model_state": "YOCOModelState",
+          "force_eager": true,
+          "fast_prefill": true,
+          "full_prefill_on_output": false,
+          "aux_layers": [],
+          "registered_layers": [
+            "model.layers.0.self_attn.attn",
+            "model.layers.20.self_attn.attn",
+            "model.layers.40.self_attn.attn",
+            "model.layers.1.self_attn.attn",
+            "model.layers.21.self_attn.attn",
+            "model.layers.41.self_attn.attn",
+            "model.layers.2.self_attn.attn",
+            "model.layers.22.self_attn.attn",
+            "model.layers.42.self_attn.attn",
+            "model.layers.3.self_attn.attn",
+            "model.layers.23.self_attn.attn",
+            "model.layers.43.self_attn.attn",
+            "model.layers.4.self_attn.attn",
+            "model.layers.24.self_attn.attn",
+            "model.layers.44.self_attn.attn",
+            "model.layers.5.self_attn.attn",
+            "model.layers.25.self_attn.attn",
+            "model.layers.45.self_attn.attn",
+            "model.layers.6.self_attn.attn",
+            "model.layers.26.self_attn.attn",
+            "model.layers.46.self_attn.attn",
+            "model.layers.7.self_attn.attn",
+            "model.layers.27.self_attn.attn",
+            "model.layers.47.self_attn.attn",
+            "model.layers.8.self_attn.attn",
+            "model.layers.28.self_attn.attn",
+            "model.layers.48.self_attn.attn",
+            "model.layers.9.self_attn.attn",
+            "model.layers.29.self_attn.attn",
+            "model.layers.49.self_attn.attn",
+            "model.layers.10.self_attn.attn"
+          ],
+          "connector": "MooncakeConnector",
+          "compatibility_hash": null,
+          "cg_mode": "NONE",
+          "backend_name": null,
+          "cache_dtype": "bfloat16",
+          "cache_layout": "KVCacheLayout.LBHNC"
+        },
+        "config": {
+          "model": "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf",
+          "dtype": "bfloat16",
+          "kv_cache_dtype": "bfloat16",
+          "quantization": null,
+          "attention_config": {
+            "backend": "FLASH_ATTN",
+            "flash_attn_version": 4
+          },
+          "max_model_len": 4096,
+          "block_size": 16,
+          "max_num_seqs": 2,
+          "max_num_batched_tokens": 2048,
+          "gpu_memory_utilization": 0.35,
+          "kv_cache_memory_bytes": 536870912,
+          "enable_prefix_caching": false,
+          "kv_sharing_fast_prefill": true,
+          "async_scheduling": false,
+          "disable_log_stats": false,
+          "additional_config": {
+            "yoco_execution_mode": "align",
+            "yoco_mega_moe": "off"
+          },
+          "worker_extension_cls": "tools.yoco_alignment.benchmark_v2_pd.PDValidationWorker",
+          "compilation_config": {
+            "cudagraph_mode": "FULL_DECODE_ONLY",
+            "cudagraph_capture_sizes": [
+              1,
+              2,
+              4,
+              8,
+              9,
+              16,
+              18
+            ],
+            "max_cudagraph_capture_size": 18
+          },
+          "kv_transfer_config": {
+            "kv_connector": "MooncakeConnector",
+            "kv_role": "kv_producer",
+            "engine_id": "yoco-v2-mooncakeconnector-p",
+            "kv_connector_extra_config": {
+              "mooncake_protocol": "rdma",
+              "num_workers": 2,
+              "backends": [
+                "UCX"
+              ],
+              "kv_lease_duration": 120
+            }
+          }
+        }
+      }
+    },
+    "cases": [
+      {
+        "length": 17,
+        "cached_tokens": 16,
+        "kv_layers": 31,
+        "transferred_bytes_equal": true,
+        "prefix_equal_to_local": true,
+        "output_equal": true,
+        "logprobs_equal": true
+      }
+    ]
+  },
+  "pd-final-align-nixlconnector": {
+    "status": "PASS",
+    "workers": {
+      "d": {
+        "status": "ready",
+        "worker": {
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "engine_id": "yoco-v2-nixlconnector-d",
+          "model_state": "YOCOModelState",
+          "force_eager": false,
+          "fast_prefill": true,
+          "full_prefill_on_output": false,
+          "aux_layers": [
+            20
+          ],
+          "registered_layers": [],
+          "connector": "NixlPullConnector",
+          "compatibility_hash": "af76f8fdc8c71603cb3c2caeefa54aa238823df201445aaa0de06fe25399fee2",
+          "cg_mode": "FULL_DECODE_ONLY",
+          "backend_name": "FLASH_ATTN",
+          "cache_dtype": "bfloat16",
+          "cache_layout": "KVCacheLayout.LBHNC"
+        },
+        "config": {
+          "model": "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf",
+          "dtype": "bfloat16",
+          "kv_cache_dtype": "bfloat16",
+          "quantization": null,
+          "attention_config": {
+            "backend": "FLASH_ATTN",
+            "flash_attn_version": 4
+          },
+          "max_model_len": 4096,
+          "block_size": 16,
+          "max_num_seqs": 2,
+          "max_num_batched_tokens": 2048,
+          "gpu_memory_utilization": 0.35,
+          "kv_cache_memory_bytes": 536870912,
+          "enable_prefix_caching": false,
+          "kv_sharing_fast_prefill": true,
+          "async_scheduling": false,
+          "disable_log_stats": false,
+          "additional_config": {
+            "yoco_execution_mode": "align",
+            "yoco_mega_moe": "off"
+          },
+          "worker_extension_cls": "tools.yoco_alignment.benchmark_v2_pd.PDValidationWorker",
+          "compilation_config": {
+            "cudagraph_mode": "FULL_DECODE_ONLY",
+            "cudagraph_capture_sizes": [
+              1,
+              2,
+              4,
+              8,
+              9,
+              16,
+              18
+            ],
+            "max_cudagraph_capture_size": 18
+          },
+          "kv_transfer_config": {
+            "kv_connector": "NixlConnector",
+            "kv_role": "kv_consumer",
+            "engine_id": "yoco-v2-nixlconnector-d",
+            "kv_connector_extra_config": {
+              "mooncake_protocol": "rdma",
+              "num_workers": 2,
+              "backends": [
+                "UCX"
+              ],
+              "kv_lease_duration": 120
+            }
+          },
+          "speculative_config": {
+            "model": "/mnt/pvc/lidong1/opd-fast-rollout-20261016/draft-parent-30000",
+            "method": "dspark",
+            "num_speculative_tokens": 8,
+            "draft_sample_method": "probabilistic",
+            "rejection_sample_method": "standard"
+          }
+        }
+      },
+      "p": {
+        "status": "ready",
+        "worker": {
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "engine_id": "yoco-v2-nixlconnector-p",
+          "model_state": "YOCOModelState",
+          "force_eager": true,
+          "fast_prefill": true,
+          "full_prefill_on_output": false,
+          "aux_layers": [],
+          "registered_layers": [],
+          "connector": "NixlPullConnector",
+          "compatibility_hash": "af76f8fdc8c71603cb3c2caeefa54aa238823df201445aaa0de06fe25399fee2",
+          "cg_mode": "NONE",
+          "backend_name": "FLASH_ATTN",
+          "cache_dtype": "bfloat16",
+          "cache_layout": "KVCacheLayout.LBHNC"
+        },
+        "config": {
+          "model": "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf",
+          "dtype": "bfloat16",
+          "kv_cache_dtype": "bfloat16",
+          "quantization": null,
+          "attention_config": {
+            "backend": "FLASH_ATTN",
+            "flash_attn_version": 4
+          },
+          "max_model_len": 4096,
+          "block_size": 16,
+          "max_num_seqs": 2,
+          "max_num_batched_tokens": 2048,
+          "gpu_memory_utilization": 0.35,
+          "kv_cache_memory_bytes": 536870912,
+          "enable_prefix_caching": false,
+          "kv_sharing_fast_prefill": true,
+          "async_scheduling": false,
+          "disable_log_stats": false,
+          "additional_config": {
+            "yoco_execution_mode": "align",
+            "yoco_mega_moe": "off"
+          },
+          "worker_extension_cls": "tools.yoco_alignment.benchmark_v2_pd.PDValidationWorker",
+          "compilation_config": {
+            "cudagraph_mode": "FULL_DECODE_ONLY",
+            "cudagraph_capture_sizes": [
+              1,
+              2,
+              4,
+              8,
+              9,
+              16,
+              18
+            ],
+            "max_cudagraph_capture_size": 18
+          },
+          "kv_transfer_config": {
+            "kv_connector": "NixlConnector",
+            "kv_role": "kv_producer",
+            "engine_id": "yoco-v2-nixlconnector-p",
+            "kv_connector_extra_config": {
+              "mooncake_protocol": "rdma",
+              "num_workers": 2,
+              "backends": [
+                "UCX"
+              ],
+              "kv_lease_duration": 120
+            }
+          }
+        }
+      }
+    },
+    "cases": [
+      {
+        "length": 17,
+        "cached_tokens": 16,
+        "kv_layers": 31,
+        "transferred_bytes_equal": true,
+        "prefix_equal_to_local": true,
+        "output_equal": true,
+        "logprobs_equal": true
+      }
+    ]
+  },
+  "pd-final-fast-mooncakeconnector": {
+    "status": "KV_BYTES_PASS_NUMERICS_DIFFER",
+    "workers": {
+      "d": {
+        "status": "ready",
+        "worker": {
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "engine_id": "yoco-v2-mooncakeconnector-d",
+          "model_state": "YOCOModelState",
+          "force_eager": false,
+          "fast_prefill": true,
+          "full_prefill_on_output": true,
+          "aux_layers": [
+            20
+          ],
+          "registered_layers": [
+            "model.layers.0.self_attn.attn",
+            "model.layers.20.self_attn.attn",
+            "model.layers.40.self_attn.attn",
+            "model.layers.1.self_attn.attn",
+            "model.layers.21.self_attn.attn",
+            "model.layers.41.self_attn.attn",
+            "model.layers.2.self_attn.attn",
+            "model.layers.22.self_attn.attn",
+            "model.layers.42.self_attn.attn",
+            "model.layers.3.self_attn.attn",
+            "model.layers.23.self_attn.attn",
+            "model.layers.43.self_attn.attn",
+            "model.layers.4.self_attn.attn",
+            "model.layers.24.self_attn.attn",
+            "model.layers.44.self_attn.attn",
+            "model.layers.5.self_attn.attn",
+            "model.layers.25.self_attn.attn",
+            "model.layers.45.self_attn.attn",
+            "model.layers.6.self_attn.attn",
+            "model.layers.26.self_attn.attn",
+            "model.layers.46.self_attn.attn",
+            "model.layers.7.self_attn.attn",
+            "model.layers.27.self_attn.attn",
+            "model.layers.47.self_attn.attn",
+            "model.layers.8.self_attn.attn",
+            "model.layers.28.self_attn.attn",
+            "model.layers.48.self_attn.attn",
+            "model.layers.9.self_attn.attn",
+            "model.layers.29.self_attn.attn",
+            "model.layers.49.self_attn.attn",
+            "model.layers.10.self_attn.attn"
+          ],
+          "connector": "MooncakeConnector",
+          "compatibility_hash": null,
+          "cg_mode": "FULL_DECODE_ONLY",
+          "backend_name": null,
+          "cache_dtype": "bfloat16",
+          "cache_layout": "KVCacheLayout.LBHNC"
+        },
+        "config": {
+          "model": "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf",
+          "dtype": "bfloat16",
+          "kv_cache_dtype": "bfloat16",
+          "quantization": "fp8_per_block",
+          "attention_config": {
+            "backend": "FLASHINFER"
+          },
+          "max_model_len": 4096,
+          "block_size": 16,
+          "max_num_seqs": 2,
+          "max_num_batched_tokens": 2048,
+          "gpu_memory_utilization": 0.35,
+          "kv_cache_memory_bytes": 536870912,
+          "enable_prefix_caching": false,
+          "kv_sharing_fast_prefill": true,
+          "async_scheduling": false,
+          "disable_log_stats": false,
+          "additional_config": {
+            "yoco_execution_mode": "fast",
+            "yoco_mega_moe": "fp8_group32"
+          },
+          "worker_extension_cls": "tools.yoco_alignment.benchmark_v2_pd.PDValidationWorker",
+          "compilation_config": {
+            "cudagraph_mode": "FULL_DECODE_ONLY",
+            "cudagraph_capture_sizes": [
+              1,
+              2,
+              4,
+              8,
+              9,
+              16,
+              18
+            ],
+            "max_cudagraph_capture_size": 18
+          },
+          "kv_transfer_config": {
+            "kv_connector": "MooncakeConnector",
+            "kv_role": "kv_consumer",
+            "engine_id": "yoco-v2-mooncakeconnector-d",
+            "kv_connector_extra_config": {
+              "mooncake_protocol": "rdma",
+              "num_workers": 2,
+              "backends": [
+                "UCX"
+              ],
+              "kv_lease_duration": 120
+            }
+          },
+          "speculative_config": {
+            "model": "/mnt/pvc/lidong1/opd-fast-rollout-20261016/draft-parent-30000",
+            "method": "dspark",
+            "num_speculative_tokens": 8,
+            "draft_sample_method": "probabilistic",
+            "rejection_sample_method": "standard"
+          }
+        }
+      },
+      "p": {
+        "status": "ready",
+        "worker": {
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "engine_id": "yoco-v2-mooncakeconnector-p",
+          "model_state": "YOCOModelState",
+          "force_eager": true,
+          "fast_prefill": true,
+          "full_prefill_on_output": false,
+          "aux_layers": [],
+          "registered_layers": [
+            "model.layers.0.self_attn.attn",
+            "model.layers.20.self_attn.attn",
+            "model.layers.40.self_attn.attn",
+            "model.layers.1.self_attn.attn",
+            "model.layers.21.self_attn.attn",
+            "model.layers.41.self_attn.attn",
+            "model.layers.2.self_attn.attn",
+            "model.layers.22.self_attn.attn",
+            "model.layers.42.self_attn.attn",
+            "model.layers.3.self_attn.attn",
+            "model.layers.23.self_attn.attn",
+            "model.layers.43.self_attn.attn",
+            "model.layers.4.self_attn.attn",
+            "model.layers.24.self_attn.attn",
+            "model.layers.44.self_attn.attn",
+            "model.layers.5.self_attn.attn",
+            "model.layers.25.self_attn.attn",
+            "model.layers.45.self_attn.attn",
+            "model.layers.6.self_attn.attn",
+            "model.layers.26.self_attn.attn",
+            "model.layers.46.self_attn.attn",
+            "model.layers.7.self_attn.attn",
+            "model.layers.27.self_attn.attn",
+            "model.layers.47.self_attn.attn",
+            "model.layers.8.self_attn.attn",
+            "model.layers.28.self_attn.attn",
+            "model.layers.48.self_attn.attn",
+            "model.layers.9.self_attn.attn",
+            "model.layers.29.self_attn.attn",
+            "model.layers.49.self_attn.attn",
+            "model.layers.10.self_attn.attn"
+          ],
+          "connector": "MooncakeConnector",
+          "compatibility_hash": null,
+          "cg_mode": "NONE",
+          "backend_name": null,
+          "cache_dtype": "bfloat16",
+          "cache_layout": "KVCacheLayout.LBHNC"
+        },
+        "config": {
+          "model": "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf",
+          "dtype": "bfloat16",
+          "kv_cache_dtype": "bfloat16",
+          "quantization": "fp8_per_block",
+          "attention_config": {
+            "backend": "FLASHINFER"
+          },
+          "max_model_len": 4096,
+          "block_size": 16,
+          "max_num_seqs": 2,
+          "max_num_batched_tokens": 2048,
+          "gpu_memory_utilization": 0.35,
+          "kv_cache_memory_bytes": 536870912,
+          "enable_prefix_caching": false,
+          "kv_sharing_fast_prefill": true,
+          "async_scheduling": false,
+          "disable_log_stats": false,
+          "additional_config": {
+            "yoco_execution_mode": "fast",
+            "yoco_mega_moe": "fp8_group32"
+          },
+          "worker_extension_cls": "tools.yoco_alignment.benchmark_v2_pd.PDValidationWorker",
+          "compilation_config": {
+            "cudagraph_mode": "FULL_DECODE_ONLY",
+            "cudagraph_capture_sizes": [
+              1,
+              2,
+              4,
+              8,
+              9,
+              16,
+              18
+            ],
+            "max_cudagraph_capture_size": 18
+          },
+          "kv_transfer_config": {
+            "kv_connector": "MooncakeConnector",
+            "kv_role": "kv_producer",
+            "engine_id": "yoco-v2-mooncakeconnector-p",
+            "kv_connector_extra_config": {
+              "mooncake_protocol": "rdma",
+              "num_workers": 2,
+              "backends": [
+                "UCX"
+              ],
+              "kv_lease_duration": 120
+            }
+          }
+        }
+      }
+    },
+    "cases": [
+      {
+        "length": 17,
+        "cached_tokens": 16,
+        "kv_layers": 31,
+        "transferred_bytes_equal": true,
+        "prefix_equal_to_local": false,
+        "output_equal": false,
+        "logprobs_equal": false
+      },
+      {
+        "length": 1025,
+        "cached_tokens": 1024,
+        "kv_layers": 31,
+        "transferred_bytes_equal": true,
+        "prefix_equal_to_local": true,
+        "output_equal": true,
+        "logprobs_equal": false
+      }
+    ]
+  },
+  "pd-final-fast-nixlconnector-r2": {
+    "status": "KV_BYTES_PASS_NUMERICS_DIFFER",
+    "workers": {
+      "d": {
+        "status": "ready",
+        "worker": {
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "engine_id": "yoco-v2-nixlconnector-d",
+          "model_state": "YOCOModelState",
+          "force_eager": false,
+          "fast_prefill": true,
+          "full_prefill_on_output": true,
+          "aux_layers": [
+            20
+          ],
+          "registered_layers": [],
+          "connector": "NixlPullConnector",
+          "compatibility_hash": "a91336d131e92af94ac520d7f1437897483468fea1f15fcb42a6695916b12216",
+          "cg_mode": "FULL_DECODE_ONLY",
+          "backend_name": "FLASHINFER",
+          "cache_dtype": "bfloat16",
+          "cache_layout": "KVCacheLayout.LBHNC"
+        },
+        "config": {
+          "model": "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf",
+          "dtype": "bfloat16",
+          "kv_cache_dtype": "bfloat16",
+          "quantization": "fp8_per_block",
+          "attention_config": {
+            "backend": "FLASHINFER"
+          },
+          "max_model_len": 4096,
+          "block_size": 16,
+          "max_num_seqs": 2,
+          "max_num_batched_tokens": 2048,
+          "gpu_memory_utilization": 0.35,
+          "kv_cache_memory_bytes": 536870912,
+          "enable_prefix_caching": false,
+          "kv_sharing_fast_prefill": true,
+          "async_scheduling": false,
+          "disable_log_stats": false,
+          "additional_config": {
+            "yoco_execution_mode": "fast",
+            "yoco_mega_moe": "fp8_group32"
+          },
+          "worker_extension_cls": "tools.yoco_alignment.benchmark_v2_pd.PDValidationWorker",
+          "compilation_config": {
+            "cudagraph_mode": "FULL_DECODE_ONLY",
+            "cudagraph_capture_sizes": [
+              1,
+              2,
+              4,
+              8,
+              9,
+              16,
+              18
+            ],
+            "max_cudagraph_capture_size": 18
+          },
+          "kv_transfer_config": {
+            "kv_connector": "NixlConnector",
+            "kv_role": "kv_consumer",
+            "engine_id": "yoco-v2-nixlconnector-d",
+            "kv_connector_extra_config": {
+              "mooncake_protocol": "rdma",
+              "num_workers": 2,
+              "backends": [
+                "UCX"
+              ],
+              "kv_lease_duration": 120
+            }
+          },
+          "speculative_config": {
+            "model": "/mnt/pvc/lidong1/opd-fast-rollout-20261016/draft-parent-30000",
+            "method": "dspark",
+            "num_speculative_tokens": 8,
+            "draft_sample_method": "probabilistic",
+            "rejection_sample_method": "standard"
+          }
+        }
+      },
+      "p": {
+        "status": "ready",
+        "worker": {
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "engine_id": "yoco-v2-nixlconnector-p",
+          "model_state": "YOCOModelState",
+          "force_eager": true,
+          "fast_prefill": true,
+          "full_prefill_on_output": false,
+          "aux_layers": [],
+          "registered_layers": [],
+          "connector": "NixlPullConnector",
+          "compatibility_hash": "a91336d131e92af94ac520d7f1437897483468fea1f15fcb42a6695916b12216",
+          "cg_mode": "NONE",
+          "backend_name": "FLASHINFER",
+          "cache_dtype": "bfloat16",
+          "cache_layout": "KVCacheLayout.LBHNC"
+        },
+        "config": {
+          "model": "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf",
+          "dtype": "bfloat16",
+          "kv_cache_dtype": "bfloat16",
+          "quantization": "fp8_per_block",
+          "attention_config": {
+            "backend": "FLASHINFER"
+          },
+          "max_model_len": 4096,
+          "block_size": 16,
+          "max_num_seqs": 2,
+          "max_num_batched_tokens": 2048,
+          "gpu_memory_utilization": 0.35,
+          "kv_cache_memory_bytes": 536870912,
+          "enable_prefix_caching": false,
+          "kv_sharing_fast_prefill": true,
+          "async_scheduling": false,
+          "disable_log_stats": false,
+          "additional_config": {
+            "yoco_execution_mode": "fast",
+            "yoco_mega_moe": "fp8_group32"
+          },
+          "worker_extension_cls": "tools.yoco_alignment.benchmark_v2_pd.PDValidationWorker",
+          "compilation_config": {
+            "cudagraph_mode": "FULL_DECODE_ONLY",
+            "cudagraph_capture_sizes": [
+              1,
+              2,
+              4,
+              8,
+              9,
+              16,
+              18
+            ],
+            "max_cudagraph_capture_size": 18
+          },
+          "kv_transfer_config": {
+            "kv_connector": "NixlConnector",
+            "kv_role": "kv_producer",
+            "engine_id": "yoco-v2-nixlconnector-p",
+            "kv_connector_extra_config": {
+              "mooncake_protocol": "rdma",
+              "num_workers": 2,
+              "backends": [
+                "UCX"
+              ],
+              "kv_lease_duration": 120
+            }
+          }
+        }
+      }
+    },
+    "cases": [
+      {
+        "length": 17,
+        "cached_tokens": 16,
+        "kv_layers": 31,
+        "transferred_bytes_equal": true,
+        "prefix_equal_to_local": false,
+        "output_equal": false,
+        "logprobs_equal": false
+      },
+      {
+        "length": 1025,
+        "cached_tokens": 1024,
+        "kv_layers": 31,
+        "transferred_bytes_equal": true,
+        "prefix_equal_to_local": true,
+        "output_equal": true,
+        "logprobs_equal": false
+      }
+    ]
+  }
+}

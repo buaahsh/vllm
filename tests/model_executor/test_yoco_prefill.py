@@ -242,7 +242,32 @@ def test_fast_cross_block_carries_residual_between_layers() -> None:
     torch.testing.assert_close(output, torch.full_like(output, 6.0))
 
 
-def test_kv_only_prefill_skips_every_cross_layer() -> None:
+def test_noncompact_eager_tail_reuses_full_model_without_split_copies():
+    from vllm.model_executor.models.yoco_prefill import _fast_prefill_forward
+
+    class FullModel(torch.nn.Module):
+        full_model_warmed = True
+
+        def self_block(self, *args):
+            raise AssertionError("noncompact tail must use the original full model")
+
+        def cross_block(self, *args):
+            raise AssertionError("noncompact tail must use the original full model")
+
+        def forward(self, input_ids, positions, inputs_embeds=None):
+            return positions[:, None].float()
+
+    model = SimpleNamespace(
+        model=FullModel(), _get_fast_prefill_indices=lambda: (None, None, None)
+    )
+    context = ForwardContext(no_compile_layers={}, attn_metadata=None, slot_mapping={})
+    with override_forward_context(context):
+        output = _fast_prefill_forward(model, None, torch.arange(5))
+    torch.testing.assert_close(output, torch.arange(5)[:, None].float())
+
+
+@pytest.mark.parametrize("auxiliary", [False, True])
+def test_kv_only_prefill_skips_every_cross_layer(auxiliary) -> None:
     class SelfBlock(torch.nn.Module):
         def forward(self, input_ids, positions, inputs_embeds=None):
             hidden_states = torch.full((positions.numel(), 8), 2.0)
@@ -260,6 +285,7 @@ def test_kv_only_prefill_skips_every_cross_layer() -> None:
             self.cross_block = CrossBlock()
             self.norm = torch.nn.Identity()
             self.full_model_warmed = True
+            self.aux_hidden_state_layers = (20,) if auxiliary else ()
 
     causal_lm = YOCOForCausalLM.__new__(YOCOForCausalLM)
     torch.nn.Module.__init__(causal_lm)
@@ -278,6 +304,9 @@ def test_kv_only_prefill_skips_every_cross_layer() -> None:
             kv_only_prefill=True,
         )
 
+    if auxiliary:
+        output, (placeholder,) = output
+        assert placeholder is output
     torch.testing.assert_close(output, torch.full((4, 8), 2.0))
 
 

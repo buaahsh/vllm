@@ -62,6 +62,9 @@ class PDValidationWorker:
             model_state=type(runner.model_state).__name__,
             force_eager=runner.model_state.force_eager,
             fast_prefill=runner.model.fast_prefill_enabled,
+            full_prefill_on_output=getattr(
+                runner.model_state, "full_prefill_on_output", False
+            ),
             aux_layers=list(runner.model.model.aux_hidden_state_layers),
             registered_layers=getattr(worker, "registered_layer_names", []),
             connector=type(backend).__name__,
@@ -84,6 +87,7 @@ def engine_process(
     draft,
     execution_mode,
     quantization,
+    mega_moe,
 ):
     import os
 
@@ -118,7 +122,7 @@ def engine_process(
             disable_log_stats=False,
             additional_config={
                 "yoco_execution_mode": execution_mode,
-                "yoco_mega_moe": "off",
+                "yoco_mega_moe": "fp8_group32" if mega_moe else "off",
             },
             worker_extension_cls=(
                 "tools.yoco_alignment.benchmark_v2_pd.PDValidationWorker"
@@ -229,10 +233,15 @@ def main():
         "--quantization", choices=["fp8_per_block", "none"], default="fp8_per_block"
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--mega-moe", action="store_true")
     parser.add_argument(
         "--lengths", type=int, nargs="+", default=[15, 16, 17, 31, 32, 33, 1025]
     )
     args = parser.parse_args()
+    if args.mega_moe and (
+        args.execution_mode != "fast" or args.quantization != "fp8_per_block"
+    ):
+        parser.error("--mega-moe requires Fast FP8 execution")
     args.output.mkdir(parents=True, exist_ok=False)
     processes, pipes = [], {}
     result = dict(connector=args.connector, scope=__doc__, workers={}, cases=[])
@@ -255,6 +264,7 @@ def main():
                     args.draft,
                     args.execution_mode,
                     args.quantization,
+                    args.mega_moe,
                 ),
             )
             process.start()
