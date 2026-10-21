@@ -1,0 +1,14 @@
+{
+  "parent_commit": "fd79a66bfc4bf55d95886d4bb6ee13aebff544f3",
+  "session": "01a15cd9-0163-7163-b4cb-d68fa74edcd0",
+  "source_manifest_sha256": "bddb3f82cb9377b8d79a5dd96b318b1a5c50010cb7b405659ff71e793fdf68f6",
+  "files": {
+    "vllm/model_executor/models/yoco_shared_kv.py": "12cfa62df041c79dd58bcea525bfafbbd40de72adeeb3898c10553f6513117b2",
+    "vllm/model_executor/layers/yoco_ops/shared_kv_norm.py": "3da5e7500c66eccbad407d6bd680b22b435d3ac392b49a8ee901da3d136b9390",
+    "vllm/v1/worker/gpu/spec_decode/dspark/shared_kv.py": "a4bcd37f422323b92833b1cf183608da811b5358df17f7425d3bd969354b8c28",
+    "tests/model_executor/test_yoco_shared_kv.py": "19e10e8484d23ac9b161d9f576fe2867a13cb55009eb0cb279502692d526017e"
+  },
+  "accepted_model_and_norm_byte_identical": true,
+  "full_source_manifest": "/data/vllm_test/work/yoco-draft-merge-20261021/source-manifest.json",
+  "runtime_support_manifest": "/data/vllm_test/work/yoco-draft-merge-20261021/runtime-support.json"
+}

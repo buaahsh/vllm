@@ -1,0 +1,375 @@
+{
+  "pairs": [
+    {
+      "context": "short",
+      "concurrency": 1,
+      "arms": {
+        "baseline": {
+          "tokens": 768,
+          "elapsed_s": 1.8220368921756744,
+          "accepted": 605,
+          "proposed": 1296,
+          "blocks": 162,
+          "propose_ms": 1.6600639820098877,
+          "events": 167,
+          "tokens_s": 421.5062841471555,
+          "acceptance": 0.466820987654321
+        },
+        "precise": {
+          "tokens": 768,
+          "elapsed_s": 1.7876313952729106,
+          "accepted": 605,
+          "proposed": 1296,
+          "blocks": 162,
+          "propose_ms": 1.4325439929962158,
+          "events": 167,
+          "tokens_s": 429.61876930045327,
+          "acceptance": 0.466820987654321
+        },
+        "bf16": {
+          "tokens": 768,
+          "elapsed_s": 1.707285413518548,
+          "accepted": 610,
+          "proposed": 1256,
+          "blocks": 157,
+          "propose_ms": 1.3055039644241333,
+          "events": 162,
+          "tokens_s": 449.83691298411975,
+          "acceptance": 0.4856687898089172
+        }
+      },
+      "precise_latency_reduction": 0.13705495178457328,
+      "bf16_latency_reduction": 0.21358213986215058,
+      "precise_vs_bf16_latency_increase": 0.09731110133251941,
+      "precise_throughput_gain": 0.019246415672572903,
+      "bf16_throughput_gain": 0.06721282671807938
+    },
+    {
+      "context": "short",
+      "concurrency": 4,
+      "arms": {
+        "baseline": {
+          "tokens": 3072,
+          "elapsed_s": 3.343938079662621,
+          "accepted": 2342,
+          "proposed": 6088,
+          "blocks": 761,
+          "propose_ms": 1.8149120211601257,
+          "events": 180,
+          "tokens_s": 918.6772980885885,
+          "acceptance": 0.38469119579500655
+        },
+        "precise": {
+          "tokens": 3072,
+          "elapsed_s": 3.2939628986641765,
+          "accepted": 2342,
+          "proposed": 6088,
+          "blocks": 761,
+          "propose_ms": 1.5759519934654236,
+          "events": 180,
+          "tokens_s": 932.6152402159142,
+          "acceptance": 0.38469119579500655
+        },
+        "bf16": {
+          "tokens": 3072,
+          "elapsed_s": 3.3021142622455955,
+          "accepted": 2336,
+          "proposed": 6120,
+          "blocks": 765,
+          "propose_ms": 1.4203519821166992,
+          "events": 179,
+          "tokens_s": 930.3130527987524,
+          "acceptance": 0.38169934640522873
+        }
+      },
+      "precise_latency_reduction": 0.1316647996754986,
+      "bf16_latency_reduction": 0.21739898928611223,
+      "precise_vs_bf16_latency_increase": 0.10955031802528215,
+      "precise_throughput_gain": 0.015171749815005908,
+      "bf16_throughput_gain": 0.012665769290667539
+    },
+    {
+      "context": "short",
+      "concurrency": 8,
+      "arms": {
+        "baseline": {
+          "tokens": 6144,
+          "elapsed_s": 4.238727572374046,
+          "accepted": 4624,
+          "proposed": 12464,
+          "blocks": 1558,
+          "propose_ms": 1.9650239944458008,
+          "events": 156,
+          "tokens_s": 1449.4915974415503,
+          "acceptance": 0.37098844672657255
+        },
+        "precise": {
+          "tokens": 6144,
+          "elapsed_s": 4.188231272622943,
+          "accepted": 4624,
+          "proposed": 12464,
+          "blocks": 1558,
+          "propose_ms": 1.7275199890136719,
+          "events": 156,
+          "tokens_s": 1466.9677007001162,
+          "acceptance": 0.37098844672657255
+        },
+        "bf16": {
+          "tokens": 6144,
+          "elapsed_s": 4.185169891454279,
+          "accepted": 4552,
+          "proposed": 12896,
+          "blocks": 1612,
+          "propose_ms": 1.5698879957199097,
+          "events": 170,
+          "tokens_s": 1468.04076282434,
+          "acceptance": 0.3529776674937965
+        }
+      },
+      "precise_latency_reduction": 0.12086570245627593,
+      "bf16_latency_reduction": 0.20108456682603104,
+      "precise_vs_bf16_latency_increase": 0.100409706758396,
+      "precise_throughput_gain": 0.012056712359983512,
+      "bf16_throughput_gain": 0.012797014770923987
+    },
+    {
+      "context": "long",
+      "concurrency": 1,
+      "arms": {
+        "baseline": {
+          "tokens": 768,
+          "elapsed_s": 4.81904851924628,
+          "accepted": 404,
+          "proposed": 2912,
+          "blocks": 364,
+          "propose_ms": 1.7092159986495972,
+          "events": 369,
+          "tokens_s": 159.36755916292756,
+          "acceptance": 0.13873626373626374
+        },
+        "precise": {
+          "tokens": 768,
+          "elapsed_s": 4.761129155755043,
+          "accepted": 404,
+          "proposed": 2912,
+          "blocks": 364,
+          "propose_ms": 1.4816639423370361,
+          "events": 369,
+          "tokens_s": 161.30627312885966,
+          "acceptance": 0.13873626373626374
+        },
+        "bf16": {
+          "tokens": 768,
+          "elapsed_s": 4.667528144083917,
+          "accepted": 405,
+          "proposed": 2904,
+          "blocks": 363,
+          "propose_ms": 1.3547519445419312,
+          "events": 368,
+          "tokens_s": 164.54105391382342,
+          "acceptance": 0.13946280991735538
+        }
+      },
+      "precise_latency_reduction": 0.1331324165537553,
+      "bf16_latency_reduction": 0.2073840020147939,
+      "precise_vs_bf16_latency_increase": 0.09367914052931403,
+      "precise_throughput_gain": 0.012165047743186497,
+      "bf16_throughput_gain": 0.03246265913884505
+    },
+    {
+      "context": "long",
+      "concurrency": 4,
+      "arms": {
+        "baseline": {
+          "tokens": 3072,
+          "elapsed_s": 9.314309157431126,
+          "accepted": 1773,
+          "proposed": 10416,
+          "blocks": 1302,
+          "propose_ms": 1.9281599521636963,
+          "events": 243,
+          "tokens_s": 329.81512080787036,
+          "acceptance": 0.17021889400921658
+        },
+        "precise": {
+          "tokens": 3072,
+          "elapsed_s": 9.233473303727806,
+          "accepted": 1773,
+          "proposed": 10416,
+          "blocks": 1302,
+          "propose_ms": 1.6886399984359741,
+          "events": 243,
+          "tokens_s": 332.70253770699156,
+          "acceptance": 0.17021889400921658
+        },
+        "bf16": {
+          "tokens": 3072,
+          "elapsed_s": 9.547429560683668,
+          "accepted": 1646,
+          "proposed": 11448,
+          "blocks": 1431,
+          "propose_ms": 1.5328960418701172,
+          "events": 274,
+          "tokens_s": 321.76199682587884,
+          "acceptance": 0.14378057302585603
+        }
+      },
+      "precise_latency_reduction": 0.12422203534460063,
+      "bf16_latency_reduction": 0.2049953946248242,
+      "precise_vs_bf16_latency_increase": 0.10160112121879505,
+      "precise_throughput_gain": 0.008754652885679004,
+      "bf16_throughput_gain": -0.024417085433395824
+    },
+    {
+      "context": "long",
+      "concurrency": 8,
+      "arms": {
+        "baseline": {
+          "tokens": 6144,
+          "elapsed_s": 14.317920368164778,
+          "accepted": 3423,
+          "proposed": 21968,
+          "blocks": 2746,
+          "propose_ms": 1.9937599897384644,
+          "events": 225,
+          "tokens_s": 429.11259750130296,
+          "acceptance": 0.15581755280407866
+        },
+        "precise": {
+          "tokens": 6144,
+          "elapsed_s": 14.19770734384656,
+          "accepted": 3423,
+          "proposed": 21968,
+          "blocks": 2746,
+          "propose_ms": 1.7786879539489746,
+          "events": 225,
+          "tokens_s": 432.7459251836795,
+          "acceptance": 0.15581755280407866
+        },
+        "bf16": {
+          "tokens": 6144,
+          "elapsed_s": 14.206003308296204,
+          "accepted": 3380,
+          "proposed": 22200,
+          "blocks": 2775,
+          "propose_ms": 1.6818879842758179,
+          "events": 204,
+          "tokens_s": 432.49321196567286,
+          "acceptance": 0.15225225225225225
+        }
+      },
+      "precise_latency_reduction": 0.10787258090062402,
+      "bf16_latency_reduction": 0.1564240465591633,
+      "precise_vs_bf16_latency_increase": 0.057554349979399344,
+      "precise_throughput_gain": 0.00846707298628191,
+      "bf16_throughput_gain": 0.007878152457082344
+    }
+  ],
+  "same_input": [
+    {
+      "checks": [
+        {
+          "batch": 1,
+          "prefix_lens": [
+            26
+          ],
+          "equal": [
+            "hidden",
+            "draft_tokens",
+            "draft_logits",
+            "draft_token_confidence_probs"
+          ],
+          "hidden_dtype": "torch.float32"
+        },
+        {
+          "batch": 4,
+          "prefix_lens": [
+            30,
+            25,
+            27,
+            30
+          ],
+          "equal": [
+            "hidden",
+            "draft_tokens",
+            "draft_logits",
+            "draft_token_confidence_probs"
+          ],
+          "hidden_dtype": "torch.float32"
+        },
+        {
+          "batch": 8,
+          "prefix_lens": [
+            30,
+            24,
+            25,
+            26,
+            27,
+            27,
+            28,
+            30
+          ],
+          "equal": [
+            "hidden",
+            "draft_tokens",
+            "draft_logits",
+            "draft_token_confidence_probs"
+          ],
+          "hidden_dtype": "torch.float32"
+        },
+        {
+          "batch": 1,
+          "prefix_lens": [
+            8193
+          ],
+          "equal": [
+            "hidden",
+            "draft_tokens",
+            "draft_logits",
+            "draft_token_confidence_probs"
+          ],
+          "hidden_dtype": "torch.float32"
+        },
+        {
+          "batch": 4,
+          "prefix_lens": [
+            8224,
+            8219,
+            8208,
+            8193
+          ],
+          "equal": [
+            "hidden",
+            "draft_tokens",
+            "draft_logits",
+            "draft_token_confidence_probs"
+          ],
+          "hidden_dtype": "torch.float32"
+        },
+        {
+          "batch": 8,
+          "prefix_lens": [
+            8265,
+            8258,
+            8248,
+            8229,
+            8221,
+            8219,
+            8199,
+            8193
+          ],
+          "equal": [
+            "hidden",
+            "draft_tokens",
+            "draft_logits",
+            "draft_token_confidence_probs"
+          ],
+          "hidden_dtype": "torch.float32"
+        }
+      ],
+      "pending": null
+    }
+  ],
+  "scored_pairs_equal": 18,
+  "broad_replays_equal": 32
+}

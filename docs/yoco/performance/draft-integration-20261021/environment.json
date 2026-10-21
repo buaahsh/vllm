@@ -1,0 +1,17 @@
+{
+  "pod": "living-cobra-b200g4-dev-f5def941-master-0",
+  "uid": "9a026fd8-e732-4fcb-b855-85ea6a6358ed",
+  "node": "slc01-cl02-hgx-0347",
+  "restart_count_after": 0,
+  "pid7_alive_after": true,
+  "gpu_uuid": "GPU-ef7d6ee6-0fce-4e0b-b14c-87bd8a36c5fe",
+  "gpu_memory_used_mib_after": 0,
+  "gpu_utilization_pct_after": 0,
+  "advisory_lock_free_after": true,
+  "validation_exit_code": 0,
+  "live_service_switched": false,
+  "parent_allocated_bytes": 69099305984,
+  "merged_allocated_bytes": 70401766400,
+  "allocated_delta_mib": 1242.123046875,
+  "allocated_scope": "torch memory_allocated after the same benchmark workloads, not reserved or peak memory."
+}

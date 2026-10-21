@@ -1,0 +1,13 @@
+{
+  "REPORT.md": "346ec93dd84887689487c62032c2fa9a44ae22dbb763a7afc2eb954711b6e1b0",
+  "environment.json": "8884e23024cf7d16bdc0b3825e9abeffc6cd18d5ed5ea21d49009a87692a0e1d",
+  "reference-norm-summary.json": "71715bca391037efabf216ca26b45da4f1d794362aec4ec54505050e30085b2c",
+  "source-audit.json": "f3d693d389334b56aa897eadda5d9a68d73bad110c8279c2937cdf42042d5450",
+  "source-receipt.json": "d0af3fbf4a3c7c8817568a287aa492b554d9f5d8030c15da7e5515191dd0c7ce",
+  "source-session.json": "e07d3f38162dc7bbe0b6bbcfbf67c1a4e87b9719338026a510ff7f17051f7449",
+  "summary.csv": "5e87328076f78061ea7c0d27ff6560154ea50ff999eefda844332ceca984efae",
+  "summary.json": "0f4202246fdc9f34ebc9eb515a64ac042399e180f8c51d7bd8e36d4d5b4a5c24",
+  "trials.csv": "08244a83c30ea8d140fb028ebae0bb582773bfaed6271d91c978bf801f3f72be",
+  "validation.json": "622b4423cc8fe090b3b4d5f7cb71647fc7865add24da6692ecc80c0c33ac5839",
+  "worker-receipts.json": "597633433a4305f0726f716d7c7e9168acbe17d3f36123daec7cda53b0c75f4c"
+}

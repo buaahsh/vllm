@@ -43,6 +43,155 @@ def test_shared_kv_rejection_cache_preserves_fp32_markov_logits():
     torch.testing.assert_close(cache[:, 0], logits, rtol=0, atol=0)
 
 
+@torch.inference_mode()
+def test_shared_kv_compute_cache_preserves_autocast_and_checkpoint_on_reload():
+    """Frozen caches must match autocast and refresh without changing storage."""
+    torch.manual_seed(42)
+    c = SharedKVConfig(
+        hidden=16,
+        ffn=24,
+        heads=4,
+        kv_heads=2,
+        head_dim=4,
+        layers=1,
+        vocab=32,
+        block=4,
+        mask_id=31,
+        rank=8,
+    )
+    model = SharedKVDraft(c).eval().requires_grad_(False)
+    for p in model.parameters():
+        p.uniform_(-0.2, 0.2)
+    model.embed_tokens.to(torch.bfloat16)
+    model.lm_head.to(torch.bfloat16)
+    checkpoint = {name: value.clone() for name, value in model.state_dict().items()}
+    ids = torch.randint(c.vocab, (2, c.block))
+    current = torch.randn(2, c.hidden, dtype=torch.bfloat16)
+    positions = torch.arange(c.block).expand(2, -1)
+
+    def run(draft=model):
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            hidden = draft(ids, current, positions, lambda q: q)
+            embed = draft.markov_embed(ids[:, 0])
+            return (
+                hidden,
+                draft.compute_draft_logits(hidden),
+                draft.markov_bias(embed),
+                draft.compute_confidence(hidden[:, 0], embed),
+            )
+
+    expected = run()
+    model.prepare_for_inference()
+    for actual, reference in zip(run(), expected):
+        torch.testing.assert_close(actual, reference, rtol=0, atol=0)
+    for name, value in model.state_dict().items():
+        torch.testing.assert_close(value, checkpoint[name], rtol=0, atol=0)
+    caches = {
+        name: value.data_ptr()
+        for name, value in model.named_buffers()
+        if name.endswith("_bf16_weight")
+    }
+    assert len(caches) == 11
+    assert all(value.dtype == torch.float32 for value in model.layers.parameters())
+    assert model.confidence_head.proj.weight.dtype == torch.float32
+    # Model reload updates derived bytes in place, including assign=True loading.
+    replacement = {name: value + 0.01 for name, value in checkpoint.items()}
+    reference = SharedKVDraft(c).eval().requires_grad_(False)
+    reference.load_state_dict(replacement, assign=True)
+    for assign in (False, True):
+        model.load_state_dict(replacement, assign=assign)
+        model.prepare_for_inference()
+        for actual, expected in zip(run(), run(reference)):
+            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+        assert caches == {
+            name: value.data_ptr()
+            for name, value in model.named_buffers()
+            if name.endswith("_bf16_weight")
+        }
+        for name, module in model.named_modules():
+            if hasattr(module, "_bf16_weight"):
+                torch.testing.assert_close(
+                    module._bf16_weight,
+                    replacement[name + ".weight"].bfloat16(),
+                    rtol=0,
+                    atol=0,
+                )
+
+
+@torch.inference_mode()
+def test_shared_kv_confidence_keeps_fp32_embed_when_hidden_is_bf16():
+    c = SharedKVConfig(hidden=4, vocab=8, layers=0, rank=2)
+    model = SharedKVDraft(c).eval()
+    model.confidence_head.proj.weight.fill_(1)
+    model.confidence_head.proj.bias.zero_()
+    hidden = torch.zeros(1, c.hidden, dtype=torch.bfloat16)
+    embed = torch.tensor([[0.1001, 0.2002]])
+    torch.testing.assert_close(
+        model.compute_confidence(hidden, embed),
+        model.compute_confidence(hidden.float(), embed),
+        rtol=0,
+        atol=0,
+    )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA fused norms")
+@pytest.mark.parametrize("dim", [128, 3072])
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32])
+@pytest.mark.parametrize("promote", [False, True])
+@torch.inference_mode()
+def test_shared_kv_fused_norm_preserves_original_bits_and_reload(dim, dtype, promote):
+    """Fusion must preserve original rounding, output and captured gamma reload."""
+    from vllm.model_executor.models.yoco_shared_kv import (
+        SharedKVRMSNorm,
+        _SharedKVInferenceRMSNorm,
+    )
+
+    torch.manual_seed(42)
+    original = SharedKVRMSNorm(dim, 1e-6, promote).cuda().eval().requires_grad_(False)
+    original.weight.uniform_(0.8, 1.2)
+    norm = _SharedKVInferenceRMSNorm(original)
+    inputs = torch.randn(2, 8, dim, device="cuda", dtype=dtype)
+    inputs[0, 0] *= 1000
+    residual = torch.randn_like(inputs, dtype=torch.float32)
+    gamma_ptr = norm._compute_weight.data_ptr()
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        for _ in range(2):
+            norm(inputs)
+            norm(inputs, residual)
+    torch.cuda.current_stream().wait_stream(stream)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph, stream=stream):
+        captured_plain = norm(inputs)
+        captured_add, captured_residual = norm(inputs, residual)
+    for reload in [False, True]:
+        if reload:
+            replacement = original.weight + 0.05
+            norm.load_state_dict({"weight": replacement}, assign=True)
+            original.load_state_dict({"weight": replacement})
+            assert norm._compute_weight.data_ptr() == gamma_ptr
+        checkpoint = norm.state_dict()
+        assert set(checkpoint) == {"weight"}
+        assert checkpoint["weight"].dtype == torch.float32
+        for add_residual in [False, True]:
+            expected = original(inputs, residual) if add_residual else original(inputs)
+            if add_residual:
+                actual, carried = norm(inputs, residual)
+                expected, expected_residual = expected
+                torch.testing.assert_close(carried, expected_residual, rtol=0, atol=0)
+            else:
+                actual = norm(inputs)
+            assert actual.dtype == expected.dtype
+            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+        graph.replay()
+        torch.accelerator.synchronize()
+        torch.testing.assert_close(captured_plain, original(inputs), rtol=0, atol=0)
+        expected_add, expected_residual = original(inputs, residual)
+        torch.testing.assert_close(captured_add, expected_add, rtol=0, atol=0)
+        torch.testing.assert_close(captured_residual, expected_residual, rtol=0, atol=0)
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA paged attention")
 def test_swa_physical_page_addresses_cross_signed_int32_boundary():
     """Physical pages 65536+ must be widened before multiplying a 32768 stride."""
@@ -349,6 +498,8 @@ def test_shared_kv_graph_replay_updates_prefix_pages_and_sampling(
         p.uniform_(-0.2, 0.2)
     model.embed_tokens.to(dtype)
     model.lm_head.to(dtype)
+    model.requires_grad_(False).prepare_for_inference()
+    model.prepare_norms_for_inference()
     spec = SharedKVSpeculator.__new__(SharedKVSpeculator)
     spec.model, spec.device, spec.dtype = model, device, dtype
     spec.num_speculative_steps = c.block
@@ -392,6 +543,14 @@ def test_shared_kv_graph_replay_updates_prefix_pages_and_sampling(
         spec._run_shared_kv(4, cache, spec._prefix_block_table, 512)
 
     for n, base in [(3, 300), (1, 11), (4, 401)]:
+        if n == 4:
+            # Reload after capture must refresh compute buffers at captured addresses.
+            state = model.state_dict()
+            key = "layers.0.mlp.down_proj.weight"
+            state[key] = state[key] + 0.1
+            key = "layers.0.post_norm.weight"
+            state[key] = state[key] + 0.05
+            model.load_state_dict(state)
         table.copy_(table.roll(1, 0))
         positions = torch.arange(n * 4, device=device).reshape(n, 4) + base
         mapping = torch.tensor([3, 1, 0, 2], device=device, dtype=torch.int32)[:n]

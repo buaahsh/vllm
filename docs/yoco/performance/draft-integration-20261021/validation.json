@@ -1,0 +1,34 @@
+{
+  "b200_model_tests": 89,
+  "b200_runner_tests": 74,
+  "b200_total_passed": 163,
+  "b200_skipped": 0,
+  "local_passed": 159,
+  "local_skipped": 4,
+  "local_skip_reason": "Four SM90+ sampler cases covered by B200.",
+  "source_audit": {
+    "source": {
+      "files_checked": 8034,
+      "mismatches": [],
+      "runtime_support_checked": 1996,
+      "runtime_mismatches": []
+    },
+    "parent": {
+      "files_checked": 8033,
+      "mismatches": [],
+      "runtime_support_checked": 1996,
+      "runtime_mismatches": []
+    },
+    "status": "PASS"
+  },
+  "unit_commands": [
+    ".venv/bin/python -m pytest --confcutdir=tests/model_executor -q tests/model_executor/test_yoco_prefill.py tests/model_executor/test_yoco_shared_kv.py",
+    ".venv/bin/python -m pytest --confcutdir=tests/v1/worker -q tests/v1/worker/test_gpu_model_runner_v2.py tests/v1/worker/test_gpu_sampler_flags.py tests/v1/worker/test_attn_utils.py tests/v1/worker/test_gpu_rejection_sampler_chunking.py tests/v1/worker/test_gpu_rejection_sampler_i64.py"
+  ],
+  "runtime": "Local repository .venv; B200 reused existing isolated integration-venv with PYTHONPATH selecting staged source. Runtime binary support matched in both snapshots.",
+  "benchmark_cli": "python -u -m tools.yoco_alignment.benchmark_mega_moe --backend hybrid --output results/<version> --max-model-len 12288 --tokens 128 --quality-tokens 64 --trials 3 --extra-prompt-tokens 8193 --concurrencies 1 4 8 --synchronous-engine --fast-prefill",
+  "test_bootstrap_failures": [
+    "Initial B200 collection lacked ignored precompiled extension; copied identical existing runtime support to both staged directories.",
+    "A task status script named inspect.py shadowed the standard library in runner collection. Renamed to merge_status.py and reran runner tests. Successful model tests were retained; implementation unchanged."
+  ]
+}

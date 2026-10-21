@@ -144,6 +144,8 @@ class SharedKVSpeculator(DSparkSpeculator):
         ) or model.lm_head.weight.shape != (c.vocab, c.hidden):
             raise ValueError("Balanced frozen vocabulary tensor shapes do not match")
         model.eval().requires_grad_(False)
+        model.prepare_for_inference()
+        model.prepare_norms_for_inference()
         self.use_confidence_head = self.enable_adaptive_verification
         if self.use_confidence_head:
             self.use_acceptance_estimator = False

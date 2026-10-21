@@ -1,0 +1,64 @@
+{
+  "parent": "fd79a66bfc4bf55d95886d4bb6ee13aebff544f3",
+  "source_session": "01a15cd9-0163-7163-b4cb-d68fa74edcd0",
+  "accepted": {
+    "status": "accepted",
+    "current_baseline": true,
+    "date": "2026-10-21",
+    "recorded_at_utc": "2026-10-21T14:27:54.497266+00:00",
+    "user_statement": "那用保精度融合版本吧",
+    "scope": "Shared-KV draft RMSNorm and residual-add fusion preserving original norm numerical semantics",
+    "use": "Baseline for subsequent optimization",
+    "source_directory": "/data/vllm_test/work/yoco-draft-fp32-norm-20261021/source",
+    "remote_source_directory": "/home/fhb/yoco-draft-fp32-norm-20261021/source",
+    "base_commit": "7780afb5ac86139269fb31c8dcf330e1feaeabdd",
+    "source_sha256": {
+      "vllm/model_executor/models/yoco_shared_kv.py": "12cfa62df041c79dd58bcea525bfafbbd40de72adeeb3898c10553f6513117b2",
+      "vllm/model_executor/layers/yoco_ops/shared_kv_norm.py": "3da5e7500c66eccbad407d6bd680b22b435d3ac392b49a8ee901da3d136b9390",
+      "tests/model_executor/test_yoco_shared_kv.py": "bb42276c1fbf7d59879a8ffabc0819508502baf8e2c7d59ea543052408bbf354"
+    },
+    "patch_sha256": {
+      "fp32-norm.patch": "1dc07ab6362314f44f4aa707a55fe91d32fd31b0597f727849ac49dd3df0497e",
+      "combined.patch": "acfaa7b61fd3aa1c9c476740d1e2a1436857a941c20bd86cd3735867faa0c851",
+      "accepted-cache-baseline.patch": "bf6aa56a8ca90c156135164c64617225bb63e6b8c1baeeccdffb693fccd9053f"
+    },
+    "patches": {
+      "incremental": "fp32-norm.patch",
+      "combined": "combined.patch",
+      "previous_accepted_baseline": "accepted-cache-baseline.patch"
+    },
+    "retained_optimizations": [
+      "FA4 attention",
+      "Frozen BF16 linear compute-weight cache"
+    ],
+    "norm_semantics": "Materialized FP32 square mean uses unchanged Torch reduction; preserve original gamma, normalization rounding, output dtype and FP32 residual. FMA fusion disabled.",
+    "supersedes_baseline": "../yoco-draft-bf16-norm-20261021/acceptance.json",
+    "evidence": {
+      "report": "REPORT.md",
+      "end_to_end_report": "e2e/REPORT.md",
+      "end_to_end_summary": "e2e/summary.json",
+      "tests_passed": 26,
+      "native_draft_latency_reduction": "10.8%–13.7% versus original norm with other optimizations fixed",
+      "numerical_checks": "All measured precision-preserving hidden/logit/proposal/confidence checks and original-norm output/counter replays matched exactly",
+      "bf16_relative_end_to_end_gain_equal_request_mix": 0.0043,
+      "bf16_relative_end_to_end_gain_equal_request_mix_95ci": [
+        -0.0004,
+        0.009
+      ],
+      "equal_mix_note": "Illustrative 1K/8K equal request mix, not business workload weighting"
+    }
+  },
+  "selection": [
+    "BF16 frozen linear compute cache",
+    "Precision-preserving RMS and residual-add fusion"
+  ],
+  "already_present": [
+    "FA4 paged Shared-KV attention",
+    "FP32 proposal cache",
+    "FP8 target validation",
+    "SWA int64 physical-page addressing; complete yoco_shared_kv_swa.py already identical to accepted session"
+  ],
+  "omitted": [
+    "OPD sampling/proposal capture hooks unrelated to accepted performance work"
+  ]
+}

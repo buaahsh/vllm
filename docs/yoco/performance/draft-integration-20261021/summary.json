@@ -1,0 +1,388 @@
+{
+  "status": "PASS",
+  "parent_commit": "fd79a66bfc4bf55d95886d4bb6ee13aebff544f3",
+  "scored_batches": 36,
+  "scored_requests": 156,
+  "scored_output_tokens": 19968,
+  "paired_scored_batches": 18,
+  "paired_warmup_batches": 12,
+  "first_token_exact": true,
+  "teacher_forced_exact": true,
+  "pairs": [
+    {
+      "profile": "short",
+      "concurrency": 1,
+      "trial": 0,
+      "warmup": true,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 1,
+      "trial": 1,
+      "warmup": true,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 1,
+      "trial": 2,
+      "warmup": false,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 1,
+      "trial": 3,
+      "warmup": false,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 1,
+      "trial": 4,
+      "warmup": false,
+      "seed": 20261022,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 4,
+      "trial": 0,
+      "warmup": true,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 4,
+      "trial": 1,
+      "warmup": true,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 4,
+      "trial": 2,
+      "warmup": false,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 4,
+      "trial": 3,
+      "warmup": false,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 4,
+      "trial": 4,
+      "warmup": false,
+      "seed": 20261022,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 8,
+      "trial": 0,
+      "warmup": true,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 8,
+      "trial": 1,
+      "warmup": true,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 8,
+      "trial": 2,
+      "warmup": false,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 8,
+      "trial": 3,
+      "warmup": false,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "short",
+      "concurrency": 8,
+      "trial": 4,
+      "warmup": false,
+      "seed": 20261022,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 1,
+      "trial": 0,
+      "warmup": true,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 1,
+      "trial": 1,
+      "warmup": true,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 1,
+      "trial": 2,
+      "warmup": false,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 1,
+      "trial": 3,
+      "warmup": false,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 1,
+      "trial": 4,
+      "warmup": false,
+      "seed": 20261022,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 4,
+      "trial": 0,
+      "warmup": true,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 4,
+      "trial": 1,
+      "warmup": true,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 4,
+      "trial": 2,
+      "warmup": false,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 4,
+      "trial": 3,
+      "warmup": false,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 4,
+      "trial": 4,
+      "warmup": false,
+      "seed": 20261022,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 8,
+      "trial": 0,
+      "warmup": true,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 8,
+      "trial": 1,
+      "warmup": true,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 8,
+      "trial": 2,
+      "warmup": false,
+      "seed": 20261020,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 8,
+      "trial": 3,
+      "warmup": false,
+      "seed": 20261021,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 8,
+      "trial": 4,
+      "warmup": false,
+      "seed": 20261022,
+      "outputs_equal": true,
+      "counts_equal": true,
+      "per_position_acceptances_equal": true
+    }
+  ],
+  "cells": [
+    {
+      "profile": "short",
+      "concurrency": 1,
+      "seeds": 3,
+      "parent_tokens_per_s": 328.46422628937034,
+      "parent_ttft_ms": 92.93484687805176,
+      "parent_acceptance_rate": 0.4494047619047619,
+      "source_tokens_per_s": 336.1813225968525,
+      "source_ttft_ms": 92.67807006835938,
+      "source_acceptance_rate": 0.4494047619047619,
+      "throughput_change_pct": 2.349448034162349
+    },
+    {
+      "profile": "short",
+      "concurrency": 4,
+      "seeds": 3,
+      "parent_tokens_per_s": 888.0480730496436,
+      "parent_ttft_ms": 93.31440925598145,
+      "parent_acceptance_rate": 0.3867801047120419,
+      "source_tokens_per_s": 896.8202099599079,
+      "source_ttft_ms": 93.52076053619385,
+      "source_acceptance_rate": 0.3867801047120419,
+      "throughput_change_pct": 0.9877997798182214
+    },
+    {
+      "profile": "short",
+      "concurrency": 8,
+      "seeds": 3,
+      "parent_tokens_per_s": 1471.24500418161,
+      "parent_ttft_ms": 94.6340560913086,
+      "parent_acceptance_rate": 0.35463308457711445,
+      "source_tokens_per_s": 1476.1346699437993,
+      "source_ttft_ms": 94.44308280944824,
+      "source_acceptance_rate": 0.35463308457711445,
+      "throughput_change_pct": 0.3323488438901512
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 1,
+      "seeds": 3,
+      "parent_tokens_per_s": 176.45089164910954,
+      "parent_ttft_ms": 392.2305107116699,
+      "parent_acceptance_rate": 0.3911290322580645,
+      "source_tokens_per_s": 179.23037446752693,
+      "source_ttft_ms": 391.80612564086914,
+      "source_acceptance_rate": 0.3911290322580645,
+      "throughput_change_pct": 1.575216079919084
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 4,
+      "seeds": 3,
+      "parent_tokens_per_s": 242.69763657793013,
+      "parent_ttft_ms": 984.42542552948,
+      "parent_acceptance_rate": 0.34548192771084335,
+      "source_tokens_per_s": 243.23326532735888,
+      "source_ttft_ms": 985.4048490524292,
+      "source_acceptance_rate": 0.34548192771084335,
+      "throughput_change_pct": 0.2206979668121889
+    },
+    {
+      "profile": "context8193",
+      "concurrency": 8,
+      "seeds": 3,
+      "parent_tokens_per_s": 268.77521852025916,
+      "parent_ttft_ms": 1773.0412483215332,
+      "parent_acceptance_rate": 0.32453325554259044,
+      "source_tokens_per_s": 268.66386339954215,
+      "source_ttft_ms": 1773.1858491897583,
+      "source_acceptance_rate": 0.32453325554259044,
+      "throughput_change_pct": -0.041430575828405036
+    }
+  ],
+  "timing_scope": "Two independent native processes, parent then merged, 3 seeds/cell and 2 warmups. Single order, no balanced process repetitions; point estimates for integration sanity, not population-confidence evidence."
+}

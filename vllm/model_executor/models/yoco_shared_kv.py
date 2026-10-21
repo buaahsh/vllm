@@ -40,16 +40,91 @@ class SharedKVRMSNorm(nn.Module):
         self.eps = eps
         self.promote_weight = promote_weight
 
-    def forward(self, x):
+    def forward(self, x, residual=None):
+        if residual is not None:
+            residual = residual + x
+            return self.forward(residual), residual
         value = x if x.dtype == torch.float64 else x.float()
         value = value * torch.rsqrt(value.square().mean(-1, keepdim=True) + self.eps)
         weight = self.weight if self.promote_weight else self.weight.to(x.dtype)
         return value.to(x.dtype) * weight
 
 
+class _SharedKVInferenceRMSNorm(nn.Module):
+    """Retain the original gamma, output dtype, reduction and rounding order."""
+
+    def __init__(self, norm: SharedKVRMSNorm):
+        if norm.training or norm.weight.requires_grad:
+            raise ValueError("Shared-KV fused norms require frozen parameters")
+        super().__init__()
+        self.weight = norm.weight
+        self.eps = norm.eps
+        self.promote_weight = norm.promote_weight
+        self.register_buffer(
+            "_compute_weight", self.weight.detach().clone(), persistent=False
+        )
+        self.register_load_state_dict_post_hook(self._refresh_compute_weight)
+        self.eval()
+
+    @torch.no_grad()
+    def _refresh_compute_weight(self, module, incompatible_keys):
+        if self.weight.shape != self._compute_weight.shape:
+            raise ValueError("Shared-KV norm shape changed; rebuild the draft graphs")
+        self._compute_weight.copy_(self.weight)
+
+    def forward(self, x, residual=None):
+        if (
+            not x.is_cuda
+            or not x.is_contiguous()
+            or x.dtype not in (torch.bfloat16, torch.float32)
+            or self._compute_weight.dtype != torch.float32
+            or (
+                residual is not None
+                and (not residual.is_contiguous() or residual.dtype != torch.float32)
+            )
+        ):
+            return SharedKVRMSNorm.forward(self, x, residual)
+        from vllm.model_executor.layers.yoco_ops.shared_kv_norm import (
+            shared_kv_rms_norm,
+        )
+
+        return shared_kv_rms_norm(
+            x, residual, self._compute_weight, self.eps, self.promote_weight
+        )
+
+
+class _SharedKVInferenceLinear(nn.Linear):
+    """Retain checkpoint parameters and cache their frozen BF16 compute values."""
+
+    def __init__(self, linear: nn.Linear):
+        if linear.training or linear.weight.requires_grad or linear.bias is not None:
+            raise ValueError(
+                "Shared-KV compute caching requires frozen biasless linears"
+            )
+        super().__init__(
+            linear.in_features, linear.out_features, bias=False, device="meta"
+        )
+        self.weight = linear.weight
+        self.register_buffer(
+            "_bf16_weight", self.weight.to(torch.bfloat16), persistent=False
+        )
+        self.register_load_state_dict_post_hook(self._refresh_compute_weight)
+        self.eval()
+
+    @torch.no_grad()
+    def _refresh_compute_weight(self, module, incompatible_keys):
+        if self.weight.shape != self._bf16_weight.shape:
+            raise ValueError("Shared-KV weight shape changed; rebuild the draft graphs")
+        self._bf16_weight.copy_(self.weight)
+
+    def forward(self, x):
+        return F.linear(x, self._bf16_weight)
+
+
 def rotary(q, k, positions, theta):
     dim = q.shape[-1]
     dtype = torch.float64 if q.dtype == torch.float64 else torch.float32
+    q, k = q.to(dtype), k.to(dtype)
     inv = theta ** (-torch.arange(0, dim, 2, device=q.device, dtype=dtype) / dim)
     angles = positions.to(dtype)[..., None] * inv
     angles = torch.cat((angles, angles), dim=-1)
@@ -121,12 +196,11 @@ class SharedKVLayer(nn.Module):
             self.global_q(normed).view(batch, block, c.heads, c.head_dim)
         )
         global_result = self.global_o(attend_prefix(qg).reshape(batch, block, -1))
-        residual = (
-            conditioned
-            + local_result
-            + self.global_gate_logit.sigmoid() * global_result
+        normed, residual = self.post_norm(
+            self.global_gate_logit.sigmoid() * global_result,
+            conditioned + local_result,
         )
-        return residual + self.mlp(self.post_norm(residual))
+        return residual + self.mlp(normed)
 
 
 class SharedKVMarkov(nn.Module):
@@ -159,6 +233,19 @@ class SharedKVDraft(nn.Module):
         self.confidence_head = SharedKVConfidence(c)
         self.draft_id_to_target_id = None
 
+    def prepare_for_inference(self):
+        """Cache only autocast linears; keep norms, residuals and confidence FP32."""
+        for root in (self.layers, self.markov_head):
+            for name, module in list(root.named_modules()):
+                if type(module) is nn.Linear:
+                    root.set_submodule(name, _SharedKVInferenceLinear(module))
+
+    def prepare_norms_for_inference(self):
+        """Fuse norms after loading; original FP32 checkpoint parameters remain."""
+        for name, module in list(self.named_modules()):
+            if type(module) is SharedKVRMSNorm:
+                self.set_submodule(name, _SharedKVInferenceRMSNorm(module))
+
     def forward(self, block_ids, current_hidden, positions, attend_prefix: Callable):
         block = block_ids.shape[1]
         if not 1 <= block <= self.c.block:
@@ -186,7 +273,7 @@ class SharedKVDraft(nn.Module):
 
     def compute_confidence(self, hidden, embed):
         return self.confidence_head(
-            torch.cat((hidden, embed.to(hidden.dtype)), -1)
+            torch.cat((hidden.float(), embed.float()), -1)
         ).sigmoid()
 
 
