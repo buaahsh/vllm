@@ -208,6 +208,24 @@ def _import_deep_gemm():
     return None
 
 
+def get_deep_gemm_mega_moe() -> Any:
+    """Resolve the optional FP8 MegaMoE API from the selected DeepGEMM package."""
+    backend = _import_deep_gemm()
+    required = (
+        "get_symm_buffer_for_mega_moe",
+        "transform_weights_for_mega_moe",
+        "fp8_fp4_mega_moe",
+    )
+    if backend is None or any(
+        not callable(getattr(backend, k, None)) for k in required
+    ):
+        raise RuntimeError(
+            "YOCO MegaMoE requires DeepGEMM with FP8 MegaMoE and recipe=(1,1,32); "
+            "select a compatible runtime or set yoco_mega_moe='off'"
+        )
+    return backend
+
+
 def _apply_pdl(mod, enable: bool = True) -> None:
     mod_name = getattr(mod, "__name__", str(mod))
     try:

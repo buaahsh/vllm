@@ -21,7 +21,11 @@ from transformers import PretrainedConfig
 import vllm.envs as envs
 from vllm.config import get_current_vllm_config
 from vllm.config.kernel import MoEBackend
-from vllm.config.yoco import YocoExecutionMode, YocoMoEPolicy
+from vllm.config.yoco import (
+    YocoExecutionMode,
+    YocoMoEPolicy,
+    get_yoco_mega_moe_mode,
+)
 from vllm.distributed import get_tensor_model_parallel_world_size
 from vllm.model_executor.layers.activation import SiluAndMul, SiluAndMulWithClampFP32
 from vllm.model_executor.layers.fused_moe import FusedMoEFactory
@@ -555,6 +559,15 @@ class YOCOMoE(nn.Module):
                 f"{prefix}.experts",
                 get_tensor_model_parallel_world_size(),
             )
+        mega_moe = (
+            get_yoco_mega_moe_mode(
+                getattr(get_current_vllm_config(), "additional_config", {})
+            )
+            != "off"
+        )
+        policy = YocoMoEPolicy.for_mode(
+            cast(YocoExecutionMode, execution_mode), mega_moe=mega_moe
+        )
         self.experts = FusedMoEFactory(
             shared_experts=self.shared_experts,
             num_experts=self.num_experts,
@@ -568,7 +581,7 @@ class YOCOMoE(nn.Module):
             custom_routing_function=routing_function,
             swiglu_limit=self.swiglu_limit,
             apply_router_weight_before_w2=True,
-            yoco_policy=YocoMoEPolicy.for_mode(cast(YocoExecutionMode, execution_mode)),
+            yoco_policy=policy,
             routed_input_transform=routed_input_transform,
             routed_output_transform=routed_output_transform,
             combined_output_transform=combined_output_transform,
@@ -577,6 +590,15 @@ class YOCOMoE(nn.Module):
             moe_backend_override=moe_backend_override,
             prefix=f"{prefix}.experts",
         )
+        if mega_moe:
+            from vllm.model_executor.layers.quantization.online.fp8 import (
+                Fp8PerBlockOnlineMoEMethod,
+            )
+
+            if not isinstance(
+                self.experts.routed_experts.quant_method, Fp8PerBlockOnlineMoEMethod
+            ):
+                raise ValueError("YOCO MegaMoE requires online block128 FP8 experts")
 
     def initialize_router_weight_cache(self) -> None:
         if self.execution_mode == "align" or self.router_weights_normalized:

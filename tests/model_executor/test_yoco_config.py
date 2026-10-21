@@ -38,6 +38,20 @@ def _make_vllm_config(
     )
 
 
+def test_mega_requires_an_explicit_activation_recipe():
+    from vllm.config.yoco import YocoMoEPolicy, get_yoco_mega_moe_mode
+
+    assert get_yoco_mega_moe_mode({}) == "off"
+    assert get_yoco_mega_moe_mode({"yoco_mega_moe": "fp8_group32"}) == "fp8_group32"
+    for value in (True, "auto", "fp8", "bf16"):
+        with pytest.raises(ValueError, match="explicitly"):
+            get_yoco_mega_moe_mode({"yoco_mega_moe": value})
+    with pytest.raises(ValueError, match="Fast"):
+        YocoMoEPolicy.for_mode("align", mega_moe=True)
+    assert not YocoMoEPolicy.for_mode("fast").mega_moe
+    assert YocoMoEPolicy.for_mode("fast", mega_moe=True).mega_moe
+
+
 def test_yoco_backend_resolution_defers_startup_changes(monkeypatch):
     from vllm.model_executor.models import yoco_config
     from vllm.utils import flashinfer

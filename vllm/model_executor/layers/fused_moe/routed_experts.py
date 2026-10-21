@@ -1198,6 +1198,12 @@ class RoutedExperts(PluggableLayer):
         """
         assert not self.quant_method.is_monolithic
 
+        if self.moe_config.yoco.mega_moe:
+            core = getattr(self, "_yoco_mega_moe", None)
+            if core is None:
+                raise RuntimeError("YOCO MegaMoE must be prepared before inference")
+            return core(x, topk_weights, topk_ids)
+
         # Modular kernels use pre-computed routing
         return self.quant_method.apply(
             layer=self,

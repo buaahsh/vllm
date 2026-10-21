@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from vllm.config import VllmConfig
 
 YocoExecutionMode = Literal["align", "fast"]
+YocoMegaMoEMode = Literal["off", "fp8_group32"]
 YOCO_FP8_GROUP_EPS = 1e-4
 
 
@@ -57,6 +58,17 @@ def get_yoco_execution_mode(additional_config: object) -> YocoExecutionMode:
     return cast(YocoExecutionMode, mode)
 
 
+def get_yoco_mega_moe_mode(additional_config: object) -> YocoMegaMoEMode:
+    mode = (
+        additional_config.get("yoco_mega_moe", "off")
+        if isinstance(additional_config, Mapping)
+        else "off"
+    )
+    if mode not in ("off", "fp8_group32"):
+        raise ValueError("yoco_mega_moe must be 'off' or explicitly 'fp8_group32'")
+    return cast(YocoMegaMoEMode, mode)
+
+
 @dataclass(frozen=True)
 class YocoMoEPolicy:
     """Numerical and tuning choices propagated with the MoE configuration."""
@@ -73,6 +85,7 @@ class YocoMoEPolicy:
     fast_moe_sum: bool = False
     swapped_w13: bool = False
     fp8_decode_aligned: bool = False
+    mega_moe: bool = False
     fp8_group_quant_eps: float = field(default=YOCO_FP8_GROUP_EPS, init=False)
 
     def __post_init__(self) -> None:
@@ -80,9 +93,13 @@ class YocoMoEPolicy:
             raise ValueError("YOCO Align and Fast MoE reductions are exclusive")
         if self.triton_fallback_max_tokens < 0:
             raise ValueError("YOCO fallback token limit cannot be negative")
+        if self.mega_moe and (not self.enabled or self.align_weighted_swiglu):
+            raise ValueError("YOCO MegaMoE requires Fast execution")
 
     @classmethod
-    def for_mode(cls, mode: YocoExecutionMode) -> "YocoMoEPolicy":
+    def for_mode(
+        cls, mode: YocoExecutionMode, *, mega_moe: bool = False
+    ) -> "YocoMoEPolicy":
         if mode not in ("align", "fast"):
             raise ValueError(f"Unsupported YOCO execution mode: {mode!r}")
         fast = mode == "fast"
@@ -95,4 +112,5 @@ class YocoMoEPolicy:
             triton_fallback_max_tokens=int(fast),
             align_moe_sum=not fast,
             fast_moe_sum=fast,
+            mega_moe=mega_moe,
         )

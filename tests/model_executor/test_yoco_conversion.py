@@ -2,9 +2,26 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """YOCO conversion regression tests."""
 
+import pytest
 import torch
 
 from convert_to_hf import convert_state_dict, create_hf_config
+
+
+def test_mega_rejects_weight_reload_before_consuming_or_modifying_weights():
+    from vllm.model_executor.models.yoco_weights import load_weights
+
+    model = torch.nn.Module()
+    model.register_parameter("weight", torch.nn.Parameter(torch.ones(1)))
+    model._yoco_mega_moe = object()
+
+    def replacement():
+        raise AssertionError("The frozen model must reject before consuming weights")
+        yield
+
+    with pytest.raises(RuntimeError, match="frozen weights"):
+        load_weights(model, replacement())
+    torch.testing.assert_close(model.weight, torch.ones(1))
 
 
 def test_yoco_embedding_conversion_preserves_lookup_exactly() -> None:

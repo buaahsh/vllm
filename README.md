@@ -6,6 +6,11 @@
 草稿所有预测位置共同读取锚点之前最近 8192 个 KV，主模型仍保留完整历史。
 以下使用 **2026-10-06 本次测试固定的 step-7750**，不是自动追踪最新 checkpoint。
 
+`fhb-dev-aligndeepinfer-startpoint` 增加了显式选择的
+[YOCO FP8 MegaMoE](docs/yoco/performance/MEGA_MOE.md)，通过
+`--additional-config '{"yoco_execution_mode":"fast","yoco_mega_moe":"fp8_group32"}'`
+启用。该路径更改 routed 激活量化分组，默认关闭；适用配置、端到端基准与回归入口见说明。
+
 ## 对应的脚本和 PVC 路径
 
 下面所有模型路径都以 **PVC 根目录挂载到 `/mnt/pvc`** 为前提。

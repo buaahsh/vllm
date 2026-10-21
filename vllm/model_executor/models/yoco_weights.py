@@ -239,6 +239,10 @@ def refresh_derived_weight_caches(model: YOCOForCausalLM) -> None:
 def load_weights(
     model: YOCOForCausalLM, weights: Iterable[tuple[str, torch.Tensor]]
 ) -> set[str]:
+    if any(getattr(m, "_yoco_mega_moe", None) is not None for m in model.modules()):
+        raise RuntimeError(
+            "YOCO MegaMoE uses frozen weights; create a new engine to reload"
+        )
     loader = _YocoWeightLoader(model)
     for name, weight in weights:
         loader.load_one(name, weight)
