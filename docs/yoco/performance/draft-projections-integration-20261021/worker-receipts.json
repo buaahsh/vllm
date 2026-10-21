@@ -1,0 +1,579 @@
+{
+  "native": {
+    "status": "PASS",
+    "rows": 30,
+    "worker": [
+      {
+        "backend": "mega",
+        "layers": [
+          "model.layers.0.mlp",
+          "model.layers.1.mlp",
+          "model.layers.2.mlp",
+          "model.layers.3.mlp",
+          "model.layers.4.mlp",
+          "model.layers.5.mlp",
+          "model.layers.6.mlp",
+          "model.layers.7.mlp",
+          "model.layers.8.mlp",
+          "model.layers.9.mlp",
+          "model.layers.10.mlp",
+          "model.layers.11.mlp",
+          "model.layers.12.mlp",
+          "model.layers.13.mlp",
+          "model.layers.14.mlp",
+          "model.layers.15.mlp",
+          "model.layers.16.mlp",
+          "model.layers.17.mlp",
+          "model.layers.18.mlp",
+          "model.layers.19.mlp"
+        ],
+        "mega_layers": 20,
+        "workspace_count": 1,
+        "shared_workspace_bytes": 525678464,
+        "torch": "2.13.0+cu130",
+        "deep_gemm": "2.8.2",
+        "deep_gemm_file": "/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/__init__.py",
+        "allocated": 70401766400,
+        "draft_type": "SharedKVSpeculator",
+        "runner": "vllm.v1.worker.gpu.model_runner",
+        "fast_prefill": true,
+        "aux_hidden_layers": [
+          20
+        ],
+        "draft_logits_dtype": "torch.float32",
+        "additional_config": {
+          "yoco_execution_mode": "fast",
+          "yoco_mega_moe": "fp8_group32"
+        },
+        "shared_kv_attention_fa_version": 4,
+        "dispatch": {
+          "profile": "b200-l3-fp8-tp1-k8",
+          "triton_max_tokens": 16,
+          "mega_min_tokens": 17,
+          "mega_prefill": false
+        },
+        "mega_capture_decisions": {
+          "72": true,
+          "36": true,
+          "18": true,
+          "9": false
+        },
+        "triton_max_tokens": 16,
+        "graphs": {
+          "target": {
+            "widest_mode": "FULL",
+            "widest_captured": true,
+            "captured_tokens": [
+              9,
+              18,
+              36,
+              72
+            ],
+            "replays": {
+              "1x9/9": 389,
+              "4x9/36": 297,
+              "2x9/18": 97,
+              "8x9/72": 279
+            }
+          },
+          "draft": {
+            "widest_mode": "FULL",
+            "widest_captured": true,
+            "captured_tokens": [
+              8,
+              16,
+              24,
+              32,
+              40,
+              64
+            ],
+            "replays": {
+              "4x8/32": 287,
+              "1x8/8": 399,
+              "3x8/24": 102,
+              "2x8/16": 137,
+              "8x8/64": 312,
+              "5x8/40": 62
+            }
+          }
+        },
+        "target_graph_backends": {
+          "8x9/72": "mega",
+          "4x9/36": "mega",
+          "2x9/18": "mega",
+          "1x9/9": "triton"
+        }
+      }
+    ]
+  },
+  "paired": {
+    "status": "PASS",
+    "worker": [
+      {
+        "worker": {
+          "backend": "mega",
+          "layers": [
+            "model.layers.0.mlp",
+            "model.layers.1.mlp",
+            "model.layers.2.mlp",
+            "model.layers.3.mlp",
+            "model.layers.4.mlp",
+            "model.layers.5.mlp",
+            "model.layers.6.mlp",
+            "model.layers.7.mlp",
+            "model.layers.8.mlp",
+            "model.layers.9.mlp",
+            "model.layers.10.mlp",
+            "model.layers.11.mlp",
+            "model.layers.12.mlp",
+            "model.layers.13.mlp",
+            "model.layers.14.mlp",
+            "model.layers.15.mlp",
+            "model.layers.16.mlp",
+            "model.layers.17.mlp",
+            "model.layers.18.mlp",
+            "model.layers.19.mlp"
+          ],
+          "mega_layers": 20,
+          "workspace_count": 1,
+          "shared_workspace_bytes": 525678464,
+          "torch": "2.13.0+cu130",
+          "deep_gemm": "2.8.2",
+          "deep_gemm_file": "/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/__init__.py",
+          "allocated": 70888311808,
+          "draft_type": "SharedKVSpeculator",
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "fast_prefill": true,
+          "aux_hidden_layers": [
+            20
+          ],
+          "draft_logits_dtype": "torch.float32",
+          "additional_config": {
+            "yoco_execution_mode": "fast",
+            "yoco_mega_moe": "fp8_group32"
+          },
+          "shared_kv_attention_fa_version": 4,
+          "dispatch": {
+            "profile": "b200-l3-fp8-tp1-k8",
+            "triton_max_tokens": 16,
+            "mega_min_tokens": 17,
+            "mega_prefill": false
+          },
+          "mega_capture_decisions": {
+            "72": true,
+            "36": true,
+            "18": true,
+            "9": false
+          },
+          "triton_max_tokens": 16,
+          "graphs": {
+            "target": {
+              "widest_mode": "FULL",
+              "widest_captured": true,
+              "captured_tokens": [
+                9,
+                18,
+                36,
+                72
+              ],
+              "replays": {
+                "1x9/9": 875,
+                "4x9/36": 635,
+                "2x9/18": 225,
+                "8x9/72": 664
+              }
+            },
+            "draft": {
+              "widest_mode": "FULL",
+              "widest_captured": true,
+              "captured_tokens": [
+                8,
+                16,
+                24,
+                32,
+                40,
+                64
+              ],
+              "replays": {
+                "1x8/8": 1678,
+                "4x8/32": 1546,
+                "3x8/24": 103,
+                "2x8/16": 139,
+                "8x8/64": 1589,
+                "5x8/40": 59
+              }
+            }
+          },
+          "target_graph_backends": {
+            "8x9/72": "mega",
+            "4x9/36": "mega",
+            "2x9/18": "mega",
+            "1x9/9": "triton"
+          }
+        },
+        "checks": [
+          {
+            "batch": 1,
+            "prefix_lens": [
+              26
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=8, num_reqs=1, uniform_token_count=8, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "exact": [
+              "hidden",
+              "draft_tokens",
+              "draft_logits",
+              "draft_token_confidence_probs"
+            ],
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  1.4465005493164063,
+                  1.446505584716797,
+                  1.4465434265136718,
+                  1.4469183349609376,
+                  1.4465837097167968,
+                  1.4466259765625,
+                  1.4459718322753907,
+                  1.446914520263672,
+                  1.4463827514648437,
+                  1.4468716430664061,
+                  1.4466648864746094,
+                  1.44625732421875
+                ],
+                "combined": [
+                  1.39791748046875,
+                  1.3976345825195313,
+                  1.397269744873047,
+                  1.3970643615722655,
+                  1.3970649719238282,
+                  1.3975975036621093,
+                  1.397430419921875,
+                  1.3969395446777344,
+                  1.3972703552246093,
+                  1.3972691345214843,
+                  1.3971859741210937,
+                  1.397189178466797
+                ]
+              },
+              "median_ms": {
+                "baseline": 1.4465635681152342,
+                "combined": 1.3972694396972656
+              },
+              "latency_reduction_pct": 3.4076710836977053
+            }
+          },
+          {
+            "batch": 4,
+            "prefix_lens": [
+              25,
+              26,
+              27,
+              30
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=32, num_reqs=4, uniform_token_count=8, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "exact": [
+              "hidden",
+              "draft_tokens",
+              "draft_logits",
+              "draft_token_confidence_probs"
+            ],
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  1.5809100341796876,
+                  1.5802989196777344,
+                  1.5811199951171875,
+                  1.5807501220703124,
+                  1.581036834716797,
+                  1.58067138671875,
+                  1.5806271362304687,
+                  1.5805471801757813,
+                  1.5803800964355468,
+                  1.5802560424804688,
+                  1.5811161804199219,
+                  1.580631103515625
+                ],
+                "combined": [
+                  1.525344696044922,
+                  1.5246937561035157,
+                  1.5241183471679687,
+                  1.5244467163085937,
+                  1.5243667602539062,
+                  1.524490203857422,
+                  1.5239993286132814,
+                  1.5240806579589843,
+                  1.524652862548828,
+                  1.5246546936035157,
+                  1.524081268310547,
+                  1.5242457580566406
+                ]
+              },
+              "median_ms": {
+                "baseline": 1.5806512451171875,
+                "combined": 1.5244067382812498
+              },
+              "latency_reduction_pct": 3.558312246909834
+            }
+          },
+          {
+            "batch": 8,
+            "prefix_lens": [
+              24,
+              25,
+              26,
+              26,
+              27,
+              27,
+              28,
+              30
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=64, num_reqs=8, uniform_token_count=8, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "exact": [
+              "hidden",
+              "draft_tokens",
+              "draft_logits",
+              "draft_token_confidence_probs"
+            ],
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  1.7247634887695313,
+                  1.7243942260742187,
+                  1.7244345092773437,
+                  1.724520263671875,
+                  1.7244781494140624,
+                  1.7246829223632814,
+                  1.7251341247558594,
+                  1.7246829223632814,
+                  1.7246835327148438,
+                  1.7243142700195313,
+                  1.7245631408691406,
+                  1.7240269470214844
+                ],
+                "combined": [
+                  1.6653952026367187,
+                  1.6655186462402343,
+                  1.6658419799804687,
+                  1.6655136108398438,
+                  1.6656396484375,
+                  1.665191650390625,
+                  1.6654751586914063,
+                  1.6650630187988282,
+                  1.6659263610839843,
+                  1.6651884460449218,
+                  1.6655162048339844,
+                  1.6654348754882813
+                ]
+              },
+              "median_ms": {
+                "baseline": 1.7245417022705078,
+                "combined": 1.665494384765625
+              },
+              "latency_reduction_pct": 3.4239425713592175
+            }
+          },
+          {
+            "batch": 1,
+            "prefix_lens": [
+              8193
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=8, num_reqs=1, uniform_token_count=8, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "exact": [
+              "hidden",
+              "draft_tokens",
+              "draft_logits",
+              "draft_token_confidence_probs"
+            ],
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  1.4951411437988282,
+                  1.4949388122558593,
+                  1.494649658203125,
+                  1.495142364501953,
+                  1.4946925354003906,
+                  1.494529266357422,
+                  1.4943257141113282,
+                  1.4951872253417968,
+                  1.494936981201172,
+                  1.4944895935058593,
+                  1.4946124267578125,
+                  1.494691162109375
+                ],
+                "combined": [
+                  1.4467079162597656,
+                  1.4467507934570312,
+                  1.4464633178710937,
+                  1.445602569580078,
+                  1.4458079528808594,
+                  1.4464242553710938,
+                  1.4465023803710937,
+                  1.4463795471191405,
+                  1.44629638671875,
+                  1.446705322265625,
+                  1.4462150573730468,
+                  1.4462136840820312
+                ]
+              },
+              "median_ms": {
+                "baseline": 1.4946918487548828,
+                "combined": 1.446401901245117
+              },
+              "latency_reduction_pct": 3.230762752201566
+            }
+          },
+          {
+            "batch": 4,
+            "prefix_lens": [
+              8234,
+              8229,
+              8206,
+              8193
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=32, num_reqs=4, uniform_token_count=8, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "exact": [
+              "hidden",
+              "draft_tokens",
+              "draft_logits",
+              "draft_token_confidence_probs"
+            ],
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  1.6990252685546876,
+                  1.6993081665039063,
+                  1.6989389038085938,
+                  1.6988557434082032,
+                  1.699183349609375,
+                  1.6990611267089843,
+                  1.698775634765625,
+                  1.6987347412109375,
+                  1.6986924743652343,
+                  1.6989395141601562,
+                  1.6993075561523439,
+                  1.6986111450195311
+                ],
+                "combined": [
+                  1.644028778076172,
+                  1.6435002136230468,
+                  1.6435821533203125,
+                  1.6438681030273437,
+                  1.644152374267578,
+                  1.6431321716308593,
+                  1.643790740966797,
+                  1.6444429016113282,
+                  1.6437855529785157,
+                  1.6439506530761718,
+                  1.6444064331054689,
+                  1.643377227783203
+                ]
+              },
+              "median_ms": {
+                "baseline": 1.698939208984375,
+                "combined": 1.6438294219970704
+              },
+              "latency_reduction_pct": 3.243776274976262
+            }
+          },
+          {
+            "batch": 8,
+            "prefix_lens": [
+              8270,
+              8313,
+              8267,
+              8291,
+              8244,
+              8231,
+              8223,
+              8193
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=64, num_reqs=8, uniform_token_count=8, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "exact": [
+              "hidden",
+              "draft_tokens",
+              "draft_logits",
+              "draft_token_confidence_probs"
+            ],
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  1.9341293334960938,
+                  1.933968048095703,
+                  1.9334010314941406,
+                  1.9345797729492187,
+                  1.9348690795898438,
+                  1.933927001953125,
+                  1.9348255920410156,
+                  1.9346624755859374,
+                  1.934706573486328,
+                  1.9344557189941407,
+                  1.9338426208496093,
+                  1.9342962646484374
+                ],
+                "combined": [
+                  1.8753753662109376,
+                  1.8751271057128907,
+                  1.8744377136230468,
+                  1.8744326782226564,
+                  1.874514617919922,
+                  1.8744306945800782,
+                  1.8748384094238282,
+                  1.874514617919922,
+                  1.8748422241210938,
+                  1.874596405029297,
+                  1.8750502014160155,
+                  1.8749221801757812
+                ]
+              },
+              "median_ms": {
+                "baseline": 1.934375991821289,
+                "combined": 1.8747174072265627
+              },
+              "latency_reduction_pct": 3.084125570569951
+            }
+          }
+        ],
+        "pending": null,
+        "audit_graphs": {
+          "combined": {
+            "tokens": [
+              8,
+              16,
+              24,
+              32,
+              40,
+              64
+            ],
+            "replays": {
+              "8": 1678,
+              "32": 1546,
+              "24": 103,
+              "16": 139,
+              "64": 1589,
+              "40": 59
+            }
+          },
+          "baseline": {
+            "tokens": [
+              8,
+              16,
+              24,
+              32,
+              40,
+              64
+            ],
+            "replays": {
+              "8": 1763,
+              "32": 1608,
+              "24": 136,
+              "16": 182,
+              "64": 1709,
+              "40": 96
+            }
+          }
+        },
+        "scope": "The second draft pool and baseline caches are audit-only."
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "source_files": 8046,
+  "runtime_files": 1996,
+  "mismatches": [],
+  "harness_sha256": {
+    "paired_merge.py": "c51cf56c8354a9980cd5f74b5db4efce938b59f3db7ecc967870d6a9a1779ec0",
+    "baseline_model.py": "12cfa62df041c79dd58bcea525bfafbbd40de72adeeb3898c10553f6513117b2",
+    "run.sh": "68aeaa829dd5ac0921b6ac767b94a4cad8ab26ec7391f4e7c2a9907c555dbbe8",
+    "config.json": "3e010020c29e5cdd626c66481994d933e80153235fa0f592b52cde5dbd2ba32e"
+  }
+}

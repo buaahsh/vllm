@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "pod_identity": {
+    "uid": "9a026fd8-e732-4fcb-b855-85ea6a6358ed",
+    "node": "slc01-cl02-hgx-0347",
+    "containers": [
+      {
+        "name": "master",
+        "containerID": "containerd://a06c6715192e04da827cecb8ef771fe27a64da274efdc3a4bf9969c9ef2786c5",
+        "restartCount": 0
+      }
+    ]
+  },
+  "pod_identity_unchanged": true,
+  "pid7_exists": true,
+  "gpu_memory_mib": 0,
+  "gpu_utilization_pct": 0,
+  "gpu_lock_acquirable": true,
+  "executed_harness_hashes_match": true,
+  "source_audit_status": "PASS"
+}

@@ -1,0 +1,23 @@
+{
+  "status": "ACCEPTED",
+  "basis": "Explicit user acceptance of draft-side gains with numerical and graph compatibility validation.",
+  "user_request": "这不在draft侧有明显的收益吗，我觉得OK啊，可以合并进去",
+  "parent_commit": "7b525571d0af65f89d72970c9a3462fac1f5c990",
+  "candidate_code_commits": [
+    "04088223dfb93d805caf17e4e8e81bc40aab1177",
+    "8d8bd197c7f4e87c7d4b5c294243967a13c953e9"
+  ],
+  "end_to_end_gain_claimed": false,
+  "combined_correctness": "PASS",
+  "local_tests": 95,
+  "b200_tests": 169,
+  "production_graph_counts": {
+    "target": 4,
+    "draft": 6
+  },
+  "files_sha256": {
+    "vllm/model_executor/models/yoco_shared_kv.py": "f4bc7958946efba9e7c8418bdcb6a6d29c4cae7ec81c15284b523cc9b33c50ba",
+    "tests/model_executor/test_yoco_shared_kv.py": "3b52680f0f82131d07abd976d40e0625428645b0347fd2734841a2b1056ce638"
+  },
+  "full_manifest_path": "/data/vllm_test/work/yoco-draft-projections-merge-20261021/source-manifest.json"
+}
