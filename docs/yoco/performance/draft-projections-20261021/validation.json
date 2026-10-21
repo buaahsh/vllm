@@ -1,0 +1,22 @@
+{
+  "base": "7b525571d0af65f89d72970c9a3462fac1f5c990",
+  "tests": {
+    "local": {
+      "rope": 92,
+      "gate-up": 92
+    },
+    "b200": {
+      "rope": 92,
+      "gate-up": 92
+    }
+  },
+  "skips": 0,
+  "local_command": "CUDA_VISIBLE_DEVICES=<idle A6000 UUID> .venv/bin/python -m pytest --confcutdir=tests/model_executor -q tests/model_executor/test_yoco_prefill.py tests/model_executor/test_yoco_shared_kv.py",
+  "remote_command": "integration-venv/bin/python -m pytest --confcutdir=<version>/tests/model_executor -q <version>/tests/model_executor/test_yoco_prefill.py <version>/tests/model_executor/test_yoco_shared_kv.py",
+  "checks": "All applicable pre-commit hooks passed for code, tests, report and reproducibility harness; raw hook logs retained in the external experiment directory.",
+  "same_input_exact_cases": 6,
+  "same_engine_formal_pairs": 84,
+  "native_quality_positions_per_process": 256,
+  "new_code_not_in_main": true,
+  "final_harness_ast_equal_ignoring_top_level_import_order": true
+}

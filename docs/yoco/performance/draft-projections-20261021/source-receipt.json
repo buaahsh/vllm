@@ -1,0 +1,20 @@
+{
+  "base": "7b525571d0af65f89d72970c9a3462fac1f5c990",
+  "code_commits": {
+    "rope": "04088223dfb93d805caf17e4e8e81bc40aab1177",
+    "gate-up": "8d8bd197c7f4e87c7d4b5c294243967a13c953e9"
+  },
+  "full_source_manifest": "/data/vllm_test/work/yoco-draft-projections-20261021/source-manifest.json",
+  "source_manifest_sha256": "e310582e785d4763ec75812698dc57f663bb5ad96341c476614d096aa084b50e",
+  "runtime_manifest": "/data/vllm_test/work/yoco-draft-projections-20261021/runtime-support.json",
+  "files": {
+    "rope": {
+      "vllm/model_executor/models/yoco_shared_kv.py": "1bebd716c5eb951562f5291acd1da30d9f7068e4a3543ea31a5e65df2388b7e3",
+      "tests/model_executor/test_yoco_shared_kv.py": "9b5537d9afa0261b56b28b8a97778f6ae3a24a9ef259b5b2ad7a1fdc95eac94e"
+    },
+    "gate-up": {
+      "vllm/model_executor/models/yoco_shared_kv.py": "3decc364385e17f922897e141bf8c10bb08318838d7f557938932e13d186a5a7",
+      "tests/model_executor/test_yoco_shared_kv.py": "a52f99cf67294bcef1525c6536be908890fa1ebf2313b5d231a8374640cc31ba"
+    }
+  }
+}
