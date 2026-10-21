@@ -1,0 +1,44 @@
+{
+  "model": "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf",
+  "dtype": "bfloat16",
+  "quantization": "fp8_per_block",
+  "tensor_parallel_size": 1,
+  "max_model_len": 12288,
+  "max_num_seqs": 8,
+  "max_num_batched_tokens": 2048,
+  "gpu_memory_utilization": 0.75,
+  "kv_cache_memory_bytes": 8589934592,
+  "enable_prefix_caching": false,
+  "kv_sharing_fast_prefill": true,
+  "disable_log_stats": false,
+  "worker_extension_cls": "tools.yoco_alignment.benchmark_mega_moe.MegaMoEBenchmarkWorker",
+  "speculative_config": {
+    "model": "/mnt/pvc/lidong1/opd-fast-rollout-20261016/draft-parent-30000",
+    "method": "dspark",
+    "num_speculative_tokens": 8,
+    "draft_sample_method": "probabilistic",
+    "rejection_sample_method": "standard"
+  },
+  "compilation_config": {
+    "cudagraph_mode": "FULL_DECODE_ONLY",
+    "max_cudagraph_capture_size": 72,
+    "cudagraph_capture_sizes": [
+      1,
+      2,
+      4,
+      8,
+      9,
+      16,
+      18,
+      32,
+      36,
+      64,
+      72
+    ]
+  },
+  "additional_config": {
+    "yoco_execution_mode": "fast",
+    "yoco_mega_moe": "fp8_group32"
+  },
+  "async_scheduling": false
+}

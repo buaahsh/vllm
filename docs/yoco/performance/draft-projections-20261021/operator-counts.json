@@ -1,0 +1,32 @@
+[
+  {
+    "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=8, num_reqs=1, uniform_token_count=8, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+    "counts": {
+      "baseline": {
+        "aten::linear": 81,
+        "aten::mm": 49,
+        "aten::arange": 16,
+        "aten::pow": 8,
+        "aten::cos": 4,
+        "aten::sin": 4
+      },
+      "rope": {
+        "aten::arange": 10,
+        "aten::pow": 2,
+        "aten::cos": 1,
+        "aten::sin": 1,
+        "aten::linear": 81,
+        "aten::mm": 49
+      },
+      "gate-up": {
+        "aten::linear": 73,
+        "aten::mm": 45,
+        "aten::arange": 16,
+        "aten::pow": 8,
+        "aten::cos": 4,
+        "aten::sin": 4
+      }
+    },
+    "scope": "CPU operator counts in a separate eager replay after all event timings; not latency data."
+  }
+]

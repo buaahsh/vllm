@@ -1,0 +1,62 @@
+{
+  "status": "PASS",
+  "pod_identity": {
+    "uid": "9a026fd8-e732-4fcb-b855-85ea6a6358ed",
+    "node": "slc01-cl02-hgx-0347",
+    "containers": [
+      {
+        "name": "master",
+        "containerID": "containerd://a06c6715192e04da827cecb8ef771fe27a64da274efdc3a4bf9969c9ef2786c5",
+        "restartCount": 0
+      }
+    ]
+  },
+  "pod_identity_unchanged": true,
+  "pid7_exists": true,
+  "gpu_memory_after_mib": 0,
+  "gpu_utilization_after_pct": 0,
+  "gpu_lock_acquirable": true,
+  "harness_ast_equal_ignoring_top_level_import_order": {
+    "rope": {
+      "paired.py": true,
+      "components.py": true,
+      "summarize.py": true
+    },
+    "gate-up": {
+      "paired.py": true,
+      "components.py": true,
+      "summarize.py": true
+    }
+  },
+  "source_audit": {
+    "status": "PASS",
+    "versions": {
+      "parent": {
+        "source_files": 8046,
+        "source_mismatches": [],
+        "runtime_files": 1996,
+        "runtime_mismatches": []
+      },
+      "rope": {
+        "source_files": 8046,
+        "source_mismatches": [],
+        "runtime_files": 1996,
+        "runtime_mismatches": []
+      },
+      "gate-up": {
+        "source_files": 8046,
+        "source_mismatches": [],
+        "runtime_files": 1996,
+        "runtime_mismatches": []
+      }
+    },
+    "harness_sha256": {
+      "paired.py": "19ebdde9ed0e02a7b28e2f853b8bafbcc584528a58a913f0740311c1aa7583c0",
+      "components.py": "568169d626655702250a5f1cd5bb04d092da3eefe5cb7ccc11ef58c6e28805b8",
+      "run.sh": "9d289783c09c452f3deba7303ac5f001516d644b8e8dc8308fce4b3fe67b67fd",
+      "run-components.sh": "cc414aa61903acb52a06e91a4834f568e69a6181b420c1d8de4feaa8fa79a7ac",
+      "config.json": "3e010020c29e5cdd626c66481994d933e80153235fa0f592b52cde5dbd2ba32e"
+    }
+  },
+  "main_base": "7b525571d0af65f89d72970c9a3462fac1f5c990"
+}

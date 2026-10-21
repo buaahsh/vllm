@@ -1,0 +1,157 @@
+{
+  "status": "MEASURED_NOT_ADOPTED",
+  "base": "7b525571d0af65f89d72970c9a3462fac1f5c990",
+  "code_commits": {
+    "rope": "04088223dfb93d805caf17e4e8e81bc40aab1177",
+    "gate-up": "8d8bd197c7f4e87c7d4b5c294243967a13c953e9"
+  },
+  "branches": {
+    "rope": "fhb-dev-draft-shared-rope-20261021",
+    "gate-up": "fhb-dev-draft-merged-gate-up-20261021"
+  },
+  "reason": "Both candidates reduce local draft work, but the tested complete engine panel does not establish a stable throughput benefit.",
+  "component_rows": [
+    {
+      "length": 0,
+      "concurrency": 1,
+      "mode": "rope",
+      "baseline_ms": 1.4597792053222656,
+      "candidate_ms": 1.3952978515625,
+      "latency_reduction_pct": 4.417199089058843
+    },
+    {
+      "length": 0,
+      "concurrency": 1,
+      "mode": "gate-up",
+      "baseline_ms": 1.4597792053222656,
+      "candidate_ms": 1.45121337890625,
+      "latency_reduction_pct": 0.586789179129632
+    },
+    {
+      "length": 0,
+      "concurrency": 4,
+      "mode": "rope",
+      "baseline_ms": 1.5834553527832032,
+      "candidate_ms": 1.5323167419433594,
+      "latency_reduction_pct": 3.22955811478729
+    },
+    {
+      "length": 0,
+      "concurrency": 4,
+      "mode": "gate-up",
+      "baseline_ms": 1.5834553527832032,
+      "candidate_ms": 1.5800563049316407,
+      "latency_reduction_pct": 0.21466016364705132
+    },
+    {
+      "length": 0,
+      "concurrency": 8,
+      "mode": "rope",
+      "baseline_ms": 1.73430908203125,
+      "candidate_ms": 1.6767398071289064,
+      "latency_reduction_pct": 3.3194357049043166
+    },
+    {
+      "length": 0,
+      "concurrency": 8,
+      "mode": "gate-up",
+      "baseline_ms": 1.73430908203125,
+      "candidate_ms": 1.7229203796386718,
+      "latency_reduction_pct": 0.6566708616459249
+    },
+    {
+      "length": 8193,
+      "concurrency": 1,
+      "mode": "rope",
+      "baseline_ms": 1.5047897338867187,
+      "candidate_ms": 1.440891571044922,
+      "latency_reduction_pct": 4.246318366138391
+    },
+    {
+      "length": 8193,
+      "concurrency": 1,
+      "mode": "gate-up",
+      "baseline_ms": 1.5047897338867187,
+      "candidate_ms": 1.4981350708007812,
+      "latency_reduction_pct": 0.44223208971190253
+    },
+    {
+      "length": 8193,
+      "concurrency": 4,
+      "mode": "rope",
+      "baseline_ms": 1.7027328491210938,
+      "candidate_ms": 1.6489900207519532,
+      "latency_reduction_pct": 3.1562689588611192
+    },
+    {
+      "length": 8193,
+      "concurrency": 4,
+      "mode": "gate-up",
+      "baseline_ms": 1.7027328491210938,
+      "candidate_ms": 1.6973004150390625,
+      "latency_reduction_pct": 0.3190420672764649
+    },
+    {
+      "length": 8193,
+      "concurrency": 8,
+      "mode": "rope",
+      "baseline_ms": 1.941976318359375,
+      "candidate_ms": 1.8853286743164062,
+      "latency_reduction_pct": 2.9170100328940185
+    },
+    {
+      "length": 8193,
+      "concurrency": 8,
+      "mode": "gate-up",
+      "baseline_ms": 1.941976318359375,
+      "candidate_ms": 1.9332325744628907,
+      "latency_reduction_pct": 0.45024976946532735
+    }
+  ],
+  "production_graph_counts": {
+    "target": 4,
+    "draft": 6
+  },
+  "same_engine_scored_batches": 126,
+  "native_scored_batches": 72,
+  "tests": {
+    "local": {
+      "rope": 92,
+      "gate-up": 92
+    },
+    "b200": {
+      "rope": 92,
+      "gate-up": 92
+    }
+  },
+  "source_audit": {
+    "status": "PASS",
+    "versions": {
+      "parent": {
+        "source_files": 8046,
+        "source_mismatches": [],
+        "runtime_files": 1996,
+        "runtime_mismatches": []
+      },
+      "rope": {
+        "source_files": 8046,
+        "source_mismatches": [],
+        "runtime_files": 1996,
+        "runtime_mismatches": []
+      },
+      "gate-up": {
+        "source_files": 8046,
+        "source_mismatches": [],
+        "runtime_files": 1996,
+        "runtime_mismatches": []
+      }
+    },
+    "harness_sha256": {
+      "paired.py": "19ebdde9ed0e02a7b28e2f853b8bafbcc584528a58a913f0740311c1aa7583c0",
+      "components.py": "568169d626655702250a5f1cd5bb04d092da3eefe5cb7ccc11ef58c6e28805b8",
+      "run.sh": "9d289783c09c452f3deba7303ac5f001516d644b8e8dc8308fce4b3fe67b67fd",
+      "run-components.sh": "cc414aa61903acb52a06e91a4834f568e69a6181b420c1d8de4feaa8fa79a7ac",
+      "config.json": "3e010020c29e5cdd626c66481994d933e80153235fa0f592b52cde5dbd2ba32e"
+    }
+  }
+}
