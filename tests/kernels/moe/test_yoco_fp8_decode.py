@@ -48,10 +48,11 @@ def make_experts(scales):
     return TritonOrDeepGemmExperts(config, quant)
 
 
-def test_decode_scale_cache_and_dispatch(scales):
+@pytest.mark.parametrize("max_tokens", [1, 8, 16, 32, 64])
+def test_decode_scale_cache_and_dispatch(scales, max_tokens):
     s1, s2, packed1, packed2 = scales
     experts = make_experts(scales)
-    assert experts.configure_yoco_fp8_decode()
+    assert experts.configure_yoco_fp8_decode(max_tokens=max_tokens)
     fallback = experts.fallback_experts
     assert fallback.moe_config.yoco.fp8_decode_aligned
     assert fallback.moe_config.yoco.direct_fp8_activation
@@ -65,7 +66,7 @@ def test_decode_scale_cache_and_dispatch(scales):
     for m in [1, 2, 4, 8, 16, 17, 32, 64, 128]:
         x = torch.empty(m, 1024, dtype=torch.float8_e4m3fn, device="meta")
         selected = experts._select_experts_impl(x, w1, w2)
-        assert selected is (fallback if m <= 16 else experts.experts)
+        assert selected is (fallback if m <= max_tokens else experts.experts)
     assert not experts.configure_yoco_fp8_decode(max_tokens=0)
     assert experts._select_experts_impl(x[:1], w1, w2) is experts.experts
 

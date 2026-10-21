@@ -9,10 +9,12 @@ import torch
 
 import vllm.envs as envs
 from vllm.config import get_current_vllm_config
+from vllm.config.compilation import CUDAGraphMode
+from vllm.config.yoco import resolve_yoco_moe_dispatch
 from vllm.distributed import get_tp_group
 from vllm.logger import init_logger
 from vllm.platforms import current_platform
-from vllm.utils.deep_gemm import get_deep_gemm_mega_moe
+from vllm.utils.deep_gemm import get_deep_gemm_mega_moe, is_deep_gemm_e8m0_used
 
 logger = init_logger(__name__)
 
@@ -130,9 +132,7 @@ class YOCOMegaMoERouted:
         return output
 
 
-@torch.no_grad()
-def prepare_yoco_mega_moe(layer: Any, kernel: Any) -> None:
-    """Prepare frozen layouts before profiling/capture; retain runner overlap."""
+def _supports_yoco_mega_moe(layer: Any, kernel: Any) -> bool:
     from vllm.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
         DeepGemmExperts,
     )
@@ -140,8 +140,6 @@ def prepare_yoco_mega_moe(layer: Any, kernel: Any) -> None:
         TritonOrDeepGemmExperts,
     )
 
-    if getattr(layer, "_yoco_mega_moe", None) is not None:
-        raise RuntimeError("YOCO MegaMoE weights are frozen; create a new engine")
     config = get_current_vllm_config()
     parallel = config.parallel_config
     moe = layer.moe_config
@@ -149,7 +147,7 @@ def prepare_yoco_mega_moe(layer: Any, kernel: Any) -> None:
     experts = kernel.fused_experts
     if isinstance(experts, TritonOrDeepGemmExperts):
         experts = experts.experts
-    if (
+    return not (
         not current_platform.is_device_capability_family(100)
         or envs.VLLM_BATCH_INVARIANT
         or parallel.tensor_parallel_size != 1
@@ -175,11 +173,110 @@ def prepare_yoco_mega_moe(layer: Any, kernel: Any) -> None:
         or tuple(layer.w2_weight.shape) != (128, 1024, 3840)
         or layer.w13_weight.dtype != torch.float8_e4m3fn
         or layer.w2_weight.dtype != torch.float8_e4m3fn
-    ):
+    )
+
+
+@torch.no_grad()
+def configure_yoco_moe_dispatch(layer: Any, kernel: Any) -> None:
+    """Resolve configuration once, before warmup and CUDA Graph capture."""
+    from vllm.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
+        TritonOrDeepGemmExperts,
+    )
+
+    config = get_current_vllm_config()
+    parallel = config.parallel_config
+    decode_graphs = (
+        config.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_DECODE_ONLY
+    )
+    spec = config.speculative_config
+    dispatch = resolve_yoco_moe_dispatch(
+        config.additional_config,
+        gpu_name=current_platform.get_device_name(layer.w13_weight.device.index),
+        parallel_sizes=(
+            parallel.tensor_parallel_size,
+            parallel.pipeline_parallel_size,
+            parallel.data_parallel_size,
+            layer.moe_config.moe_parallel_config.ep_size,
+        ),
+        profile_compatible=(
+            _supports_yoco_mega_moe(layer, kernel)
+            and is_deep_gemm_e8m0_used()
+            and decode_graphs
+            and not config.model_config.enforce_eager
+            and bool(envs.VLLM_USE_V2_MODEL_RUNNER)
+            and getattr(spec, "method", None) == "dspark"
+        ),
+        speculative_tokens=getattr(spec, "num_speculative_tokens", 0),
+    )
+    experts = kernel.fused_experts
+    if dispatch.triton_max_tokens is not None:
+        if not isinstance(experts, TritonOrDeepGemmExperts):
+            raise ValueError("triton_max_tokens requires TritonOrDeepGemmExperts")
+        if dispatch.triton_max_tokens == 0:
+            experts._yoco_fp8_decode_limit = 0
+        elif not experts.configure_yoco_fp8_decode(dispatch.triton_max_tokens):
+            raise ValueError("triton_max_tokens is unsupported by this FP8 layout")
+    layer._yoco_moe_dispatch = dispatch
+    layer._yoco_moe_decode_only_graphs = decode_graphs
+    layer._yoco_moe_capture_backends = {}
+    logger.info_once(
+        "YOCO MoE dispatch profile=%s, Triton M<=%s, Mega M>=%s, "
+        "Mega prefill=%s. Unselected rows retain the original backend.",
+        dispatch.profile,
+        dispatch.triton_max_tokens,
+        dispatch.mega_min_tokens,
+        dispatch.mega_prefill,
+    )
+    if dispatch.mega_min_tokens is not None:
+        prepare_yoco_mega_moe(layer, kernel)
+
+
+def use_yoco_mega_moe(layer: Any, num_tokens: int) -> bool:
+    from vllm.forward_context import (
+        get_forward_context,
+        is_forward_context_available,
+    )
+
+    dispatch = layer._yoco_moe_dispatch
+    # Profiling without metadata must exercise the original path to reserve its
+    # largest workspace before the workspace manager locks graph addresses.
+    if not is_forward_context_available():
+        return False
+    context = get_forward_context()
+    if context.attn_metadata is None:
+        return False
+    selected = dispatch.use_mega(
+        num_tokens,
+        decode_graph=(
+            layer._yoco_moe_decode_only_graphs
+            and CUDAGraphMode.FULL
+            in (context.cudagraph_runtime_mode, context.cudagraph_capture_mode)
+        ),
+    )
+    if context.cudagraph_capture_mode != CUDAGraphMode.NONE:
+        layer._yoco_moe_capture_backends[num_tokens] = selected
+    return selected
+
+
+@torch.no_grad()
+def prepare_yoco_mega_moe(layer: Any, kernel: Any) -> None:
+    """Prepare frozen layouts before profiling/capture; retain runner overlap."""
+    if getattr(layer, "_yoco_mega_moe", None) is not None:
+        raise RuntimeError("YOCO MegaMoE weights are frozen; create a new engine")
+    if not _supports_yoco_mega_moe(layer, kernel):
         raise ValueError(
             "YOCO MegaMoE requires SM100 Fast L3 online block128 FP8, BF16 inputs, "
             "TP1/PP1/DP1/EP1, without CP, EPLB, DBO, LoRA or batch invariance"
         )
+    from vllm.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
+        TritonOrDeepGemmExperts,
+    )
+
+    config = get_current_vllm_config()
+    moe = layer.moe_config
+    experts = kernel.fused_experts
+    if isinstance(experts, TritonOrDeepGemmExperts):
+        experts = experts.experts
     if torch.cuda.is_current_stream_capturing():
         raise RuntimeError("Prepare YOCO MegaMoE before CUDA graph capture")
     backend = get_deep_gemm_mega_moe()

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+# Merge with your checkpoint, draft, parallelism and serving configuration.
+quantization: fp8_per_block
+compilation-config:
+  cudagraph_mode: FULL_DECODE_ONLY
+additional-config:
+  yoco_execution_mode: fast
+  yoco_mega_moe: fp8_group32
+  yoco_moe_dispatch:
+    mode: auto

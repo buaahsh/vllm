@@ -1,0 +1,28 @@
+{
+  "parent_commit": "45b893be045abe66e6433fb141f912cc665f3e99",
+  "source_files": {
+    "vllm/config/yoco.py": "363b551da496215168a24ab5dad5ee4876ec17ea313dcabeb0719404f49bdd03",
+    "vllm/model_executor/layers/yoco_ops/mega_moe.py": "cc0ed593447cedda27c763f0fda52611826db8841222430b1d25261f77f79dff",
+    "vllm/model_executor/layers/quantization/online/fp8.py": "549e3eb35fa4588312610a9d6fbde1e3d3b3283e08784341e19ff0f589568a3b",
+    "vllm/model_executor/layers/fused_moe/routed_experts.py": "db3b9348998493be6116c5908edf640c10acc50e8c0c00d144d5094959b1eab4",
+    "tools/yoco_alignment/benchmark_mega_moe.py": "bcbe96914d06ab3d1483df3e97ccf0a811a908be1a3130ae962c0e4c8684460f",
+    "vllm/forward_context.py": "9d6795f1d5630a8b4b70bb6cee76b99482de1dd4ed40798cea9b8149dfd89483",
+    "vllm/v1/worker/gpu/cudagraph_utils.py": "ae423a0a816e996b4d4040f6f48a7457cee4db82434868c3e9af817cf151dd87"
+  },
+  "pod": "living-cobra-b200g4-dev-f5def941-master-0",
+  "pod_uid": "9a026fd8-e732-4fcb-b855-85ea6a6358ed",
+  "node": "slc01-cl02-hgx-0347",
+  "gpu": "GPU-ef7d6ee6-0fce-4e0b-b14c-87bd8a36c5fe",
+  "scope": "Only GPU6; existing holder unchanged",
+  "source_files_verified": 7969,
+  "source_manifest_sha256": "f98223f0e46d7161741b2a276042d50d806457c3e37143f24474dd545ee92384",
+  "runtime_support_files_verified": 1943,
+  "runtime_support_manifest_sha256": "2002469f51a3a1baa57121d4b886bc1ec16be25ee0b3d159e6ba2f2df0d3f9ea",
+  "python": "3.12.3",
+  "torch": "2.13.0+cu130",
+  "torch_cuda": "13.0",
+  "triton": "3.7.1",
+  "deep_gemm": "2.8.2",
+  "deep_gemm_extension_sha256": "c0f54cacf14e6024921bd9f34d2119c77b3f5544d8194110e97ed60cf0465d41",
+  "all_runs_passed": true
+}

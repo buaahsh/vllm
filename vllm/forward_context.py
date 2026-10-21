@@ -147,6 +147,8 @@ class ForwardContext:
     # determine the cudagraph style at runtime to be FULL, PIECEWISE, or NONE.
     # by default NONE, no cudagraph is used.
     cudagraph_runtime_mode: CUDAGraphMode = CUDAGraphMode.NONE
+    # Intended graph during capture/warmup; V2 runs FULL capture with runtime NONE.
+    cudagraph_capture_mode: CUDAGraphMode = CUDAGraphMode.NONE
     batch_descriptor: BatchDescriptor | None = None
 
     ubatch_slices: UBatchSlices | None = None
@@ -231,6 +233,7 @@ def create_forward_context(
     additional_kwargs: dict[str, Any] | None = None,
     skip_compiled: bool = False,
     is_padding: torch.Tensor | None = None,
+    cudagraph_capture_mode: CUDAGraphMode = CUDAGraphMode.NONE,
 ):
     if vllm_config.compilation_config.fast_moe_cold_start:
         all_moe_layers = vllm_config.compilation_config.static_all_moe_layers
@@ -245,6 +248,7 @@ def create_forward_context(
         dp_metadata=dp_metadata,
         fast_prefill_num_tokens_across_dp_cpu=(fast_prefill_num_tokens_across_dp_cpu),
         cudagraph_runtime_mode=cudagraph_runtime_mode,
+        cudagraph_capture_mode=cudagraph_capture_mode,
         batch_descriptor=batch_descriptor,
         ubatch_slices=ubatch_slices,
         skip_compiled=skip_compiled,
@@ -281,6 +285,7 @@ def set_forward_context(
     slot_mapping: dict[str, torch.Tensor] | list[dict[str, torch.Tensor]] | None = None,
     skip_compiled: bool = False,
     is_padding: torch.Tensor | None = None,
+    cudagraph_capture_mode: CUDAGraphMode = CUDAGraphMode.NONE,
 ):
     """A context manager that stores the current forward context,
     can be attention metadata, etc.
@@ -351,6 +356,7 @@ def set_forward_context(
         additional_kwargs,
         skip_compiled,
         is_padding=is_padding,
+        cudagraph_capture_mode=cudagraph_capture_mode,
     )
 
     try:

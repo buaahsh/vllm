@@ -577,12 +577,15 @@ class _Fp8OnlineMoEBase(OnlineMoEMethodBase):
                 experts = self.moe_kernel.fused_experts
                 if isinstance(experts, TritonOrDeepGemmExperts):
                     experts.configure_yoco_fp8_decode(cached_scales=prior_cache)
-            if layer.moe_config.yoco.mega_moe:
+            if (
+                layer.moe_config.yoco.enabled
+                and not layer.moe_config.yoco.align_weighted_swiglu
+            ):
                 from vllm.model_executor.layers.yoco_ops.mega_moe import (
-                    prepare_yoco_mega_moe,
+                    configure_yoco_moe_dispatch,
                 )
 
-                prepare_yoco_mega_moe(layer, self.moe_kernel)
+                configure_yoco_moe_dispatch(layer, self.moe_kernel)
 
     def get_fused_moe_quant_config(
         self, layer: torch.nn.Module

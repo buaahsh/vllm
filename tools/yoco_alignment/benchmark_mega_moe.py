@@ -99,6 +99,13 @@ class MegaMoEBenchmarkWorker:
             draft_type=type(runner.speculator).__name__,
             draft_logits_dtype=str(runner.speculator.draft_logits.dtype),
             additional_config=self.vllm_config.additional_config,
+            dispatch=asdict(layers[0][1]._yoco_moe_dispatch),
+            mega_capture_decisions=layers[0][1]._yoco_moe_capture_backends,
+            triton_max_tokens=getattr(
+                layers[0][1].quant_method.moe_kernel.fused_experts,
+                "_yoco_fp8_decode_limit",
+                None,
+            ),
         )
         status["graphs"] = {}
         for name, manager, width in (
@@ -111,6 +118,27 @@ class MegaMoEBenchmarkWorker:
                 widest_captured=desc in manager.graphs,
                 captured_tokens=manager.captured_token_counts(),
                 replays=getattr(self, "_ab_graph_counts", {}).get(name, {}),
+            )
+        status["target_graph_backends"] = {
+            f"{desc.num_reqs}x{desc.uniform_token_count}/{desc.num_tokens}": (
+                "mega"
+                if status["mega_capture_decisions"].get(desc.num_tokens, False)
+                else (
+                    "triton"
+                    if 0 < desc.num_tokens <= (status["triton_max_tokens"] or 0)
+                    else "deep_gemm"
+                )
+            )
+            for desc in runner.cudagraph_manager.graphs
+        }
+        if cores:
+            assert all(
+                layer._yoco_moe_capture_backends == status["mega_capture_decisions"]
+                for _, layer in layers
+            )
+            assert all(
+                desc.num_tokens in status["mega_capture_decisions"]
+                for desc in runner.cudagraph_manager.graphs
             )
         return status
 
@@ -127,7 +155,9 @@ def main():
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--model", default=TARGET)
     p.add_argument("--draft", default=DRAFT)
-    p.add_argument("--backend", choices=["current", "mega"], required=True)
+    p.add_argument("--backend", choices=["current", "mega", "hybrid"], required=True)
+    p.add_argument("--dispatch-config", type=Path)
+    p.add_argument("--concurrencies", type=int, nargs="+", default=[1, 2, 4, 8])
     p.add_argument("--prompt-tokens", type=int, default=0)
     p.add_argument("--quality-tokens", type=int, default=512)
     p.add_argument("--extra-prompt-tokens", type=int, default=0)
@@ -139,6 +169,7 @@ def main():
         args.tokens < 1
         or args.trials < 1
         or args.quality_tokens < 1
+        or any(c not in range(1, 9) for c in args.concurrencies)
         or not 0 <= max(args.prompt_tokens, args.extra_prompt_tokens) <= 7168
     ):
         p.error("Require positive token/trial counts and prompt-tokens in [0,7168]")
@@ -183,9 +214,20 @@ def main():
         },
         "additional_config": {
             "yoco_execution_mode": "fast",
-            "yoco_mega_moe": "fp8_group32" if args.backend == "mega" else "off",
+            "yoco_mega_moe": "off" if args.backend == "current" else "fp8_group32",
         },
     }
+    if args.backend == "mega":
+        config["additional_config"]["yoco_moe_dispatch"] = {
+            "mode": "manual",
+            "mega_min_tokens": 1,
+            "mega_prefill": True,
+        }
+    if args.dispatch_config:
+        import yaml
+
+        extra = yaml.safe_load(args.dispatch_config.read_text())["additional-config"]
+        config["additional_config"].update(extra)
     if args.pilot:
         config["enforce_eager"] = True
     save(
@@ -209,6 +251,7 @@ def main():
             "prompt_tokens": args.prompt_tokens,
             "extra_prompt_tokens": args.extra_prompt_tokens,
             "quality_tokens_per_prompt": args.quality_tokens,
+            "concurrencies": args.concurrencies,
         },
     )
     event("loading")
@@ -220,8 +263,11 @@ def main():
     assert status[0]["draft_type"] == "SharedKVSpeculator", status
     assert status[0]["draft_logits_dtype"] == "torch.float32", status
     assert len(status[0]["layers"]) == 20
-    assert status[0]["mega_layers"] == (20 if args.backend == "mega" else 0)
-    assert status[0]["workspace_count"] == (1 if args.backend == "mega" else 0)
+    expect_mega = status[0]["dispatch"]["mega_min_tokens"] is not None
+    assert status[0]["mega_layers"] == (20 if expect_mega else 0)
+    assert status[0]["workspace_count"] == (1 if expect_mega else 0)
+    if args.backend == "hybrid" and not args.pilot and not args.dispatch_config:
+        assert status[0]["dispatch"]["profile"] == "b200-l3-fp8-tp1-k8", status
     if not args.pilot:
         assert all(g["widest_captured"] for g in status[0]["graphs"].values()), status
     tokenizer = llm.get_tokenizer()
@@ -334,7 +380,7 @@ def main():
     save("teacher-forced.json", teacher_rows)
     rows = []
     for profile, workload in profiles:
-        for concurrency in [1, 4] if args.pilot else [1, 4, 8]:
+        for concurrency in args.concurrencies:
             count = (
                 1
                 if args.pilot

@@ -52,6 +52,89 @@ def test_mega_requires_an_explicit_activation_recipe():
     assert YocoMoEPolicy.for_mode("fast", mega_moe=True).mega_moe
 
 
+@pytest.mark.parametrize(
+    "gpu,parallel,compatible,k,expected",
+    [
+        ("NVIDIA B200", (1, 1, 1, 1), True, 8, 17),
+        ("NVIDIA B200", (2, 1, 1, 1), True, 8, None),
+        ("NVIDIA B200", (1, 1, 2, 2), True, 8, None),
+        ("NVIDIA H100", (1, 1, 1, 1), True, 8, None),
+        ("NVIDIA GB200", (1, 1, 1, 1), True, 8, None),
+        ("NVIDIA B200", (1, 1, 1, 1), False, 8, None),
+        ("NVIDIA B200", (1, 1, 1, 1), True, 0, None),
+    ],
+)
+def test_moe_auto_does_not_extrapolate_to_unmeasured_configs(
+    gpu, parallel, compatible, k, expected
+):
+    from vllm.config.yoco import resolve_yoco_moe_dispatch
+
+    dispatch = resolve_yoco_moe_dispatch(
+        {"yoco_mega_moe": "fp8_group32"},
+        gpu_name=gpu,
+        parallel_sizes=parallel,
+        profile_compatible=compatible,
+        speculative_tokens=k,
+    )
+    assert dispatch.mega_min_tokens == expected
+    assert dispatch.triton_max_tokens == (16 if expected else None)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"mode": "auto", "mega_min_tokens": 17},
+        {"mode": "manual", "mega_min_tokens": True},
+        {"mode": "manual", "triton_max_tokens": 65},
+        {"mode": "manual", "triton_max_tokens": -1},
+        {"mode": "manual", "mega_min_tokens": 0},
+        {"mode": "manual", "mega_prefill": "false"},
+        {"mode": "manual", "triton_max_tokens": 16, "mega_min_tokens": 16},
+        {"mode": "manual", "mega_min_token": 17},
+    ],
+)
+def test_moe_yaml_rejects_ambiguous_thresholds(options):
+    from vllm.config.yoco import resolve_yoco_moe_dispatch
+
+    with pytest.raises(ValueError):
+        resolve_yoco_moe_dispatch(
+            {"yoco_mega_moe": "fp8_group32", "yoco_moe_dispatch": options},
+            gpu_name="NVIDIA B200",
+            parallel_sizes=(1, 1, 1, 1),
+            profile_compatible=True,
+            speculative_tokens=8,
+        )
+
+
+def test_manual_moe_thresholds_override_auto_and_can_disable_mega():
+    from vllm.config.yoco import resolve_yoco_moe_dispatch
+
+    options: dict[str, object] = {
+        "mode": "manual",
+        "triton_max_tokens": 8,
+        "mega_min_tokens": 37,
+    }
+    extra = {
+        "yoco_mega_moe": "fp8_group32",
+        "yoco_moe_dispatch": options,
+    }
+    kwargs = dict(
+        gpu_name="NVIDIA B200",
+        parallel_sizes=(1, 1, 1, 1),
+        profile_compatible=True,
+        speculative_tokens=8,
+    )
+    dispatch = resolve_yoco_moe_dispatch(extra, **kwargs)
+    assert (dispatch.triton_max_tokens, dispatch.mega_min_tokens) == (8, 37)
+    options["mega_min_tokens"] = None
+    assert resolve_yoco_moe_dispatch(extra, **kwargs).mega_min_tokens is None
+    extra["yoco_mega_moe"] = "off"
+    assert resolve_yoco_moe_dispatch(extra, **kwargs).mega_min_tokens is None
+    options["mega_min_tokens"] = 37
+    with pytest.raises(ValueError, match="explicit"):
+        resolve_yoco_moe_dispatch(extra, **kwargs)
+
+
 def test_yoco_backend_resolution_defers_startup_changes(monkeypatch):
     from vllm.model_executor.models import yoco_config
     from vllm.utils import flashinfer

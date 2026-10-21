@@ -70,6 +70,78 @@ def get_yoco_mega_moe_mode(additional_config: object) -> YocoMegaMoEMode:
 
 
 @dataclass(frozen=True)
+class YocoMoEDispatch:
+    """Resolved, graph-stable routed-expert thresholds (local token rows)."""
+
+    profile: str = "original"
+    triton_max_tokens: int | None = None
+    mega_min_tokens: int | None = None
+    mega_prefill: bool = False
+
+    def use_mega(self, num_tokens: int, *, decode_graph: bool) -> bool:
+        return (
+            self.mega_min_tokens is not None
+            and num_tokens >= self.mega_min_tokens
+            and (self.mega_prefill or decode_graph)
+        )
+
+
+def resolve_yoco_moe_dispatch(
+    additional_config: object,
+    *,
+    gpu_name: str,
+    parallel_sizes: tuple[int, int, int, int],
+    profile_compatible: bool,
+    speculative_tokens: int,
+) -> YocoMoEDispatch:
+    """Use measured profiles only; manual YAML thresholds override selection."""
+    extra = additional_config if isinstance(additional_config, Mapping) else {}
+    options = extra.get("yoco_moe_dispatch", {})
+    if not isinstance(options, Mapping):
+        raise ValueError("yoco_moe_dispatch must be a mapping")
+    unknown = options.keys() - {
+        "mode",
+        "triton_max_tokens",
+        "mega_min_tokens",
+        "mega_prefill",
+    }
+    if unknown:
+        raise ValueError(f"Unknown yoco_moe_dispatch options: {sorted(unknown)}")
+    mode = options.get("mode", "auto")
+    if mode not in ("auto", "manual"):
+        raise ValueError("yoco_moe_dispatch.mode must be 'auto' or 'manual'")
+    mega_enabled = get_yoco_mega_moe_mode(extra) != "off"
+    if mode == "auto":
+        if options.keys() - {"mode"}:
+            raise ValueError("Use yoco_moe_dispatch.mode=manual to set thresholds")
+        # Evidence and full matching contract: docs/yoco/performance/MEGA_MOE.md.
+        if (
+            mega_enabled
+            and gpu_name == "NVIDIA B200"
+            and parallel_sizes == (1, 1, 1, 1)
+            and profile_compatible
+            and speculative_tokens == 8
+        ):
+            return YocoMoEDispatch("b200-l3-fp8-tp1-k8", 16, 17, False)
+        return YocoMoEDispatch("unprofiled-original")
+
+    triton = options.get("triton_max_tokens")
+    mega = options.get("mega_min_tokens")
+    prefill = options.get("mega_prefill", False)
+    if triton is not None and (type(triton) is not int or not 0 <= triton <= 64):
+        raise ValueError("triton_max_tokens must be null or an integer in [0,64]")
+    if mega is not None and (type(mega) is not int or mega < 1):
+        raise ValueError("mega_min_tokens must be null or a positive integer")
+    if type(prefill) is not bool:
+        raise ValueError("mega_prefill must be a boolean")
+    if mega is not None and not mega_enabled:
+        raise ValueError("mega_min_tokens requires explicit yoco_mega_moe=fp8_group32")
+    if mega is not None and triton is not None and mega <= triton:
+        raise ValueError("mega_min_tokens must exceed triton_max_tokens")
+    return YocoMoEDispatch("manual", triton, mega, prefill)
+
+
+@dataclass(frozen=True)
 class YocoMoEPolicy:
     """Numerical and tuning choices propagated with the MoE configuration."""
 

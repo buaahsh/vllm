@@ -1,0 +1,13 @@
+{
+  "source_files_verified": 7969,
+  "source_manifest_sha256": "f98223f0e46d7161741b2a276042d50d806457c3e37143f24474dd545ee92384",
+  "runtime_support_files_verified": 1943,
+  "runtime_support_manifest_sha256": "2002469f51a3a1baa57121d4b886bc1ec16be25ee0b3d159e6ba2f2df0d3f9ea",
+  "python": "3.12.3",
+  "torch": "2.13.0+cu130",
+  "torch_cuda": "13.0",
+  "triton": "3.7.1",
+  "deep_gemm": "2.8.2",
+  "deep_gemm_extension_sha256": "c0f54cacf14e6024921bd9f34d2119c77b3f5544d8194110e97ed60cf0465d41",
+  "all_runs_passed": true
+}
