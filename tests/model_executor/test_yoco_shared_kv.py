@@ -14,6 +14,81 @@ from vllm.model_executor.models.yoco_shared_kv import (
 from vllm.v1.worker.gpu.spec_decode.dspark.shared_kv import select_shared_kv_context
 
 
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@torch.inference_mode()
+def test_shared_kv_shared_rotary_matches_per_layer_preparation(dtype):
+    """Sharing positions across layers must preserve the original draft output."""
+    from copy import deepcopy
+    from types import MethodType
+
+    from vllm.model_executor.models.yoco_shared_kv import SharedKVLayer
+
+    torch.manual_seed(42)
+    c = SharedKVConfig(
+        hidden=16,
+        ffn=24,
+        heads=4,
+        kv_heads=2,
+        head_dim=4,
+        layers=4,
+        vocab=32,
+        block=8,
+        rank=8,
+    )
+    model = SharedKVDraft(c).to(dtype).eval()
+    for parameter in model.parameters():
+        parameter.uniform_(-0.2, 0.2)
+    reference = deepcopy(model)
+
+    def per_layer(self, z, current, positions, attend_prefix, cos_sin=None):
+        return SharedKVLayer.forward(self, z, current, positions, attend_prefix)
+
+    for layer in reference.layers:
+        layer.forward = MethodType(per_layer, layer)
+    ids = torch.randint(c.vocab, (2, c.block))
+    current = torch.randn(2, c.hidden, dtype=dtype)
+    for offset in (0, 8193, 1234567):
+        positions = torch.tensor([offset, offset + 37])[:, None] + torch.arange(c.block)
+        torch.testing.assert_close(
+            model(ids, current, positions, lambda q: q),
+            reference(ids, current, positions, lambda q: q),
+            rtol=0,
+            atol=0,
+        )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA RoPE replay")
+@torch.inference_mode()
+def test_shared_kv_shared_rotary_reads_new_positions_on_graph_replay():
+    """Graph replay must recompute phases from the current request positions."""
+    from vllm.model_executor.models.yoco_shared_kv import rotary, rotary_cos_sin
+
+    q = torch.randn(2, 4, 8, 128, device="cuda", dtype=torch.bfloat16)
+    k = torch.randn(2, 2, 8, 128, device="cuda", dtype=torch.bfloat16)
+    positions = torch.arange(16, device="cuda").reshape(2, 8)
+
+    def run():
+        phases = rotary_cos_sin(positions, 128, 10000.0, torch.float32)
+        return rotary(q, k, positions, 10000.0, phases)
+
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        for _ in range(2):
+            run()
+    torch.cuda.current_stream().wait_stream(stream)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph, stream=stream):
+        captured = run()
+    for offset in (8193, 1234567):
+        positions.add_(offset)
+        graph.replay()
+        expected = rotary(q, k, positions, 10000.0)
+        torch.accelerator.synchronize()
+        for actual, reference in zip(captured, expected):
+            torch.testing.assert_close(actual, reference, rtol=0, atol=0)
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA proposal sampling")
 def test_shared_kv_rejection_cache_preserves_fp32_markov_logits():
     from types import SimpleNamespace

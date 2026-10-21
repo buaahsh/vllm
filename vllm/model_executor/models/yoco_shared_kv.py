@@ -121,14 +121,21 @@ class _SharedKVInferenceLinear(nn.Linear):
         return F.linear(x, self._bf16_weight)
 
 
-def rotary(q, k, positions, theta):
-    dim = q.shape[-1]
-    dtype = torch.float64 if q.dtype == torch.float64 else torch.float32
-    q, k = q.to(dtype), k.to(dtype)
-    inv = theta ** (-torch.arange(0, dim, 2, device=q.device, dtype=dtype) / dim)
+def rotary_cos_sin(positions, dim, theta, dtype):
+    inv = theta ** (
+        -torch.arange(0, dim, 2, device=positions.device, dtype=dtype) / dim
+    )
     angles = positions.to(dtype)[..., None] * inv
     angles = torch.cat((angles, angles), dim=-1)
-    cos, sin = angles.cos().to(q.dtype)[:, None], angles.sin().to(q.dtype)[:, None]
+    return angles.cos()[:, None], angles.sin()[:, None]
+
+
+def rotary(q, k, positions, theta, cos_sin=None):
+    dtype = torch.float64 if q.dtype == torch.float64 else torch.float32
+    q, k = q.to(dtype), k.to(dtype)
+    if cos_sin is None:
+        cos_sin = rotary_cos_sin(positions, q.shape[-1], theta, dtype)
+    cos, sin = cos_sin
 
     def rotate(x):
         first, second = x.chunk(2, dim=-1)
@@ -174,7 +181,7 @@ class SharedKVLayer(nn.Module):
         self.alpha = nn.Parameter(torch.empty(()))
         self.global_gate_logit = nn.Parameter(torch.empty(()))
 
-    def forward(self, z, current, positions, attend_prefix):
+    def forward(self, z, current, positions, attend_prefix, cos_sin=None):
         c = self.c
         batch, block, _ = z.shape
         conditioned = z + self.alpha * self.hidden_proj(current)[:, None]
@@ -185,7 +192,7 @@ class SharedKVLayer(nn.Module):
             local.k_proj(normed).view(batch, block, c.kv_heads, c.head_dim)
         )
         v = local.v_proj(normed).view(batch, block, c.kv_heads, c.head_dim)
-        q, k = rotary(q.transpose(1, 2), k.transpose(1, 2), positions, c.theta)
+        q, k = rotary(q.transpose(1, 2), k.transpose(1, 2), positions, c.theta, cos_sin)
         local_result = F.scaled_dot_product_attention(
             q, k, v.transpose(1, 2), is_causal=True, enable_gqa=True
         )
@@ -252,8 +259,10 @@ class SharedKVDraft(nn.Module):
             raise ValueError("Draft query length must fit the trained slot embeddings")
         z = self.embed_tokens(block_ids) + self.slot_embedding[None, :block]
         current = self.current_norm(current_hidden)
+        dtype = torch.float64 if z.dtype == torch.float64 else torch.float32
+        cos_sin = rotary_cos_sin(positions, self.c.head_dim, self.c.theta, dtype)
         for layer in self.layers:
-            z = layer(z, current, positions, attend_prefix)
+            z = layer(z, current, positions, attend_prefix, cos_sin)
         return self.norm(z)
 
     def compute_draft_logits(self, hidden_states):
