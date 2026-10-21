@@ -1,0 +1,9 @@
+{
+  "parent_commit": "ca9e851fb8c07d1b57f359fe4fdbb728a7561c81",
+  "files": {
+    "vllm/model_executor/models/yoco_shared_kv.py": "f4bbdf90d6d14c188fd1aea334b58705283864bdbf2ece5df63db3cdfd9ab37e",
+    "vllm/model_executor/models/yoco_shared_kv_swa.py": "532324c616145b908195594b90ec77f0cfa11f1b6c4cb9a4f25f32e9e521aa4c",
+    "tests/model_executor/test_yoco_shared_kv.py": "7e1a30d52cb2dada539fac7aa63a9f33a595577f045767987fac4b7c41ee6d8f",
+    "tools/yoco_alignment/benchmark_mega_moe.py": "57e5349a45d6ab47ee6cd02a19291510f5d1a707bea97e820f0d76a4a2f78678"
+  }
+}

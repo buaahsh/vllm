@@ -1,0 +1,218 @@
+{
+  "scope": "Combined native compatibility validation; no new baseline comparison",
+  "worker": {
+    "backend": "mega",
+    "layers": [
+      "model.layers.0.mlp",
+      "model.layers.1.mlp",
+      "model.layers.2.mlp",
+      "model.layers.3.mlp",
+      "model.layers.4.mlp",
+      "model.layers.5.mlp",
+      "model.layers.6.mlp",
+      "model.layers.7.mlp",
+      "model.layers.8.mlp",
+      "model.layers.9.mlp",
+      "model.layers.10.mlp",
+      "model.layers.11.mlp",
+      "model.layers.12.mlp",
+      "model.layers.13.mlp",
+      "model.layers.14.mlp",
+      "model.layers.15.mlp",
+      "model.layers.16.mlp",
+      "model.layers.17.mlp",
+      "model.layers.18.mlp",
+      "model.layers.19.mlp"
+    ],
+    "mega_layers": 20,
+    "workspace_count": 1,
+    "shared_workspace_bytes": 525678464,
+    "torch": "2.13.0+cu130",
+    "deep_gemm": "2.8.2",
+    "deep_gemm_file": "/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/__init__.py",
+    "allocated": 69080579072,
+    "draft_type": "SharedKVSpeculator",
+    "draft_logits_dtype": "torch.float32",
+    "additional_config": {
+      "yoco_execution_mode": "fast",
+      "yoco_mega_moe": "fp8_group32"
+    },
+    "shared_kv_attention_fa_version": 4,
+    "dispatch": {
+      "profile": "b200-l3-fp8-tp1-k8",
+      "triton_max_tokens": 16,
+      "mega_min_tokens": 17,
+      "mega_prefill": false
+    },
+    "mega_capture_decisions": {
+      "72": true,
+      "36": true,
+      "18": true,
+      "9": false
+    },
+    "triton_max_tokens": 16,
+    "graphs": {
+      "target": {
+        "widest_mode": "FULL",
+        "widest_captured": true,
+        "captured_tokens": [
+          9,
+          18,
+          36,
+          72
+        ],
+        "replays": {
+          "1x9/9": 760,
+          "4x9/36": 632,
+          "2x9/18": 189,
+          "8x9/72": 623
+        }
+      },
+      "draft": {
+        "widest_mode": "FULL",
+        "widest_captured": true,
+        "captured_tokens": [
+          8,
+          16,
+          24,
+          32,
+          40,
+          64
+        ],
+        "replays": {
+          "1x8/8": 842,
+          "3x8/24": 130,
+          "4x8/32": 594,
+          "2x8/16": 229,
+          "8x8/64": 654,
+          "5x8/40": 64
+        }
+      }
+    },
+    "target_graph_backends": {
+      "8x9/72": "mega",
+      "4x9/36": "mega",
+      "2x9/18": "mega",
+      "1x9/9": "triton"
+    }
+  },
+  "cases": {
+    "short": {
+      "1": {
+        "samples": 3,
+        "elapsed_s": 2.060467720963061,
+        "tokens": 768,
+        "tokens_per_s": 372.73090579697964,
+        "median_tokens_per_s": 343.99289983637385,
+        "minimum_tokens_per_s": 343.3909391935502,
+        "maximum_tokens_per_s": 448.5245145136331,
+        "drafts": 162,
+        "proposed": 1296,
+        "accepted": 605,
+        "acceptance_rate": 0.466820987654321,
+        "mean_acceptance_length": 4.734567901234568,
+        "ttft_p50_ms": 112.64777183532715,
+        "ttft_p95_ms": 112.67223358154297,
+        "request_mean_tpot_p50_ms": 2.4271299259043206,
+        "request_mean_tpot_p95_ms": 2.4331333605097787
+      },
+      "4": {
+        "samples": 3,
+        "elapsed_s": 3.577946678735316,
+        "tokens": 3072,
+        "tokens_per_s": 858.5930076201831,
+        "median_tokens_per_s": 832.6388901391592,
+        "minimum_tokens_per_s": 797.5744873674481,
+        "maximum_tokens_per_s": 962.1987405005068,
+        "drafts": 787,
+        "proposed": 6296,
+        "accepted": 2291,
+        "acceptance_rate": 0.3638818297331639,
+        "mean_acceptance_length": 3.9110546378653113,
+        "ttft_p50_ms": 227.41127014160156,
+        "ttft_p95_ms": 228.93595695495605,
+        "request_mean_tpot_p50_ms": 3.409274327842628,
+        "request_mean_tpot_p95_ms": 4.012532235104956
+      },
+      "8": {
+        "samples": 3,
+        "elapsed_s": 4.2756732208654284,
+        "tokens": 6144,
+        "tokens_per_s": 1436.9666910036703,
+        "median_tokens_per_s": 1452.8404836998823,
+        "minimum_tokens_per_s": 1322.8757166817716,
+        "maximum_tokens_per_s": 1554.0128004751264,
+        "drafts": 1642,
+        "proposed": 13136,
+        "accepted": 4519,
+        "acceptance_rate": 0.34401644336175397,
+        "mean_acceptance_length": 3.7521315468940317,
+        "ttft_p50_ms": 228.32226753234863,
+        "ttft_p95_ms": 236.27188205718994,
+        "request_mean_tpot_p50_ms": 4.012415506968312,
+        "request_mean_tpot_p95_ms": 4.822088602163336
+      }
+    },
+    "context8193": {
+      "1": {
+        "samples": 3,
+        "elapsed_s": 3.6097806254401803,
+        "tokens": 768,
+        "tokens_per_s": 212.75531110878777,
+        "median_tokens_per_s": 210.22005001306755,
+        "minimum_tokens_per_s": 206.097551155413,
+        "maximum_tokens_per_s": 222.63215519524505,
+        "drafts": 184,
+        "proposed": 1472,
+        "accepted": 584,
+        "acceptance_rate": 0.3967391304347826,
+        "mean_acceptance_length": 4.173913043478261,
+        "ttft_p50_ms": 546.8788146972656,
+        "ttft_p95_ms": 550.7991313934326,
+        "request_mean_tpot_p50_ms": 2.5883893610215654,
+        "request_mean_tpot_p95_ms": 2.6557626746887086
+      },
+      "4": {
+        "samples": 3,
+        "elapsed_s": 8.841483740136027,
+        "tokens": 3072,
+        "tokens_per_s": 347.45299434919696,
+        "median_tokens_per_s": 343.1236200306879,
+        "minimum_tokens_per_s": 341.90977504817715,
+        "maximum_tokens_per_s": 357.7674498872778,
+        "drafts": 822,
+        "proposed": 6576,
+        "accepted": 2264,
+        "acceptance_rate": 0.3442822384428224,
+        "mean_acceptance_length": 3.7542579075425793,
+        "ttft_p50_ms": 1370.993733406067,
+        "ttft_p95_ms": 1960.5510830879211,
+        "request_mean_tpot_p50_ms": 5.158281547254791,
+        "request_mean_tpot_p95_ms": 7.928958536472683
+      },
+      "8": {
+        "samples": 3,
+        "elapsed_s": 15.244131124578416,
+        "tokens": 6144,
+        "tokens_per_s": 403.0403536803686,
+        "median_tokens_per_s": 400.00010927618206,
+        "minimum_tokens_per_s": 394.36932858373115,
+        "maximum_tokens_per_s": 415.32897299889606,
+        "drafts": 1705,
+        "proposed": 13640,
+        "accepted": 4475,
+        "acceptance_rate": 0.3280791788856305,
+        "mean_acceptance_length": 3.624633431085044,
+        "ttft_p50_ms": 2274.8756408691406,
+        "ttft_p95_ms": 3853.0361890792847,
+        "request_mean_tpot_p50_ms": 9.741688327973378,
+        "request_mean_tpot_p95_ms": 14.223651792306235
+      }
+    }
+  },
+  "numerical_panel": {
+    "tokens": 2048,
+    "mean_nll": 0.24994225036965692,
+    "scope": "No matched target-batch control; not a quality comparison"
+  }
+}

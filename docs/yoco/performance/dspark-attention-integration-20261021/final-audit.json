@@ -1,0 +1,15 @@
+{
+  "source_files_verified": 7974,
+  "source_manifest_sha256": "6f5ade9480063ebd648dd344e75da63d789922a2c6a537d5f2f84fcf387c72cc",
+  "runtime_files_verified": 1996,
+  "runtime_manifest_sha256": "69d102e786c7d8884ac96e957853f64708b13e045ab7f7aeebbe0faabab34e91",
+  "runtime": {
+    "torch": "2.13.0+cu130",
+    "cutlass": "/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/nvidia_cutlass_dsl/dsl_packages/cutlass/__init__.py",
+    "fa_version": 4,
+    "fa4_interface": "/home/fhb/yoco-dspark-integration-20261021/source/vllm/vllm_flash_attn/cute/interface.py"
+  },
+  "one_target_graph_manager": true,
+  "one_shared_kv_graph_manager": true,
+  "status": "PASS"
+}

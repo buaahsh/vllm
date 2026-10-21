@@ -73,6 +73,7 @@ class MegaMoEBenchmarkWorker:
 
         from vllm.model_executor.layers.yoco_moe import YOCOMoE
         from vllm.utils.deep_gemm import _import_deep_gemm
+        from vllm.v1.attention.backends.fa_utils import get_flash_attn_version
 
         runner = self.model_runner
         layers = [
@@ -99,6 +100,7 @@ class MegaMoEBenchmarkWorker:
             draft_type=type(runner.speculator).__name__,
             draft_logits_dtype=str(runner.speculator.draft_logits.dtype),
             additional_config=self.vllm_config.additional_config,
+            shared_kv_attention_fa_version=get_flash_attn_version(head_size=128),
             dispatch=asdict(layers[0][1]._yoco_moe_dispatch),
             mega_capture_decisions=layers[0][1]._yoco_moe_capture_backends,
             triton_max_tokens=getattr(
@@ -164,17 +166,21 @@ def main():
     p.add_argument("--pilot", action="store_true")
     p.add_argument("--trials", type=int, default=3)
     p.add_argument("--tokens", type=int, default=256)
+    p.add_argument("--max-model-len", type=int, default=8192)
     args = p.parse_args()
     if (
         args.tokens < 1
         or args.trials < 1
         or args.quality_tokens < 1
         or any(c not in range(1, 9) for c in args.concurrencies)
-        or not 0 <= max(args.prompt_tokens, args.extra_prompt_tokens) <= 7168
+        or min(args.prompt_tokens, args.extra_prompt_tokens) < 0
     ):
-        p.error("Require positive token/trial counts and prompt-tokens in [0,7168]")
-    if args.tokens + max(args.prompt_tokens, args.extra_prompt_tokens) > 8192:
-        p.error("Prompt and output must fit max_model_len=8192")
+        p.error("Require positive token/trial counts and nonnegative prompt-tokens")
+    if (
+        args.tokens + max(args.prompt_tokens, args.extra_prompt_tokens)
+        > args.max_model_len
+    ):
+        p.error("Prompt and output must fit --max-model-len")
     args.output.mkdir(exist_ok=False, parents=True)
 
     def save(name, value):
@@ -190,7 +196,7 @@ def main():
         "dtype": "bfloat16",
         "quantization": "fp8_per_block",
         "tensor_parallel_size": 1,
-        "max_model_len": 8192,
+        "max_model_len": args.max_model_len,
         "max_num_seqs": 8,
         "max_num_batched_tokens": 2048,
         "gpu_memory_utilization": 0.75,

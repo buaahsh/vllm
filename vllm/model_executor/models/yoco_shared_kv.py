@@ -190,7 +190,9 @@ class SharedKVDraft(nn.Module):
         ).sigmoid()
 
 
-def paged_prefix_attention(q, cache, block_table, prefix_lens, max_prefix_len):
+def paged_prefix_attention(
+    q, cache, block_table, prefix_lens, max_prefix_len, *, window_size=None
+):
     """Read normalized YOCO KV without writes, RoPE, or query-dependent masking."""
     from vllm.v1.attention.backends.fa_utils import (
         flash_attn_varlen_func,
@@ -202,7 +204,9 @@ def paged_prefix_attention(q, cache, block_table, prefix_lens, max_prefix_len):
     if cache.ndim != 4 or cache.shape[-1] != 2 * dim or cache.dtype != q.dtype:
         raise ValueError("Shared-KV requires an unquantized logical YOCO KV cache")
     keys, values = cache.transpose(1, 2).split(dim, dim=-1)
-    cu_q = torch.arange(batch + 1, device=q.device, dtype=torch.int32) * block
+    cu_q = torch.arange(
+        0, (batch + 1) * block, block, device=q.device, dtype=torch.int32
+    )
     fa_version = get_flash_attn_version(head_size=dim)
     if fa_version is None:
         raise RuntimeError("No supported FlashAttention kernel for Shared-KV")
@@ -216,6 +220,7 @@ def paged_prefix_attention(q, cache, block_table, prefix_lens, max_prefix_len):
         max_seqlen_k=max_prefix_len,
         block_table=block_table,
         causal=False,
+        window_size=window_size,
         softmax_scale=dim**-0.5,
         fa_version=fa_version,
     )

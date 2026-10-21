@@ -4,7 +4,9 @@
 
 import torch
 
+from vllm.model_executor.models.yoco_shared_kv import paged_prefix_attention
 from vllm.triton_utils import tl, triton
+from vllm.v1.attention.backends.fa_utils import get_flash_attn_version
 
 
 @triton.jit
@@ -76,6 +78,8 @@ def paged_window_attention(q, cache, table, ends, window=8192):
     kvheads, page = cache.shape[1:3]
     if heads % kvheads or not 1 <= block <= 8 or dim not in (32, 64, 128):
         raise ValueError("Invalid SWA draft query shape")
+    if get_flash_attn_version(head_size=dim) == 4:
+        return _flash_window_attention(q, cache, table, ends, window)
     q = q.contiguous()
     out = torch.empty_like(q)
     group = heads // kvheads
@@ -99,3 +103,26 @@ def paged_window_attention(q, cache, table, ends, window=8192):
         num_warps=4,
     )
     return out
+
+
+def _flash_window_attention(q, cache, table, ends, window):
+    batch, block, heads, dim = q.shape
+    kvheads, page = cache.shape[1:3]
+    group = heads // kvheads
+    # Fold slots into each KV head's GQA group. With one query position, FA's
+    # window is [end-window, end) for EVERY slot, regardless of its draft offset.
+    query = q.reshape(batch, block, kvheads, group, dim).transpose(1, 2)
+    query = query.reshape(batch, 1, kvheads * block * group, dim)
+    out = paged_prefix_attention(
+        query,
+        cache,
+        table,
+        ends,
+        table.shape[1] * page,
+        window_size=[window - 1, -1],
+    )
+    return (
+        out.reshape(batch, kvheads, block, group, dim)
+        .transpose(1, 2)
+        .reshape(batch, block, heads, dim)
+    )

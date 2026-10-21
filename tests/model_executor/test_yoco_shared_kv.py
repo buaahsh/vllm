@@ -316,8 +316,11 @@ def test_shared_kv_export_pins_checkpoint_and_rejects_changed_weights(tmp_path, 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA graph replay")
 @pytest.mark.parametrize("probabilistic", [False, True])
+@pytest.mark.parametrize("window", [0, 8192])
 @torch.inference_mode()
-def test_shared_kv_graph_replay_updates_prefix_pages_and_sampling(probabilistic):
+def test_shared_kv_graph_replay_updates_prefix_pages_and_sampling(
+    probabilistic, window
+):
     """A captured backbone + Markov sampler must follow new inputs and inert padding."""
     from types import SimpleNamespace
 
@@ -339,6 +342,7 @@ def test_shared_kv_graph_replay_updates_prefix_pages_and_sampling(probabilistic)
         block=4,
         mask_id=127,
         rank=16,
+        draft_kv_window=window,
     )
     model = SharedKVDraft(c).to(device).eval()
     for p in model.parameters():
@@ -440,19 +444,24 @@ def test_shared_kv_graph_replay_updates_prefix_pages_and_sampling(probabilistic)
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA window pages")
 @pytest.mark.parametrize("physical_layout", ["HND", "NHD"])
+@pytest.mark.parametrize("page", [16, 256])
 @torch.inference_mode()
-def test_swa8192_reads_exact_window_and_replays_changed_pages(physical_layout):
+def test_swa8192_reads_exact_window_and_replays_changed_pages(physical_layout, page):
     """Check exact windows, immutable cache, shared slots and changing graphs."""
     from vllm.model_executor.models.yoco_shared_kv_swa import paged_window_attention
 
     torch.manual_seed(42)
-    page, heads, kvheads, dim = 256, 4, 2, 64
-    cache = torch.randn(80, kvheads, page, 2 * dim, device="cuda", dtype=torch.bfloat16)
+    heads, kvheads, dim = 4, 2, 64
+    columns = (17003 + page - 1) // page + 3
+    pages = columns + 10
+    cache = torch.randn(
+        pages, kvheads, page, 2 * dim, device="cuda", dtype=torch.bfloat16
+    )
     if physical_layout == "NHD":
         cache = cache.transpose(1, 2).contiguous().transpose(1, 2)
     # Different mappings exercise physical pages, including non-page-aligned starts.
     table = torch.stack(
-        [torch.randperm(80, device="cuda")[:70] for _ in range(8)]
+        [torch.randperm(pages, device="cuda")[:columns] for _ in range(8)]
     ).int()
     ends = torch.tensor(
         [0, 1, 8191, 8192, 8193, 8255, 8449, 17003], device="cuda", dtype=torch.int32
@@ -498,8 +507,13 @@ def test_swa8192_reads_exact_window_and_replays_changed_pages(physical_layout):
     one_q = q[7:8].clone()
     expected = paged_window_attention(one_q, cache, one_table, one_end)
     poisoned = cache.clone()
-    for pos in list(range(end - 8192)) + list(range(end, 70 * page)):
-        poisoned[one_table[0, pos // page], :, pos % page] = 100
+    outside = torch.cat(
+        (
+            torch.arange(end - 8192, device="cuda"),
+            torch.arange(end, columns * page, device="cuda"),
+        )
+    )
+    poisoned[one_table[0, outside // page], :, outside % page] = 100
     actual = paged_window_attention(one_q, poisoned, one_table, one_end)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
     stream = torch.cuda.Stream()

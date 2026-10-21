@@ -1,0 +1,23 @@
+{
+  "native_base": "7780afb5ac86139269fb31c8dcf330e1feaeabdd",
+  "validated_reference": "4f06396875061c9664bf73566c58c0d28b37ef5b",
+  "flash_attention": "506341a143fcabd4bb79052a7605ada727d6b3f5",
+  "files": {
+    "vllm/model_executor/models/yoco_shared_kv.py": "f4bbdf90d6d14c188fd1aea334b58705283864bdbf2ece5df63db3cdfd9ab37e",
+    "vllm/model_executor/models/yoco_shared_kv_swa.py": "532324c616145b908195594b90ec77f0cfa11f1b6c4cb9a4f25f32e9e521aa4c",
+    "tests/model_executor/test_yoco_shared_kv.py": "64051ebcc1e3ff4c678127f29c8bf40bdfe4df4454976d221764fdf4974909f1"
+  },
+  "flash_attention_archive_sha256": "44b0fb2c1524cad96de2aad64f2c749f57f92b3f445a86011a4ceaed29c1ca43",
+  "experiment_scripts": {
+    "baseline_swa.py": "a17adfd05205dab065a46126a739881124737eaf8354224fb6b294abb946139e",
+    "fullmodel_backend.py": "58d636326be284868e4b4709bd8c6ab0720194a745dcffa6f226af522a1342d5",
+    "fullmodel_benchmark.py": "44c672e5a8251631ef8139e6fd4de0204b91b9c9ac5d8357791ad39198175d0e",
+    "draft_benchmark.py": "46a5293de9b5e8eea18411a27f2d7d3475afc935658b354396a73cfbf62fe71c",
+    "quality_backend.py": "5bcc2fcf0cb9355eb862d603fb4bbe7e7c4e02744104122a8cab3760a1ee91ea",
+    "quality_diagnostic.py": "406a26b8f3b082fe059a350ceba37bd001480ff17f4f85bc46e9e4b5f38052bf",
+    "quality_batching.py": "e1e00f88df555f40429163c2659408adf7a73b65061566259532f39fc6d31a54",
+    "remote-env.sh": "ab14e0a0a6fb6e23d1bf21b6a37e72b3bf082216f40ef0f71817cb7de806ff06",
+    "run-fullmodel.sh": "a81d265a5d88072e57a5b35c58482bd0cb31bf3e6e3994bd910ccafcf005fb1b",
+    "run-formal.sh": "e4439723b362133d0dc2759284ef873ac2d69e580f9fc4d2e94491c2bce62149"
+  }
+}
