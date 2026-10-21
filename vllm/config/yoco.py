@@ -14,35 +14,24 @@ YocoMegaMoEMode = Literal["off", "fp8_group32"]
 YOCO_FP8_GROUP_EPS = 1e-4
 
 
+def is_yoco_shared_kv_speculation(config: "VllmConfig") -> bool:
+    spec = config.speculative_config
+    draft = getattr(spec, "draft_model_config", None)
+    return bool(
+        config.model_config.hf_text_config.model_type == "yoco"
+        and spec is not None
+        and spec.method == "dspark"
+        and draft is not None
+        and getattr(draft.hf_config, "shared_kv_config", None)
+    )
+
+
 def yoco_fp8_group_quant_eps(config: "VllmConfig | None") -> float | None:
     model_config = config.model_config if config is not None else None
     hf_config = getattr(model_config, "hf_text_config", None)
     if getattr(hf_config, "model_type", None) == "yoco":
         return YOCO_FP8_GROUP_EPS
     return None
-
-
-def yoco_v1_runner_features(config: "VllmConfig") -> list[str]:
-    """Features whose YOCO integration uses upstream's retained V1 runner."""
-    import vllm.envs as envs
-
-    hf_config = getattr(config.model_config, "hf_text_config", None)
-    if getattr(hf_config, "model_type", None) != "yoco":
-        return []
-    features = []
-    if config.kv_transfer_config is not None:
-        features.append("YOCO disaggregated KV transfer")
-    if (
-        config.cache_config.kv_sharing_fast_prefill
-        and config.parallel_config.data_parallel_size > 1
-    ):
-        features.append("YOCO fast prefill across data-parallel ranks")
-    if (
-        envs.VLLM_YOCO_BF16_SAMPLING
-        and get_yoco_execution_mode(config.additional_config) == "fast"
-    ):
-        features.append("YOCO BF16 sampling")
-    return features
 
 
 def get_yoco_execution_mode(additional_config: object) -> YocoExecutionMode:

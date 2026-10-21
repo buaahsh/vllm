@@ -21,6 +21,26 @@ from vllm.v1.worker.gpu.block_table import BlockTables
 from vllm.v1.worker.gpu.model_runner import GPUModelRunner
 
 
+@pytest.mark.parametrize("role", ["kv_producer", "kv_consumer", "kv_both"])
+def test_yoco_v2_producer_skips_cross_layers_on_real_and_dummy_ranks(role):
+    from vllm.v1.attention.backend import AttentionCGSupport
+    from vllm.v1.worker.gpu.model_states.yoco import YOCOModelState
+
+    state = YOCOModelState.__new__(YOCOModelState)
+    state.vllm_config = SimpleNamespace(
+        cache_config=SimpleNamespace(kv_sharing_fast_prefill=True),
+        kv_transfer_config=SimpleNamespace(kv_role=role),
+    )
+    state.rope_state = None
+    state.supports_mm_inputs = False
+    state.prompt_embeds_state = None
+    expected = {"kv_only_prefill": True} if role == "kv_producer" else {}
+    assert state.prepare_inputs(None, None) == expected
+    assert state.prepare_dummy_inputs(1, 16) == expected
+    support, _ = state.get_additional_cg_support()
+    assert (support == AttentionCGSupport.NEVER) == (role == "kv_producer")
+
+
 def test_qsa_circular_group_uses_custom_slot_mapping(monkeypatch):
     runner = GPUModelRunner.__new__(GPUModelRunner)
     runner.max_model_len = 262144

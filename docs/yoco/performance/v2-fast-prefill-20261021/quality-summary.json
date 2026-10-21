@@ -1,0 +1,10 @@
+{
+  "teacher_forced_observations": 256,
+  "teacher_forced_equal_across_all_four_runs": true,
+  "teacher_forced_uses_complete_prompt_rows": true,
+  "baseline_repeat_first_token_exact": true,
+  "compact_first_token_common_topk_entries": 78,
+  "compact_first_token_mean_abs_logprob_delta": 0.1139801018513166,
+  "compact_first_token_max_abs_logprob_delta": 0.5639524459838867,
+  "distribution_or_task_quality_equivalence_claimed": false
+}

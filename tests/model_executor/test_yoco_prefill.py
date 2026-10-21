@@ -81,6 +81,58 @@ def test_aux_extraction_rejects_decoder_skipping_prefill():
         model.set_aux_hidden_state_layers((14, 21, 27, 28))
 
 
+def test_fast_prefill_aux_accepts_only_shared_kv_final_residual():
+    model = YOCOForCausalLM.__new__(YOCOForCausalLM)
+    torch.nn.Module.__init__(model)
+    model.fast_prefill_enabled = True
+    model.fast_prefill_shared_kv_aux = True
+    model.model = SimpleNamespace(
+        num_hidden_layers=20,
+        _set_aux_hidden_state_layers=lambda layers: setattr(
+            model.model, "layers", layers
+        ),
+    )
+    model.set_aux_hidden_state_layers((20,))
+    assert model.model.layers == (20,)
+    for layers in [(19,), (19, 20), (20, 21)]:
+        with pytest.raises(ValueError, match="final raw residual"):
+            model.set_aux_hidden_state_layers(layers)
+
+
+def test_fast_prefill_aux_preserves_raw_selected_rows_and_rejection_anchors():
+    """Only retained rows are final hidden; every possible rejection anchor is kept."""
+    from vllm.model_executor.models.yoco_prefill import _fast_prefill_forward
+
+    hidden = torch.arange(48, dtype=torch.float32).reshape(12, 4)
+    # A chunked prefill row, followed by all verification rows of another request.
+    indices = torch.tensor([7, 8, 9, 10, 11, 0])
+    core = SimpleNamespace(
+        self_block=lambda *args: (hidden, hidden, hidden, torch.empty(0)),
+        cross_block=lambda p, h, k, v, dep: h + 100,
+        full_model_warmed=True,
+        fuse_fp8_shared_kv=False,
+        aux_hidden_state_layers=(20,),
+        fp_positions=torch.empty(12, dtype=torch.int64),
+        fp_hidden_states=torch.empty_like(hidden),
+        fp_yoco_key=torch.empty_like(hidden),
+        fp_yoco_value=torch.empty_like(hidden),
+        norm=lambda h: (h * 2).to(torch.bfloat16),
+    )
+    model = SimpleNamespace(
+        model=core, _get_fast_prefill_indices=lambda: (indices, 5, None)
+    )
+    context = ForwardContext(no_compile_layers={}, attn_metadata=None, slot_mapping={})
+    with override_forward_context(context):
+        normalized, (raw,) = _fast_prefill_forward(model, None, torch.arange(12))
+    assert raw.shape == normalized.shape == hidden.shape
+    assert raw.dtype == normalized.dtype == torch.bfloat16
+    for anchor in [7, 11, 10, 9, 8]:
+        torch.testing.assert_close(raw[anchor], (hidden[anchor] + 100).to(raw.dtype))
+        torch.testing.assert_close(normalized[anchor], raw[anchor] * 2)
+    # The padding row must not replace the real full-batch row at index zero.
+    torch.testing.assert_close(raw[0], hidden[0].to(raw.dtype))
+
+
 def test_fast_prefill_runs_all_cross_layers_on_compact_tokens() -> None:
     calls = []
 

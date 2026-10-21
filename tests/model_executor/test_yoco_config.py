@@ -605,25 +605,27 @@ def test_yoco_sm100_fast_decode_dispatch(
         assert calls[0][1] == (-1, -1)
 
 
+@pytest.mark.parametrize("method", ["dspark", "eagle3"])
+@pytest.mark.parametrize("shared", [False, True])
 @pytest.mark.parametrize("model_type", ["yoco", "llama"])
-@pytest.mark.parametrize("feature", ["none", "transfer", "dp", "bf16"])
-def test_yoco_specialized_features_select_retained_runner(
-    monkeypatch, model_type, feature
+def test_fast_prefill_aux_exception_is_restricted_to_yoco_shared_kv(
+    method, shared, model_type
 ):
-    from vllm.config.yoco import yoco_v1_runner_features
+    from vllm.config.yoco import is_yoco_shared_kv_speculation
 
-    monkeypatch.setenv("VLLM_YOCO_BF16_SAMPLING", "1" if feature == "bf16" else "0")
-    runtime = SimpleNamespace(
+    config = SimpleNamespace(
         model_config=SimpleNamespace(
             hf_text_config=SimpleNamespace(model_type=model_type)
         ),
-        kv_transfer_config=object() if feature == "transfer" else None,
-        cache_config=SimpleNamespace(kv_sharing_fast_prefill=True),
-        parallel_config=SimpleNamespace(data_parallel_size=2 if feature == "dp" else 1),
-        additional_config={"yoco_execution_mode": "fast"},
+        speculative_config=SimpleNamespace(
+            method=method,
+            draft_model_config=SimpleNamespace(
+                hf_config=SimpleNamespace(
+                    shared_kv_config={"block": 8} if shared else None
+                )
+            ),
+        ),
     )
-    reasons = yoco_v1_runner_features(runtime)
-    assert bool(reasons) == (model_type == "yoco" and feature != "none")
-    if feature == "bf16":
-        runtime.additional_config["yoco_execution_mode"] = "align"
-        assert yoco_v1_runner_features(runtime) == []
+    assert is_yoco_shared_kv_speculation(config) == (
+        model_type == "yoco" and method == "dspark" and shared
+    )

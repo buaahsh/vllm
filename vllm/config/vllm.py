@@ -1784,9 +1784,12 @@ class VllmConfig:
             self.compilation_config.cudagraph_mode = CUDAGraphMode.NONE
 
         if self.cache_config.kv_sharing_fast_prefill:
+            from vllm.config.yoco import is_yoco_shared_kv_speculation
+
             if (
                 self.speculative_config is not None
                 and self.speculative_config.use_eagle()
+                and not is_yoco_shared_kv_speculation(self)
             ):
                 raise ValueError(
                     "Fast prefill optimization for KV sharing is not "
@@ -2807,9 +2810,7 @@ class VllmConfig:
 
     def _get_v2_model_runner_unsupported_features(self) -> list[str]:
         """Collect features not yet supported by the V2 model runner."""
-        from vllm.config.yoco import yoco_v1_runner_features
-
-        unsupported = yoco_v1_runner_features(self)
+        unsupported: list[str] = []
         model_config = self.model_config
         speculative_config = self.speculative_config
 

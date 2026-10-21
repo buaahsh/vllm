@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -51,6 +52,29 @@ DRAFT = "/mnt/pvc/lidong1/opd-fast-rollout-20261016/draft-parent-30000"
 
 
 class MegaMoEBenchmarkWorker:
+    def ab_profile_start(self):
+        import torch
+
+        self._ab_profile = torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            record_shapes=True,
+        )
+        self._ab_profile.__enter__()
+
+    def ab_profile_stop(self):
+        self._ab_profile.__exit__(None, None, None)
+        return dict(
+            cpu=self._ab_profile.key_averages().table(
+                sort_by="self_cpu_time_total", row_limit=40
+            ),
+            gpu=self._ab_profile.key_averages().table(
+                sort_by="self_device_time_total", row_limit=40
+            ),
+        )
+
     def ab_bind_graphs(self):
         self._ab_graph_counts = {"target": {}, "draft": {}}
         for name, manager in (
@@ -98,6 +122,9 @@ class MegaMoEBenchmarkWorker:
             deep_gemm_file=dg.__file__,
             allocated=torch.accelerator.memory_allocated(),
             draft_type=type(runner.speculator).__name__,
+            runner=type(runner).__module__,
+            fast_prefill=runner.model.fast_prefill_enabled,
+            aux_hidden_layers=list(runner.model.model.aux_hidden_state_layers),
             draft_logits_dtype=str(runner.speculator.draft_logits.dtype),
             additional_config=self.vllm_config.additional_config,
             shared_kv_attention_fa_version=get_flash_attn_version(head_size=128),
@@ -151,8 +178,6 @@ class MegaMoEBenchmarkWorker:
 
 
 def main():
-    from vllm import LLM, SamplingParams
-
     p = argparse.ArgumentParser()
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--model", default=TARGET)
@@ -164,10 +189,17 @@ def main():
     p.add_argument("--quality-tokens", type=int, default=512)
     p.add_argument("--extra-prompt-tokens", type=int, default=0)
     p.add_argument("--pilot", action="store_true")
+    p.add_argument("--fast-prefill", action="store_true")
+    p.add_argument("--profile-prefill", action="store_true")
+    p.add_argument("--synchronous-engine", action="store_true")
     p.add_argument("--trials", type=int, default=3)
     p.add_argument("--tokens", type=int, default=256)
     p.add_argument("--max-model-len", type=int, default=8192)
     args = p.parse_args()
+    if args.synchronous_engine:
+        os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
+    from vllm import LLM, SamplingParams
+
     if (
         args.tokens < 1
         or args.trials < 1
@@ -202,6 +234,7 @@ def main():
         "gpu_memory_utilization": 0.75,
         "kv_cache_memory_bytes": 8 * 1024**3,
         "enable_prefix_caching": False,
+        "kv_sharing_fast_prefill": args.fast_prefill,
         "disable_log_stats": False,
         "worker_extension_cls": (
             "tools.yoco_alignment.benchmark_mega_moe.MegaMoEBenchmarkWorker"
@@ -229,6 +262,8 @@ def main():
             "mega_min_tokens": 1,
             "mega_prefill": True,
         }
+    if args.synchronous_engine:
+        config["async_scheduling"] = False
     if args.dispatch_config:
         import yaml
 
@@ -258,6 +293,15 @@ def main():
             "extra_prompt_tokens": args.extra_prompt_tokens,
             "quality_tokens_per_prompt": args.quality_tokens,
             "concurrencies": args.concurrencies,
+            "synchronous_engine": args.synchronous_engine,
+            "runtime_env": {
+                key: os.environ.get(key)
+                for key in (
+                    "VLLM_USE_V2_MODEL_RUNNER",
+                    "VLLM_ENABLE_V1_MULTIPROCESSING",
+                    "VLLM_YOCO_BF16_SAMPLING",
+                )
+            },
         },
     )
     event("loading")
@@ -267,6 +311,8 @@ def main():
     status = llm.collective_rpc("ab_bind_graphs")
     save("worker.json", status)
     assert status[0]["draft_type"] == "SharedKVSpeculator", status
+    assert status[0]["runner"] == "vllm.v1.worker.gpu.model_runner", status
+    assert status[0]["fast_prefill"] == args.fast_prefill, status
     assert status[0]["draft_logits_dtype"] == "torch.float32", status
     assert len(status[0]["layers"]) == 20
     expect_mega = status[0]["dispatch"]["mega_min_tokens"] is not None
@@ -323,6 +369,13 @@ def main():
             )
         profiles.append((f"context{args.extra_prompt_tokens}", longer))
     save("prompt-ids.json", dict(profiles))
+    if args.profile_prefill:
+        warmup_params = SamplingParams(temperature=0, max_tokens=1, ignore_eos=True)
+        llm.generate(prompts[:1], warmup_params, use_tqdm=False)
+        llm.generate(prompts[:1], warmup_params, use_tqdm=False)
+        llm.collective_rpc("ab_profile_start")
+        llm.generate(prompts[:1], warmup_params, use_tqdm=False)
+        save("prefill-profile.json", llm.collective_rpc("ab_profile_stop"))
 
     # Same input prefixes expose end-of-prompt full-model logprob differences.
     quality = llm.generate(

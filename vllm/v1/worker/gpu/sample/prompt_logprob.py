@@ -14,9 +14,15 @@ from vllm.v1.worker.gpu.sample.logprob import compute_topk_scores
 
 
 class PromptLogprobsWorker:
-    def __init__(self, max_num_reqs: int, logprobs_mode: LogprobsMode = "raw_logprobs"):
+    def __init__(
+        self,
+        max_num_reqs: int,
+        logprobs_mode: LogprobsMode = "raw_logprobs",
+        score_fn: Callable | None = None,
+    ):
         self.max_num_reqs = max_num_reqs
         self.logprobs_mode = logprobs_mode
+        self.score_fn = score_fn
 
         self.uses_prompt_logprobs = np.zeros(self.max_num_reqs, dtype=bool)
         self.num_prompt_logprobs = np.zeros(self.max_num_reqs, dtype=np.int32)
@@ -85,6 +91,7 @@ class PromptLogprobsWorker:
                 logits_fn,
                 max_num_prompt_logprobs,
                 self.logprobs_mode,
+                self.score_fn,
             )
         )
 
@@ -202,6 +209,7 @@ def compute_prompt_logprobs_with_chunking(
     logits_fn: Callable[[torch.Tensor], torch.Tensor],
     num_prompt_logprobs: int,
     logprobs_mode: LogprobsMode = "raw_logprobs",
+    score_fn: Callable | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     # Since materializing the full prompt logits can take too much memory,
     # we compute it in chunks.
@@ -220,7 +228,7 @@ def compute_prompt_logprobs_with_chunking(
             if num_prompt_logprobs == -1
             else num_prompt_logprobs
         )
-        result = compute_topk_scores(
+        result = (score_fn or compute_topk_scores)(
             prompt_logits,
             requested_num,
             prompt_token_ids[start_idx:end_idx],

@@ -22,6 +22,7 @@ import vllm.envs as envs
 from vllm.compilation.decorators import support_torch_compile
 from vllm.config import CacheConfig, VllmConfig
 from vllm.config.kernel import MoEBackend
+from vllm.config.yoco import is_yoco_shared_kv_speculation
 from vllm.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
@@ -929,6 +930,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP, SupportsEagle3):
         hidden_size = _cfg_int(config, "hidden_size", "d_model")
         self.fast_prefill_enabled = vllm_config.cache_config.kv_sharing_fast_prefill
         tie_word_embeddings = bool(getattr(config, "tie_word_embeddings", False))
+        self.fast_prefill_shared_kv_aux = is_yoco_shared_kv_speculation(vllm_config)
         if tie_word_embeddings:
             self.lm_head = self.model.embed_tokens
         else:
@@ -979,11 +981,21 @@ class YOCOForCausalLM(nn.Module, SupportsPP, SupportsEagle3):
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
 
+    @classmethod
+    def get_model_state_cls(cls):
+        from vllm.v1.worker.gpu.model_states.yoco import YOCOModelState
+
+        return YOCOModelState
+
     def set_aux_hidden_state_layers(self, layers: tuple[int, ...]) -> None:
-        if self.fast_prefill_enabled:
+        if self.fast_prefill_enabled and (
+            not getattr(self, "fast_prefill_shared_kv_aux", False)
+            or layers != (self.model.num_hidden_layers,)
+        ):
             raise ValueError(
-                "YOCO auxiliary features require full decoder execution; "
-                "disable kv_sharing_fast_prefill for speculative decoding/extraction"
+                "YOCO fast prefill auxiliary outputs require Shared-KV drafting "
+                "with exactly the final raw residual; other extraction requires "
+                "full decoder execution"
             )
         postnorm_id = self.model.num_hidden_layers + 1
         self.model._fourval_export_postnorm = postnorm_id in layers

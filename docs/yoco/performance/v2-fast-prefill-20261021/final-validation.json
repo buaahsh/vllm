@@ -1,0 +1,151 @@
+{
+  "status": "PASS",
+  "standalone_by_bf16_sampling_flag": {
+    "0": {
+      "status": "PASS",
+      "rows": 6,
+      "worker": [
+        {
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "fast_prefill": true,
+          "split_blocks": true,
+          "hidden_buffer": [
+            [
+              4096,
+              3072
+            ],
+            "torch.float32"
+          ],
+          "key_buffer": [
+            [
+              4096,
+              1024
+            ],
+            "torch.bfloat16"
+          ],
+          "additional_config": {
+            "yoco_execution_mode": "fast",
+            "yoco_mega_moe": "off"
+          }
+        }
+      ]
+    },
+    "1": {
+      "status": "PASS",
+      "rows": 6,
+      "worker": [
+        {
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "fast_prefill": true,
+          "split_blocks": true,
+          "hidden_buffer": [
+            [
+              4096,
+              3072
+            ],
+            "torch.float32"
+          ],
+          "key_buffer": [
+            [
+              4096,
+              1024
+            ],
+            "torch.bfloat16"
+          ],
+          "additional_config": {
+            "yoco_execution_mode": "fast",
+            "yoco_mega_moe": "off"
+          }
+        }
+      ]
+    }
+  },
+  "bf16_shared_kv_k8": {
+    "worker": [
+      {
+        "runner": "vllm.v1.worker.gpu.model_runner",
+        "sampler": "YocoBf16GreedySampler",
+        "draft": "SharedKVSpeculator",
+        "fast": true,
+        "aux": [
+          20
+        ],
+        "draft_logits_dtype": "torch.float32"
+      }
+    ],
+    "cases": [
+      {
+        "length": 26,
+        "output_ids": [
+          16,
+          13,
+          220,
+          3070,
+          16236,
+          2685,
+          279,
+          39730,
+          66475,
+          576,
+          1196,
+          6801,
+          311,
+          1414,
+          279,
+          1985
+        ]
+      },
+      {
+        "length": 8192,
+        "output_ids": [
+          154842,
+          1249,
+          1477,
+          279,
+          1985,
+          315,
+          3070,
+          99419,
+          24692,
+          220,
+          99619,
+          96403,
+          582,
+          646,
+          990,
+          279
+        ]
+      }
+    ],
+    "status": "PASS"
+  },
+  "measured_source_audit": {
+    "status": "PASS",
+    "parent": "0e57d04dd8c8c9ee105fedf6fd687b9d832774ed",
+    "source_files": 8003,
+    "runtime_support_files": 1996,
+    "source_manifest_sha256": "91b78cca584b510b608af1f784bc6e3410c93cc4926e6cd6291f5d1b08304d6e",
+    "support_manifest_sha256": "0d4ca143972806d839e5ac5a762ab691b1b9f2a46fffb92156a845cf0bc04e7b",
+    "transport_files": 916,
+    "source_mismatches": [],
+    "runtime_mismatches": [],
+    "transport_manifest_sha256": "43cba7f63b96ee7703c00d23efdbfc55637bd0a86ef08f1dad5f9a36aa8a618f"
+  },
+  "resource_receipt": {
+    "pod": "living-cobra-b200g4-dev-f5def941-master-0",
+    "uid": "9a026fd8-e732-4fcb-b855-85ea6a6358ed",
+    "node": "slc01-cl02-hgx-0347",
+    "containers": [
+      {
+        "name": "master",
+        "ready": true,
+        "restartCount": 0
+      }
+    ],
+    "gpu6_memory_mib": 0,
+    "gpu6_advisory_lock_available": true,
+    "pid7_preserved": true,
+    "raw_check": "2026-10-21T12:25:59Z\n6, GPU-ef7d6ee6-0fce-4e0b-b14c-87bd8a36c5fe, 0 MiB, 0 %\nlock_check_exit=0\n      7 bash             198045\n",
+    "pod_json_sha256": "0756c15031bb8cf51822975fcef0f0c9bb23d8b20e1dcfd6711b2ad7d40a5519"
+  }
+}

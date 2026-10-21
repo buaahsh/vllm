@@ -314,6 +314,8 @@ def _warmup_kernels(
         pooling_params.verify(model_runner.model_config)
     else:
         sampling_params = SamplingParams.for_sampler_warmup()
+        if getattr(model_runner.sampler, "greedy_only", False):
+            sampling_params.temperature = 0.0
         pooling_params = None
 
     # Assign distinct block IDs per request per group. 0 null block, start from 1.

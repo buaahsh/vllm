@@ -95,6 +95,7 @@ from vllm.v1.worker.gpu.attn_utils import (
     FastPrefillHelper,
     build_slot_mappings_by_layer,
     get_kv_cache_spec,
+    get_shared_kv_cache_layers,
     init_attn_backend,
     init_kv_cache,
 )
@@ -113,7 +114,11 @@ from vllm.v1.worker.gpu.cudagraph_utils import (
 from vllm.v1.worker.gpu.cudagraph_utils import (
     profile_cudagraph_memory as _profile_cudagraph_memory,
 )
-from vllm.v1.worker.gpu.dp_utils import DPSyncState, dispatch_cg_and_sync_dp
+from vllm.v1.worker.gpu.dp_utils import (
+    DPSyncState,
+    dispatch_cg_and_sync_dp,
+    sync_fast_prefill_tokens,
+)
 from vllm.v1.worker.gpu.ec_connector import get_ec_connector
 from vllm.v1.worker.gpu.eplb_utils import EPLBController, step_eplb_after
 from vllm.v1.worker.gpu.input_batch import (
@@ -505,6 +510,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             self.prompt_logprobs_worker = PromptLogprobsWorker(
                 self.max_num_reqs,
                 logprobs_mode=self.model_config.logprobs_mode,
+                score_fn=getattr(self.sampler, "compute_topk_scores", None),
             )
             self.structured_outputs_worker = StructuredOutputsWorker(
                 max_num_logits=self.max_num_reqs * self.decode_query_len,
@@ -697,7 +703,9 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             self.kv_cache_config,
             use_replayssm=self.cache_config.use_replayssm,
         )
-        piecewise_capture_available = bool(
+        piecewise_capture_available = not getattr(
+            self.model_state, "force_eager", False
+        ) and bool(
             envs.VLLM_USE_BREAKABLE_CUDAGRAPH or has_compiled_submodule(self.model)
         )
         if self.adaptive_verification is not None:
@@ -727,7 +735,11 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         )
         if self.cache_config.kv_sharing_fast_prefill and self.pcp_manager is None:
             self.fast_prefill = FastPrefillHelper(
-                self.cudagraph_manager, self.max_num_tokens
+                self.cudagraph_manager,
+                self.max_num_tokens,
+                min_query_len=(
+                    getattr(self.model_state, "fast_prefill_min_query_len", 0)
+                ),
             )
         check_attention_cp_compatibility(self.vllm_config, target_attn_layer_names)
         if isinstance(self.speculator, DraftModelSpeculator):
@@ -761,7 +773,11 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         if is_profiling:
             self.kv_connector = NO_OP_KV_CONNECTOR
         else:
-            self.kv_connector = get_kv_connector(self.vllm_config, kv_caches_dict)
+            shared_layers = get_shared_kv_cache_layers(self.vllm_config)
+            self.kv_connector = get_kv_connector(
+                self.vllm_config,
+                {k: v for k, v in kv_caches_dict.items() if k not in shared_layers},
+            )
 
     def _init_kv_zero_meta(self) -> None:
         """Build KV-block zeroing metadata; invoked from gpu_worker."""
@@ -1410,6 +1426,15 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 cu_num_logits_np,
                 batch_req_state.has_prefill,
                 batch_desc,
+                max_query_len=int(num_scheduled_tokens_upper_bound.max()),
+                needs_full_hidden_states=(
+                    self.prompt_logprobs_worker is not None
+                    and bool(
+                        self.prompt_logprobs_worker.uses_prompt_logprobs[
+                            idx_mapping_np
+                        ].any()
+                    )
+                ),
             )
 
         # CPU upper bound on seq_lens; padded entries left at zero.
@@ -1684,6 +1709,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             # cross-attention cache with dynamic encoder outputs.
             skip_compiled = True
 
+        force_eager = getattr(self.model_state, "force_eager", False)
         batch_desc, dp_sync = dispatch_cg_and_sync_dp(
             self.cudagraph_manager,
             num_reqs,
@@ -1692,7 +1718,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             self.dp_size,
             self.dp_rank,
             max_query_len=max_query_len,
-            need_eager=is_profile or skip_compiled,
+            need_eager=is_profile or skip_compiled or force_eager,
             num_active_loras=num_active_loras,
             parallel_config=self.parallel_config,
             allow_ubatching=(
@@ -1764,6 +1790,20 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 )
                 block_tables = None
                 slot_mappings = None
+
+        fast_prefill_num_tokens_across_dp = None
+        if (
+            self.fast_prefill is not None
+            and getattr(self.model_state, "coordinate_fast_prefill", False)
+            and not force_eager
+        ):
+            compact = input_batch.fast_prefill
+            fast_prefill_num_tokens_across_dp = sync_fast_prefill_tokens(
+                input_batch.num_tokens_after_padding,
+                compact.logits_indices_padded.numel() if compact is not None else None,
+                self.dp_size,
+                self.dp_rank,
+            )
 
         attn_metadata = None
         slot_mappings_by_layer = None
@@ -1920,6 +1960,9 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 cudagraph_runtime_mode=batch_desc.cg_mode,
                 num_tokens_across_dp=(
                     dp_sync.num_tokens_across_dp if dp_sync is not None else None
+                ),
+                fast_prefill_num_tokens_across_dp_cpu=(
+                    fast_prefill_num_tokens_across_dp
                 ),
                 batch_descriptor=batch_descriptor,
                 ubatch_slices=ubatch_slices,

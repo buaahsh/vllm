@@ -95,6 +95,12 @@ def _get_speculative_compatibility_factors(
     vllm_config: VllmConfig,
 ) -> dict[str, Any] | None:
     """Return NIXL compatibility factors for hidden-state-based speculators."""
+    from vllm.config.yoco import is_yoco_shared_kv_speculation
+
+    # Shared-KV drafts only read the target cache. Their raw final hidden
+    # state is rebuilt on D's retained prompt tail, not transferred from P.
+    if is_yoco_shared_kv_speculation(vllm_config):
+        return None
     speculative_config = vllm_config.speculative_config
     if speculative_config is None or not speculative_config.use_eagle():
         return None

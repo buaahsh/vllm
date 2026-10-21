@@ -31,6 +31,8 @@ from vllm.v1.worker.gpu.states import RequestState
 
 
 class Sampler:
+    compute_topk_scores = staticmethod(compute_topk_scores)
+
     def __init__(
         self,
         max_num_reqs: int,
@@ -160,7 +162,7 @@ class Sampler:
                 logits = processed_logits
             expanded_logits = logits.shape[0] != idx_mapping_np.shape[0]
             cu_num_logits = cu_num_logits_np.tolist() if expanded_logits else None
-            logprobs_tensors = compute_topk_scores(
+            logprobs_tensors = self.compute_topk_scores(
                 logits,
                 num_logprobs,
                 sampled,

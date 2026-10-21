@@ -25,6 +25,11 @@ def main():
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--served-model-name", default="yoco-swa8k")
     parser.add_argument(
+        "--no-fast-prefill",
+        action="store_true",
+        help="Run the full target decoder on prompt rows for comparison",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print the command without loading models",
@@ -45,7 +50,7 @@ def main():
         | {cap}
     )
     compilation = {
-        "cudagraph_mode": "FULL_AND_PIECEWISE",
+        "cudagraph_mode": "FULL_DECODE_ONLY",
         "cudagraph_capture_sizes": sizes,
     }
     command = [
@@ -99,6 +104,8 @@ def main():
         "--port",
         str(args.port),
     ]
+    if not args.no_fast_prefill:
+        command.append("--kv-sharing-fast-prefill")
     print(
         "VLLM_USE_V2_MODEL_RUNNER=1 VLLM_BATCH_INVARIANT=0 " + shlex.join(command),
         flush=True,

@@ -41,6 +41,25 @@ class DPSyncState:
     num_reqs: int
 
 
+def sync_fast_prefill_tokens(
+    num_tokens: int,
+    compact_num_tokens: int | None,
+    dp_size: int,
+    dp_rank: int,
+) -> torch.Tensor | None:
+    """Agree cross-block sizes, including full/dummy ranks in a mixed DP step."""
+    if dp_size == 1:
+        return None
+    sizes = torch.zeros((2, dp_size), dtype=torch.int32)
+    sizes[0, dp_rank] = num_tokens if compact_num_tokens is None else compact_num_tokens
+    sizes[1, dp_rank] = compact_num_tokens is not None
+    if should_skip_dp_coordination():
+        sizes[:] = sizes[:, dp_rank, None].clone()
+    else:
+        dist.all_reduce(sizes, group=get_dp_group().cpu_group)
+    return sizes[0] if torch.any(sizes[1]).item() else None
+
+
 def sync_cudagraph_and_dp_padding(
     cudagraph_manager: CudaGraphManager | None,
     desired_batch_desc: BatchExecutionDescriptor,

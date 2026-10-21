@@ -345,6 +345,10 @@ class Scheduler(SchedulerInterface):
         self.need_yoco_final_prompt_block_split = (
             self.vllm_config.model_config.hf_config.model_type == "yoco"
             and self.cache_config.kv_sharing_fast_prefill
+            and (
+                self.cache_config.enable_prefix_caching
+                or self.vllm_config.kv_transfer_config is not None
+            )
         )
         # TODO: Support models with multiple Mamba specs that require different
         # prefill checkpoint alignments instead of selecting the first one.
@@ -577,7 +581,8 @@ class Scheduler(SchedulerInterface):
         full prefill, a local-cache block tail, or a one-token remote-KV replay.
         Shape-dependent floating-point reductions can then select different
         MoE experts.  Splitting at the final KV block boundary makes the tail
-        shape identical in all three cases.
+        shape identical in all three cases. Engines without prefix caching
+        or KV transfer have no alternate replay shape to match.
         """
         if not self.need_yoco_final_prompt_block_split:
             return num_new_tokens

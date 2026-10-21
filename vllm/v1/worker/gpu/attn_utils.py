@@ -81,8 +81,14 @@ class FastPrefillHelper:
     stages the logits indices it runs on.
     """
 
-    def __init__(self, cudagraph_manager: "CudaGraphManager", max_num_tokens: int):
+    def __init__(
+        self,
+        cudagraph_manager: "CudaGraphManager",
+        max_num_tokens: int,
+        min_query_len: int = 0,
+    ):
         self.max_num_tokens = max_num_tokens
+        self.min_query_len = min_query_len
         self.cudagraph_manager = cudagraph_manager
         self.logits_indices_buf = torch.zeros(
             max_num_tokens, dtype=torch.int32, device=cudagraph_manager.device
@@ -95,9 +101,13 @@ class FastPrefillHelper:
         cu_num_logits_np: np.ndarray,
         has_prefill: bool,
         batch_desc: "BatchExecutionDescriptor",
+        max_query_len: int | None = None,
+        needs_full_hidden_states: bool = False,
     ) -> FastPrefillBatchMetadata | None:
         if (
             not has_prefill
+            or needs_full_hidden_states
+            or (max_query_len is not None and max_query_len <= self.min_query_len)
             or batch_desc.cg_mode == CUDAGraphMode.FULL
             or batch_desc.num_ubatches > 1
         ):

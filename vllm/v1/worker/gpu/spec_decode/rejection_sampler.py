@@ -139,7 +139,7 @@ class RejectionSampler:
                 cu_num_generated_tokens = cu_num_logits.clone()
             else:
                 cu_num_generated_tokens = cu_num_logits_np.tolist()
-        return compute_topk_scores(
+        return getattr(self.sampler, "compute_topk_scores", compute_topk_scores)(
             logits,
             max_num_logprobs,
             flat_sampled,

@@ -6677,6 +6677,31 @@ def test_yoco_final_prompt_block_split_boundaries(
     )
 
 
+@pytest.mark.parametrize("prefix_cache", [False, True])
+@pytest.mark.parametrize("transfer", [False, True])
+def test_yoco_cold_prefill_avoids_extra_tail_round_without_cache_or_transfer(
+    prefix_cache, transfer
+):
+    template = create_scheduler(
+        block_size=16,
+        enable_prefix_caching=prefix_cache,
+        use_kv_connector=mock_kv(0, False) if transfer else None,
+    )
+    template.vllm_config.model_config.hf_config.model_type = "yoco"
+    template.cache_config.kv_sharing_fast_prefill = True
+    scheduler = Scheduler(
+        template.vllm_config,
+        template.kv_cache_config,
+        template.structured_output_manager,
+        block_size=16,
+    )
+    (request,) = create_requests(num_requests=1, num_tokens=26)
+    scheduler.add_request(request)
+    output = scheduler.schedule()
+    expected = 16 if prefix_cache or transfer else 26
+    assert output.num_scheduled_tokens[request.request_id] == expected
+
+
 def test_yoco_truncated_pd_prefill_is_not_split_again():
     scheduler = create_scheduler(block_size=16)
     scheduler.need_yoco_final_prompt_block_split = True

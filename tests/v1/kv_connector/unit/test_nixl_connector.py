@@ -3399,6 +3399,25 @@ def test_missing_speculative_config_changes_compatibility_hash():
     assert regular_hash != speculative_hash
 
 
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.skip_global_cleanup
+def test_yoco_shared_kv_draft_does_not_change_transferred_target_state_hash(shared):
+    producer = create_vllm_config()
+    decoder = create_vllm_config()
+    for config in [producer, decoder]:
+        config.model_config.hf_text_config.model_type = "yoco"
+    _set_test_speculative_config(decoder, method="dspark", auxiliary_layer_ids=(20,))
+    decoder.speculative_config.draft_model_config.hf_config.shared_kv_config = (
+        {"block": 8} if shared else None
+    )
+    producer_hash = compute_nixl_compatibility_hash(producer, "FLASHINFER")
+    decoder_hash = compute_nixl_compatibility_hash(decoder, "FLASHINFER")
+    assert (producer_hash == decoder_hash) is shared
+    assert producer_hash != compute_nixl_compatibility_hash(decoder, "FLASH_ATTN")
+    decoder.cache_config.cache_dtype = "fp8"
+    assert producer_hash != compute_nixl_compatibility_hash(decoder, "FLASHINFER")
+
+
 @pytest.mark.skip_global_cleanup
 def test_speculative_kv_cache_dtype_resolves_to_target():
     # The draft kv_cache_dtype override defaults to None ("inherit the target's

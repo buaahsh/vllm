@@ -24,7 +24,7 @@ def _fast_prefill_forward(
     intermediate_tensors: IntermediateTensors | None = None,
     inputs_embeds: torch.Tensor | None = None,
     kv_only_prefill: bool = False,
-) -> torch.Tensor:
+) -> torch.Tensor | tuple[torch.Tensor, list[torch.Tensor]]:
     """Forward with fast prefill: cross-attention layers that share KV
     only process decode tokens during prefill.
 
@@ -170,7 +170,12 @@ def _fast_prefill_forward(
     else:
         out_hidden[logits_indices_padded] = decode_hidden
 
-    return model.norm(out_hidden)
+    output = model.norm(out_hidden)
+    if getattr(model, "aux_hidden_state_layers", ()):
+        # Shared-KV reads end - rejected - 1, always one of the selected
+        # logits rows. Skipped prompt rows are not final-layer features.
+        return output, [out_hidden.to(output.dtype)]
+    return output
 
 
 def _get_fast_prefill_indices(

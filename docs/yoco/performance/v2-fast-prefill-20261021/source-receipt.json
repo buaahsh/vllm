@@ -1,0 +1,46 @@
+{
+  "parent": "0e57d04dd8c8c9ee105fedf6fd687b9d832774ed",
+  "source_manifest_sha256": "91b78cca584b510b608af1f784bc6e3410c93cc4926e6cd6291f5d1b08304d6e",
+  "files": {
+    "examples/offline_inference/spec_decode/serve_yoco_swa8k.py": "5d1f7bd8aa7b946f9c67ec2fd84ca640e51b489489780dcb93b523802ee33805",
+    "tests/model_executor/test_yoco_config.py": "10566b48c84ac535e51fafc337bcda64363895d3ff2f9a96e91965312154089d",
+    "tests/model_executor/test_yoco_prefill.py": "b81a4fee87414991901ae7d75f6ef6532549d0e1521782acc62bb6b95e41db82",
+    "tests/v1/core/test_scheduler.py": "0118c947567fdeeb88624211f35f29672d6eaff60c077dec62d89829414bb167",
+    "tests/v1/kv_connector/unit/test_nixl_connector.py": "ea3f77c0383f23274713d6a46ee86c90ad5987b4d2c8ffbbe8e66a8b6ea07bb6",
+    "tests/v1/worker/test_attn_utils.py": "5dd3eb3c353c4bc8cc14578392830c3a24803ca9e76569258b06ea986db3344f",
+    "tests/v1/worker/test_dp_utils.py": "c4e3c052f844ae4914f0efc86cf8ea2592dc3f4c2b03156b801ef3349a672d51",
+    "tests/v1/worker/test_gpu_model_runner_v2.py": "2bdf4f5dc068c47bafb84984007271b57e33e7447e530eb014be704e990a149a",
+    "tests/v1/worker/test_gpu_sampler_flags.py": "5a328b148855dd7cbccc1e005f3b46e3d5361ccd5bad0f7e32f9d2c095559e82",
+    "tools/yoco_alignment/benchmark_mega_moe.py": "b573834380da3c376ec58283e62fc342fac423eb3cfcd8e294204758468aa98c",
+    "tools/yoco_alignment/benchmark_v2_pd.py": "677e9f8bca5f11755dd114c47bbe7ba4071f01c6f99df60f801defd9850f626d",
+    "vllm/config/vllm.py": "1c9bb334d9b55899ba3ac2a458d5b17cab05d07613a37ef2a551f22d33367ecb",
+    "vllm/config/yoco.py": "73b475e2174fb160946945533226c06b98cff081447876c4e1c35e557ff85b71",
+    "vllm/distributed/kv_transfer/kv_connector/v1/nixl/metadata.py": "bbd910f9a7b62162a2e833161025b3ef45055a7b2761b52dd7b693b4df171835",
+    "vllm/model_executor/models/yoco.py": "384f8c9abad08b2ce03875629b9301287434e5de3a7fdffe48c84350483b3b5c",
+    "vllm/model_executor/models/yoco_prefill.py": "5c9493f4ab0566f1ffb075811fd1e9a9fbd367ff8ff81604e289373e6f282b2c",
+    "vllm/v1/core/sched/scheduler.py": "1f8cc38d404683b16d53588b3716bb4b84e6bc81c27948ba56ba924c57384c88",
+    "vllm/v1/worker/gpu/attn_utils.py": "02637dfcfc4f3197e0213e9397646ec074f3a7ed4772a8e9dd167e8d4c954bb1",
+    "vllm/v1/worker/gpu/dp_utils.py": "707dbe837917c2a5cff9746530586d33ae0e3611c0767547d1b72a50eb055a31",
+    "vllm/v1/worker/gpu/model_runner.py": "f10bcd1edee938fca557a86116a23608b86d3545388df124056d9dd067abba36",
+    "vllm/v1/worker/gpu/model_states/yoco.py": "5f5278faf92d6a912215ca9d3bb10474921f454391ede632a077a54f7c31dbfe",
+    "vllm/v1/worker/gpu/sample/prompt_logprob.py": "226f155426df4a8b78d4b6e52ba4a38b40b3571ae801ba2b714630da83a3ff87",
+    "vllm/v1/worker/gpu/sample/sampler.py": "f32bdf4f502576aa603ce924e2fa1b1a27ba60c5f48731ac8bab4ce0819511b6",
+    "vllm/v1/worker/gpu/sample/yoco_bf16.py": "ba725abc80d85cf299656c73c54918d4894de121799a8afef4588a4b4723b2b8",
+    "vllm/v1/worker/gpu/spec_decode/rejection_sampler.py": "276dda25ef838001d36cd4eaf337502ef392796c6bb443936414bd04857b06da",
+    "vllm/v1/worker/gpu/warmup.py": "48bc65ff75e5f365d525a284536bf8d1601df62c083e3eec5b767077d56b969b"
+  },
+  "post_measurement_changes": {
+    "reason": "Explicit typing.cast annotations at the Sampler proxy boundaries to satisfy mypy; computation and dispatch are unchanged.",
+    "files": {
+      "vllm/v1/worker/gpu/model_states/yoco.py": {
+        "measured_sha256": "5de4c0f0d59c2b0aae7c8d2d012a26b46ec2bb9e9819bd2bd62b50940dc383d8",
+        "final_sha256": "5f5278faf92d6a912215ca9d3bb10474921f454391ede632a077a54f7c31dbfe"
+      },
+      "vllm/v1/worker/gpu/sample/yoco_bf16.py": {
+        "measured_sha256": "48923febab6f6f0b2e01abf6ecbefe1d8ccb594745aeefbcf88a0be44ed082f2",
+        "final_sha256": "ba725abc80d85cf299656c73c54918d4894de121799a8afef4588a4b4723b2b8"
+      }
+    },
+    "validation": "Complete scoped pre-commit, including mypy, passed after this change. Native performance results use the measured hashes."
+  }
+}

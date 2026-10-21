@@ -9,6 +9,7 @@ never addressed by the logical view.
 
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import torch
 
@@ -609,3 +610,47 @@ def test_allocate_hisparse_kv_caches_host_pool_and_view_less_specs():
         backing.untyped_storage().data_ptr()
         == caches["indexer"].untyped_storage().data_ptr()
     )
+
+
+@pytest.mark.parametrize("max_query,full_hidden", [(8, False), (9, True)])
+def test_fast_prefill_requires_full_rows_for_short_queries_or_prompt_logprobs(
+    max_query, full_hidden
+):
+    from vllm.config import CUDAGraphMode
+    from vllm.v1.worker.gpu.attn_utils import FastPrefillHelper
+
+    helper = FastPrefillHelper(SimpleNamespace(device="cpu"), 16, min_query_len=8)
+    assert (
+        helper.prepare(
+            torch.tensor([7]),
+            1,
+            np.array([0, 1]),
+            True,
+            SimpleNamespace(cg_mode=CUDAGraphMode.NONE, num_ubatches=1),
+            max_query_len=max_query,
+            needs_full_hidden_states=full_hidden,
+        )
+        is None
+    )
+
+
+def test_fast_prefill_stages_all_verification_rows_and_replaces_stale_padding():
+    from vllm.config import CUDAGraphMode
+    from vllm.v1.worker.gpu.attn_utils import FastPrefillHelper
+
+    manager = SimpleNamespace(
+        device="cpu", dispatch=lambda **kw: SimpleNamespace(num_tokens=4)
+    )
+    helper = FastPrefillHelper(manager, 16, min_query_len=8)
+    for indices in [torch.tensor([7, 8, 9]), torch.tensor([11, 12, 13])]:
+        result = helper.prepare(
+            indices,
+            2,
+            np.array([0, 1, 3]),
+            True,
+            SimpleNamespace(cg_mode=CUDAGraphMode.NONE, num_ubatches=1),
+            max_query_len=10,
+        )
+        assert result.num_logits_indices == 3 and result.max_logits_per_req == 2
+        torch.testing.assert_close(result.logits_indices_padded[:3].long(), indices)
+        assert result.logits_indices_padded[3] == indices[-1]
