@@ -11,6 +11,11 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
+from tools.yoco_alignment.scheduling import (
+    add_scheduling_arguments,
+    resolve_scheduling_options,
+)
+
 PROMPTS = [
     "What is 17 times 23? Explain the calculation step by step.",
     "Write a Python function that merges two sorted lists. Explain its complexity.",
@@ -52,7 +57,7 @@ DRAFT = "/mnt/pvc/lidong1/opd-fast-rollout-20261016/draft-parent-30000"
 
 
 class MegaMoEBenchmarkWorker:
-    def ab_profile_start(self):
+    def ab_profile_start(self, annotate_scheduler=False):
         import torch
 
         self._ab_profile = torch.profiler.profile(
@@ -63,14 +68,39 @@ class MegaMoEBenchmarkWorker:
             record_shapes=True,
         )
         self._ab_profile.__enter__()
+        self._ab_profile_originals = []
+        if annotate_scheduler:
+            from vllm.v1.core.sched.scheduler import Scheduler
 
-    def ab_profile_stop(self):
-        self._ab_profile.__exit__(None, None, None)
+            for name in ("schedule", "update_from_output"):
+                original = getattr(Scheduler, name)
+
+                def annotated(*args, original=original, name=name, **kwargs):
+                    with torch.profiler.record_function(f"yoco_scheduler::{name}"):
+                        return original(*args, **kwargs)
+
+                self._ab_profile_originals.append((Scheduler, name, original))
+                setattr(Scheduler, name, annotated)
+
+    def ab_profile_stop(self, trace_dir=None):
+        for owner, name, original in self._ab_profile_originals:
+            setattr(owner, name, original)
+        self._ab_profile_originals = []
+        profiler = self._ab_profile
+        self._ab_profile = None
+        profiler.__exit__(None, None, None)
+        trace_path = None
+        if trace_dir is not None:
+            directory = Path(trace_dir)
+            directory.mkdir(parents=True, exist_ok=True)
+            trace_path = directory / f"worker-{os.getpid()}-{time.time_ns()}.json"
+            profiler.export_chrome_trace(str(trace_path))
         return dict(
-            cpu=self._ab_profile.key_averages().table(
+            trace_path=str(trace_path) if trace_path is not None else None,
+            cpu=profiler.key_averages().table(
                 sort_by="self_cpu_time_total", row_limit=40
             ),
-            gpu=self._ab_profile.key_averages().table(
+            gpu=profiler.key_averages().table(
                 sort_by="self_device_time_total", row_limit=40
             ),
         )
@@ -109,6 +139,8 @@ class MegaMoEBenchmarkWorker:
         cores = [core for core in cores if core is not None]
         workspaces = {id(core.workspace): core.workspace for core in cores}
         dg = _import_deep_gemm()
+        config = self.vllm_config
+        scheduler_cls = config.scheduler_config.get_scheduler_cls()
         status = dict(
             backend="mega" if cores else "current",
             layers=[name for name, _ in layers],
@@ -127,6 +159,13 @@ class MegaMoEBenchmarkWorker:
             aux_hidden_layers=list(runner.model.model.aux_hidden_state_layers),
             draft_logits_dtype=str(runner.speculator.draft_logits.dtype),
             additional_config=self.vllm_config.additional_config,
+            async_scheduling=config.scheduler_config.async_scheduling,
+            scheduler_class=f"{scheduler_cls.__module__}.{scheduler_cls.__qualname__}",
+            max_concurrent_batches=config.max_concurrent_batches,
+            speculative_tokens=runner.speculator.num_speculative_steps,
+            executor_backend=str(config.parallel_config.distributed_executor_backend),
+            worker_pid=os.getpid(),
+            engine_multiprocessing=os.environ.get("VLLM_ENABLE_V1_MULTIPROCESSING"),
             shared_kv_attention_fa_version=get_flash_attn_version(head_size=128),
             dispatch=asdict(layers[0][1]._yoco_moe_dispatch),
             mega_capture_decisions=layers[0][1]._yoco_moe_capture_backends,
@@ -191,13 +230,16 @@ def main():
     p.add_argument("--pilot", action="store_true")
     p.add_argument("--fast-prefill", action="store_true")
     p.add_argument("--profile-prefill", action="store_true")
-    p.add_argument("--synchronous-engine", action="store_true")
+    add_scheduling_arguments(p)
     p.add_argument("--trials", type=int, default=3)
     p.add_argument("--tokens", type=int, default=256)
     p.add_argument("--max-model-len", type=int, default=8192)
     args = p.parse_args()
-    if args.synchronous_engine:
-        os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
+    try:
+        scheduling = resolve_scheduling_options(args)
+    except ValueError as exc:
+        p.error(str(exc))
+    scheduling.apply_environment()
     from vllm import LLM, SamplingParams
 
     if (
@@ -262,8 +304,7 @@ def main():
             "mega_min_tokens": 1,
             "mega_prefill": True,
         }
-    if args.synchronous_engine:
-        config["async_scheduling"] = False
+    config.update(scheduling.llm_kwargs())
     if args.dispatch_config:
         import yaml
 
@@ -294,6 +335,7 @@ def main():
             "quality_tokens_per_prompt": args.quality_tokens,
             "concurrencies": args.concurrencies,
             "synchronous_engine": args.synchronous_engine,
+            "scheduling": asdict(scheduling),
             "runtime_env": {
                 key: os.environ.get(key)
                 for key in (
@@ -310,6 +352,18 @@ def main():
     event("loaded", startup_s=time.perf_counter() - begin)
     status = llm.collective_rpc("ab_bind_graphs")
     save("worker.json", status)
+    for worker in status:
+        scheduling.validate_runtime(worker)
+    client_cls = type(llm.llm_engine.engine_core)
+    save(
+        "scheduling.json",
+        {
+            "requested": asdict(scheduling),
+            "engine_client": f"{client_cls.__module__}.{client_cls.__qualname__}",
+            "frontend_pid": os.getpid(),
+            "workers": status,
+        },
+    )
     assert status[0]["draft_type"] == "SharedKVSpeculator", status
     assert status[0]["runner"] == "vllm.v1.worker.gpu.model_runner", status
     assert status[0]["fast_prefill"] == args.fast_prefill, status
@@ -493,12 +547,15 @@ def main():
                     elapsed_s=elapsed,
                     tokens_per_s=tokens / elapsed,
                 )
+    final_status = llm.collective_rpc("ab_status")
+    for worker in final_status:
+        scheduling.validate_runtime(worker)
     save(
         "complete.json",
         {
             "status": "PASS",
             "rows": len(rows),
-            "worker": llm.collective_rpc("ab_status"),
+            "worker": final_status,
         },
     )
     event("complete")

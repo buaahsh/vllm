@@ -443,7 +443,8 @@ def test_shared_kv_paged_attention_matches_strict_prefix_and_never_writes(
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA proposal buffers")
-def test_shared_kv_propose_handles_bonus_column_and_chunked_prefill():
+@pytest.mark.parametrize("cpu_lookahead", [0, 8])
+def test_shared_kv_propose_handles_bonus_column_and_chunked_prefill(cpu_lookahead):
     from types import SimpleNamespace
 
     from vllm.config.compilation import CUDAGraphMode
@@ -493,7 +494,7 @@ def test_shared_kv_propose_handles_bonus_column_and_chunked_prefill():
         positions=torch.tensor([100, 101, 102, 103, 8, 9], device=device),
         query_start_loc=torch.tensor([0, 4, 6], device=device),
         idx_mapping=torch.tensor([2, 0], device=device),
-        seq_lens_cpu_upper_bound=torch.tensor([104, 10]),
+        seq_lens_cpu_upper_bound=torch.tensor([104, 10]) + cpu_lookahead,
     )
     hidden = torch.arange(48, device=device).reshape(6, 8).to(torch.bfloat16)
     spec.propose(
@@ -512,6 +513,7 @@ def test_shared_kv_propose_handles_bonus_column_and_chunked_prefill():
     assert observed["ids"].tolist() == [[13, 31, 31, 31], [21, 31, 31, 31]]
     assert observed["positions"].tolist() == [[102, 103, 104, 105], [10, 11, 12, 13]]
     torch.testing.assert_close(observed["current"], hidden[[1, 5]])
+    assert spec._prefix_lens.tolist() == [102, 10]
     assert spec.sample_pos.tolist() == [103, 104, 105, 106, 11, 12, 13, 14]
     assert spec.sample_idx_mapping.tolist() == [2, 2, 2, 2, 0, 0, 0, 0]
 

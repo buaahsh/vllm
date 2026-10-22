@@ -1,0 +1,36 @@
+{
+  "sync": {
+    "trace": "/data/vllm_test/work/yoco-async-scheduling-20261022/attempt3/results/profile-sync/traces/worker-3169532-1792656669784863868.json",
+    "kernel_events": 71423,
+    "schedule": {
+      "calls": 40,
+      "total_ms": 39.71024853515625,
+      "gpu_overlap_ms": 17.597469482421875,
+      "gpu_overlap_fraction": 0.4431467979064018
+    },
+    "update_from_output": {
+      "calls": 40,
+      "total_ms": 13.20338427734375,
+      "gpu_overlap_ms": 11.240302001953125,
+      "gpu_overlap_fraction": 0.8513197651333104
+    },
+    "note": "CPU range overlap with GPU kernel intervals in an instrumented trace; not an unprofiled critical-path speedup."
+  },
+  "async": {
+    "trace": "/data/vllm_test/work/yoco-async-scheduling-20261022/attempt3/results/profile-async/traces/worker-3170918-1792656764508753564.json",
+    "kernel_events": 67769,
+    "schedule": {
+      "calls": 38,
+      "total_ms": 39.838725341796874,
+      "gpu_overlap_ms": 20.1835751953125,
+      "gpu_overlap_fraction": 0.5066320526610038
+    },
+    "update_from_output": {
+      "calls": 38,
+      "total_ms": 12.753715087890624,
+      "gpu_overlap_ms": 11.18034619140625,
+      "gpu_overlap_fraction": 0.8766344641038551
+    },
+    "note": "CPU range overlap with GPU kernel intervals in an instrumented trace; not an unprofiled critical-path speedup."
+  }
+}
