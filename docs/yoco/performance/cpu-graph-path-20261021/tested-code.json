@@ -1,0 +1,20 @@
+{
+  "base": "d4b0c39f8f72b130b8cfdae34a3426cf6f65811a",
+  "files": {
+    "tests/v1/attention/test_attention_backends.py": "c89e3bd93a6f7f41feabc9bca34d4dcf6bdfbf0d1abbbed7b011ac5233fdf2c6",
+    "tests/v1/attention/test_attention_splitting.py": "5939849b176a61e0d2c439771b5d41e6393707e8a3a1b92370b984339beb0608",
+    "tests/v1/worker/test_gpu_model_runner_v2.py": "9b703058897d6dfca9dfdb6a973ea58be4c7b16588b2d7828aa92df7abdd80a5",
+    "vllm/v1/attention/backends/flashinfer.py": "7c5cfd272545ed8bdd8515ee3ab634beff4f116c4661ecbfc96b01f97f0e3cfb",
+    "vllm/v1/attention/backends/utils.py": "837c4a7325a4a22d43682c42b417bd1a57a9cfd86f80c5d5480a625d1e6ddec2",
+    "vllm/v1/worker/gpu/model_runner.py": "b43c7e2f849f47d622d5b8ad9bcb151ecdb55affb30aef1a17e37ba622a85b32",
+    "vllm/v1/worker/gpu/model_states/yoco.py": "5d7d7a7b3266661775523253ab60e980811b60305f0564c35bce6932b43989c0"
+  },
+  "harness": {
+    "cpu_graph_ab.py": "1e6215d22166efd2846d8ef88d68bf7a1bbb2329b4f2f985e436934b02955243",
+    "trace_path_light.py": "3a21fc9943df56e4f1bc052d81a7158d2f736d4e130f80061e9423ca269bfba6",
+    "config.json": "3e010020c29e5cdd626c66481994d933e80153235fa0f592b52cde5dbd2ba32e",
+    "baseline-methods.json": "beb99e6149432e95bad12cbddee56cf022ce6dde5c8aa64d87f92ec7d8a5e5d0",
+    "prepare_candidate3.py": "6675fda5e2b98143abbf03a29580c2175096ae491e802e5ec8d1af84d9e9c4ae",
+    "run_candidate3.sh": "a1caa07460947b294c252baad03870b5130e76225f89cb5b201bba76a71318c3"
+  }
+}

@@ -32,7 +32,7 @@ class YOCOModelState(DefaultModelState):
     def requires_full_prefill(self, input_batch: InputBatch) -> bool:
         # This measured profile is host-bound during prefill. Keep the ordinary
         # target path whenever a request needs output, including mixed batches.
-        return self.full_prefill_on_output and not self.should_skip_speculation(
+        return self.full_prefill_on_output and not self._is_intermediate_prefill(
             input_batch
         )
 
@@ -87,12 +87,16 @@ class YOCOModelState(DefaultModelState):
     def should_skip_speculation(self, input_batch: InputBatch) -> bool:
         if self.force_eager:
             return True
-        # Fast-prefill metadata is absent for prompt-logprob/full-row consumers.
-        # Shared-KV's single-rank contract avoids collective skew.
+        # Full-row consumers still need h20 and a proposal even on a prompt chunk.
         return bool(
             input_batch is not None
             and input_batch.fast_prefill is not None
-            and input_batch.has_prefill
+            and self._is_intermediate_prefill(input_batch)
+        )
+
+    def _is_intermediate_prefill(self, input_batch: InputBatch) -> bool:
+        return bool(
+            input_batch.has_prefill
             and np.all(
                 input_batch.is_prefilling_np
                 & (

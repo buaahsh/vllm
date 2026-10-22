@@ -117,6 +117,10 @@ fusion and Mega's math mode unchanged. The
 [input-fusion report](target-mega-input-fusion-20261021/REPORT.md) records numerical
 error, acceptance, target graph latency and end-to-end measurements.
 
+The [CPU/Graph execution report](cpu-graph-path-20261021/REPORT.md) checks
+all-stream GPU gaps, host metadata preparation and actual graph padding,
+with a separate unprofiled throughput comparison.
+
 ## End-to-end benchmark
 
 The benchmark uses the ordinary LLM generation API and native configured MoE

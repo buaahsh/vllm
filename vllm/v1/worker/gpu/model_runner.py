@@ -1418,25 +1418,6 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             self.model_state.num_new_sampled_tokens_per_step,
         )
 
-        fast_prefill = None
-        if self.fast_prefill is not None:
-            fast_prefill = self.fast_prefill.prepare(
-                logits_indices,
-                num_reqs,
-                cu_num_logits_np,
-                batch_req_state.has_prefill,
-                batch_desc,
-                max_query_len=int(num_scheduled_tokens_upper_bound.max()),
-                needs_full_hidden_states=(
-                    self.prompt_logprobs_worker is not None
-                    and bool(
-                        self.prompt_logprobs_worker.uses_prompt_logprobs[
-                            idx_mapping_np
-                        ].any()
-                    )
-                ),
-            )
-
         # CPU upper bound on seq_lens; padded entries left at zero.
         num_computed_tokens_np = self.req_states.num_computed_tokens_np[idx_mapping_np]
         seq_lens_cpu_upper_bound_np = np.zeros(num_reqs_padded, dtype=np.int32)
@@ -1483,18 +1464,33 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             cu_num_logits_np=cu_num_logits_np,
             has_structured_output_reqs=scheduler_output.has_structured_output_requests,
             prompt_lens=prompt_lens,
-            fast_prefill=fast_prefill,
+            fast_prefill=None,
             max_query_len=(
                 int(num_scheduled_tokens_upper_bound.max())
                 if adaptive_verification is not None
                 else None
             ),
         )
-        if (
-            input_batch.fast_prefill is not None
-            and self.model_state.requires_full_prefill(input_batch)
+        if self.fast_prefill is not None and not self.model_state.requires_full_prefill(
+            input_batch
         ):
-            input_batch.fast_prefill = None
+            input_batch.fast_prefill = self.fast_prefill.prepare(
+                logits_indices,
+                num_reqs,
+                cu_num_logits_np,
+                batch_req_state.has_prefill,
+                batch_desc,
+                max_query_len=int(num_scheduled_tokens_upper_bound.max()),
+                needs_full_hidden_states=(
+                    self.prompt_logprobs_worker is not None
+                    and bool(
+                        self.prompt_logprobs_worker.uses_prompt_logprobs[
+                            idx_mapping_np
+                        ].any()
+                    )
+                ),
+            )
+
         input_batch = pcp.maybe_partition_pcp_batch(
             self.pcp_manager,
             input_batch,

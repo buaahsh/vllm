@@ -1059,28 +1059,26 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
         if num_decodes == 0 or num_decode_tokens == 0:
             return 1, None, None
 
+        offsets = qo_indptr_cpu.numpy()
+        decode_q_lens = offsets[1 : num_decodes + 1] - offsets[:num_decodes]
         if not self.use_xqa:
-            decode_q_lens = (
-                qo_indptr_cpu[1 : num_decodes + 1] - qo_indptr_cpu[:num_decodes]
-            )
             q_len_per_req = num_decode_tokens // num_decodes
             if num_decode_tokens % num_decodes == 0 and bool(
-                (decode_q_lens == q_len_per_req).all().item()
+                (decode_q_lens == q_len_per_req).all()
             ):
                 return q_len_per_req, None, None
 
             # CUDA-graph padding can leave zero-length requests after a
             # uniform speculative decode batch. Keep the packed query and
             # describe it through the trtllm-gen varlen API.
-            max_q_len = int(decode_q_lens.max().item())
+            max_q_len = int(decode_q_lens.max())
             if max_q_len > 1:
                 return max_q_len, qo_indptr[: num_decodes + 1], None
             return 1, None, None
 
-        decode_q_lens = qo_indptr_cpu[1 : num_decodes + 1] - qo_indptr_cpu[:num_decodes]
         nonzero = decode_q_lens[decode_q_lens > 0]
-        q_len_per_req = int(nonzero.max().item()) if nonzero.numel() > 0 else 1
-        uniform = nonzero.numel() <= 1 or bool((nonzero == nonzero[0]).all().item())
+        q_len_per_req = int(nonzero.max()) if nonzero.size > 0 else 1
+        uniform = nonzero.size <= 1 or bool((nonzero == nonzero[0]).all())
         if uniform and num_decode_tokens == num_decodes * q_len_per_req:
             return q_len_per_req, None, None
 

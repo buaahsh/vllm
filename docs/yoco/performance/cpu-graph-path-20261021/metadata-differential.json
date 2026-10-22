@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "comparisons": 12000,
+  "seed": 20261021,
+  "cases": "int32/int64, strided CPU offsets, mixed/padded queries, XQA/TRTLLM, empty decode subsets"
+}

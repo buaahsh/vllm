@@ -1,0 +1,4690 @@
+[
+  {
+    "case": "audit-baseline-0-c4-t128",
+    "concurrency": 4,
+    "length": 0,
+    "capture_wall_s": 0.5872118305414915,
+    "calibration_s": [],
+    "pure_prefill": {
+      "steps": [
+        0
+      ],
+      "step_groups": [
+        [
+          0
+        ]
+      ],
+      "wall_span_us": 115740.60595703125,
+      "gpu_busy_union_us": 16276.897216796875,
+      "gpu_idle_us": 99461.37280273438,
+      "idle_fraction": 0.8593674442758691,
+      "gpu_activities": 2166,
+      "activities_without_launch_api": 0,
+      "host_before_next_api_us": 86575.13598632812,
+      "queued_gap_us": 657.239501953125,
+      "p95_gap_us": 111.297119140625,
+      "gaps_gt10_us": 98131.005859375,
+      "cpu_scopes_us": {
+        "finish_requests": 6.096,
+        "free_states": 0.775,
+        "add_requests": 624.202,
+        "update_requests": 8.644,
+        "block_table_writes": 187.539,
+        "gather_batch_req_state": 32.928,
+        "prepare_inputs": 471.284,
+        "prepare_attn": 376.862,
+        "attention_metadata": 3680.528,
+        "sample": 401.677,
+        "postprocess_sampled": 45.757,
+        "draft_graph": 891.462,
+        "draft_propose": 1005.488,
+        "output_wait": 14.811,
+        "take_draft_token_ids": 3.216
+      },
+      "graph_submission": {
+        "target_graph": {
+          "count": 0,
+          "median_submit_interval_us": null
+        },
+        "draft_graph": {
+          "count": 1,
+          "median_submit_interval_us": null
+        }
+      },
+      "top_gaps": [
+        {
+          "start_us": 1.823974609375,
+          "duration_us": 2328.926025390625,
+          "host_before_api_us": 2307.8330078125,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<2, at::native::FillFunctor<long>, std::array<char*, 1ul> >(int, at::native::FillFunctor<long>, std::array<char*, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 113238.080078125,
+          "duration_us": 896.73486328125,
+          "host_before_api_us": 15.216064453125,
+          "next_kernel": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::opera",
+          "next_label": "draft_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 7774.07421875,
+          "duration_us": 653.918701171875,
+          "host_before_api_us": 640.854736328125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 3757.277099609375,
+          "duration_us": 325.72802734375,
+          "host_before_api_us": 317.305908203125,
+          "next_kernel": "_compute_slot_mappings_kernel",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 2830.942138671875,
+          "duration_us": 244.351806640625,
+          "host_before_api_us": 236.837890625,
+          "next_kernel": "Memcpy HtoD (Pinned -> Device)",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 112313.88891601562,
+          "duration_us": 238.97607421875,
+          "host_before_api_us": 229.47900390625,
+          "next_kernel": "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 4086.3330078125,
+          "duration_us": 192.9599609375,
+          "host_before_api_us": 182.955078125,
+          "next_kernel": "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunct",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 107285.98901367188,
+          "duration_us": 170.783935546875,
+          "host_before_api_us": 161.81298828125,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<unsigned char>, std::array<char*, 1ul> >(int, at::native::FillFunctor<unsigned char>, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 102260.58520507812,
+          "duration_us": 169.56787109375,
+          "host_before_api_us": 161.48486328125,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<unsigned char>, std::array<char*, 1ul> >(int, at::native::FillFunctor<unsigned char>, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 9675.927978515625,
+          "duration_us": 168.5439453125,
+          "host_before_api_us": 157.483154296875,
+          "next_kernel": "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 97203.05419921875,
+          "duration_us": 168.3828125,
+          "host_before_api_us": 159.433837890625,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<unsigned char>, std::array<char*, 1ul> >(int, at::native::FillFunctor<unsigned char>, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 51323.06103515625,
+          "duration_us": 164.990966796875,
+          "host_before_api_us": 155.55908203125,
+          "next_kernel": "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        }
+      ]
+    },
+    "mixed": null,
+    "steady": {
+      "steps": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "step_groups": [
+        [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      ],
+      "wall_span_us": 117573.244140625,
+      "gpu_busy_union_us": 92294.1884765625,
+      "gpu_idle_us": 25276.9755859375,
+      "idle_fraction": 0.21500687379032557,
+      "gpu_activities": 12326,
+      "activities_without_launch_api": 0,
+      "host_before_next_api_us": 12125.630126953125,
+      "queued_gap_us": 2967.714111328125,
+      "p95_gap_us": 0.9599609375,
+      "gaps_gt10_us": 22309.261474609375,
+      "cpu_scopes_us": {
+        "finish_requests": 14.017999999999999,
+        "free_states": 3.759,
+        "add_requests": 622.8119999999999,
+        "update_requests": 398.979,
+        "block_table_writes": 1270.961,
+        "gather_batch_req_state": 255.11200000000002,
+        "prepare_inputs": 3041.4240000000004,
+        "prepare_attn": 1191.05,
+        "attention_metadata": 10593.802,
+        "target_graph": 10284.139,
+        "sample": 4716.696,
+        "postprocess_sampled": 351.14300000000003,
+        "draft_graph": 5081.467999999999,
+        "draft_propose": 5949.546,
+        "output_wait": 67569.216,
+        "take_draft_token_ids": 22.82
+      },
+      "graph_submission": {
+        "target_graph": {
+          "count": 8,
+          "median_submit_interval_us": 14711.73193359375
+        },
+        "draft_graph": {
+          "count": 8,
+          "median_submit_interval_us": 14680.576904296875
+        }
+      },
+      "top_gaps": [
+        {
+          "start_us": 197.054931640625,
+          "duration_us": 2737.5341796875,
+          "host_before_api_us": 1428.2060546875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 3,
+          "queued": false
+        },
+        {
+          "start_us": 73938.11303710938,
+          "duration_us": 2703.006103515625,
+          "host_before_api_us": 1459.156005859375,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 8,
+          "queued": false
+        },
+        {
+          "start_us": 15137.875,
+          "duration_us": 2702.174072265625,
+          "host_before_api_us": 1430.569091796875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 4,
+          "queued": false
+        },
+        {
+          "start_us": 29705.382080078125,
+          "duration_us": 2696.06201171875,
+          "host_before_api_us": 1433.806884765625,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 5,
+          "queued": false
+        },
+        {
+          "start_us": 44398.6181640625,
+          "duration_us": 2694.10888671875,
+          "host_before_api_us": 1420.468994140625,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 6,
+          "queued": false
+        },
+        {
+          "start_us": 103212.13598632812,
+          "duration_us": 2677.150146484375,
+          "host_before_api_us": 1434.426025390625,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 10,
+          "queued": false
+        },
+        {
+          "start_us": 59106.669189453125,
+          "duration_us": 2665.14990234375,
+          "host_before_api_us": 1427.29296875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 7,
+          "queued": false
+        },
+        {
+          "start_us": 88616.11596679688,
+          "duration_us": 2566.75,
+          "host_before_api_us": 1318.714111328125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 9,
+          "queued": false
+        },
+        {
+          "start_us": 81.7919921875,
+          "duration_us": 111.614990234375,
+          "host_before_api_us": 104.842041015625,
+          "next_kernel": "_compute_slot_mappings_kernel",
+          "next_label": "outside_graph",
+          "next_step": 3,
+          "queued": false
+        },
+        {
+          "start_us": 15023.923095703125,
+          "duration_us": 110.6240234375,
+          "host_before_api_us": 103.60498046875,
+          "next_kernel": "_compute_slot_mappings_kernel",
+          "next_label": "outside_graph",
+          "next_step": 4,
+          "queued": false
+        },
+        {
+          "start_us": 44293.849853515625,
+          "duration_us": 101.248291015625,
+          "host_before_api_us": 94.111083984375,
+          "next_kernel": "_compute_slot_mappings_kernel",
+          "next_label": "outside_graph",
+          "next_step": 6,
+          "queued": false
+        },
+        {
+          "start_us": 73834.27319335938,
+          "duration_us": 100.287841796875,
+          "host_before_api_us": 93.3388671875,
+          "next_kernel": "_compute_slot_mappings_kernel",
+          "next_label": "outside_graph",
+          "next_step": 8,
+          "queued": false
+        }
+      ]
+    },
+    "padding": [
+      {
+        "step": 0,
+        "phase": "pure_prefill",
+        "reqs": 4,
+        "target_real": 108,
+        "target_padded": 108,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 1,
+        "phase": "decode_ramp",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 2,
+        "phase": "decode_ramp",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 3,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 4,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 5,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 6,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 7,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 8,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 9,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 10,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 11,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 12,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 13,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 14,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 15,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 16,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 17,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 18,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 19,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 20,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 21,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 22,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 23,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 24,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 25,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 26,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 27,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 28,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 29,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 30,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 31,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 32,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      }
+    ],
+    "marker_count": 33,
+    "unknown_graph_launches": 0,
+    "method": "CUDA-only CUPTI trace, one diagnostic marker per step; GPU interval union across every stream. Graph labels match exact activity-name/count signatures from CPU+CUDA traces. Marker-to-marker step windows. No CPU/GPU aggregate subtraction."
+  },
+  {
+    "case": "audit-baseline-8193-c8-t256",
+    "concurrency": 8,
+    "length": 8193,
+    "capture_wall_s": 5.478693293407559,
+    "calibration_s": [],
+    "pure_prefill": {
+      "steps": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "step_groups": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      "wall_span_us": 499884.89404296875,
+      "gpu_busy_union_us": 123313.30419921875,
+      "gpu_idle_us": 370991.2438964844,
+      "idle_fraction": 0.7533166021443747,
+      "gpu_activities": 7553,
+      "activities_without_launch_api": 0,
+      "host_before_next_api_us": 321840.9553222656,
+      "queued_gap_us": 1705.5625,
+      "p95_gap_us": 121.631103515625,
+      "gaps_gt10_us": 366169.6318359375,
+      "cpu_scopes_us": {
+        "finish_requests": 14.399000000000001,
+        "free_states": 2.451,
+        "add_requests": 1757.5279999999998,
+        "update_requests": 235.692,
+        "block_table_writes": 2516.793,
+        "gather_batch_req_state": 157.56900000000002,
+        "prepare_inputs": 2299.852,
+        "prepare_attn": 781.458,
+        "attention_metadata": 19780.372,
+        "sample": 1949.799,
+        "postprocess_sampled": 237.83,
+        "output_wait": 57.474000000000004,
+        "take_draft_token_ids": 13.899000000000001,
+        "draft_graph": 488.501,
+        "draft_propose": 615.964
+      },
+      "graph_submission": {
+        "target_graph": {
+          "count": 0,
+          "median_submit_interval_us": null
+        },
+        "draft_graph": {
+          "count": 1,
+          "median_submit_interval_us": null
+        }
+      },
+      "top_gaps": [
+        {
+          "start_us": 381293.6799316406,
+          "duration_us": 2932.157958984375,
+          "host_before_api_us": 2918.79296875,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 4,
+          "queued": false
+        },
+        {
+          "start_us": 190525.99194335938,
+          "duration_us": 2633.43798828125,
+          "host_before_api_us": 2621.741943359375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 2,
+          "queued": false
+        },
+        {
+          "start_us": 286002.5400390625,
+          "duration_us": 2628.44580078125,
+          "host_before_api_us": 2616.156982421875,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 3,
+          "queued": false
+        },
+        {
+          "start_us": 94954.11596679688,
+          "duration_us": 2271.2939453125,
+          "host_before_api_us": 2259.080078125,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 1,
+          "queued": false
+        },
+        {
+          "start_us": 193160.998046875,
+          "duration_us": 659.0068359375,
+          "host_before_api_us": 635.35791015625,
+          "next_kernel": "Memcpy HtoD (Pinned -> Device)",
+          "next_label": "outside_graph",
+          "next_step": 2,
+          "queued": false
+        },
+        {
+          "start_us": 288632.42578125,
+          "duration_us": 648.86328125,
+          "host_before_api_us": 635.859130859375,
+          "next_kernel": "Memcpy HtoD (Pinned -> Device)",
+          "next_label": "outside_graph",
+          "next_step": 3,
+          "queued": false
+        },
+        {
+          "start_us": 389967.94384765625,
+          "duration_us": 645.216064453125,
+          "host_before_api_us": 629.841064453125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "outside_graph",
+          "next_step": 4,
+          "queued": false
+        },
+        {
+          "start_us": 97227.01000976562,
+          "duration_us": 638.591064453125,
+          "host_before_api_us": 626.0068359375,
+          "next_kernel": "Memcpy HtoD (Pinned -> Device)",
+          "next_label": "outside_graph",
+          "next_step": 1,
+          "queued": false
+        },
+        {
+          "start_us": 4453.658935546875,
+          "duration_us": 587.583984375,
+          "host_before_api_us": 578.364013671875,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1u",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 6688.792724609375,
+          "duration_us": 579.904296875,
+          "host_before_api_us": 564.42724609375,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 384960.4929199219,
+          "duration_us": 555.51904296875,
+          "host_before_api_us": 546.823974609375,
+          "next_kernel": "Memcpy HtoD (Pinned -> Device)",
+          "next_label": "outside_graph",
+          "next_step": 4,
+          "queued": false
+        },
+        {
+          "start_us": 293850.98095703125,
+          "duration_us": 543.487060546875,
+          "host_before_api_us": 528.845947265625,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "outside_graph",
+          "next_step": 3,
+          "queued": false
+        }
+      ]
+    },
+    "mixed": {
+      "steps": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33
+      ],
+      "step_groups": [
+        [
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33
+        ]
+      ],
+      "wall_span_us": 3418589.3908691406,
+      "gpu_busy_union_us": 1038632.1049804688,
+      "gpu_idle_us": 2375262.346923828,
+      "idle_fraction": 0.6961810892660591,
+      "gpu_activities": 62579,
+      "activities_without_launch_api": 0,
+      "host_before_next_api_us": 2040506.2915039062,
+      "queued_gap_us": 20718.186279296875,
+      "p95_gap_us": 107.327880859375,
+      "gaps_gt10_us": 2327300.258544922,
+      "cpu_scopes_us": {
+        "finish_requests": 56.1,
+        "free_states": 14.578000000000003,
+        "add_requests": 6353.503999999999,
+        "update_requests": 2430.9230000000002,
+        "block_table_writes": 14321.348999999998,
+        "gather_batch_req_state": 999.0360000000001,
+        "prepare_inputs": 14771.190999999999,
+        "prepare_attn": 4360.026,
+        "attention_metadata": 147884.59,
+        "sample": 16622.987,
+        "postprocess_sampled": 1281.6389999999997,
+        "draft_graph": 12825.625999999998,
+        "draft_propose": 16029.577999999998,
+        "output_wait": 481.77900000000005,
+        "take_draft_token_ids": 92.64699999999999
+      },
+      "graph_submission": {
+        "target_graph": {
+          "count": 0,
+          "median_submit_interval_us": null
+        },
+        "draft_graph": {
+          "count": 29,
+          "median_submit_interval_us": 117106.03796386719
+        }
+      },
+      "top_gaps": [
+        {
+          "start_us": 2349624.593017578,
+          "duration_us": 5800.761962890625,
+          "host_before_api_us": 5786.493896484375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 25,
+          "queued": false
+        },
+        {
+          "start_us": 2821215.0517578125,
+          "duration_us": 5676.8271484375,
+          "host_before_api_us": 5661.065185546875,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 29,
+          "queued": false
+        },
+        {
+          "start_us": 935918.2041015625,
+          "duration_us": 5669.913818359375,
+          "host_before_api_us": 5656.246826171875,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 13,
+          "queued": false
+        },
+        {
+          "start_us": 466547.77490234375,
+          "duration_us": 5642.52294921875,
+          "host_before_api_us": 5627.569091796875,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 9,
+          "queued": false
+        },
+        {
+          "start_us": 1406595.2541503906,
+          "duration_us": 5553.786865234375,
+          "host_before_api_us": 5538.622802734375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 17,
+          "queued": false
+        },
+        {
+          "start_us": 1878405.8720703125,
+          "duration_us": 5309.978759765625,
+          "host_before_api_us": 5296.06494140625,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 21,
+          "queued": false
+        },
+        {
+          "start_us": 2703937.5329589844,
+          "duration_us": 1887.2939453125,
+          "host_before_api_us": 1873.656005859375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 28,
+          "queued": false
+        },
+        {
+          "start_us": 3176124.9838867188,
+          "duration_us": 1833.85400390625,
+          "host_before_api_us": 1820.14404296875,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 32,
+          "queued": false
+        },
+        {
+          "start_us": 3058428.583984375,
+          "duration_us": 1774.910888671875,
+          "host_before_api_us": 1761.8330078125,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 31,
+          "queued": false
+        },
+        {
+          "start_us": 1287862.6008300781,
+          "duration_us": 1748.5419921875,
+          "host_before_api_us": 1733.568115234375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 16,
+          "queued": false
+        },
+        {
+          "start_us": 1761046.4008789062,
+          "duration_us": 1726.3349609375,
+          "host_before_api_us": 1711.863037109375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 20,
+          "queued": false
+        },
+        {
+          "start_us": 2941647.7358398438,
+          "duration_us": 1704.447021484375,
+          "host_before_api_us": 1690.238037109375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 30,
+          "queued": false
+        }
+      ]
+    },
+    "steady": {
+      "steps": [
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43
+      ],
+      "step_groups": [
+        [
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43
+        ]
+      ],
+      "wall_span_us": 145026.93310546875,
+      "gpu_busy_union_us": 115250.71069335938,
+      "gpu_idle_us": 29773.886474609375,
+      "idle_fraction": 0.20531512164333676,
+      "gpu_activities": 12264,
+      "activities_without_launch_api": 0,
+      "host_before_next_api_us": 16062.11279296875,
+      "queued_gap_us": 2866.71044921875,
+      "p95_gap_us": 0.9599609375,
+      "gaps_gt10_us": 26893.16015625,
+      "cpu_scopes_us": {
+        "finish_requests": 14.37,
+        "free_states": 3.8499999999999996,
+        "add_requests": 631.6920000000001,
+        "update_requests": 461.73299999999995,
+        "block_table_writes": 1458.192,
+        "gather_batch_req_state": 267.88,
+        "prepare_inputs": 4173.316,
+        "prepare_attn": 1223.9700000000003,
+        "attention_metadata": 10696.157,
+        "target_graph": 10538.962,
+        "sample": 4747.907,
+        "postprocess_sampled": 355.97999999999996,
+        "draft_graph": 3783.446,
+        "draft_propose": 4655.091,
+        "output_wait": 89065.486,
+        "take_draft_token_ids": 27.427000000000003
+      },
+      "graph_submission": {
+        "target_graph": {
+          "count": 8,
+          "median_submit_interval_us": 18040.843017578125
+        },
+        "draft_graph": {
+          "count": 8,
+          "median_submit_interval_us": 17962.38818359375
+        }
+      },
+      "top_gaps": [
+        {
+          "start_us": 109361.33520507812,
+          "duration_us": 2874.492919921875,
+          "host_before_api_us": 1457.143798828125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 42,
+          "queued": false
+        },
+        {
+          "start_us": 90440.4892578125,
+          "duration_us": 2758.7177734375,
+          "host_before_api_us": 1482.575927734375,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 41,
+          "queued": false
+        },
+        {
+          "start_us": 36489.629150390625,
+          "duration_us": 2740.637939453125,
+          "host_before_api_us": 1433.56689453125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 38,
+          "queued": false
+        },
+        {
+          "start_us": 18444.97412109375,
+          "duration_us": 2728.157958984375,
+          "host_before_api_us": 1437.37890625,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 37,
+          "queued": false
+        },
+        {
+          "start_us": 510.272216796875,
+          "duration_us": 2722.78076171875,
+          "host_before_api_us": 1458.4169921875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 36,
+          "queued": false
+        },
+        {
+          "start_us": 72547.77124023438,
+          "duration_us": 2702.012939453125,
+          "host_before_api_us": 1425.23486328125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 40,
+          "queued": false
+        },
+        {
+          "start_us": 54408.044189453125,
+          "duration_us": 2701.85302734375,
+          "host_before_api_us": 1443.511962890625,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 39,
+          "queued": false
+        },
+        {
+          "start_us": 127501.7021484375,
+          "duration_us": 2688.284912109375,
+          "host_before_api_us": 1441.135986328125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 43,
+          "queued": false
+        },
+        {
+          "start_us": 108042.55200195312,
+          "duration_us": 1205.503173828125,
+          "host_before_api_us": 1194.859130859375,
+          "next_kernel": "_gather_block_tables_kernel",
+          "next_label": "outside_graph",
+          "next_step": 42,
+          "queued": false
+        },
+        {
+          "start_us": 72318.58715820312,
+          "duration_us": 120.864013671875,
+          "host_before_api_us": 113.347900390625,
+          "next_kernel": "_gather_block_tables_kernel",
+          "next_label": "outside_graph",
+          "next_step": 40,
+          "queued": false
+        },
+        {
+          "start_us": 18208.84716796875,
+          "duration_us": 120.384033203125,
+          "host_before_api_us": 112.998046875,
+          "next_kernel": "_gather_block_tables_kernel",
+          "next_label": "outside_graph",
+          "next_step": 37,
+          "queued": false
+        },
+        {
+          "start_us": 17780.718994140625,
+          "duration_us": 114.336181640625,
+          "host_before_api_us": 105.543212890625,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<bool>, std::array<char*, 1ul> >(int, at::native::FillFunctor<bool>, std::array<char*, ",
+          "next_label": "outside_graph",
+          "next_step": 37,
+          "queued": false
+        }
+      ]
+    },
+    "padding": [
+      {
+        "step": 0,
+        "phase": "pure_prefill",
+        "reqs": 1,
+        "target_real": 2041,
+        "target_padded": 2041,
+        "draft_real": 0,
+        "draft_padded": 0
+      },
+      {
+        "step": 1,
+        "phase": "pure_prefill",
+        "reqs": 1,
+        "target_real": 2041,
+        "target_padded": 2041,
+        "draft_real": 0,
+        "draft_padded": 0
+      },
+      {
+        "step": 2,
+        "phase": "pure_prefill",
+        "reqs": 1,
+        "target_real": 2041,
+        "target_padded": 2041,
+        "draft_real": 0,
+        "draft_padded": 0
+      },
+      {
+        "step": 3,
+        "phase": "pure_prefill",
+        "reqs": 1,
+        "target_real": 2041,
+        "target_padded": 2041,
+        "draft_real": 0,
+        "draft_padded": 0
+      },
+      {
+        "step": 4,
+        "phase": "pure_prefill",
+        "reqs": 2,
+        "target_real": 2034,
+        "target_padded": 2034,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 5,
+        "phase": "mixed",
+        "reqs": 2,
+        "target_real": 2034,
+        "target_padded": 2034,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 6,
+        "phase": "mixed",
+        "reqs": 2,
+        "target_real": 2034,
+        "target_padded": 2034,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 7,
+        "phase": "mixed",
+        "reqs": 2,
+        "target_real": 2034,
+        "target_padded": 2034,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 8,
+        "phase": "mixed",
+        "reqs": 3,
+        "target_real": 2027,
+        "target_padded": 2027,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 9,
+        "phase": "mixed",
+        "reqs": 3,
+        "target_real": 2027,
+        "target_padded": 2027,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 10,
+        "phase": "mixed",
+        "reqs": 3,
+        "target_real": 2027,
+        "target_padded": 2027,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 11,
+        "phase": "mixed",
+        "reqs": 3,
+        "target_real": 2027,
+        "target_padded": 2027,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 12,
+        "phase": "mixed",
+        "reqs": 4,
+        "target_real": 2020,
+        "target_padded": 2020,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 13,
+        "phase": "mixed",
+        "reqs": 4,
+        "target_real": 2020,
+        "target_padded": 2020,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 14,
+        "phase": "mixed",
+        "reqs": 4,
+        "target_real": 2020,
+        "target_padded": 2020,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 15,
+        "phase": "mixed",
+        "reqs": 4,
+        "target_real": 2020,
+        "target_padded": 2020,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 16,
+        "phase": "mixed",
+        "reqs": 5,
+        "target_real": 2013,
+        "target_padded": 2013,
+        "draft_real": 40,
+        "draft_padded": 40
+      },
+      {
+        "step": 17,
+        "phase": "mixed",
+        "reqs": 5,
+        "target_real": 2013,
+        "target_padded": 2013,
+        "draft_real": 40,
+        "draft_padded": 40
+      },
+      {
+        "step": 18,
+        "phase": "mixed",
+        "reqs": 5,
+        "target_real": 2013,
+        "target_padded": 2013,
+        "draft_real": 40,
+        "draft_padded": 40
+      },
+      {
+        "step": 19,
+        "phase": "mixed",
+        "reqs": 5,
+        "target_real": 2013,
+        "target_padded": 2013,
+        "draft_real": 40,
+        "draft_padded": 40
+      },
+      {
+        "step": 20,
+        "phase": "mixed",
+        "reqs": 6,
+        "target_real": 2006,
+        "target_padded": 2006,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 21,
+        "phase": "mixed",
+        "reqs": 6,
+        "target_real": 2006,
+        "target_padded": 2006,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 22,
+        "phase": "mixed",
+        "reqs": 6,
+        "target_real": 2006,
+        "target_padded": 2006,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 23,
+        "phase": "mixed",
+        "reqs": 6,
+        "target_real": 2006,
+        "target_padded": 2006,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 24,
+        "phase": "mixed",
+        "reqs": 7,
+        "target_real": 1999,
+        "target_padded": 1999,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 25,
+        "phase": "mixed",
+        "reqs": 7,
+        "target_real": 1999,
+        "target_padded": 1999,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 26,
+        "phase": "mixed",
+        "reqs": 7,
+        "target_real": 1999,
+        "target_padded": 1999,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 27,
+        "phase": "mixed",
+        "reqs": 7,
+        "target_real": 1999,
+        "target_padded": 1999,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 28,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 1992,
+        "target_padded": 1992,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 29,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 1992,
+        "target_padded": 1992,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 30,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 1992,
+        "target_padded": 1992,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 31,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 1992,
+        "target_padded": 1992,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 32,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 1992,
+        "target_padded": 1992,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 33,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 95,
+        "target_padded": 95,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 34,
+        "phase": "decode_ramp",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 35,
+        "phase": "decode_ramp",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 36,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 37,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 38,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 39,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 40,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 41,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 42,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 43,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 44,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 45,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 46,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 47,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 48,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 49,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 50,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 51,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 52,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 53,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 54,
+        "phase": "decode_drain",
+        "reqs": 7,
+        "target_real": 63,
+        "target_padded": 72,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 55,
+        "phase": "decode_drain",
+        "reqs": 7,
+        "target_real": 63,
+        "target_padded": 72,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 56,
+        "phase": "decode_drain",
+        "reqs": 7,
+        "target_real": 63,
+        "target_padded": 72,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 57,
+        "phase": "decode_drain",
+        "reqs": 7,
+        "target_real": 63,
+        "target_padded": 72,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 58,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 59,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 60,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 61,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 62,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 63,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 64,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 65,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 66,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 67,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 68,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 69,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 70,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 71,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 72,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 73,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 74,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 75,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 76,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 77,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 78,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 79,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 80,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 81,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 82,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 83,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 84,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 85,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 86,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 87,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 88,
+        "phase": "decode_drain",
+        "reqs": 5,
+        "target_real": 45,
+        "target_padded": 72,
+        "draft_real": 40,
+        "draft_padded": 40
+      },
+      {
+        "step": 89,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 90,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 91,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 92,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 93,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 94,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 95,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 96,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 97,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 98,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 99,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 100,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 101,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 102,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 103,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 104,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 105,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 106,
+        "phase": "decode_drain",
+        "reqs": 2,
+        "target_real": 18,
+        "target_padded": 18,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 107,
+        "phase": "decode_drain",
+        "reqs": 2,
+        "target_real": 18,
+        "target_padded": 18,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 108,
+        "phase": "decode_drain",
+        "reqs": 2,
+        "target_real": 18,
+        "target_padded": 18,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 109,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 110,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 111,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 112,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 113,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 114,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 115,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 116,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 117,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 118,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 119,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 120,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 121,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 122,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 123,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 124,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 125,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 126,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      }
+    ],
+    "marker_count": 127,
+    "unknown_graph_launches": 0,
+    "method": "CUDA-only CUPTI trace, one diagnostic marker per step; GPU interval union across every stream. Graph labels match exact activity-name/count signatures from CPU+CUDA traces. Marker-to-marker step windows. No CPU/GPU aggregate subtraction."
+  },
+  {
+    "case": "audit-candidate-0-c4-t128",
+    "concurrency": 4,
+    "length": 0,
+    "capture_wall_s": 0.5650871600955725,
+    "calibration_s": [],
+    "pure_prefill": {
+      "steps": [
+        0
+      ],
+      "step_groups": [
+        [
+          0
+        ]
+      ],
+      "wall_span_us": 112473.48388671875,
+      "gpu_busy_union_us": 16260.34765625,
+      "gpu_idle_us": 96210.80029296875,
+      "idle_fraction": 0.8554295012980382,
+      "gpu_activities": 2164,
+      "activities_without_launch_api": 0,
+      "host_before_next_api_us": 83682.7568359375,
+      "queued_gap_us": 642.9052734375,
+      "p95_gap_us": 109.760009765625,
+      "gaps_gt10_us": 95019.09765625,
+      "cpu_scopes_us": {
+        "finish_requests": 6.521,
+        "free_states": 0.477,
+        "add_requests": 621.614,
+        "update_requests": 8.978,
+        "block_table_writes": 180.702,
+        "gather_batch_req_state": 38.604,
+        "prepare_inputs": 359.099,
+        "prepare_attn": 143.733,
+        "attention_metadata": 3921.916,
+        "sample": 404.091,
+        "postprocess_sampled": 46.769,
+        "draft_graph": 431.72,
+        "draft_propose": 538.452,
+        "output_wait": 13.976,
+        "take_draft_token_ids": 3.122
+      },
+      "graph_submission": {
+        "target_graph": {
+          "count": 0,
+          "median_submit_interval_us": null
+        },
+        "draft_graph": {
+          "count": 1,
+          "median_submit_interval_us": null
+        }
+      },
+      "top_gaps": [
+        {
+          "start_us": 5506.5869140625,
+          "duration_us": 659.295166015625,
+          "host_before_api_us": 645.873046875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 110438.5419921875,
+          "duration_us": 437.055908203125,
+          "host_before_api_us": 14.532958984375,
+          "next_kernel": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::opera",
+          "next_label": "draft_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 109528.623046875,
+          "duration_us": 234.4638671875,
+          "host_before_api_us": 224.885009765625,
+          "next_kernel": "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 698.080078125,
+          "duration_us": 230.68701171875,
+          "host_before_api_us": 223.35693359375,
+          "next_kernel": "Memcpy HtoD (Pinned -> Device)",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 2961.405029296875,
+          "duration_us": 220.511962890625,
+          "host_before_api_us": 212.98095703125,
+          "next_kernel": "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunct",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 1.760009765625,
+          "duration_us": 183.263916015625,
+          "host_before_api_us": 169.695068359375,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<2, at::native::FillFunctor<long>, std::array<char*, 1ul> >(int, at::native::FillFunctor<long>, std::array<char*, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 1592.54296875,
+          "duration_us": 179.10302734375,
+          "host_before_api_us": 169.534912109375,
+          "next_kernel": "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunct",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 86947.30297851562,
+          "duration_us": 175.615966796875,
+          "host_before_api_us": 166.69189453125,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<unsigned char>, std::array<char*, 1ul> >(int, at::native::FillFunctor<unsigned char>, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 97018.07690429688,
+          "duration_us": 166.84716796875,
+          "host_before_api_us": 158.136962890625,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<unsigned char>, std::array<char*, 1ul> >(int, at::native::FillFunctor<unsigned char>, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 7367.8330078125,
+          "duration_us": 164.73486328125,
+          "host_before_api_us": 155.7958984375,
+          "next_kernel": "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 107889.296875,
+          "duration_us": 164.672119140625,
+          "host_before_api_us": 155.72216796875,
+          "next_kernel": "void per_token_group_quant_8bit_packed_register_kernel<c10::BFloat16, c10::Float8_e4m3fn, 128, 8, 2>(c10::BFloat16 const*, void*, unsigned int*, int, int, int, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 107123.98583984375,
+          "duration_us": 162.6240234375,
+          "host_before_api_us": 154.03125,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<unsigned char>, std::array<char*, 1ul> >(int, at::native::FillFunctor<unsigned char>, ",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        }
+      ]
+    },
+    "mixed": null,
+    "steady": {
+      "steps": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "step_groups": [
+        [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      ],
+      "wall_span_us": 113584.01098632812,
+      "gpu_busy_union_us": 92203.4912109375,
+      "gpu_idle_us": 21378.471923828125,
+      "idle_fraction": 0.18823529464868216,
+      "gpu_activities": 12326,
+      "activities_without_launch_api": 0,
+      "host_before_next_api_us": 9022.419677734375,
+      "queued_gap_us": 2969.78857421875,
+      "p95_gap_us": 0.9599609375,
+      "gaps_gt10_us": 18395.24560546875,
+      "cpu_scopes_us": {
+        "finish_requests": 13.745,
+        "free_states": 3.742,
+        "add_requests": 633.0530000000001,
+        "update_requests": 382.065,
+        "block_table_writes": 1281.15,
+        "gather_batch_req_state": 256.467,
+        "prepare_inputs": 2968.941,
+        "prepare_attn": 1150.649,
+        "attention_metadata": 7505.6320000000005,
+        "target_graph": 10168.963,
+        "sample": 4743.678,
+        "postprocess_sampled": 346.271,
+        "draft_graph": 3731.346,
+        "draft_propose": 4627.554999999999,
+        "output_wait": 68099.775,
+        "take_draft_token_ids": 22.541999999999998
+      },
+      "graph_submission": {
+        "target_graph": {
+          "count": 8,
+          "median_submit_interval_us": 14322.14306640625
+        },
+        "draft_graph": {
+          "count": 8,
+          "median_submit_interval_us": 14328.069091796875
+        }
+      },
+      "top_gaps": [
+        {
+          "start_us": 14644.43310546875,
+          "duration_us": 2307.10205078125,
+          "host_before_api_us": 1040.8798828125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 4,
+          "queued": false
+        },
+        {
+          "start_us": 43114.7080078125,
+          "duration_us": 2305.5009765625,
+          "host_before_api_us": 1059.748046875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 6,
+          "queued": false
+        },
+        {
+          "start_us": 28800.546875,
+          "duration_us": 2296.4130859375,
+          "host_before_api_us": 1055.439208984375,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 5,
+          "queued": false
+        },
+        {
+          "start_us": 180.991943359375,
+          "duration_us": 2293.085205078125,
+          "host_before_api_us": 1035.7021484375,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 3,
+          "queued": false
+        },
+        {
+          "start_us": 99597.72192382812,
+          "duration_us": 2281.629150390625,
+          "host_before_api_us": 1048.83203125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 10,
+          "queued": false
+        },
+        {
+          "start_us": 57457.572998046875,
+          "duration_us": 2280.22216796875,
+          "host_before_api_us": 1039.026123046875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 7,
+          "queued": false
+        },
+        {
+          "start_us": 85393.67211914062,
+          "duration_us": 2155.933837890625,
+          "host_before_api_us": 917.10888671875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 9,
+          "queued": false
+        },
+        {
+          "start_us": 71923.73388671875,
+          "duration_us": 1624.8310546875,
+          "host_before_api_us": 1054.09814453125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 8,
+          "queued": false
+        },
+        {
+          "start_us": 43008.628173828125,
+          "duration_us": 102.783935546875,
+          "host_before_api_us": 95.601806640625,
+          "next_kernel": "_compute_slot_mappings_kernel",
+          "next_label": "outside_graph",
+          "next_step": 6,
+          "queued": false
+        },
+        {
+          "start_us": 75.39208984375,
+          "duration_us": 102.27197265625,
+          "host_before_api_us": 95.248046875,
+          "next_kernel": "_compute_slot_mappings_kernel",
+          "next_label": "outside_graph",
+          "next_step": 3,
+          "queued": false
+        },
+        {
+          "start_us": 14540.880859375,
+          "duration_us": 100.16015625,
+          "host_before_api_us": 93.648193359375,
+          "next_kernel": "_compute_slot_mappings_kernel",
+          "next_label": "outside_graph",
+          "next_step": 4,
+          "queued": false
+        },
+        {
+          "start_us": 71820.75805664062,
+          "duration_us": 99.679931640625,
+          "host_before_api_us": 92.631103515625,
+          "next_kernel": "_compute_slot_mappings_kernel",
+          "next_label": "outside_graph",
+          "next_step": 8,
+          "queued": false
+        }
+      ]
+    },
+    "padding": [
+      {
+        "step": 0,
+        "phase": "pure_prefill",
+        "reqs": 4,
+        "target_real": 108,
+        "target_padded": 108,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 1,
+        "phase": "decode_ramp",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 2,
+        "phase": "decode_ramp",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 3,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 4,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 5,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 6,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 7,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 8,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 9,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 10,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 11,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 12,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 13,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 14,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 15,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 16,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 17,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 18,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 19,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 20,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 21,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 22,
+        "phase": "steady",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 23,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 24,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 25,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 26,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 27,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 28,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 29,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 30,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 31,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 32,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      }
+    ],
+    "marker_count": 33,
+    "unknown_graph_launches": 0,
+    "method": "CUDA-only CUPTI trace, one diagnostic marker per step; GPU interval union across every stream. Graph labels match exact activity-name/count signatures from CPU+CUDA traces. Marker-to-marker step windows. No CPU/GPU aggregate subtraction."
+  },
+  {
+    "case": "audit-candidate-8193-c8-t256",
+    "concurrency": 8,
+    "length": 8193,
+    "capture_wall_s": 5.438094401732087,
+    "calibration_s": [],
+    "pure_prefill": {
+      "steps": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "step_groups": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      "wall_span_us": 503645.33203125,
+      "gpu_busy_union_us": 123343.57373046875,
+      "gpu_idle_us": 375307.71630859375,
+      "idle_fraction": 0.7550983482106103,
+      "gpu_activities": 7551,
+      "activities_without_launch_api": 0,
+      "host_before_next_api_us": 326081.3796386719,
+      "queued_gap_us": 1706.03076171875,
+      "p95_gap_us": 124.064208984375,
+      "gaps_gt10_us": 370867.8330078125,
+      "cpu_scopes_us": {
+        "finish_requests": 14.559999999999999,
+        "free_states": 2.419,
+        "add_requests": 1712.4009999999998,
+        "update_requests": 223.57999999999998,
+        "block_table_writes": 2354.1139999999996,
+        "gather_batch_req_state": 158.433,
+        "prepare_inputs": 2283.571,
+        "prepare_attn": 746.615,
+        "attention_metadata": 20023.68,
+        "sample": 1942.888,
+        "postprocess_sampled": 228.962,
+        "output_wait": 56.711999999999996,
+        "take_draft_token_ids": 13.982,
+        "draft_graph": 472.707,
+        "draft_propose": 589.969
+      },
+      "graph_submission": {
+        "target_graph": {
+          "count": 0,
+          "median_submit_interval_us": null
+        },
+        "draft_graph": {
+          "count": 1,
+          "median_submit_interval_us": null
+        }
+      },
+      "top_gaps": [
+        {
+          "start_us": 384470.7121582031,
+          "duration_us": 2604.764892578125,
+          "host_before_api_us": 2591.180908203125,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 4,
+          "queued": false
+        },
+        {
+          "start_us": 288403.841796875,
+          "duration_us": 2502.14111328125,
+          "host_before_api_us": 2487.1630859375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 3,
+          "queued": false
+        },
+        {
+          "start_us": 192335.6279296875,
+          "duration_us": 2492.636962890625,
+          "host_before_api_us": 2477.816162109375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 2,
+          "queued": false
+        },
+        {
+          "start_us": 96541.27001953125,
+          "duration_us": 2161.69287109375,
+          "host_before_api_us": 2149.782958984375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 1,
+          "queued": false
+        },
+        {
+          "start_us": 6723.2568359375,
+          "duration_us": 680.191162109375,
+          "host_before_api_us": 666.149169921875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 290907.5830078125,
+          "duration_us": 617.054931640625,
+          "host_before_api_us": 603.738037109375,
+          "next_kernel": "Memcpy HtoD (Pinned -> Device)",
+          "next_label": "outside_graph",
+          "next_step": 3,
+          "queued": false
+        },
+        {
+          "start_us": 194829.89697265625,
+          "duration_us": 606.7509765625,
+          "host_before_api_us": 593.570068359375,
+          "next_kernel": "Memcpy HtoD (Pinned -> Device)",
+          "next_label": "outside_graph",
+          "next_step": 2,
+          "queued": false
+        },
+        {
+          "start_us": 98704.91577148438,
+          "duration_us": 605.727294921875,
+          "host_before_api_us": 593.130126953125,
+          "next_kernel": "Memcpy HtoD (Pinned -> Device)",
+          "next_label": "outside_graph",
+          "next_step": 1,
+          "queued": false
+        },
+        {
+          "start_us": 398588.2958984375,
+          "duration_us": 600.927001953125,
+          "host_before_api_us": 590.365966796875,
+          "next_kernel": "triton_per_fused__fused_rms_norm_per_token_group_fp8_quant_packed_1",
+          "next_label": "outside_graph",
+          "next_step": 4,
+          "queued": false
+        },
+        {
+          "start_us": 3890.588134765625,
+          "duration_us": 585.374755859375,
+          "host_before_api_us": 575.247802734375,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::BUnaryFunctor<int, int, int, at::native::binary_internal::div_floor_kernel_cuda(at::TensorIterator",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        },
+        {
+          "start_us": 392777.5830078125,
+          "duration_us": 542.111083984375,
+          "host_before_api_us": 529.995849609375,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "outside_graph",
+          "next_step": 4,
+          "queued": false
+        },
+        {
+          "start_us": 834.302978515625,
+          "duration_us": 522.751953125,
+          "host_before_api_us": 513.4580078125,
+          "next_kernel": "Memcpy HtoD (Pinned -> Device)",
+          "next_label": "outside_graph",
+          "next_step": 0,
+          "queued": false
+        }
+      ]
+    },
+    "mixed": {
+      "steps": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33
+      ],
+      "step_groups": [
+        [
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33
+        ]
+      ],
+      "wall_span_us": 3417993.2700195312,
+      "gpu_busy_union_us": 1038521.9116210938,
+      "gpu_idle_us": 2375600.0673828125,
+      "idle_fraction": 0.6961603404165979,
+      "gpu_activities": 62521,
+      "activities_without_launch_api": 0,
+      "host_before_next_api_us": 2036854.0034179688,
+      "queued_gap_us": 20619.464111328125,
+      "p95_gap_us": 104.16015625,
+      "gaps_gt10_us": 2327990.0708007812,
+      "cpu_scopes_us": {
+        "finish_requests": 54.388999999999996,
+        "free_states": 14.775,
+        "add_requests": 5971.586000000001,
+        "update_requests": 2408.726,
+        "block_table_writes": 13390.909000000003,
+        "gather_batch_req_state": 1000.6949999999997,
+        "prepare_inputs": 12402.859999999999,
+        "prepare_attn": 4252.339,
+        "attention_metadata": 136004.94700000001,
+        "sample": 16954.8,
+        "postprocess_sampled": 1279.787,
+        "draft_graph": 12965.377000000004,
+        "draft_propose": 16195.173000000003,
+        "output_wait": 490.991,
+        "take_draft_token_ids": 91.39199999999997
+      },
+      "graph_submission": {
+        "target_graph": {
+          "count": 0,
+          "median_submit_interval_us": null
+        },
+        "draft_graph": {
+          "count": 29,
+          "median_submit_interval_us": 117131.955078125
+        }
+      },
+      "top_gaps": [
+        {
+          "start_us": 2822549.5581054688,
+          "duration_us": 5369.5947265625,
+          "host_before_api_us": 5355.371826171875,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 29,
+          "queued": false
+        },
+        {
+          "start_us": 2349218.337158203,
+          "duration_us": 5288.121826171875,
+          "host_before_api_us": 5273.24267578125,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 25,
+          "queued": false
+        },
+        {
+          "start_us": 935359.5771484375,
+          "duration_us": 5235.8017578125,
+          "host_before_api_us": 5221.517822265625,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 13,
+          "queued": false
+        },
+        {
+          "start_us": 1406860.8801269531,
+          "duration_us": 5202.202880859375,
+          "host_before_api_us": 5188.3447265625,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 17,
+          "queued": false
+        },
+        {
+          "start_us": 464639.583984375,
+          "duration_us": 5139.48193359375,
+          "host_before_api_us": 5126.89990234375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 9,
+          "queued": false
+        },
+        {
+          "start_us": 1878026.3129882812,
+          "duration_us": 5134.681884765625,
+          "host_before_api_us": 5120.333984375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 21,
+          "queued": false
+        },
+        {
+          "start_us": 2705308.919921875,
+          "duration_us": 1600.446044921875,
+          "host_before_api_us": 1587.095947265625,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 28,
+          "queued": false
+        },
+        {
+          "start_us": 3177000.6879882812,
+          "duration_us": 1595.166015625,
+          "host_before_api_us": 1581.407958984375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 32,
+          "queued": false
+        },
+        {
+          "start_us": 3060074.2890625,
+          "duration_us": 1532.18994140625,
+          "host_before_api_us": 1518.740966796875,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 31,
+          "queued": false
+        },
+        {
+          "start_us": 1759856.9069824219,
+          "duration_us": 1518.302978515625,
+          "host_before_api_us": 1504.031005859375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 20,
+          "queued": false
+        },
+        {
+          "start_us": 1288039.1870117188,
+          "duration_us": 1508.47900390625,
+          "host_before_api_us": 1495.8359375,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 16,
+          "queued": false
+        },
+        {
+          "start_us": 2231964.4189453125,
+          "duration_us": 1480.030029296875,
+          "host_before_api_us": 1465.876953125,
+          "next_kernel": "_path_step_marker",
+          "next_label": "outside_graph",
+          "next_step": 24,
+          "queued": false
+        }
+      ]
+    },
+    "steady": {
+      "steps": [
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43
+      ],
+      "step_groups": [
+        [
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43
+        ]
+      ],
+      "wall_span_us": 140800.87109375,
+      "gpu_busy_union_us": 115154.37866210938,
+      "gpu_idle_us": 25644.12451171875,
+      "idle_fraction": 0.18214725684874722,
+      "gpu_activities": 12264,
+      "activities_without_launch_api": 0,
+      "host_before_next_api_us": 12126.041259765625,
+      "queued_gap_us": 2904.978759765625,
+      "p95_gap_us": 0.9599609375,
+      "gaps_gt10_us": 22730.923095703125,
+      "cpu_scopes_us": {
+        "finish_requests": 13.481,
+        "free_states": 4.054,
+        "add_requests": 630.6719999999999,
+        "update_requests": 462.35499999999996,
+        "block_table_writes": 1482.022,
+        "gather_batch_req_state": 278.039,
+        "prepare_inputs": 3538.8489999999997,
+        "prepare_attn": 1186.847,
+        "attention_metadata": 7608.954999999999,
+        "target_graph": 10352.488000000001,
+        "sample": 4790.400000000001,
+        "postprocess_sampled": 362.67600000000004,
+        "draft_graph": 5603.243999999999,
+        "draft_propose": 6489.241999999999,
+        "output_wait": 86981.787,
+        "take_draft_token_ids": 27.676999999999996
+      },
+      "graph_submission": {
+        "target_graph": {
+          "count": 8,
+          "median_submit_interval_us": 17575.239013671875
+        },
+        "draft_graph": {
+          "count": 8,
+          "median_submit_interval_us": 17567.39501953125
+        }
+      },
+      "top_gaps": [
+        {
+          "start_us": 35553.56201171875,
+          "duration_us": 2356.636962890625,
+          "host_before_api_us": 1060.444091796875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 38,
+          "queued": false
+        },
+        {
+          "start_us": 70766.9951171875,
+          "duration_us": 2351.35791015625,
+          "host_before_api_us": 1069.364013671875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 40,
+          "queued": false
+        },
+        {
+          "start_us": 459.488037109375,
+          "duration_us": 2349.85302734375,
+          "host_before_api_us": 1049.98193359375,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 36,
+          "queued": false
+        },
+        {
+          "start_us": 53111.590087890625,
+          "duration_us": 2341.6298828125,
+          "host_before_api_us": 1077.655029296875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 39,
+          "queued": false
+        },
+        {
+          "start_us": 88268.41625976562,
+          "duration_us": 2333.084716796875,
+          "host_before_api_us": 1075.705810546875,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 41,
+          "queued": false
+        },
+        {
+          "start_us": 123756.34521484375,
+          "duration_us": 2308.92578125,
+          "host_before_api_us": 1051.27197265625,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 43,
+          "queued": false
+        },
+        {
+          "start_us": 106200.71606445312,
+          "duration_us": 2293.501953125,
+          "host_before_api_us": 1050.589111328125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 42,
+          "queued": false
+        },
+        {
+          "start_us": 18053.93212890625,
+          "duration_us": 2290.94189453125,
+          "host_before_api_us": 1040.048828125,
+          "next_kernel": "triton_poi_fused__to_copy_embedding_0",
+          "next_label": "target_graph",
+          "next_step": 37,
+          "queued": false
+        },
+        {
+          "start_us": 105421.58227539062,
+          "duration_us": 667.518798828125,
+          "host_before_api_us": 657.541748046875,
+          "next_kernel": "_gather_block_tables_kernel",
+          "next_label": "outside_graph",
+          "next_step": 42,
+          "queued": false
+        },
+        {
+          "start_us": 17427.5009765625,
+          "duration_us": 122.239990234375,
+          "host_before_api_us": 111.97998046875,
+          "next_kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<bool>, std::array<char*, 1ul> >(int, at::native::FillFunctor<bool>, std::array<char*, ",
+          "next_label": "outside_graph",
+          "next_step": 37,
+          "queued": false
+        },
+        {
+          "start_us": 17945.7080078125,
+          "duration_us": 104.800048828125,
+          "host_before_api_us": 98.14404296875,
+          "next_kernel": "_compute_slot_mappings_kernel",
+          "next_label": "outside_graph",
+          "next_step": 37,
+          "queued": false
+        },
+        {
+          "start_us": 106093.80517578125,
+          "duration_us": 103.519775390625,
+          "host_before_api_us": 96.137939453125,
+          "next_kernel": "_compute_slot_mappings_kernel",
+          "next_label": "outside_graph",
+          "next_step": 42,
+          "queued": false
+        }
+      ]
+    },
+    "padding": [
+      {
+        "step": 0,
+        "phase": "pure_prefill",
+        "reqs": 1,
+        "target_real": 2041,
+        "target_padded": 2041,
+        "draft_real": 0,
+        "draft_padded": 0
+      },
+      {
+        "step": 1,
+        "phase": "pure_prefill",
+        "reqs": 1,
+        "target_real": 2041,
+        "target_padded": 2041,
+        "draft_real": 0,
+        "draft_padded": 0
+      },
+      {
+        "step": 2,
+        "phase": "pure_prefill",
+        "reqs": 1,
+        "target_real": 2041,
+        "target_padded": 2041,
+        "draft_real": 0,
+        "draft_padded": 0
+      },
+      {
+        "step": 3,
+        "phase": "pure_prefill",
+        "reqs": 1,
+        "target_real": 2041,
+        "target_padded": 2041,
+        "draft_real": 0,
+        "draft_padded": 0
+      },
+      {
+        "step": 4,
+        "phase": "pure_prefill",
+        "reqs": 2,
+        "target_real": 2034,
+        "target_padded": 2034,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 5,
+        "phase": "mixed",
+        "reqs": 2,
+        "target_real": 2034,
+        "target_padded": 2034,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 6,
+        "phase": "mixed",
+        "reqs": 2,
+        "target_real": 2034,
+        "target_padded": 2034,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 7,
+        "phase": "mixed",
+        "reqs": 2,
+        "target_real": 2034,
+        "target_padded": 2034,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 8,
+        "phase": "mixed",
+        "reqs": 3,
+        "target_real": 2027,
+        "target_padded": 2027,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 9,
+        "phase": "mixed",
+        "reqs": 3,
+        "target_real": 2027,
+        "target_padded": 2027,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 10,
+        "phase": "mixed",
+        "reqs": 3,
+        "target_real": 2027,
+        "target_padded": 2027,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 11,
+        "phase": "mixed",
+        "reqs": 3,
+        "target_real": 2027,
+        "target_padded": 2027,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 12,
+        "phase": "mixed",
+        "reqs": 4,
+        "target_real": 2020,
+        "target_padded": 2020,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 13,
+        "phase": "mixed",
+        "reqs": 4,
+        "target_real": 2020,
+        "target_padded": 2020,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 14,
+        "phase": "mixed",
+        "reqs": 4,
+        "target_real": 2020,
+        "target_padded": 2020,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 15,
+        "phase": "mixed",
+        "reqs": 4,
+        "target_real": 2020,
+        "target_padded": 2020,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 16,
+        "phase": "mixed",
+        "reqs": 5,
+        "target_real": 2013,
+        "target_padded": 2013,
+        "draft_real": 40,
+        "draft_padded": 40
+      },
+      {
+        "step": 17,
+        "phase": "mixed",
+        "reqs": 5,
+        "target_real": 2013,
+        "target_padded": 2013,
+        "draft_real": 40,
+        "draft_padded": 40
+      },
+      {
+        "step": 18,
+        "phase": "mixed",
+        "reqs": 5,
+        "target_real": 2013,
+        "target_padded": 2013,
+        "draft_real": 40,
+        "draft_padded": 40
+      },
+      {
+        "step": 19,
+        "phase": "mixed",
+        "reqs": 5,
+        "target_real": 2013,
+        "target_padded": 2013,
+        "draft_real": 40,
+        "draft_padded": 40
+      },
+      {
+        "step": 20,
+        "phase": "mixed",
+        "reqs": 6,
+        "target_real": 2006,
+        "target_padded": 2006,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 21,
+        "phase": "mixed",
+        "reqs": 6,
+        "target_real": 2006,
+        "target_padded": 2006,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 22,
+        "phase": "mixed",
+        "reqs": 6,
+        "target_real": 2006,
+        "target_padded": 2006,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 23,
+        "phase": "mixed",
+        "reqs": 6,
+        "target_real": 2006,
+        "target_padded": 2006,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 24,
+        "phase": "mixed",
+        "reqs": 7,
+        "target_real": 1999,
+        "target_padded": 1999,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 25,
+        "phase": "mixed",
+        "reqs": 7,
+        "target_real": 1999,
+        "target_padded": 1999,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 26,
+        "phase": "mixed",
+        "reqs": 7,
+        "target_real": 1999,
+        "target_padded": 1999,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 27,
+        "phase": "mixed",
+        "reqs": 7,
+        "target_real": 1999,
+        "target_padded": 1999,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 28,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 1992,
+        "target_padded": 1992,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 29,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 1992,
+        "target_padded": 1992,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 30,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 1992,
+        "target_padded": 1992,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 31,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 1992,
+        "target_padded": 1992,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 32,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 1992,
+        "target_padded": 1992,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 33,
+        "phase": "mixed",
+        "reqs": 8,
+        "target_real": 95,
+        "target_padded": 95,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 34,
+        "phase": "decode_ramp",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 35,
+        "phase": "decode_ramp",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 36,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 37,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 38,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 39,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 40,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 41,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 42,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 43,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 44,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 45,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 46,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 47,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 48,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 49,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 50,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 51,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 52,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 53,
+        "phase": "steady",
+        "reqs": 8,
+        "target_real": 72,
+        "target_padded": 72,
+        "draft_real": 64,
+        "draft_padded": 64
+      },
+      {
+        "step": 54,
+        "phase": "decode_drain",
+        "reqs": 7,
+        "target_real": 63,
+        "target_padded": 72,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 55,
+        "phase": "decode_drain",
+        "reqs": 7,
+        "target_real": 63,
+        "target_padded": 72,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 56,
+        "phase": "decode_drain",
+        "reqs": 7,
+        "target_real": 63,
+        "target_padded": 72,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 57,
+        "phase": "decode_drain",
+        "reqs": 7,
+        "target_real": 63,
+        "target_padded": 72,
+        "draft_real": 56,
+        "draft_padded": 64
+      },
+      {
+        "step": 58,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 59,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 60,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 61,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 62,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 63,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 64,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 65,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 66,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 67,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 68,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 69,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 70,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 71,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 72,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 73,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 74,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 75,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 76,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 77,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 78,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 79,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 80,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 81,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 82,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 83,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 84,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 85,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 86,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 87,
+        "phase": "decode_drain",
+        "reqs": 6,
+        "target_real": 54,
+        "target_padded": 72,
+        "draft_real": 48,
+        "draft_padded": 64
+      },
+      {
+        "step": 88,
+        "phase": "decode_drain",
+        "reqs": 5,
+        "target_real": 45,
+        "target_padded": 72,
+        "draft_real": 40,
+        "draft_padded": 40
+      },
+      {
+        "step": 89,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 90,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 91,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 92,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 93,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 94,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 95,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 96,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 97,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 98,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 99,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 100,
+        "phase": "decode_drain",
+        "reqs": 4,
+        "target_real": 36,
+        "target_padded": 36,
+        "draft_real": 32,
+        "draft_padded": 32
+      },
+      {
+        "step": 101,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 102,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 103,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 104,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 105,
+        "phase": "decode_drain",
+        "reqs": 3,
+        "target_real": 27,
+        "target_padded": 36,
+        "draft_real": 24,
+        "draft_padded": 24
+      },
+      {
+        "step": 106,
+        "phase": "decode_drain",
+        "reqs": 2,
+        "target_real": 18,
+        "target_padded": 18,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 107,
+        "phase": "decode_drain",
+        "reqs": 2,
+        "target_real": 18,
+        "target_padded": 18,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 108,
+        "phase": "decode_drain",
+        "reqs": 2,
+        "target_real": 18,
+        "target_padded": 18,
+        "draft_real": 16,
+        "draft_padded": 16
+      },
+      {
+        "step": 109,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 110,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 111,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 112,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 113,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 114,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 115,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 116,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 117,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 118,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 119,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 120,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 121,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 122,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 123,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 124,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 125,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      },
+      {
+        "step": 126,
+        "phase": "decode_drain",
+        "reqs": 1,
+        "target_real": 9,
+        "target_padded": 9,
+        "draft_real": 8,
+        "draft_padded": 8
+      }
+    ],
+    "marker_count": 127,
+    "unknown_graph_launches": 0,
+    "method": "CUDA-only CUPTI trace, one diagnostic marker per step; GPU interval union across every stream. Graph labels match exact activity-name/count signatures from CPU+CUDA traces. Marker-to-marker step windows. No CPU/GPU aggregate subtraction."
+  }
+]

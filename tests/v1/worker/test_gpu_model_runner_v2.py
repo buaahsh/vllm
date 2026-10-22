@@ -89,7 +89,15 @@ def test_yoco_skips_only_unused_intermediate_shared_kv_chunks(
         {"kv_only_prefill": True} if expected else {}
     )
     state.full_prefill_on_output = True
-    assert state.requires_full_prefill(batch) == (not expected)
+    full_rows = not (
+        shared
+        and all(prefilling)
+        and all(a + b < 8193 for a, b in zip(computed, scheduled))
+    )
+    assert state.requires_full_prefill(batch) == full_rows
+    # The decision must be available before compact GPU indices are staged.
+    batch.fast_prefill = None
+    assert state.requires_full_prefill(batch) == full_rows
 
 
 @pytest.mark.parametrize(

@@ -426,6 +426,7 @@ def test_build_attention_metadata_zeros_stale_is_prefilling():
     runner.positions = torch.zeros(num_reqs_padded, dtype=torch.int64)
     runner.routed_experts_initialized = False
     runner.use_async_spec_decode = False
+    runner.cache_config.kv_sharing_fast_prefill = False
     runner.dcp_world_size = 1
     runner.speculative_config = None
     runner.is_mm_prefix_lm = False
@@ -460,3 +461,24 @@ def test_build_attention_metadata_zeros_stale_is_prefilling():
     assert not captured_is_prefilling[2]  # decode  (200 >= 200)
     assert not captured_is_prefilling[3]  # stale data (10 < 100) zeroed
     assert not captured_is_prefilling[4]  # stale data (20 < 200) zeroed
+
+
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize("require_uniform", [False, True])
+def test_split_reads_live_strided_cpu_offsets(dtype, require_uniform):
+    metadata = create_common_attn_metadata(
+        BatchSpec(seq_lens=[30, 40, 50], query_lens=[9, 9, 0]),
+        block_size=16,
+        device=torch.device("cpu"),
+    )
+    storage = torch.full((8,), -7, dtype=dtype)
+    offsets = storage[::2]
+    offsets.copy_(metadata.query_start_loc_cpu)
+    metadata.query_start_loc_cpu = offsets
+    assert split_decodes_and_prefills(metadata, 9, require_uniform) == (3, 0, 18, 0)
+
+    offsets.copy_(torch.tensor([0, 9, 26, 26], dtype=dtype))
+    metadata.max_query_len = 17
+    metadata.num_actual_tokens = 26
+    assert split_decodes_and_prefills(metadata, 9, require_uniform) == (1, 2, 9, 17)
+    assert storage[1::2].tolist() == [-7] * 4

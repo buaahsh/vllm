@@ -1433,3 +1433,36 @@ def test_non_causal_backend_correctness(
             causal=False,
             block_size=128,
         )
+
+
+@pytest.mark.skipif(
+    AttentionBackendEnum.FLASHINFER not in BACKENDS_TO_TEST,
+    reason="FlashInfer is not available.",
+)
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize("use_xqa", [False, True])
+def test_flashinfer_query_lens_read_live_strided_cpu_offsets(dtype, use_xqa):
+    from vllm.v1.attention.backends.flashinfer import FlashInferMetadataBuilder
+
+    builder = object.__new__(FlashInferMetadataBuilder)
+    builder.use_xqa = use_xqa
+    storage = torch.full((8,), -7, dtype=dtype)
+    offsets = storage[::2]
+    offsets.copy_(torch.tensor([0, 4, 8, 12], dtype=dtype))
+    qo_indptr = offsets.clone()
+    assert builder._compute_decode_query_lens(qo_indptr, offsets, 3, 12) == (
+        4,
+        None,
+        None,
+    )
+
+    offsets.copy_(torch.tensor([0, 3, 8, 8], dtype=dtype))
+    qo_indptr.copy_(offsets)
+    width, gpu_offsets, lengths = builder._compute_decode_query_lens(
+        qo_indptr, offsets, 3, 8
+    )
+    assert width == 5
+    assert gpu_offsets is not None and gpu_offsets.data_ptr() == qo_indptr.data_ptr()
+    assert gpu_offsets.tolist() == [0, 3, 8, 8]
+    assert lengths == ([3, 5, 0] if use_xqa else None)
+    assert storage[1::2].tolist() == [-7] * 4
