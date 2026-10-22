@@ -1,0 +1,198 @@
+[
+  {
+    "tokens": 1,
+    "results": {
+      "fp32_target": {
+        "us": 4.965573151906331,
+        "dtype": "torch.float32"
+      },
+      "torch_bf16": {
+        "us": 3.891199827194214,
+        "dtype": "torch.bfloat16"
+      },
+      "deepgemm_bf16": {
+        "us": 4.100213448206584,
+        "dtype": "torch.bfloat16",
+        "mismatch": 0,
+        "max_abs": 0.0
+      },
+      "norm_fp32_stats": {
+        "us": 2.0009867350260415,
+        "dtype": "torch.bfloat16"
+      },
+      "norm_bf16_stats": {
+        "us": 1.663146714369456,
+        "dtype": "torch.bfloat16"
+      }
+    },
+    "norm_relative_rms": 0.0028556473553180695
+  },
+  {
+    "tokens": 9,
+    "results": {
+      "fp32_target": {
+        "us": 8.390959898630777,
+        "dtype": "torch.float32"
+      },
+      "torch_bf16": {
+        "us": 4.220586617787679,
+        "dtype": "torch.bfloat16"
+      },
+      "deepgemm_bf16": {
+        "us": 4.200960000356038,
+        "dtype": "torch.bfloat16",
+        "mismatch": 0,
+        "max_abs": 0.0
+      },
+      "norm_fp32_stats": {
+        "us": 2.0070399840672812,
+        "dtype": "torch.bfloat16"
+      },
+      "norm_bf16_stats": {
+        "us": 1.690453290939331,
+        "dtype": "torch.bfloat16"
+      }
+    },
+    "norm_relative_rms": 0.0026302749756723642
+  },
+  {
+    "tokens": 18,
+    "results": {
+      "fp32_target": {
+        "us": 8.514533042907715,
+        "dtype": "torch.float32"
+      },
+      "torch_bf16": {
+        "us": 4.222293297449748,
+        "dtype": "torch.bfloat16"
+      },
+      "deepgemm_bf16": {
+        "us": 4.253013531366984,
+        "dtype": "torch.bfloat16",
+        "mismatch": 0,
+        "max_abs": 0.0
+      },
+      "norm_fp32_stats": {
+        "us": 1.999359925587972,
+        "dtype": "torch.bfloat16"
+      },
+      "norm_bf16_stats": {
+        "us": 1.642799973487854,
+        "dtype": "torch.bfloat16"
+      }
+    },
+    "norm_relative_rms": 0.0031107505783438683
+  },
+  {
+    "tokens": 36,
+    "results": {
+      "fp32_target": {
+        "us": 8.650240103403727,
+        "dtype": "torch.float32"
+      },
+      "torch_bf16": {
+        "us": 4.3033599853515625,
+        "dtype": "torch.bfloat16"
+      },
+      "deepgemm_bf16": {
+        "us": 4.301653305689494,
+        "dtype": "torch.bfloat16",
+        "mismatch": 0,
+        "max_abs": 0.0
+      },
+      "norm_fp32_stats": {
+        "us": 2.0488532384236655,
+        "dtype": "torch.bfloat16"
+      },
+      "norm_bf16_stats": {
+        "us": 1.690453290939331,
+        "dtype": "torch.bfloat16"
+      }
+    },
+    "norm_relative_rms": 0.003083891700953245
+  },
+  {
+    "tokens": 72,
+    "results": {
+      "fp32_target": {
+        "us": 8.518826961517334,
+        "dtype": "torch.float32"
+      },
+      "torch_bf16": {
+        "us": 4.915173451105754,
+        "dtype": "torch.bfloat16"
+      },
+      "deepgemm_bf16": {
+        "us": 4.915226697921753,
+        "dtype": "torch.bfloat16",
+        "mismatch": 0,
+        "max_abs": 0.0
+      },
+      "norm_fp32_stats": {
+        "us": 2.0488266150156655,
+        "dtype": "torch.bfloat16"
+      },
+      "norm_bf16_stats": {
+        "us": 1.693706711133321,
+        "dtype": "torch.bfloat16"
+      }
+    },
+    "norm_relative_rms": 0.0030003555584698915
+  },
+  {
+    "tokens": 128,
+    "results": {
+      "fp32_target": {
+        "us": 8.735360304514566,
+        "dtype": "torch.float32"
+      },
+      "torch_bf16": {
+        "us": 4.294853210449219,
+        "dtype": "torch.bfloat16"
+      },
+      "deepgemm_bf16": {
+        "us": 4.2903999487559,
+        "dtype": "torch.bfloat16",
+        "mismatch": 0,
+        "max_abs": 0.0
+      },
+      "norm_fp32_stats": {
+        "us": 1.7450666427612305,
+        "dtype": "torch.bfloat16"
+      },
+      "norm_bf16_stats": {
+        "us": 1.7450666427612305,
+        "dtype": "torch.bfloat16"
+      }
+    },
+    "norm_relative_rms": 0.003051637439057231
+  },
+  {
+    "tokens": 2048,
+    "results": {
+      "fp32_target": {
+        "us": 21.533013979593914,
+        "dtype": "torch.float32"
+      },
+      "torch_bf16": {
+        "us": 5.221546490987142,
+        "dtype": "torch.bfloat16"
+      },
+      "deepgemm_bf16": {
+        "us": 5.222426652908325,
+        "dtype": "torch.bfloat16",
+        "mismatch": 0,
+        "max_abs": 0.0
+      },
+      "norm_fp32_stats": {
+        "us": 6.916453043619792,
+        "dtype": "torch.bfloat16"
+      },
+      "norm_bf16_stats": {
+        "us": 5.7369065284729,
+        "dtype": "torch.bfloat16"
+      }
+    },
+    "norm_relative_rms": 0.0031107349786907434
+  }
+]

@@ -121,7 +121,7 @@ def test_bf16_router_cache_refresh(normalized):
     module = yoco.YOCOMoE.__new__(yoco.YOCOMoE)
     torch.nn.Module.__init__(module)
     module.execution_mode = "fast"
-    module.bf16_chain = True
+    module.bf16_router = True
     module.router_weights_normalized = normalized
     module.gate = torch.nn.Linear(8, 4, bias=False, dtype=torch.float32)
     module.register_buffer("_normalized_gate_weight", None, persistent=False)

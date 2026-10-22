@@ -157,14 +157,17 @@ The shared training imports `layers/yoco_probabilities.py` and
 patch/import the new owning module; successful legacy import alone is not a
 correctness test.
 
-Experimental controls remain explicit. Their existing defaults and precision
-eligibility are preserved; absence from the runtime matrix is not qualification.
+Experimental controls remain explicit. The Fast router defaults to BF16 after
+the [router evaluation](performance/bf16-router-20261022/REPORT.md); residual and
+reduction experiments remain opt-in. Absence from the runtime matrix is not
+qualification for other configurations.
 
 | Control | Default | Purpose |
 | --- | --- | --- |
 | `additional_config.yoco_execution_mode` | `fast` | Fast/Align execution semantics |
 | `VLLM_YOCO_FP8_ATTENTION_FUSION` | `1` | Eligible FP8 Q/KV fusion |
 | `VLLM_YOCO_FP8_LATENT_NORM_FUSION` | `0` | Opt-in latent normalization fusion |
+| `VLLM_YOCO_BF16_ROUTER` | `1` | Fast BF16 router operands/logits; Align ignores it |
 | `VLLM_YOCO_BF16_RESIDUAL`, `VLLM_YOCO_BF16_CHAIN` | `0` | Opt-in BF16 residual/chain experiments |
 | `VLLM_YOCO_BF16_REDUCTIONS`, `VLLM_YOCO_BF16_SAMPLING` | `0` | Opt-in reductions/sampler; sampler selects V1 |
 | `VLLM_YOCO_FP8_W2_TUNING` | `1` | Existing W2 tuning policy |

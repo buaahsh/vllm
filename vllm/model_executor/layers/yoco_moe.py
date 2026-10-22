@@ -399,7 +399,9 @@ class YOCOMoE(nn.Module):
     ) -> None:
         super().__init__()
         self.execution_mode = execution_mode
-        self.bf16_chain = execution_mode == "fast" and envs.VLLM_YOCO_BF16_CHAIN
+        self.bf16_router = execution_mode == "fast" and (
+            envs.VLLM_YOCO_BF16_ROUTER or envs.VLLM_YOCO_BF16_CHAIN
+        )
         self.hidden_size = _cfg_int(config, "hidden_size", "d_model")
         self.num_experts = _cfg_int(config, "num_experts", "moe_expert_num")
         self.top_k = _cfg_int(config, "num_experts_per_tok", "moe_top_k", "top_k")
@@ -435,7 +437,7 @@ class YOCOMoE(nn.Module):
         self.register_buffer("_normalized_gate_weight", None, persistent=False)
         self.register_buffer("_bf16_gate_weight", None, persistent=False)
 
-        # Keep FP32 checkpoint weights; the BF16 chain uses a separate cache.
+        # Keep FP32 checkpoint weights; the BF16 router uses a separate cache.
         self.gate = GateLinear(
             input_size=self.hidden_size,
             output_size=self.num_experts,
@@ -637,7 +639,7 @@ class YOCOMoE(nn.Module):
                 self._normalized_gate_weight = refresh_yoco_module_cache(
                     self, "_normalized_gate_weight", normalized
                 )
-        if getattr(self, "bf16_chain", False):
+        if getattr(self, "bf16_router", False):
             weight = cast(torch.Tensor, self.gate.weight)
             if self._normalized_gate_weight is not None:
                 weight = self._normalized_gate_weight
@@ -657,7 +659,7 @@ class YOCOMoE(nn.Module):
             gate_weight = self._normalized_gate_weight
             normalize_gate_weight = False
 
-        if getattr(self, "bf16_chain", False):
+        if getattr(self, "bf16_router", False):
             assert self._bf16_gate_weight is not None
             # Both GEMM operands and logits are BF16. The small selected
             # Top-K probabilities retain the FP32 backend interface.

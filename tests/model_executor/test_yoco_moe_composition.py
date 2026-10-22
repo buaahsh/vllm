@@ -20,8 +20,14 @@ from vllm.model_executor.layers.yoco_moe import (
 from vllm.model_executor.layers.yoco_ops.norm import RMSNorm
 
 
-def test_yoco_latent_projections_follow_fast_quantization(monkeypatch) -> None:
-    """Fast passes linear precision to both latent GEMMs; Align stays BF16."""
+@pytest.mark.parametrize("bf16_router", [False, True])
+def test_yoco_latent_projections_follow_fast_quantization(
+    monkeypatch, bf16_router
+) -> None:
+    """Router precision is independent of latent GEMMs and Align arithmetic."""
+
+    monkeypatch.setenv("VLLM_YOCO_BF16_ROUTER", str(int(bf16_router)))
+    monkeypatch.setenv("VLLM_YOCO_BF16_CHAIN", "0")
 
     import vllm.model_executor.layers.yoco_moe as yoco_module
 
@@ -84,6 +90,7 @@ def test_yoco_latent_projections_follow_fast_quantization(monkeypatch) -> None:
     )
 
     assert module.fc1_latent_proj.quant_config is online_quant_config
+    assert module.bf16_router == bf16_router
     assert module.fc2_latent_proj.quant_config is online_quant_config
     assert module.shared_gate.quant_config is None
     assert module.shared_experts.quant_config is online_quant_config
@@ -105,6 +112,7 @@ def test_yoco_latent_projections_follow_fast_quantization(monkeypatch) -> None:
         prefix="model.layers.1.mlp",
         execution_mode="align",
     )
+    assert not align_module.bf16_router
     assert align_module.fc1_latent_proj.quant_config is None
     assert align_module.fc2_latent_proj.quant_config is None
     assert not align_module.experts.use_tuned_config

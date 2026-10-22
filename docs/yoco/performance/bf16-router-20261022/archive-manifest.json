@@ -1,0 +1,14 @@
+{
+  "candidate2-upload.tar.gz": {
+    "sha256": "5c7f52537de6064a3f88e86a4255b46108d622f3679d20c73a8b7c394fb0a98e",
+    "bytes": 55942568
+  },
+  "profiles-upload.tar.gz": {
+    "sha256": "06e10068d55d547e2493d620d2c98adf2a3514499f4ca6e5ab9252c13059ab33",
+    "bytes": 55809244
+  },
+  "results-evidence.tar.gz": {
+    "sha256": "2d30dc069d20e6864a78b55b810db283b20fa5b548e8e8ee9e7bef432efb645b",
+    "bytes": 13370410
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "total": 500,
+  "output_cap_tokens": 131072,
+  "max_context_tokens": 139264,
+  "temperature": 1,
+  "top_p": 1,
+  "seed": 20261022,
+  "dataset_sha256": "35dc41080a3680858b27fa7e0533d2d547825316fc5dafe5d316f4ccc5a06132",
+  "fp32_tf32_correct": 485,
+  "router_bf16_correct": 490,
+  "delta_percentage_points": 1.0,
+  "identical_token_streams_to_previous_valid_bf16": 500,
+  "changed_indices": [],
+  "length_stop_indices": [
+    154,
+    308
+  ],
+  "output_tokens": 3003164,
+  "automatic_score_consistent_with_previous_bf16": true,
+  "raw_outputs_sha256": "ec7a418ab22b5a94f4e42aa65a914789c04d93516ada229dde4ed8e3f2f8eee3",
+  "scores_sha256": "208be2967f4003f03c52ce267ffe054051f1997d79a4a0cf59d0a8c960a3209c",
+  "previous_fp32_raw_outputs_sha256": "48a53dfa40256bbfb7598a96b0c2385471b90ed73a6035567c5de031df9ab236",
+  "previous_bf16_raw_outputs_sha256": "1f1d7fc54bee6fc3df1dfa6a757564ee45dd9fb4f7533b00b3222b20056498b2",
+  "identical_prompts_to_previous_valid_bf16": 500,
+  "grader_math_verify_version": "0.8.0",
+  "grader_source_sha256": "79383c12ecadba59042767eaba275927598c710599552374091917b14a8c7472",
+  "paired_statistics": {
+    "total": 500,
+    "fp32_correct": 485,
+    "bf16_correct": 490,
+    "delta_percentage_points": 1.0,
+    "both_correct": 480,
+    "both_wrong": 5,
+    "fp32_only_correct": 5,
+    "bf16_only_correct": 10,
+    "mcnemar_exact_p": 0.3017578125,
+    "paired_bootstrap_95pct_delta_pp": [
+      -0.6,
+      2.6
+    ],
+    "subjects": {
+      "Precalculus": {
+        "total": 56,
+        "fp32_correct": 55,
+        "bf16_correct": 55
+      },
+      "Intermediate Algebra": {
+        "total": 97,
+        "fp32_correct": 94,
+        "bf16_correct": 95
+      },
+      "Algebra": {
+        "total": 124,
+        "fp32_correct": 121,
+        "bf16_correct": 123
+      },
+      "Number Theory": {
+        "total": 62,
+        "fp32_correct": 62,
+        "bf16_correct": 62
+      },
+      "Prealgebra": {
+        "total": 82,
+        "fp32_correct": 79,
+        "bf16_correct": 81
+      },
+      "Geometry": {
+        "total": 41,
+        "fp32_correct": 36,
+        "bf16_correct": 36
+      },
+      "Counting & Probability": {
+        "total": 38,
+        "fp32_correct": 38,
+        "bf16_correct": 38
+      }
+    },
+    "length_stops": {
+      "fp32": 0,
+      "bf16": 2
+    },
+    "unparsed": {
+      "fp32": 0,
+      "bf16": 2
+    }
+  },
+  "manual_extraction_review": [
+    {
+      "mode": "fp32",
+      "index": 376,
+      "unique_id": "test/geometry/538.json",
+      "automatic_correct": false,
+      "reviewed_correct": true,
+      "gold": "(8,-2)",
+      "visible_final_answer": "The coordinates of the point $P$ are $(8, -2)$.",
+      "parser_prediction": "P",
+      "reason": "Parser picked the point label after Final Answer anchor instead of the explicit coordinate tuple."
+    },
+    {
+      "mode": "bf16",
+      "index": 379,
+      "unique_id": "test/prealgebra/1865.json",
+      "automatic_correct": false,
+      "reviewed_correct": true,
+      "gold": "12",
+      "visible_final_answer": "\\boxed{12^{\\text{th}}\\ \\text{grade}}",
+      "parser_prediction": "0.03",
+      "reason": "Explicit final boxed answer says12th grade; parser failed on ordinal/text suffix and extracted an earlier0.03."
+    }
+  ],
+  "reviewed_fp32_correct": 486,
+  "reviewed_router_bf16_correct": 491
+}

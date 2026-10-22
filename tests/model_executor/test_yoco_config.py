@@ -52,6 +52,26 @@ def test_mega_requires_an_explicit_activation_recipe():
     assert YocoMoEPolicy.for_mode("fast", mega_moe=True).mega_moe
 
 
+def test_bf16_router_has_an_independent_default_and_compile_cache(monkeypatch):
+    import vllm.envs as envs
+    from vllm.model_executor.layers.yoco_ops.norm import RMSNorm
+
+    monkeypatch.delenv("VLLM_YOCO_BF16_ROUTER", raising=False)
+    monkeypatch.setenv("VLLM_YOCO_BF16_CHAIN", "0")
+    monkeypatch.setenv("VLLM_YOCO_BF16_RESIDUAL", "0")
+    monkeypatch.setenv("VLLM_YOCO_BF16_REDUCTIONS", "0")
+    fast = RMSNorm(3072, dtype=torch.bfloat16)
+    assert envs.VLLM_YOCO_BF16_ROUTER
+    assert not fast.bf16_chain
+    assert fast.residual_dtype == torch.float32
+    assert not fast.bf16_reductions
+    assert RMSNorm(3072, execution_mode="align").residual_dtype == torch.float32
+    enabled = envs.compile_factors()["VLLM_YOCO_BF16_ROUTER"]
+    monkeypatch.setenv("VLLM_YOCO_BF16_ROUTER", "0")
+    assert RMSNorm(3072).residual_dtype == torch.float32
+    assert envs.compile_factors()["VLLM_YOCO_BF16_ROUTER"] != enabled
+
+
 @pytest.mark.parametrize(
     "gpu,parallel,compatible,k,expected",
     [

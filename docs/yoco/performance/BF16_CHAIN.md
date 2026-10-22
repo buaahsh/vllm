@@ -77,7 +77,9 @@ No training or QAT work was performed.
 Enable with `VLLM_YOCO_BF16_CHAIN=1` before starting Fast. The switch defaults
 to 0 and is independent of the earlier storage-only experiment; enabling it
 implies BF16 residual storage even if `VLLM_YOCO_BF16_RESIDUAL=0`. Align ignores
-the switch.
+the switch. Fast enables the router-only BF16 path by default through
+`VLLM_YOCO_BF16_ROUTER=1`, without changing the residual or Norm statistics.
+Set both flags to `0` to restore the previous FP32/TF32 router.
 
 - Embeddings, carried residuals, Norm inputs/outputs and cross-block buffers
   use BF16. Materialized residual boundaries add BF16 tensors directly.

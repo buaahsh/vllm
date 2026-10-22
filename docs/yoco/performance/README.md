@@ -36,11 +36,16 @@
 
 ## Fast block-128 FP8 组
 
+[2026-10-22 BF16 router 与主链复测](bf16-router-20261022/REPORT.md)：Fast router
+独立默认启用 BF16，残差主链与 Norm BF16 归约实验保持关闭。记录真实 BF16 输入的
+kernel 对照、K8 接受率变化、固定输出端到端吞吐与 128K 输出上限的 MATH-500 评测；
+性能收益随提示词和并发变化。
+
 [Fast FP8 W2 独立调参](FP8_W2_TUNING.md)：M1/M2/M4 使用独立配置，M8/M16 保留原选择。
 
 [BF16 内部归约与采样实验](BF16_INTERNALS.md)：实现自有 RMSNorm 和 greedy logprob 的原生 BF16 运算；额外吞吐收益很小，独立 NLL 略升。当前 MMA 累加类型和 DeepGEMM scale 接口不支持全部改成 BF16，实验默认关闭。
 
-[BF16 主干上下游与 router](BF16_CHAIN.md)：残差边界、router 输入/权重/logits 使用 BF16；同卡 B1/B8 吞吐提升 3.19%/2.42%，prefill 延迟降低约 2.5%。保留内部 FP32 累加及控制数据，实验开关默认关闭。
+[BF16 主干上下游与 router](BF16_CHAIN.md)：历史残差边界与 router 联合实验，同卡 B1/B8 吞吐提升 3.19%/2.42%，prefill 延迟降低约 2.5%。主链实验开关仍默认关闭；当前独立 router 默认及 K8 复测见上方新报告。保留内部 FP32 累加及控制数据。
 
 [主残差 BF16 同卡 A/B](BF16_RESIDUAL.md)：decode 基本持平，prefill 未提速；平均 NLL 接近但逐 token 存在变化，实验开关默认关闭。
 

@@ -630,6 +630,8 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "VLLM_YOCO_BF16_RESIDUAL": lambda: bool(
         int(os.getenv("VLLM_YOCO_BF16_RESIDUAL", "0"))
     ),
+    # Default Fast router operands/logits. Separate from residual/Norm precision.
+    "VLLM_YOCO_BF16_ROUTER": lambda: bool(int(os.getenv("VLLM_YOCO_BF16_ROUTER", "1"))),
     # Fast BF16 residual boundaries and router operands/logits. Kernel-local
     # reductions, FP8 scales and Top-K probabilities retain FP32 arithmetic.
     "VLLM_YOCO_BF16_CHAIN": lambda: bool(int(os.getenv("VLLM_YOCO_BF16_CHAIN", "0"))),
