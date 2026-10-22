@@ -56,6 +56,26 @@ TARGET = "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf"
 DRAFT = "/mnt/pvc/lidong1/opd-fast-rollout-20261016/draft-parent-30000"
 
 
+def build_benchmark_prompts(count):
+    """Keep the original panel while providing distinct requests above C8."""
+    return [
+        PROMPTS[index]
+        if index < len(PROMPTS)
+        else (
+            f"{PROMPTS[index % len(PROMPTS)]}\n"
+            f"Include a worked example numbered {index + 1}."
+        )
+        for index in range(count)
+    ]
+
+
+def validate_fixed_outputs(outputs, concurrency, token_count):
+    if len(outputs) != concurrency:
+        raise RuntimeError(f"Expected {concurrency} requests, got {len(outputs)}")
+    if any(len(o.outputs[0].token_ids) != token_count for o in outputs):
+        raise RuntimeError("A request did not complete its fixed output budget")
+
+
 class MegaMoEBenchmarkWorker:
     def ab_profile_start(self, annotate_scheduler=False):
         import torch
@@ -166,6 +186,9 @@ class MegaMoEBenchmarkWorker:
             executor_backend=str(config.parallel_config.distributed_executor_backend),
             worker_pid=os.getpid(),
             engine_multiprocessing=os.environ.get("VLLM_ENABLE_V1_MULTIPROCESSING"),
+            max_num_seqs=config.scheduler_config.max_num_seqs,
+            max_num_batched_tokens=config.scheduler_config.max_num_batched_tokens,
+            kv_cache_memory_bytes=config.cache_config.kv_cache_memory_bytes,
             shared_kv_attention_fa_version=get_flash_attn_version(head_size=128),
             dispatch=asdict(layers[0][1]._yoco_moe_dispatch),
             mega_capture_decisions=layers[0][1]._yoco_moe_capture_backends,
@@ -180,7 +203,10 @@ class MegaMoEBenchmarkWorker:
             ("target", runner.cudagraph_manager, 9),
             ("draft", runner.speculator.shared_kv_cudagraph_manager, 8),
         ):
-            desc = manager.dispatch(8, 8 * width, width, 0, max_query_len=width)
+            requests = config.scheduler_config.max_num_seqs
+            desc = manager.dispatch(
+                requests, requests * width, width, 0, max_query_len=width
+            )
             status["graphs"][name] = dict(
                 widest_mode=str(desc.cg_mode),
                 widest_captured=desc in manager.graphs,
@@ -233,7 +259,17 @@ def main():
     add_scheduling_arguments(p)
     p.add_argument("--trials", type=int, default=3)
     p.add_argument("--tokens", type=int, default=256)
+    p.add_argument("--token-counts", type=int, nargs="+")
     p.add_argument("--max-model-len", type=int, default=8192)
+    p.add_argument("--max-num-seqs", type=int, default=8)
+    p.add_argument("--max-num-batched-tokens", type=int, default=2048)
+    p.add_argument("--kv-cache-gib", type=float, default=8)
+    p.add_argument(
+        "--cudagraph-capture-sizes",
+        type=int,
+        nargs="+",
+        default=[1, 2, 4, 8, 9, 16, 18, 32, 36, 64, 72],
+    )
     args = p.parse_args()
     try:
         scheduling = resolve_scheduling_options(args)
@@ -243,15 +279,25 @@ def main():
     from vllm import LLM, SamplingParams
 
     if (
-        args.tokens < 1
+        min(args.token_counts or [args.tokens]) < 1
         or args.trials < 1
         or args.quality_tokens < 1
-        or any(c not in range(1, 9) for c in args.concurrencies)
+        or args.max_num_seqs < 1
+        or any(not 1 <= c <= args.max_num_seqs for c in args.concurrencies)
+        or args.max_num_batched_tokens < 9 * args.max_num_seqs
+        or not math.isfinite(args.kv_cache_gib)
+        or args.kv_cache_gib <= 0
+        or min(args.cudagraph_capture_sizes) < 1
+        or max(args.cudagraph_capture_sizes) < 9 * args.max_num_seqs
         or min(args.prompt_tokens, args.extra_prompt_tokens) < 0
     ):
-        p.error("Require positive token/trial counts and nonnegative prompt-tokens")
+        p.error(
+            "Require positive token/trial/KV counts, concurrency <= max-num-seqs, "
+            "nonnegative prompt-tokens, and batch/graph capacity >= 9*max-num-seqs"
+        )
+    token_counts = args.token_counts or [args.tokens]
     if (
-        args.tokens + max(args.prompt_tokens, args.extra_prompt_tokens)
+        max(token_counts) + max(args.prompt_tokens, args.extra_prompt_tokens)
         > args.max_model_len
     ):
         p.error("Prompt and output must fit --max-model-len")
@@ -271,10 +317,10 @@ def main():
         "quantization": "fp8_per_block",
         "tensor_parallel_size": 1,
         "max_model_len": args.max_model_len,
-        "max_num_seqs": 8,
-        "max_num_batched_tokens": 2048,
+        "max_num_seqs": args.max_num_seqs,
+        "max_num_batched_tokens": args.max_num_batched_tokens,
         "gpu_memory_utilization": 0.75,
-        "kv_cache_memory_bytes": 8 * 1024**3,
+        "kv_cache_memory_bytes": int(args.kv_cache_gib * 1024**3),
         "enable_prefix_caching": False,
         "kv_sharing_fast_prefill": args.fast_prefill,
         "disable_log_stats": False,
@@ -290,8 +336,8 @@ def main():
         },
         "compilation_config": {
             "cudagraph_mode": "FULL_DECODE_ONLY",
-            "max_cudagraph_capture_size": 72,
-            "cudagraph_capture_sizes": [1, 2, 4, 8, 9, 16, 18, 32, 36, 64, 72],
+            "max_cudagraph_capture_size": max(args.cudagraph_capture_sizes),
+            "cudagraph_capture_sizes": sorted(set(args.cudagraph_capture_sizes)),
         },
         "additional_config": {
             "yoco_execution_mode": "fast",
@@ -312,14 +358,15 @@ def main():
         config["additional_config"].update(extra)
     if args.pilot:
         config["enforce_eager"] = True
+    prompt_texts = build_benchmark_prompts(max(8, max(args.concurrencies)))
     save(
         "manifest.json",
         {
             "config": config,
             "backend": args.backend,
-            "prompts": PROMPTS,
+            "prompts": prompt_texts,
             "prompt_sha256": hashlib.sha256(
-                json.dumps(PROMPTS, ensure_ascii=False).encode()
+                json.dumps(prompt_texts, ensure_ascii=False).encode()
             ).hexdigest(),
             "draft_config": json.loads((Path(args.draft) / "config.json").read_text()),
             "script_sha256": {
@@ -334,6 +381,7 @@ def main():
             "extra_prompt_tokens": args.extra_prompt_tokens,
             "quality_tokens_per_prompt": args.quality_tokens,
             "concurrencies": args.concurrencies,
+            "token_counts": token_counts,
             "synchronous_engine": args.synchronous_engine,
             "scheduling": asdict(scheduling),
             "runtime_env": {
@@ -386,7 +434,7 @@ def main():
                 return_dict=False,
             )
         }
-        for text in PROMPTS
+        for text in prompt_texts
     ]
     if args.prompt_tokens:
         filler = tokenizer.encode(
@@ -492,13 +540,13 @@ def main():
         )
     save("teacher-forced.json", teacher_rows)
     rows = []
-    for profile, workload in profiles:
+    for profile, workload, token_count in (
+        (profile, workload, token_count)
+        for profile, workload in profiles
+        for token_count in token_counts
+    ):
         for concurrency in args.concurrencies:
-            count = (
-                1
-                if args.pilot
-                else (args.trials if profile == "short" else min(args.trials, 3)) + 2
-            )
+            count = 1 if args.pilot else args.trials + 2
             for trial in range(count):
                 scored = trial - 2
                 seed = 20261020 + (max(scored, 0) if trial >= 2 else trial)
@@ -506,7 +554,7 @@ def main():
                     temperature=1.0,
                     top_p=1.0,
                     top_k=-1,
-                    max_tokens=16 if args.pilot else args.tokens,
+                    max_tokens=16 if args.pilot else token_count,
                     seed=seed,
                     ignore_eos=True,
                 )
@@ -516,11 +564,13 @@ def main():
                 outputs = llm.generate(workload[:concurrency], params, use_tqdm=False)
                 llm.collective_rpc("ab_synchronize")
                 elapsed = time.perf_counter() - begin
+                validate_fixed_outputs(outputs, concurrency, params.max_tokens)
                 after = [asdict(m) for m in llm.get_metrics()]
                 tokens = sum(len(o.outputs[0].token_ids) for o in outputs)
                 row = {
                     "profile": profile,
                     "concurrency": concurrency,
+                    "output_tokens_per_request": params.max_tokens,
                     "trial": trial,
                     "warmup": trial < 2,
                     "seed": seed,
@@ -542,6 +592,7 @@ def main():
                     "trial",
                     profile=profile,
                     concurrency=concurrency,
+                    output_tokens_per_request=params.max_tokens,
                     trial=trial,
                     tokens=tokens,
                     elapsed_s=elapsed,
@@ -559,6 +610,7 @@ def main():
         },
     )
     event("complete")
+    llm.llm_engine.engine_core.shutdown(timeout=60)
 
 
 if __name__ == "__main__":

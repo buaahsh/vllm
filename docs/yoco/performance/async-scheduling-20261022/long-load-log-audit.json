@@ -1,0 +1,102 @@
+{
+  "sync-a1": {
+    "scored_batches": 24,
+    "formal_window_compilation_log_findings": [],
+    "memory_and_capture": [
+      "(EngineCore pid=3203731) INFO 10-22 08:55:21 [kv_cache_utils.py:2395] GPU KV cache size: 3,730,429 tokens, Maximum concurrency for 32,768 tokens per request: 113.84x",
+      "(EngineCore pid=3203731) INFO 10-22 08:55:43 [model_runner.py:1085] Graph capturing finished in 5 secs, took 0.49 GiB"
+    ],
+    "serious_errors": [],
+    "tracebacks": [
+      {
+        "classification": "known_MLOPart_startup_fallback",
+        "lines": [
+          "Traceback (most recent call last):",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 134, in <module>",
+          "    main(int(sys.argv[1]), sys.argv[2])",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 127, in main",
+          "    serve(sock)",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 99, in serve",
+          "    assert num_devices.value == NUM_LOCALITY_DOMAINS, f'{num_devices.value} MLOPart devices'",
+          "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+          "AssertionError: 1 MLOPart devices"
+        ]
+      }
+    ]
+  },
+  "async-b1": {
+    "scored_batches": 24,
+    "formal_window_compilation_log_findings": [],
+    "memory_and_capture": [
+      "(EngineCore pid=3218418) INFO 10-22 09:08:12 [kv_cache_utils.py:2395] GPU KV cache size: 2,397,637 tokens, Maximum concurrency for 32,768 tokens per request: 73.17x",
+      "(EngineCore pid=3218418) INFO 10-22 09:08:28 [model_runner.py:1085] Graph capturing finished in 4 secs, took 0.49 GiB"
+    ],
+    "serious_errors": [],
+    "tracebacks": [
+      {
+        "classification": "known_MLOPart_startup_fallback",
+        "lines": [
+          "Traceback (most recent call last):",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 134, in <module>",
+          "    main(int(sys.argv[1]), sys.argv[2])",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 127, in main",
+          "    serve(sock)",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 99, in serve",
+          "    assert num_devices.value == NUM_LOCALITY_DOMAINS, f'{num_devices.value} MLOPart devices'",
+          "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+          "AssertionError: 1 MLOPart devices"
+        ]
+      }
+    ]
+  },
+  "async-b2": {
+    "scored_batches": 24,
+    "formal_window_compilation_log_findings": [],
+    "memory_and_capture": [
+      "(EngineCore pid=3228237) INFO 10-22 09:20:30 [kv_cache_utils.py:2395] GPU KV cache size: 2,397,637 tokens, Maximum concurrency for 32,768 tokens per request: 73.17x",
+      "(EngineCore pid=3228237) INFO 10-22 09:20:46 [model_runner.py:1085] Graph capturing finished in 4 secs, took 0.49 GiB"
+    ],
+    "serious_errors": [],
+    "tracebacks": [
+      {
+        "classification": "known_MLOPart_startup_fallback",
+        "lines": [
+          "Traceback (most recent call last):",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 134, in <module>",
+          "    main(int(sys.argv[1]), sys.argv[2])",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 127, in main",
+          "    serve(sock)",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 99, in serve",
+          "    assert num_devices.value == NUM_LOCALITY_DOMAINS, f'{num_devices.value} MLOPart devices'",
+          "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+          "AssertionError: 1 MLOPart devices"
+        ]
+      }
+    ]
+  },
+  "sync-a2": {
+    "scored_batches": 24,
+    "formal_window_compilation_log_findings": [],
+    "memory_and_capture": [
+      "(EngineCore pid=3239877) INFO 10-22 09:32:45 [kv_cache_utils.py:2395] GPU KV cache size: 3,730,429 tokens, Maximum concurrency for 32,768 tokens per request: 113.84x",
+      "(EngineCore pid=3239877) INFO 10-22 09:33:00 [model_runner.py:1085] Graph capturing finished in 4 secs, took 0.49 GiB"
+    ],
+    "serious_errors": [],
+    "tracebacks": [
+      {
+        "classification": "known_MLOPart_startup_fallback",
+        "lines": [
+          "Traceback (most recent call last):",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 134, in <module>",
+          "    main(int(sys.argv[1]), sys.argv[2])",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 127, in main",
+          "    serve(sock)",
+          "  File \"/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/utils/mlopart.py\", line 99, in serve",
+          "    assert num_devices.value == NUM_LOCALITY_DOMAINS, f'{num_devices.value} MLOPart devices'",
+          "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+          "AssertionError: 1 MLOPart devices"
+        ]
+      }
+    ]
+  }
+}

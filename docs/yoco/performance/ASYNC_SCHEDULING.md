@@ -13,7 +13,7 @@ The implementation starts from `c616521d8c`. See the
 - One B200 GPU, V2 runner, TP1/PP1/DP1 without CP or DBO.
 - The existing FP8 target, BF16 draft/KV, FP32 proposal cache, fixed DSpark K8.
 - Existing hybrid MoE dispatch, fast-prefill/raw-h20 semantics, target four and
-  draft six CUDA graphs.
+  draft six CUDA graphs in the initial C1/C4/C8 panel.
 - APC disabled; no grammar or P/D in the initial panel.
 
 Adaptive verification, multi-GPU Shared-KV/Mega, APC, P/D, and grammar combinations
@@ -43,6 +43,50 @@ The worker receipt records the resolved scheduler class, async flag, concurrent
 batch capacity, executor, process IDs, MoE dispatch and actual graph replays.
 An explicitly requested mode that resolves differently fails validation.
 Capacity is a configuration observation; actual CPU/GPU overlap requires a trace.
+
+## Longer requests and larger native batches
+
+The native benchmark accepts independent sequence, KV, batch-token and graph
+budgets. For example, the larger experimental panel uses:
+
+```bash
+VLLM_USE_V2_MODEL_RUNNER=1 \
+  .venv/bin/python -m tools.yoco_alignment.benchmark_mega_moe \
+  --backend hybrid --fast-prefill --engine-mode multiprocess \
+  --scheduler-mode sync --max-model-len 32768 --max-num-seqs 32 \
+  --max-num-batched-tokens 2048 --kv-cache-gib 48 \
+  --cudagraph-capture-sizes 1 2 4 8 9 16 18 32 36 64 72 128 144 256 288 \
+  --concurrencies 16 32 --token-counts 512 1024 --trials 3 \
+  --extra-prompt-tokens 16384 --dispatch-config /path/to/dispatch.yaml \
+  --output /new/path/large-sync
+```
+
+The dispatch YAML explicitly fixes the original thresholds while testing larger
+graphs outside the initial measured panel:
+
+```yaml
+additional-config:
+  yoco_moe_dispatch:
+    mode: manual
+    triton_max_tokens: 16
+    mega_min_tokens: 17
+    mega_prefill: false
+```
+
+Repeat with the asynchronous scheduler and the same budgets. The default C8/KV8
+configuration is preserved. K8 requires a target graph capacity of at least nine
+tokens per configured request; the widest graph receipt uses `max_num_seqs`.
+Above C8, the workload adds distinct prompt variants and verifies the actual
+completed request count and each output budget. `--token-counts` sweeps several
+output lengths within one engine session; `--tokens` still selects one length.
+Every input/output/concurrency cell has two warmups and `--trials` scored seeds.
+
+These are simultaneous-arrival native batches. Their output throughput includes
+prefill and GPU drain; it does not establish HTTP serving capacity or sustained
+online concurrency. Check preemptions, graph replays, resolved settings and
+request latencies before interpreting a difference as scheduler performance.
+See the [larger-load report](async-scheduling-20261022/LONG_LOAD_REPORT.md) for
+the repeated results and latency tradeoffs.
 
 ## Staggered requests and cancellation
 

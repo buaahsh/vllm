@@ -12,7 +12,12 @@ from types import SimpleNamespace
 import pytest
 
 from tools.yoco_alignment.benchmark_async_scheduling import collect_request
-from tools.yoco_alignment.benchmark_mega_moe import MegaMoEBenchmarkWorker
+from tools.yoco_alignment.benchmark_mega_moe import (
+    PROMPTS,
+    MegaMoEBenchmarkWorker,
+    build_benchmark_prompts,
+    validate_fixed_outputs,
+)
 from tools.yoco_alignment.scheduling import (
     SchedulingOptions,
     add_scheduling_arguments,
@@ -80,6 +85,23 @@ def test_runtime_receipt_requires_async_batch_capacity():
             {"async_scheduling": True, "max_concurrent_batches": 1}
         )
     options.validate_runtime({"async_scheduling": True, "max_concurrent_batches": 2})
+
+
+def test_c32_panel_supplies_32_distinct_requests_and_preserves_original_panel():
+    """A sliced eight-prompt workload must not be reported as C32 throughput."""
+    prompts = build_benchmark_prompts(32)
+    assert len(prompts) == len(set(prompts)) == 32
+    assert prompts[:8] == PROMPTS
+
+
+@pytest.mark.parametrize("requests,tokens", [(8, 512), (32, 511)])
+def test_fixed_budget_rejects_partial_high_concurrency_batch(requests, tokens):
+    outputs = [
+        SimpleNamespace(outputs=[SimpleNamespace(token_ids=[1] * tokens)])
+        for _ in range(requests)
+    ]
+    with pytest.raises(RuntimeError):
+        validate_fixed_outputs(outputs, concurrency=32, token_count=512)
 
 
 class StreamingEngine:
