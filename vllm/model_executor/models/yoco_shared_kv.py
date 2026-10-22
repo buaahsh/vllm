@@ -328,15 +328,38 @@ class SharedKVDraft(nn.Module):
 
 
 def paged_prefix_attention(
-    q, cache, block_table, prefix_lens, max_prefix_len, *, window_size=None
+    q,
+    cache,
+    block_table,
+    prefix_lens,
+    max_prefix_len,
+    *,
+    window_size=None,
+    k_scale=None,
+    v_scale=None,
 ):
-    """Read normalized YOCO KV without writes, RoPE, or query-dependent masking."""
+    """Read BF16/E4M3 YOCO KV using the writer's scales and strict prefix."""
     from vllm.v1.attention.backends.fa_utils import (
         flash_attn_varlen_func,
         get_flash_attn_version,
     )
 
     batch, block, heads, dim = q.shape
+    if cache.dtype in (torch.uint8, torch.float8_e4m3fn):
+        from vllm.model_executor.models.yoco_shared_kv_swa import (
+            paged_window_attention,
+        )
+
+        window = max(1, max_prefix_len) if window_size is None else window_size[0] + 1
+        return paged_window_attention(
+            q,
+            cache,
+            block_table,
+            prefix_lens,
+            window,
+            k_scale=k_scale,
+            v_scale=v_scale,
+        )
     # vLLM's logical cache is [page, kv_head, token, K|V].
     if cache.ndim != 4 or cache.shape[-1] != 2 * dim or cache.dtype != q.dtype:
         raise ValueError("Shared-KV requires an unquantized logical YOCO KV cache")

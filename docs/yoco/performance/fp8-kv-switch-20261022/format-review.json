@@ -1,0 +1,310 @@
+{
+  "primary_automatic_unchanged": true,
+  "reviewed_all_automatic_negatives": true,
+  "corrections": {
+    "bfloat16": {
+      "379": "Correct 12th grade; ordinal superscript/text extraction false negative."
+    },
+    "fp8_e4m3": {
+      "420": "Correct column vector (16/49,48/49,24/49); LaTeX row spacing [6pt] parsed as algebra. Removing spacing only verifies exact equality."
+    }
+  },
+  "reviewed_correct": {
+    "bfloat16": 491,
+    "fp8_e4m3": 487
+  },
+  "reviewed_delta_pp": -0.8,
+  "reviewed_paired": {
+    "both_correct": 483,
+    "bfloat16_only_correct": 8,
+    "fp8_only_correct": 4,
+    "both_wrong": 5
+  },
+  "unboxed_positive_review": {
+    "mode": "fp8_e4m3",
+    "index": 466,
+    "correct": true,
+    "reason": "Final displayed equality explicitly gives 8*pi."
+  },
+  "negative_reviews": [
+    {
+      "mode": "bfloat16",
+      "index": 154,
+      "unique_id": "test/geometry/880.json",
+      "gold": "2\\sqrt{113}",
+      "prediction": [],
+      "classification": "unfinished_thinking",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "bfloat16",
+      "index": 161,
+      "unique_id": "test/algebra/1255.json",
+      "gold": "6",
+      "prediction": [
+        "1/3",
+        "\\frac{1}{3}"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "bfloat16",
+      "index": 264,
+      "unique_id": "test/geometry/826.json",
+      "gold": "1\\frac{4}{5}",
+      "prediction": [
+        "9/4",
+        "\\frac{9}{4}"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "bfloat16",
+      "index": 284,
+      "unique_id": "test/precalculus/768.json",
+      "gold": "3 \\pm 2 \\sqrt{2}",
+      "prediction": [
+        "{-3 + 2*sqrt(2), -3 - 1*2*sqrt(2), 2*sqrt(2) + 3, -1*2*sqrt(2) + 3}",
+        "3 - 2\\sqrt{2}, 3 + 2\\sqrt{2}, -3 + 2\\sqrt{2}, -3 - 2\\sqrt{2}"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "bfloat16",
+      "index": 286,
+      "unique_id": "test/intermediate_algebra/960.json",
+      "gold": "\\frac{17}{21}",
+      "prediction": [
+        "37/77",
+        "\\frac{37}{77}"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "bfloat16",
+      "index": 308,
+      "unique_id": "test/geometry/711.json",
+      "gold": "1+2\\sqrt{3}",
+      "prediction": [],
+      "classification": "unfinished_thinking",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "bfloat16",
+      "index": 324,
+      "unique_id": "test/geometry/465.json",
+      "gold": "120",
+      "prediction": [
+        "150",
+        "150"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "bfloat16",
+      "index": 379,
+      "unique_id": "test/prealgebra/1865.json",
+      "gold": "12",
+      "prediction": [
+        "0.0300000000000000",
+        "12^{"
+      ],
+      "classification": "format_false_negative",
+      "reason": "Correct 12th grade; ordinal superscript/text extraction false negative."
+    },
+    {
+      "mode": "bfloat16",
+      "index": 422,
+      "unique_id": "test/intermediate_algebra/2015.json",
+      "gold": "\\{1\\pm\\sqrt{5},-2\\}",
+      "prediction": [
+        "{2, -sqrt(3)*i - 1, sqrt(3)*i - 1}",
+        "\\{2, -1 + i\\sqrt{3}, -1 - i\\sqrt{3}\\}"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "bfloat16",
+      "index": 486,
+      "unique_id": "test/geometry/477.json",
+      "gold": "216",
+      "prediction": [
+        "54*sqrt(2)",
+        "54\\sqrt{2}"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 11,
+      "unique_id": "test/intermediate_algebra/1197.json",
+      "gold": "\\frac{3}{56}",
+      "prediction": [
+        "25/126",
+        "\\frac{25}{126}"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 18,
+      "unique_id": "test/geometry/434.json",
+      "gold": "28",
+      "prediction": [
+        "124",
+        "124"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 94,
+      "unique_id": "test/prealgebra/1646.json",
+      "gold": "80",
+      "prediction": [
+        "130",
+        "130"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 100,
+      "unique_id": "test/geometry/183.json",
+      "gold": "145^\\circ",
+      "prediction": [
+        "130",
+        "130^\\circ"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 154,
+      "unique_id": "test/geometry/880.json",
+      "gold": "2\\sqrt{113}",
+      "prediction": [],
+      "classification": "unfinished_thinking",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 161,
+      "unique_id": "test/algebra/1255.json",
+      "gold": "6",
+      "prediction": [
+        "1/6",
+        "\\frac{1}{6}"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 166,
+      "unique_id": "test/prealgebra/1003.json",
+      "gold": "\\frac{270}7\\text{ degrees}",
+      "prediction": [
+        "360/7",
+        "\\frac{360}{7}"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 214,
+      "unique_id": "test/counting_and_probability/765.json",
+      "gold": "110",
+      "prediction": [
+        "115",
+        "115"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 228,
+      "unique_id": "test/precalculus/1056.json",
+      "gold": "288 \\pi",
+      "prediction": [
+        "x**2 + y**2 + z**2 <= 36",
+        "x^2 + y^2 + z^2 \\le 36"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 240,
+      "unique_id": "test/prealgebra/874.json",
+      "gold": "116",
+      "prediction": [
+        "154",
+        "154"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 264,
+      "unique_id": "test/geometry/826.json",
+      "gold": "1\\frac{4}{5}",
+      "prediction": [
+        "1",
+        "1"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 286,
+      "unique_id": "test/intermediate_algebra/960.json",
+      "gold": "\\frac{17}{21}",
+      "prediction": [
+        "6/7",
+        "\\frac{6}{7}"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 420,
+      "unique_id": "test/precalculus/625.json",
+      "gold": "\\begin{pmatrix} 16/49 \\\\ 48/49 \\\\ 24/49 \\end{pmatrix}",
+      "prediction": [
+        "Matrix([[16/49], [6*p*t*(48/49)], [6*p*t*(24/49)]])",
+        "\\begin{pmatrix} \\frac{16}{49} \\\\[6pt] \\frac{48}{49} \\\\[6pt] \\frac{24}{49} \\end{pmatrix}"
+      ],
+      "classification": "format_false_negative",
+      "reason": "Correct column vector (16/49,48/49,24/49); LaTeX row spacing [6pt] parsed as algebra. Removing spacing only verifies exact equality."
+    },
+    {
+      "mode": "fp8_e4m3",
+      "index": 422,
+      "unique_id": "test/intermediate_algebra/2015.json",
+      "gold": "\\{1\\pm\\sqrt{5},-2\\}",
+      "prediction": [
+        "{-2, 1 - sqrt(3), 1 + sqrt(3)}",
+        "\\{-2, 1+\\sqrt{3}, 1-\\sqrt{3}\\}"
+      ],
+      "classification": "incorrect_final_answer",
+      "reason": "Final answer differs from canonical answer, or no completed final answer."
+    }
+  ]
+}

@@ -16,6 +16,9 @@ def _window(
     TABLE,
     ENDS,
     OUT,
+    K_SCALE,
+    V_SCALE,
+    QUANTIZED: tl.constexpr,
     H: tl.constexpr,
     KH: tl.constexpr,
     D: tl.constexpr,
@@ -49,8 +52,11 @@ def _window(
         page = tl.load(TABLE + req * TS + pos // PAGE, valid, 0).to(tl.int64)
         offset = page[:, None] * SP + head * SH
         offset += (pos % PAGE)[:, None] * ST + dim[None, :] * SC
-        key = tl.load(KV + offset, valid[:, None], 0)
-        value = tl.load(KV + offset + D * SC, valid[:, None], 0)
+        key = tl.load(KV + offset, valid[:, None], 0.0)
+        value = tl.load(KV + offset + D * SC, valid[:, None], 0.0)
+        if QUANTIZED:
+            key = (key.to(tl.float32) * tl.load(K_SCALE)).to(q.dtype)
+            value = (value.to(tl.float32) * tl.load(V_SCALE)).to(q.dtype)
         score = tl.dot(q, tl.trans(key)) * (D**-0.5 * 1.4426950408889634)
         score = tl.where(valid[None, :], score, -float("inf"))
         next_max = tl.maximum(maximum, tl.max(score, 1))
@@ -64,21 +70,37 @@ def _window(
     tl.store(OUT + qo, result, row[:, None] < B * G)
 
 
-def paged_window_attention(q, cache, table, ends, window=8192):
-    if window != 8192:
+def paged_window_attention(
+    q, cache, table, ends, window=8192, *, k_scale=None, v_scale=None
+):
+    quantized = cache.dtype in (torch.uint8, torch.float8_e4m3fn)
+    if window != 8192 and not quantized:
         raise ValueError("This kernel implements the trained SWA8192 contract")
+    if quantized:
+        if window < 1 or k_scale is None or v_scale is None:
+            raise ValueError("FP8 KV requires a positive window and owner K/V scales")
+        if k_scale.numel() != 1 or v_scale.numel() != 1:
+            raise ValueError("Expected per-tensor target K/V scales")
+        if any(
+            scale.dtype != torch.float32 or scale.device != q.device
+            for scale in (k_scale, v_scale)
+        ):
+            raise ValueError("Expected FP32 target K/V scales on the query device")
+        cache = cache.view(torch.float8_e4m3fn)
     batch, block, heads, dim = q.shape
     if (
         cache.ndim != 4
         or cache.shape[-1] != 2 * dim
-        or cache.dtype != q.dtype
+        or (not quantized and cache.dtype != q.dtype)
         or q.dtype != torch.bfloat16
     ):
-        raise ValueError("Expected BF16 logical target cache [page,head,token,K|V]")
+        raise ValueError(
+            "Expected BF16 query and BF16/E4M3 target cache [page,head,token,K|V]"
+        )
     kvheads, page = cache.shape[1:3]
     if heads % kvheads or not 1 <= block <= 8 or dim not in (32, 64, 128):
         raise ValueError("Invalid SWA draft query shape")
-    if get_flash_attn_version(head_size=dim) == 4:
+    if not quantized and get_flash_attn_version(head_size=dim) == 4:
         return _flash_window_attention(q, cache, table, ends, window)
     q = q.contiguous()
     out = torch.empty_like(q)
@@ -89,6 +111,9 @@ def paged_window_attention(q, cache, table, ends, window=8192):
         table,
         ends,
         out,
+        k_scale if quantized else q,
+        v_scale if quantized else q,
+        quantized,
         heads,
         kvheads,
         dim,

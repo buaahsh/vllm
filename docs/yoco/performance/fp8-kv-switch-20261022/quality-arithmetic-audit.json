@@ -1,0 +1,11 @@
+{
+  "_window": true,
+  "paged_prefix_attention": true,
+  "runtime_files_compared": 2524,
+  "changed_runtime_files": [
+    "vllm/model_executor/models/yoco_shared_kv.py",
+    "vllm/model_executor/models/yoco_shared_kv_swa.py",
+    "vllm/v1/worker/gpu/spec_decode/dspark/shared_kv.py"
+  ],
+  "same_target_and_sampling_sources": true
+}

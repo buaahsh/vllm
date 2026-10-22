@@ -1,0 +1,84 @@
+{
+  "status": "PASS",
+  "remote": {
+    "source-manifest.json": {
+      "files": 8091,
+      "mismatches": []
+    },
+    "runtime-support.json": {
+      "files": 1996,
+      "mismatches": []
+    },
+    "auto": {
+      "cache": {
+        "storage_dtype": "torch.bfloat16",
+        "shape": [
+          131072,
+          8,
+          16,
+          256
+        ],
+        "strides": [
+          32768,
+          4096,
+          256,
+          1
+        ],
+        "elements": 4294967296,
+        "bytes": 8589934592,
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      "graphs": {
+        "target": 4,
+        "draft": 6
+      },
+      "resolved_dtype": "auto"
+    },
+    "fp8_e4m3": {
+      "cache": {
+        "storage_dtype": "torch.uint8",
+        "shape": [
+          131072,
+          8,
+          16,
+          256
+        ],
+        "strides": [
+          32768,
+          4096,
+          256,
+          1
+        ],
+        "elements": 4294967296,
+        "bytes": 4294967296,
+        "k_scale": 1.0,
+        "v_scale": 1.0
+      },
+      "graphs": {
+        "target": 4,
+        "draft": 6
+      },
+      "resolved_dtype": "fp8_e4m3"
+    },
+    "gpu": "6, GPU-ef7d6ee6-0fce-4e0b-b14c-87bd8a36c5fe, 110568 MiB, 0 %",
+    "pid7_present": true,
+    "gpu_at_task_end": "6, GPU-ef7d6ee6-0fce-4e0b-b14c-87bd8a36c5fe, 0 MiB, 0 %",
+    "own_live_gpu_processes": [],
+    "status": "PASS"
+  },
+  "pod": {
+    "uid": "9a026fd8-e732-4fcb-b855-85ea6a6358ed",
+    "node": "slc01-cl02-hgx-0347",
+    "restart_counts": {
+      "master": 0
+    }
+  },
+  "final_executable_files": 5434,
+  "final_mismatches": [],
+  "tests": {
+    "model": 199,
+    "tools": 17
+  },
+  "base_commit": "456d589ebf82262b0ca837e7ae988e24da5cd48d"
+}

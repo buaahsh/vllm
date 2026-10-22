@@ -36,6 +36,10 @@
 
 ## Fast block-128 FP8 组
 
+[Shared-KV FP8 KV开关](SHARED_KV_FP8.md)：默认BF16，使用现有`kv_cache_dtype`
+显式选择E4M3。相同容量的KV数据字节减半；MATH-500冻结对照为98.0%→97.2%，
+主要用于容量，不承诺提速。
+
 [异步调度入口与用法](ASYNC_SCHEDULING.md)已合入开发分支，提供独立的engine/scheduler
 选项、实际运行回执和EOS/取消检查。[C16/C32补测](async-scheduling-20261022/LONG_LOAD_REPORT.md)
 在原冻结配置下，短输入长输出吞吐提升4.93%～13.14%，16K输入无稳定正收益；

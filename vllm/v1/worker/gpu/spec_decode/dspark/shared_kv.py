@@ -15,6 +15,7 @@ from vllm.model_executor.models.yoco_shared_kv import (
     SharedKVDraft,
     paged_prefix_attention,
 )
+from vllm.platforms import current_platform
 from vllm.triton_utils import tl, triton
 from vllm.v1.worker.gpu.cudagraph_utils import CudaGraphManager
 from vllm.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
@@ -50,12 +51,22 @@ class SharedKVSpeculator(DSparkSpeculator):
             raise ValueError("Shared-KV currently requires TP1/PP1/DP1 without CP")
         if c.hf_text_config.model_type != "yoco" or c.dtype != torch.bfloat16:
             raise ValueError("Shared-KV requires the paired BF16 YOCO target")
-        if vllm_config.cache_config.cache_dtype not in ("auto", "bfloat16"):
-            raise ValueError("Shared-KV does not support quantized target KV")
+        if vllm_config.cache_config.cache_dtype not in (
+            "auto",
+            "bfloat16",
+            "fp8",
+            "fp8_e4m3",
+        ):
+            raise ValueError("Shared-KV supports BF16 or E4M3 target KV")
+        if vllm_config.cache_config.cache_dtype in ("fp8", "fp8_e4m3") and (
+            not current_platform.is_cuda()
+            or current_platform.fp8_dtype() != torch.float8_e4m3fn
+        ):
+            raise ValueError("Shared-KV FP8 KV requires CUDA E4M3 storage")
         if self.draft_model_config.quantization is not None:
             raise ValueError("Shared-KV requires unquantized draft weights")
         if c.quantization is not None:
-            # Quantized target linears still export BF16 hidden states and KV.
+            # Quantized target linears still export BF16 hidden states.
             # Draft vocabulary tensors are shared, so validate their storage
             # below instead of silently treating a quantized head as BF16.
             from vllm.model_executor.layers.quantization.online.base import (
@@ -215,6 +226,12 @@ class SharedKVSpeculator(DSparkSpeculator):
 
     def _run_shared_kv(self, n, cache, table, upper):
         k = self.num_speculative_steps
+        scales = {}
+        if cache.dtype in (torch.uint8, torch.float8_e4m3fn):
+            scales = dict(
+                k_scale=self._cache_owner._k_scale,
+                v_scale=self._cache_owner._v_scale,
+            )
 
         def attend_prefix(q):
             if self.model.c.draft_kv_window:
@@ -228,9 +245,15 @@ class SharedKVSpeculator(DSparkSpeculator):
                     table,
                     self._prefix_lens[:n],
                     self.model.c.draft_kv_window,
+                    **scales,
                 )
             return paged_prefix_attention(
-                q.to(self.dtype), cache, table, self._prefix_lens[:n], upper
+                q.to(self.dtype),
+                cache,
+                table,
+                self._prefix_lens[:n],
+                upper,
+                **scales,
             )
 
         # Preserve FP32 trained parameters/residuals and BF16 matmuls.

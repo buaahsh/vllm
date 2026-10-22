@@ -161,6 +161,7 @@ class MegaMoEBenchmarkWorker:
         dg = _import_deep_gemm()
         config = self.vllm_config
         scheduler_cls = config.scheduler_config.get_scheduler_cls()
+        owner = runner.speculator._cache_owner
         status = dict(
             backend="mega" if cores else "current",
             layers=[name for name, _ in layers],
@@ -189,6 +190,16 @@ class MegaMoEBenchmarkWorker:
             max_num_seqs=config.scheduler_config.max_num_seqs,
             max_num_batched_tokens=config.scheduler_config.max_num_batched_tokens,
             kv_cache_memory_bytes=config.cache_config.kv_cache_memory_bytes,
+            kv_cache_dtype=config.cache_config.cache_dtype,
+            shared_kv_cache={
+                "storage_dtype": str(owner.kv_cache.dtype),
+                "shape": list(owner.kv_cache.shape),
+                "strides": list(owner.kv_cache.stride()),
+                "elements": owner.kv_cache.numel(),
+                "bytes": owner.kv_cache.numel() * owner.kv_cache.element_size(),
+                "k_scale": owner._k_scale.item(),
+                "v_scale": owner._v_scale.item(),
+            },
             shared_kv_attention_fa_version=get_flash_attn_version(head_size=128),
             dispatch=asdict(layers[0][1]._yoco_moe_dispatch),
             mega_capture_decisions=layers[0][1]._yoco_moe_capture_backends,
@@ -265,6 +276,11 @@ def main():
     p.add_argument("--max-num-batched-tokens", type=int, default=2048)
     p.add_argument("--kv-cache-gib", type=float, default=8)
     p.add_argument(
+        "--kv-cache-dtype",
+        choices=["auto", "bfloat16", "fp8", "fp8_e4m3"],
+        default="auto",
+    )
+    p.add_argument(
         "--cudagraph-capture-sizes",
         type=int,
         nargs="+",
@@ -321,6 +337,7 @@ def main():
         "max_num_batched_tokens": args.max_num_batched_tokens,
         "gpu_memory_utilization": 0.75,
         "kv_cache_memory_bytes": int(args.kv_cache_gib * 1024**3),
+        "kv_cache_dtype": args.kv_cache_dtype,
         "enable_prefix_caching": False,
         "kv_sharing_fast_prefill": args.fast_prefill,
         "disable_log_stats": False,

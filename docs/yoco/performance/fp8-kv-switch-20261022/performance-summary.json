@@ -1,0 +1,62 @@
+[
+  {
+    "profile": "short",
+    "concurrency": 1,
+    "auto": {
+      "output_tokens": 256,
+      "elapsed_s": 0.7708693761378527,
+      "tokens_per_s": 332.0925800459093
+    },
+    "fp8_e4m3": {
+      "output_tokens": 256,
+      "elapsed_s": 0.7442990504205227,
+      "tokens_per_s": 343.94777187390224
+    },
+    "delta_pct": 3.5698454407966818
+  },
+  {
+    "profile": "short",
+    "concurrency": 8,
+    "auto": {
+      "output_tokens": 2048,
+      "elapsed_s": 1.274777378886938,
+      "tokens_per_s": 1606.555022013487
+    },
+    "fp8_e4m3": {
+      "output_tokens": 2048,
+      "elapsed_s": 1.349692713469267,
+      "tokens_per_s": 1517.3824230967325
+    },
+    "delta_pct": -5.550547456818178
+  },
+  {
+    "profile": "context8193",
+    "concurrency": 1,
+    "auto": {
+      "output_tokens": 256,
+      "elapsed_s": 1.570385169237852,
+      "tokens_per_s": 163.01733168063686
+    },
+    "fp8_e4m3": {
+      "output_tokens": 256,
+      "elapsed_s": 1.5316420495510101,
+      "tokens_per_s": 167.14087999545623
+    },
+    "delta_pct": 2.529515280557848
+  },
+  {
+    "profile": "context8193",
+    "concurrency": 8,
+    "auto": {
+      "output_tokens": 2048,
+      "elapsed_s": 8.009271508082747,
+      "tokens_per_s": 255.7036551867685
+    },
+    "fp8_e4m3": {
+      "output_tokens": 2048,
+      "elapsed_s": 7.628593573346734,
+      "tokens_per_s": 268.463640159758
+    },
+    "delta_pct": 4.990145707408633
+  }
+]

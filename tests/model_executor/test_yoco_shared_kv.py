@@ -831,3 +831,104 @@ def test_swa8192_reads_exact_window_and_replays_changed_pages(physical_layout, p
         torch.testing.assert_close(
             captured.float(), reference(q), atol=0.006, rtol=0.03
         )
+
+
+@pytest.mark.parametrize("invalid", ["missing", "vector", "dtype", "device"])
+def test_shared_kv_fp8_rejects_missing_or_incompatible_owner_scales(invalid):
+    """A quantized page must never silently use a unit or unrelated scale."""
+    from vllm.model_executor.models.yoco_shared_kv_swa import paged_window_attention
+
+    q = torch.zeros(1, 1, 1, 32, dtype=torch.bfloat16)
+    cache = torch.zeros(1, 1, 16, 64, dtype=torch.uint8)
+    table = torch.zeros(1, 1, dtype=torch.int32)
+    ends = torch.ones(1, dtype=torch.int32)
+    ks, vs = torch.ones(()), torch.ones(())
+    if invalid == "missing":
+        ks, error = None, "owner K/V scales"
+    elif invalid == "vector":
+        ks, error = torch.ones(2), "per-tensor"
+    elif invalid == "dtype":
+        ks, error = ks.bfloat16(), "FP32 target K/V scales"
+    else:
+        ks, error = torch.ones((), device="meta"), "query device"
+    with pytest.raises(ValueError, match=error):
+        paged_window_attention(q, cache, table, ends, k_scale=ks, v_scale=vs)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA FP8 cache reads")
+@pytest.mark.parametrize("layout", ["HND", "NHD"])
+@pytest.mark.parametrize("window", [8192, None])
+@pytest.mark.parametrize("block", [1, 8])
+@torch.inference_mode()
+def test_shared_kv_fp8_reads_owner_scales_and_strict_prefix(layout, window, block):
+    """Quantized pages must honor owner scales, empty rows and SWA boundaries."""
+    from vllm.model_executor.models.yoco_shared_kv_swa import paged_window_attention
+
+    torch.manual_seed(20261022)
+    batch, heads, kvheads, dim, page = 3, 4, 2, 128, 64
+    capacity = 8448
+    pages = capacity // page
+    q = torch.randn(batch, block, heads, dim, device="cuda", dtype=torch.bfloat16)
+    raw = torch.randn(batch * pages, kvheads, page, 2 * dim, device="cuda")
+    cache = raw.to(torch.float8_e4m3fn).view(torch.uint8)
+    if layout == "NHD":
+        cache = cache.transpose(1, 2).contiguous().transpose(1, 2)
+    table = torch.randperm(batch * pages, device="cuda", dtype=torch.int32)
+    table = table.reshape(batch, pages)
+    ends = torch.tensor([0, 77, 8401], device="cuda", dtype=torch.int32)
+    ks = torch.tensor(0.25, device="cuda")
+    vs = torch.tensor(1.75, device="cuda")
+    original = cache.clone()
+
+    def run():
+        if window:
+            return paged_window_attention(
+                q, cache, table, ends, window, k_scale=ks, v_scale=vs
+            )
+        return paged_prefix_attention(
+            q, cache, table, ends, capacity, k_scale=ks, v_scale=vs
+        )
+
+    def reference():
+        decoded = cache.view(torch.float8_e4m3fn).float()
+        rows = []
+        for i, end in enumerate(ends.tolist()):
+            if not end:
+                rows.append(torch.zeros_like(q[i]).float())
+                continue
+            start = max(0, end - window) if window else 0
+            history = decoded[table[i].long()].permute(1, 0, 2, 3)
+            key, value = history.reshape(kvheads, -1, 2 * dim)[:, start:end].split(
+                dim, -1
+            )
+            key = (key * ks).bfloat16().float()
+            value = (value * vs).bfloat16().float()
+            rows.append(
+                F.scaled_dot_product_attention(
+                    q[i].transpose(0, 1).float(), key, value, enable_gqa=True
+                ).transpose(0, 1)
+            )
+        return torch.stack(rows)
+
+    actual = run()
+    torch.testing.assert_close(actual.float(), reference(), atol=0.006, rtol=0.025)
+    torch.testing.assert_close(cache, original, atol=0, rtol=0)
+    # Capture must read updated scale tensors, rather than freezing Python values.
+    for _ in range(3):
+        run()
+    torch.accelerator.synchronize()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        captured = run()
+    ks.fill_(0.5)
+    vs.fill_(0.75)
+    graph.replay()
+    torch.accelerator.synchronize()
+    torch.testing.assert_close(captured.float(), reference(), atol=0.006, rtol=0.025)
+    # Future and out-of-window bytes must not affect the strict-prefix read.
+    prior = run().clone()
+    for i, end in enumerate(ends.tolist()):
+        lower = max(0, end - window) if window else 0
+        for position in list(range(lower)) + list(range(end, capacity)):
+            cache[table[i, position // page], :, position % page] = 126
+    torch.testing.assert_close(run(), prior, atol=0, rtol=0)

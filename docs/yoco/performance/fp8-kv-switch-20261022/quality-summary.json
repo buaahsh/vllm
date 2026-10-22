@@ -1,0 +1,65 @@
+{
+  "modes": {
+    "bfloat16": {
+      "total": 500,
+      "correct": 490,
+      "accuracy_percent": 98.0,
+      "length_stops": 2,
+      "unparsed": 2
+    },
+    "fp8_e4m3": {
+      "total": 500,
+      "correct": 486,
+      "accuracy_percent": 97.2,
+      "length_stops": 1,
+      "unparsed": 1
+    }
+  },
+  "delta_pp": -0.8,
+  "both_correct": 481,
+  "both_wrong": 5,
+  "bfloat16_only_correct": 9,
+  "fp8_only_correct": 5,
+  "mcnemar_exact_p": 0.4239501953125,
+  "paired_bootstrap_95pct_delta_pp": [
+    -2.2,
+    0.6
+  ],
+  "subjects": {
+    "Precalculus": {
+      "total": 56,
+      "bfloat16_correct": 55,
+      "fp8_correct": 54
+    },
+    "Intermediate Algebra": {
+      "total": 97,
+      "bfloat16_correct": 95,
+      "fp8_correct": 94
+    },
+    "Algebra": {
+      "total": 124,
+      "bfloat16_correct": 123,
+      "fp8_correct": 123
+    },
+    "Number Theory": {
+      "total": 62,
+      "bfloat16_correct": 62,
+      "fp8_correct": 62
+    },
+    "Prealgebra": {
+      "total": 82,
+      "bfloat16_correct": 81,
+      "fp8_correct": 79
+    },
+    "Geometry": {
+      "total": 41,
+      "bfloat16_correct": 36,
+      "fp8_correct": 37
+    },
+    "Counting & Probability": {
+      "total": 38,
+      "bfloat16_correct": 38,
+      "fp8_correct": 37
+    }
+  }
+}

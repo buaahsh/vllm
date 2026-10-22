@@ -156,3 +156,9 @@ covers target verification: C128/K8 needs 1152 tokens. For small configurations
 such as C4/K8, setting a maximum of 36 alone can be rounded down to 32 by the
 default capture list; explicitly include 36 in `cudagraph_capture_sizes` and
 verify actual four-request target replay.
+
+Shared-KV also accepts optional CUDA E4M3 target KV with
+`--kv-cache-dtype fp8_e4m3`; `auto`/`bfloat16` preserve the BF16 default.
+The draft reads the writer's K/V scales and dequantizes pages during attention.
+See the [FP8 KV switch](performance/SHARED_KV_FP8.md) for API/YAML controls,
+capacity accounting and the separate MATH-500 quality result.
