@@ -13,10 +13,161 @@ from vllm.config.compilation import CUDAGraphMode
 from vllm.config.yoco import resolve_yoco_moe_dispatch
 from vllm.distributed import get_tp_group
 from vllm.logger import init_logger
+from vllm.model_executor.layers.fused_moe.routed_experts import RoutedExperts
 from vllm.platforms import current_platform
+from vllm.triton_utils import tl, tldevice, triton
 from vllm.utils.deep_gemm import get_deep_gemm_mega_moe, is_deep_gemm_e8m0_used
 
 logger = init_logger(__name__)
+
+
+@triton.jit
+def _latent_norm_megamoe_kernel(
+    x,
+    gamma,
+    ids,
+    weights,
+    out,
+    scales,
+    out_ids,
+    out_weights,
+    x_stride: tl.constexpr,
+    ids_stride: tl.constexpr,
+    weights_stride: tl.constexpr,
+    out_stride: tl.constexpr,
+    scales_stride: tl.constexpr,
+    out_ids_stride: tl.constexpr,
+    out_weights_stride: tl.constexpr,
+    EPS: tl.constexpr,
+    STAGE: tl.constexpr,
+):
+    row = tl.program_id(0)
+    cols = tl.arange(0, 1024)
+    if not STAGE:
+        # Retain the original norm layout on the small-M and prefill paths.
+        cols = tl.max_contiguous(cols, 8)
+    value = tl.load(x + row * x_stride + cols).to(tl.float32)
+    affine = tl.load(gamma + cols).to(tl.float32)
+    variance = tl.sum(value * value, 0) * (1.0 / 1024)
+    normalized = value * tldevice.rsqrt(variance + EPS) * affine
+    # Keep the existing norm -> BF16 -> group32 quantizer rounding boundary.
+    normalized = normalized.to(tl.bfloat16)
+    if STAGE:
+        normalized = normalized.to(tl.float32).reshape(32, 32)
+        amax = tl.maximum(tl.max(tl.abs(normalized), 1), 1.0e-4)
+        bits = (amax / 448.0).to(tl.uint32, bitcast=True)
+        exponent = ((bits >> 23) & 255) + ((bits & 0x7FFFFF) != 0).to(tl.uint32)
+        exponent = tl.minimum(tl.maximum(exponent, 1), 254)
+        scale = (exponent << 23).to(tl.float32, bitcast=True)
+        quantized = (normalized * (1.0 / scale)[:, None]).reshape(1024)
+        tl.store(out + row * out_stride + cols, quantized.to(tl.float8e4nv))
+        packed = tl.sum(exponent.reshape(8, 4) << (tl.arange(0, 4)[None, :] * 8), 1).to(
+            tl.int32
+        )
+        tl.store(scales + row * scales_stride + tl.arange(0, 8), packed)
+        topk = tl.arange(0, 8)
+        tl.store(
+            out_ids + row * out_ids_stride + topk,
+            tl.load(ids + row * ids_stride + topk).to(tl.int64),
+        )
+        tl.store(
+            out_weights + row * out_weights_stride + topk,
+            tl.load(weights + row * weights_stride + topk),
+        )
+    else:
+        tl.store(out + row * out_stride + cols, normalized)
+
+
+def prepare_yoco_latent_megamoe_inputs(
+    hidden: torch.Tensor,
+    norm: torch.nn.Module,
+    weights: torch.Tensor,
+    ids: torch.Tensor,
+    buffer: Any,
+) -> None:
+    """Normalize and stage into the existing Mega workspace on its owner stream."""
+    if hidden.shape[0]:
+        _latent_norm_megamoe_kernel[(hidden.shape[0],)](
+            hidden,
+            norm.weight,
+            ids,
+            weights,
+            buffer.x,
+            buffer.x_sf,
+            buffer.topk_idx,
+            buffer.topk_weights,
+            hidden.stride(0),
+            ids.stride(0),
+            weights.stride(0),
+            buffer.x.stride(0),
+            buffer.x_sf.stride(0),
+            buffer.topk_idx.stride(0),
+            buffer.topk_weights.stride(0),
+            norm.eps,
+            STAGE=True,
+            num_warps=4,
+            enable_fp_fusion=False,
+        )
+
+
+def normalize_yoco_mega_input(
+    hidden: torch.Tensor, norm: torch.nn.Module
+) -> torch.Tensor:
+    """Retain the compiled model's single-warp FP32 reduction after deferral."""
+    if hidden.dtype != torch.bfloat16:
+        return norm(hidden)
+    output = torch.empty_like(hidden)
+    if hidden.shape[0]:
+        _latent_norm_megamoe_kernel[(hidden.shape[0],)](
+            hidden,
+            norm.weight,
+            None,
+            None,
+            output,
+            None,
+            None,
+            None,
+            hidden.stride(0),
+            0,
+            0,
+            output.stride(0),
+            0,
+            0,
+            0,
+            norm.eps,
+            STAGE=False,
+            num_warps=1,
+            enable_fp_fusion=False,
+        )
+    return output
+
+
+class YOCOLatentRoutedExperts(RoutedExperts):
+    """Keep the latent norm inside the existing opaque routed-expert boundary."""
+
+    def __init__(self, *args: Any, input_norm: torch.nn.Module, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.input_norm = input_norm
+
+    def forward_modular(
+        self,
+        x: torch.Tensor,
+        topk_weights: torch.Tensor,
+        topk_ids: torch.Tensor,
+        shared_experts: Any = None,
+        shared_experts_input: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if x.dtype == torch.bfloat16 and use_yoco_mega_moe(self, x.shape[0]):
+            return self._yoco_mega_moe(
+                x, topk_weights, topk_ids, input_norm=self.input_norm
+            )
+        return super().forward_modular(
+            normalize_yoco_mega_input(x, self.input_norm),
+            topk_weights,
+            topk_ids,
+            shared_experts,
+            shared_experts_input,
+        )
 
 
 def expand_block128_scales(
@@ -87,7 +238,12 @@ class YOCOMegaMoERouted:
         )
 
     def __call__(
-        self, hidden: torch.Tensor, weights: torch.Tensor, ids: torch.Tensor
+        self,
+        hidden: torch.Tensor,
+        weights: torch.Tensor,
+        ids: torch.Tensor,
+        *,
+        input_norm: torch.nn.Module | None = None,
     ) -> torch.Tensor:
         from vllm.models.deepseek_v4.nvidia.ops.prepare_megamoe import (
             prepare_megamoe_inputs,
@@ -111,15 +267,20 @@ class YOCOMegaMoERouted:
             raise ValueError("Inputs exceed the prepared YOCO MegaMoE contract")
         output = torch.empty_like(hidden)
         if n:
-            prepare_megamoe_inputs(
-                hidden,
-                weights,
-                ids,
-                buffer.x[:n],
-                buffer.x_sf[:n],
-                buffer.topk_idx[:n],
-                buffer.topk_weights[:n],
-            )
+            if input_norm is None:
+                prepare_megamoe_inputs(
+                    hidden,
+                    weights,
+                    ids,
+                    buffer.x[:n],
+                    buffer.x_sf[:n],
+                    buffer.topk_idx[:n],
+                    buffer.topk_weights[:n],
+                )
+            else:
+                prepare_yoco_latent_megamoe_inputs(
+                    hidden, input_norm, weights, ids, buffer
+                )
             self.backend.fp8_fp4_mega_moe(
                 output,
                 self.w13,

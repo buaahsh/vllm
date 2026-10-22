@@ -1,0 +1,80 @@
+[
+  {
+    "source": "parent-norm-bad.pt",
+    "layer": "model.layers.0.mlp",
+    "shape": [
+      108,
+      1024
+    ],
+    "changed_elements": 0,
+    "total": 110592,
+    "relative_rms": 0.0,
+    "max_abs_dequantized": 0.0,
+    "scale_groups_changed": 0
+  },
+  {
+    "source": "parent-norm-bad.pt",
+    "layer": "model.layers.4.mlp",
+    "shape": [
+      108,
+      1024
+    ],
+    "changed_elements": 0,
+    "total": 110592,
+    "relative_rms": 0.0,
+    "max_abs_dequantized": 0.0,
+    "scale_groups_changed": 0
+  },
+  {
+    "source": "parent-norm-bad.pt",
+    "layer": "model.layers.7.mlp",
+    "shape": [
+      108,
+      1024
+    ],
+    "changed_elements": 0,
+    "total": 110592,
+    "relative_rms": 0.0,
+    "max_abs_dequantized": 0.0,
+    "scale_groups_changed": 0
+  },
+  {
+    "source": "parent-norm-bad.pt",
+    "layer": "model.layers.3.mlp",
+    "shape": [
+      108,
+      1024
+    ],
+    "changed_elements": 0,
+    "total": 110592,
+    "relative_rms": 0.0,
+    "max_abs_dequantized": 0.0,
+    "scale_groups_changed": 0
+  },
+  {
+    "source": "diagnostic2-bad.pt",
+    "layer": "model.layers.3.mlp",
+    "shape": [
+      72,
+      1024
+    ],
+    "changed_elements": 1,
+    "total": 73728,
+    "relative_rms": 0.00036134140100330114,
+    "max_abs_dequantized": 0.03125,
+    "scale_groups_changed": 0
+  },
+  {
+    "source": "diagnostic4-bad.pt",
+    "layer": "model.layers.2.mlp",
+    "shape": [
+      36,
+      1024
+    ],
+    "changed_elements": 1,
+    "total": 36864,
+    "relative_rms": 0.0005856012576259673,
+    "max_abs_dequantized": 0.03125,
+    "scale_groups_changed": 0
+  }
+]

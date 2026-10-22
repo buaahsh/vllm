@@ -105,6 +105,18 @@ and LM-head storage. This branch includes the constrained online FP8-target
 integration, FP32 proposal-distribution cache, and the int64 physical-page address
 fix used by the benchmark.
 
+For Fast latent1024 RMSNorm with BF16 affine weights and FP32 statistics, the
+routed norm executes inside the existing opaque MoE boundary. When the existing
+dispatch selects Mega, one kernel normalizes, quantizes to group32 FP8, and writes
+activations, packed E8M0 scales and top-k values into the shared final workspace.
+The norm's BF16 rounding remains in registers; FP32 reduction order can differ
+from the unfused path. Other dispatch selections execute a norm-only kernel and
+the original routed backend. Shared experts retain their original 3072-dimensional
+input. This adds no thresholds or graph descriptors and leaves output-norm
+fusion and Mega's math mode unchanged. The
+[input-fusion report](target-mega-input-fusion-20261021/REPORT.md) records numerical
+error, acceptance, target graph latency and end-to-end measurements.
+
 ## End-to-end benchmark
 
 The benchmark uses the ordinary LLM generation API and native configured MoE

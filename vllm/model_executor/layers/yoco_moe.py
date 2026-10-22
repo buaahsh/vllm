@@ -219,16 +219,19 @@ class YOCOSharedExperts(nn.Module):
 class YOCOLatentInputTransform(nn.Module):
     """Project and normalize only the routed-expert input."""
 
-    def __init__(self, proj: nn.Module, norm: nn.Module) -> None:
+    def __init__(
+        self, proj: nn.Module, norm: nn.Module, *, defer_norm: bool = False
+    ) -> None:
         super().__init__()
         self.proj = proj
         self.norm = norm
+        self.defer_norm = defer_norm
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         projected = self.proj(x)
         if isinstance(projected, tuple):
             projected = projected[0]
-        return self.norm(projected)
+        return projected if self.defer_norm else self.norm(projected)
 
 
 class YOCOLatentOutputTransform(nn.Module):
@@ -514,8 +517,36 @@ class YOCOMoE(nn.Module):
             self.fc1_latent_norm = None
             self.fc2_latent_norm = None
 
+        mega_moe = (
+            get_yoco_mega_moe_mode(
+                getattr(get_current_vllm_config(), "additional_config", {})
+            )
+            != "off"
+        )
+        defer_latent_norm = (
+            mega_moe
+            and current_platform.is_device_capability_family(100)
+            and isinstance(self.fc1_latent_norm, RMSNorm)
+            and self.fc1_latent_norm.execution_mode == "fast"
+            and self.fc1_latent_norm.dim == 1024
+            and self.fc1_latent_norm.weight.dtype == torch.bfloat16
+            and not self.fc1_latent_norm.bf16_reductions
+        )
+        routed_experts_args = None
+        routed_experts_cls = None
+        if defer_latent_norm:
+            from vllm.model_executor.layers.yoco_ops.mega_moe import (
+                YOCOLatentRoutedExperts,
+            )
+
+            routed_experts_cls = YOCOLatentRoutedExperts
+            routed_experts_args = {"input_norm": self.fc1_latent_norm}
         routed_input_transform = (
-            YOCOLatentInputTransform(self.fc1_latent_proj, self.fc1_latent_norm)
+            YOCOLatentInputTransform(
+                self.fc1_latent_proj,
+                self.fc1_latent_norm,
+                defer_norm=defer_latent_norm,
+            )
             if self.fc1_latent_proj is not None and self.fc1_latent_norm is not None
             else None
         )
@@ -559,12 +590,6 @@ class YOCOMoE(nn.Module):
                 f"{prefix}.experts",
                 get_tensor_model_parallel_world_size(),
             )
-        mega_moe = (
-            get_yoco_mega_moe_mode(
-                getattr(get_current_vllm_config(), "additional_config", {})
-            )
-            != "off"
-        )
         policy = YocoMoEPolicy.for_mode(
             cast(YocoExecutionMode, execution_mode), mega_moe=mega_moe
         )
@@ -583,6 +608,8 @@ class YOCOMoE(nn.Module):
             apply_router_weight_before_w2=True,
             yoco_policy=policy,
             routed_input_transform=routed_input_transform,
+            routed_experts_cls=routed_experts_cls,
+            routed_experts_args=routed_experts_args,
             routed_output_transform=routed_output_transform,
             combined_output_transform=combined_output_transform,
             reduce_shared_experts_separately=True,

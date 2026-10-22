@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "source_files": 8059,
+  "runtime_files": 1996,
+  "mismatches": [],
+  "harness_sha256": {
+    "run-bench.sh": "dd309b33b51b15d9cb78d0b329300fee496838b556a4e27fd980be7b60a0f0ec",
+    "paired_input.py": "3ecd0af34c0a97ae6eb846e1621b2e9fe35b945c3b8d7358a9d502d8e5233e68",
+    "config.json": "3e010020c29e5cdd626c66481994d933e80153235fa0f592b52cde5dbd2ba32e"
+  }
+}

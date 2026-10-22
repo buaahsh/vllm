@@ -1,0 +1,816 @@
+{
+  "parent": {
+    "status": "PASS",
+    "rows": 30,
+    "worker": [
+      {
+        "backend": "mega",
+        "layers": [
+          "model.layers.0.mlp",
+          "model.layers.1.mlp",
+          "model.layers.2.mlp",
+          "model.layers.3.mlp",
+          "model.layers.4.mlp",
+          "model.layers.5.mlp",
+          "model.layers.6.mlp",
+          "model.layers.7.mlp",
+          "model.layers.8.mlp",
+          "model.layers.9.mlp",
+          "model.layers.10.mlp",
+          "model.layers.11.mlp",
+          "model.layers.12.mlp",
+          "model.layers.13.mlp",
+          "model.layers.14.mlp",
+          "model.layers.15.mlp",
+          "model.layers.16.mlp",
+          "model.layers.17.mlp",
+          "model.layers.18.mlp",
+          "model.layers.19.mlp"
+        ],
+        "mega_layers": 20,
+        "workspace_count": 1,
+        "shared_workspace_bytes": 525678464,
+        "torch": "2.13.0+cu130",
+        "deep_gemm": "2.8.2",
+        "deep_gemm_file": "/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/__init__.py",
+        "allocated": 70401766400,
+        "draft_type": "SharedKVSpeculator",
+        "runner": "vllm.v1.worker.gpu.model_runner",
+        "fast_prefill": true,
+        "aux_hidden_layers": [
+          20
+        ],
+        "draft_logits_dtype": "torch.float32",
+        "additional_config": {
+          "yoco_execution_mode": "fast",
+          "yoco_mega_moe": "fp8_group32"
+        },
+        "shared_kv_attention_fa_version": 4,
+        "dispatch": {
+          "profile": "b200-l3-fp8-tp1-k8",
+          "triton_max_tokens": 16,
+          "mega_min_tokens": 17,
+          "mega_prefill": false
+        },
+        "mega_capture_decisions": {
+          "72": true,
+          "36": true,
+          "18": true,
+          "9": false
+        },
+        "triton_max_tokens": 16,
+        "graphs": {
+          "target": {
+            "widest_mode": "FULL",
+            "widest_captured": true,
+            "captured_tokens": [
+              9,
+              18,
+              36,
+              72
+            ],
+            "replays": {
+              "1x9/9": 389,
+              "4x9/36": 297,
+              "2x9/18": 97,
+              "8x9/72": 279
+            }
+          },
+          "draft": {
+            "widest_mode": "FULL",
+            "widest_captured": true,
+            "captured_tokens": [
+              8,
+              16,
+              24,
+              32,
+              40,
+              64
+            ],
+            "replays": {
+              "4x8/32": 287,
+              "1x8/8": 399,
+              "3x8/24": 102,
+              "2x8/16": 137,
+              "8x8/64": 312,
+              "5x8/40": 62
+            }
+          }
+        },
+        "target_graph_backends": {
+          "8x9/72": "mega",
+          "4x9/36": "mega",
+          "2x9/18": "mega",
+          "1x9/9": "triton"
+        }
+      }
+    ]
+  },
+  "fused": {
+    "status": "PASS",
+    "rows": 30,
+    "worker": [
+      {
+        "backend": "mega",
+        "layers": [
+          "model.layers.0.mlp",
+          "model.layers.1.mlp",
+          "model.layers.2.mlp",
+          "model.layers.3.mlp",
+          "model.layers.4.mlp",
+          "model.layers.5.mlp",
+          "model.layers.6.mlp",
+          "model.layers.7.mlp",
+          "model.layers.8.mlp",
+          "model.layers.9.mlp",
+          "model.layers.10.mlp",
+          "model.layers.11.mlp",
+          "model.layers.12.mlp",
+          "model.layers.13.mlp",
+          "model.layers.14.mlp",
+          "model.layers.15.mlp",
+          "model.layers.16.mlp",
+          "model.layers.17.mlp",
+          "model.layers.18.mlp",
+          "model.layers.19.mlp"
+        ],
+        "mega_layers": 20,
+        "workspace_count": 1,
+        "shared_workspace_bytes": 525678464,
+        "torch": "2.13.0+cu130",
+        "deep_gemm": "2.8.2",
+        "deep_gemm_file": "/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/__init__.py",
+        "allocated": 70401766400,
+        "draft_type": "SharedKVSpeculator",
+        "runner": "vllm.v1.worker.gpu.model_runner",
+        "fast_prefill": true,
+        "aux_hidden_layers": [
+          20
+        ],
+        "draft_logits_dtype": "torch.float32",
+        "additional_config": {
+          "yoco_execution_mode": "fast",
+          "yoco_mega_moe": "fp8_group32"
+        },
+        "shared_kv_attention_fa_version": 4,
+        "dispatch": {
+          "profile": "b200-l3-fp8-tp1-k8",
+          "triton_max_tokens": 16,
+          "mega_min_tokens": 17,
+          "mega_prefill": false
+        },
+        "mega_capture_decisions": {
+          "72": true,
+          "36": true,
+          "18": true,
+          "9": false
+        },
+        "triton_max_tokens": 16,
+        "graphs": {
+          "target": {
+            "widest_mode": "FULL",
+            "widest_captured": true,
+            "captured_tokens": [
+              9,
+              18,
+              36,
+              72
+            ],
+            "replays": {
+              "1x9/9": 402,
+              "4x9/36": 314,
+              "2x9/18": 80,
+              "8x9/72": 279
+            }
+          },
+          "draft": {
+            "widest_mode": "FULL",
+            "widest_captured": true,
+            "captured_tokens": [
+              8,
+              16,
+              24,
+              32,
+              40,
+              64
+            ],
+            "replays": {
+              "4x8/32": 288,
+              "1x8/8": 412,
+              "3x8/24": 118,
+              "2x8/16": 120,
+              "8x8/64": 313,
+              "5x8/40": 61
+            }
+          }
+        },
+        "target_graph_backends": {
+          "8x9/72": "mega",
+          "4x9/36": "mega",
+          "2x9/18": "mega",
+          "1x9/9": "triton"
+        }
+      }
+    ]
+  },
+  "paired": {
+    "status": "PASS",
+    "worker": [
+      {
+        "worker": {
+          "backend": "mega",
+          "layers": [
+            "model.layers.0.mlp",
+            "model.layers.1.mlp",
+            "model.layers.2.mlp",
+            "model.layers.3.mlp",
+            "model.layers.4.mlp",
+            "model.layers.5.mlp",
+            "model.layers.6.mlp",
+            "model.layers.7.mlp",
+            "model.layers.8.mlp",
+            "model.layers.9.mlp",
+            "model.layers.10.mlp",
+            "model.layers.11.mlp",
+            "model.layers.12.mlp",
+            "model.layers.13.mlp",
+            "model.layers.14.mlp",
+            "model.layers.15.mlp",
+            "model.layers.16.mlp",
+            "model.layers.17.mlp",
+            "model.layers.18.mlp",
+            "model.layers.19.mlp"
+          ],
+          "mega_layers": 20,
+          "workspace_count": 1,
+          "shared_workspace_bytes": 525678464,
+          "torch": "2.13.0+cu130",
+          "deep_gemm": "2.8.2",
+          "deep_gemm_file": "/home/fhb/yoco-mega-moe-20261020/fullmodel-venv/lib/python3.12/site-packages/deep_gemm/__init__.py",
+          "allocated": 70436209664,
+          "draft_type": "SharedKVSpeculator",
+          "runner": "vllm.v1.worker.gpu.model_runner",
+          "fast_prefill": true,
+          "aux_hidden_layers": [
+            20
+          ],
+          "draft_logits_dtype": "torch.float32",
+          "additional_config": {
+            "yoco_execution_mode": "fast",
+            "yoco_mega_moe": "fp8_group32"
+          },
+          "shared_kv_attention_fa_version": 4,
+          "dispatch": {
+            "profile": "b200-l3-fp8-tp1-k8",
+            "triton_max_tokens": 16,
+            "mega_min_tokens": 17,
+            "mega_prefill": false
+          },
+          "mega_capture_decisions": {
+            "72": true,
+            "36": true,
+            "18": true,
+            "9": false
+          },
+          "triton_max_tokens": 16,
+          "graphs": {
+            "target": {
+              "widest_mode": "FULL",
+              "widest_captured": true,
+              "captured_tokens": [
+                9,
+                18,
+                36,
+                72
+              ],
+              "replays": {
+                "1x9/9": 420,
+                "4x9/36": 309,
+                "2x9/18": 77,
+                "8x9/72": 281
+              }
+            },
+            "draft": {
+              "widest_mode": "FULL",
+              "widest_captured": true,
+              "captured_tokens": [
+                8,
+                16,
+                24,
+                32,
+                40,
+                64
+              ],
+              "replays": {
+                "1x8/8": 921,
+                "4x8/32": 611,
+                "3x8/24": 260,
+                "2x8/16": 299,
+                "8x8/64": 756,
+                "5x8/40": 153
+              }
+            }
+          },
+          "target_graph_backends": {
+            "8x9/72": "mega",
+            "4x9/36": "mega",
+            "2x9/18": "mega",
+            "1x9/9": "triton"
+          }
+        },
+        "checks": [
+          {
+            "batch": 1,
+            "positions": [
+              26
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=9, num_reqs=1, uniform_token_count=9, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "numerical": {
+              "target_hidden": {
+                "numel": 27648,
+                "changed": 0,
+                "max_abs": 0.0,
+                "rms": 0.0,
+                "relative_rms": 0.0,
+                "cosine": 1.000000238418579
+              },
+              "auxiliary_hidden": [
+                {
+                  "numel": 27648,
+                  "changed": 0,
+                  "max_abs": 0.0,
+                  "rms": 0.0,
+                  "relative_rms": 0.0,
+                  "cosine": 1.0
+                }
+              ],
+              "full_target_logits": {
+                "numel": 1393920,
+                "changed": 0,
+                "max_abs": 0.0,
+                "rms": 0.0,
+                "relative_rms": 0.0,
+                "cosine": 1.0
+              },
+              "target_top1_changed": 0
+            },
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  7.43531494140625,
+                  7.4324493408203125,
+                  7.437670135498047,
+                  7.434393310546875,
+                  7.432961273193359,
+                  7.4329582214355465,
+                  7.431934356689453,
+                  7.4310157775878904,
+                  7.437974548339843,
+                  7.431629180908203,
+                  7.43070068359375,
+                  7.434907531738281
+                ],
+                "fused": [
+                  7.417806243896484,
+                  7.418224334716797,
+                  7.4158576965332035,
+                  7.4155517578125,
+                  7.4131935119628904,
+                  7.412889862060547,
+                  7.415245056152344,
+                  7.415449523925782,
+                  7.417603302001953,
+                  7.41504135131836,
+                  7.416687774658203,
+                  7.419649505615235
+                ]
+              },
+              "median_ms": {
+                "baseline": 7.432959747314452,
+                "fused": 7.415704727172852
+              },
+              "latency_reduction_pct": 0.2321419828465343
+            }
+          },
+          {
+            "batch": 4,
+            "positions": [
+              26,
+              25,
+              30,
+              27
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=36, num_reqs=4, uniform_token_count=9, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "numerical": {
+              "target_hidden": {
+                "numel": 110592,
+                "changed": 24197,
+                "max_abs": 0.765625,
+                "rms": 0.05500857159495354,
+                "relative_rms": 0.06088748574256897,
+                "cosine": 0.9981464147567749
+              },
+              "auxiliary_hidden": [
+                {
+                  "numel": 110592,
+                  "changed": 24223,
+                  "max_abs": 4.0,
+                  "rms": 0.2222495973110199,
+                  "relative_rms": 0.0445731095969677,
+                  "cosine": 0.9990075826644897
+                }
+              ],
+              "full_target_logits": {
+                "numel": 5575680,
+                "changed": 1197902,
+                "max_abs": 2.3125,
+                "rms": 0.13309212028980255,
+                "relative_rms": 0.03226223587989807,
+                "cosine": 0.9994800090789795
+              },
+              "target_top1_changed": 1
+            },
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  9.121481323242188,
+                  9.119182586669922,
+                  9.119281768798828,
+                  9.120716857910157,
+                  9.117951965332031,
+                  9.117132568359375,
+                  9.11917953491211,
+                  9.119193267822265,
+                  9.122764587402344,
+                  9.118873596191406,
+                  9.115803527832032,
+                  9.120716857910157
+                ],
+                "fused": [
+                  9.045760345458984,
+                  9.048422241210938,
+                  9.047296142578125,
+                  9.045655822753906,
+                  9.044631958007812,
+                  9.048513793945313,
+                  9.047500610351562,
+                  9.04483642578125,
+                  9.048833465576172,
+                  9.04616928100586,
+                  9.045964813232422,
+                  9.047908782958984
+                ]
+              },
+              "median_ms": {
+                "baseline": 9.119187927246093,
+                "fused": 9.046732711791993
+              },
+              "latency_reduction_pct": 0.7945358296391758
+            }
+          },
+          {
+            "batch": 8,
+            "positions": [
+              26,
+              25,
+              30,
+              27,
+              24,
+              26,
+              27,
+              28
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=72, num_reqs=8, uniform_token_count=9, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "numerical": {
+              "target_hidden": {
+                "numel": 221184,
+                "changed": 0,
+                "max_abs": 0.0,
+                "rms": 0.0,
+                "relative_rms": 0.0,
+                "cosine": 0.9999999403953552
+              },
+              "auxiliary_hidden": [
+                {
+                  "numel": 221184,
+                  "changed": 0,
+                  "max_abs": 0.0,
+                  "rms": 0.0,
+                  "relative_rms": 0.0,
+                  "cosine": 1.0
+                }
+              ],
+              "full_target_logits": {
+                "numel": 11151360,
+                "changed": 0,
+                "max_abs": 0.0,
+                "rms": 0.0,
+                "relative_rms": 0.0,
+                "cosine": 1.0
+              },
+              "target_top1_changed": 0
+            },
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  10.753536224365234,
+                  10.75036163330078,
+                  10.74985122680664,
+                  10.749540710449219,
+                  10.749542236328125,
+                  10.749654388427734,
+                  10.747904205322266,
+                  10.754560089111328,
+                  10.74811019897461,
+                  10.749134063720703,
+                  10.754255676269532,
+                  10.753126525878907
+                ],
+                "fused": [
+                  10.624771118164062,
+                  10.622200012207031,
+                  10.624664306640625,
+                  10.62108154296875,
+                  10.620262145996094,
+                  10.624256134033203,
+                  10.625791931152344,
+                  10.626918029785156,
+                  10.623744201660156,
+                  10.621600341796874,
+                  10.623846435546875,
+                  10.62456817626953
+                ]
+              },
+              "median_ms": {
+                "baseline": 10.749752807617188,
+                "fused": 10.624051284790038
+              },
+              "latency_reduction_pct": 1.1693433800457176
+            }
+          },
+          {
+            "batch": 1,
+            "positions": [
+              8193
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=9, num_reqs=1, uniform_token_count=9, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "numerical": {
+              "target_hidden": {
+                "numel": 27648,
+                "changed": 0,
+                "max_abs": 0.0,
+                "rms": 0.0,
+                "relative_rms": 0.0,
+                "cosine": 0.9999999403953552
+              },
+              "auxiliary_hidden": [
+                {
+                  "numel": 27648,
+                  "changed": 0,
+                  "max_abs": 0.0,
+                  "rms": 0.0,
+                  "relative_rms": 0.0,
+                  "cosine": 1.0
+                }
+              ],
+              "full_target_logits": {
+                "numel": 1393920,
+                "changed": 0,
+                "max_abs": 0.0,
+                "rms": 0.0,
+                "relative_rms": 0.0,
+                "cosine": 1.0
+              },
+              "target_top1_changed": 0
+            },
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  7.688499450683594,
+                  7.689625549316406,
+                  7.686553955078125,
+                  7.685784149169922,
+                  7.68880615234375,
+                  7.685068511962891,
+                  7.688238525390625,
+                  7.687064361572266,
+                  7.686450958251953,
+                  7.686348724365234,
+                  7.685734558105469,
+                  7.68563232421875
+                ],
+                "fused": [
+                  7.675492858886718,
+                  7.676211547851563,
+                  7.676108551025391,
+                  7.6743614196777346,
+                  7.673038482666016,
+                  7.671705627441407,
+                  7.67242431640625,
+                  7.672380828857422,
+                  7.672831726074219,
+                  7.676313781738282,
+                  7.671304321289062,
+                  7.6751853942871096
+                ]
+              },
+              "median_ms": {
+                "baseline": 7.686502456665039,
+                "fused": 7.673699951171875
+              },
+              "latency_reduction_pct": 0.16655826971164744
+            }
+          },
+          {
+            "batch": 4,
+            "positions": [
+              8234,
+              8229,
+              8206,
+              8193
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=36, num_reqs=4, uniform_token_count=9, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "numerical": {
+              "target_hidden": {
+                "numel": 110592,
+                "changed": 21044,
+                "max_abs": 0.3125,
+                "rms": 0.02810642309486866,
+                "relative_rms": 0.031705718487501144,
+                "cosine": 0.9994974136352539
+              },
+              "auxiliary_hidden": [
+                {
+                  "numel": 110592,
+                  "changed": 21018,
+                  "max_abs": 4.0,
+                  "rms": 0.14449717104434967,
+                  "relative_rms": 0.02595350705087185,
+                  "cosine": 0.9996638298034668
+                }
+              ],
+              "full_target_logits": {
+                "numel": 5575680,
+                "changed": 1025876,
+                "max_abs": 0.96875,
+                "rms": 0.06697363406419754,
+                "relative_rms": 0.01623917929828167,
+                "cosine": 0.9998680949211121
+              },
+              "target_top1_changed": 0
+            },
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  10.154740905761718,
+                  10.157107543945312,
+                  10.154964447021484,
+                  10.156288146972656,
+                  10.154137420654298,
+                  10.150758361816406,
+                  10.157209777832032,
+                  10.14993896484375,
+                  10.152499389648437,
+                  10.153510284423827,
+                  10.152089691162109,
+                  10.1530029296875
+                ],
+                "fused": [
+                  10.069503784179688,
+                  10.06929931640625,
+                  10.07083511352539,
+                  10.07104034423828,
+                  10.074217224121094,
+                  10.07227020263672,
+                  10.07144775390625,
+                  10.071246337890624,
+                  10.07074432373047,
+                  10.073292541503907,
+                  10.07227020263672,
+                  10.07236328125
+                ]
+              },
+              "median_ms": {
+                "baseline": 10.153823852539062,
+                "fused": 10.071347045898438
+              },
+              "latency_reduction_pct": 0.8122733645807734
+            }
+          },
+          {
+            "batch": 8,
+            "positions": [
+              8270,
+              8313,
+              8267,
+              8291,
+              8244,
+              8231,
+              8223,
+              8193
+            ],
+            "descriptor": "BatchExecutionDescriptor(cg_mode=<CUDAGraphMode.FULL: 2>, num_tokens=72, num_reqs=8, uniform_token_count=9, max_query_len=None, num_active_loras=0, num_ubatches=1)",
+            "numerical": {
+              "target_hidden": {
+                "numel": 221184,
+                "changed": 0,
+                "max_abs": 0.0,
+                "rms": 0.0,
+                "relative_rms": 0.0,
+                "cosine": 1.0000001192092896
+              },
+              "auxiliary_hidden": [
+                {
+                  "numel": 221184,
+                  "changed": 0,
+                  "max_abs": 0.0,
+                  "rms": 0.0,
+                  "relative_rms": 0.0,
+                  "cosine": 1.0000001192092896
+                }
+              ],
+              "full_target_logits": {
+                "numel": 11151360,
+                "changed": 0,
+                "max_abs": 0.0,
+                "rms": 0.0,
+                "relative_rms": 0.0,
+                "cosine": 0.9999999403953552
+              },
+              "target_top1_changed": 0
+            },
+            "timing": {
+              "samples_ms": {
+                "baseline": [
+                  12.602932739257813,
+                  12.593764495849609,
+                  12.596469116210937,
+                  12.596892547607421,
+                  12.592227172851562,
+                  12.599858856201172,
+                  12.592486572265624,
+                  12.590081787109375,
+                  12.58608627319336,
+                  12.597351837158204,
+                  12.5970947265625,
+                  12.590087890625
+                ],
+                "fused": [
+                  12.464492797851562,
+                  12.4598876953125,
+                  12.462233734130859,
+                  12.462847900390624,
+                  12.459059143066407,
+                  12.457318115234376,
+                  12.46090087890625,
+                  12.463558197021484,
+                  12.459059143066407,
+                  12.458344268798829,
+                  12.463265228271485,
+                  12.461109161376953
+                ]
+              },
+              "median_ms": {
+                "baseline": 12.595116806030273,
+                "fused": 12.461005020141602
+              },
+              "latency_reduction_pct": 1.064791918598651
+            }
+          }
+        ],
+        "pending": null,
+        "audit_graphs": {
+          "fused": {
+            "tokens": [
+              9,
+              18,
+              36,
+              72
+            ],
+            "replays": {
+              "9": 420,
+              "36": 309,
+              "18": 77,
+              "72": 281
+            }
+          },
+          "baseline": {
+            "tokens": [
+              9,
+              18,
+              36,
+              72
+            ],
+            "replays": {
+              "9": 479,
+              "36": 348,
+              "18": 126,
+              "72": 383
+            }
+          }
+        },
+        "scope": "Extra target pool and baseline method are audit-only. Baseline retains the candidate norm boundary; native parent comparison separately checks the original boundary."
+      }
+    ]
+  }
+}
