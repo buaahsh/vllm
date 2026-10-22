@@ -36,6 +36,11 @@
 
 ## Fast block-128 FP8 组
 
+[异步调度入口与用法](ASYNC_SCHEDULING.md)已合入开发分支，提供独立的engine/scheduler
+选项、实际运行回执和EOS/取消检查。[C16/C32补测](async-scheduling-20261022/LONG_LOAD_REPORT.md)
+在原冻结配置下，短输入长输出吞吐提升4.93%～13.14%，16K输入无稳定正收益；
+异步继续显式选择，历史结果与当前BF16 router默认的组合性能分别解读。
+
 [2026-10-22 BF16 router 与主链复测](bf16-router-20261022/REPORT.md)：Fast router
 独立默认启用 BF16，残差主链与 Norm BF16 归约实验保持关闭。记录真实 BF16 输入的
 kernel 对照、K8 接受率变化、固定输出端到端吞吐与 128K 输出上限的 MATH-500 评测；
