@@ -291,11 +291,11 @@ class ParallelConfig:
     """num of nodes for multi-node distributed
     inference when distributed_executor_backend is mp."""
     numa_bind: bool = False
-    """Enable NUMA binding for GPU worker subprocesses.
+    """Enable additional launch-time NUMA CPU and memory policies.
 
-    By default, workers are pinned to their GPU's NUMA-local CPUs and
-    memory; on PCT-capable Xeons they also auto-bind to the SKU's
-    PCT priority cores.
+    CUDA workers always enforce GPU-local CPU affinity at device initialization,
+    independently of this option. Enabling this option also requests NUMA-local
+    memory through numactl; on PCT-capable Xeons it selects PCT priority cores.
     """
     numa_bind_nodes: list[int] | None = None
     """NUMA node to bind each GPU worker to.

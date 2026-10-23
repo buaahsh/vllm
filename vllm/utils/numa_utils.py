@@ -11,7 +11,7 @@ import logging
 import multiprocessing
 import os
 import subprocess
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -26,6 +26,59 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 _NUMACTL_ARGS_ENV = "_VLLM_INTERNAL_NUMACTL_ARGS"
 _NUMACTL_PYTHON_EXECUTABLE_ENV = "_VLLM_INTERNAL_NUMACTL_PYTHON_EXECUTABLE"
+
+
+def bind_cuda_worker_to_local_cpus(device_id: int) -> None:
+    """Require all worker threads to run on their GPU's CPU NUMA node."""
+    from vllm.platforms import current_platform
+    from vllm.utils.cpu_resource_utils import parse_id_list
+
+    node = current_platform.get_device_numa_node(device_id)
+    if node is None:
+        raise RuntimeError(
+            f"Cannot determine the CPU NUMA node for CUDA GPU {device_id}; "
+            "GPU-local CPU affinity is required."
+        )
+    try:
+        local_cpus = set(
+            parse_id_list(
+                Path(f"/sys/devices/system/node/node{node}/cpulist").read_text().strip()
+            )
+        )
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"Cannot read CPUs for GPU-local NUMA node {node}") from exc
+    cpus = local_cpus & os.sched_getaffinity(0)
+    if not cpus:
+        raise RuntimeError(
+            f"CUDA GPU {device_id} is local to NUMA node {node}, but its CPUs "
+            "are excluded by this worker's CPU affinity/cpuset. "
+            "Allocate GPU-local CPUs to this worker."
+        )
+
+    # Bind the caller first so its new threads inherit the local CPU set.
+    os.sched_setaffinity(0, cpus)
+    process = psutil.Process()
+    for _ in range(3):
+        for thread in process.threads():
+            with suppress(ProcessLookupError):
+                os.sched_setaffinity(thread.id, cpus)
+        unbound = []
+        for thread in process.threads():
+            try:
+                if os.sched_getaffinity(thread.id) != cpus:
+                    unbound.append(thread.id)
+            except ProcessLookupError:
+                pass
+        if not unbound:
+            logger.info(
+                "Enforced GPU-local CPU affinity: logical GPU %d, NUMA node %d, "
+                "CPUs %s (all worker threads)",
+                device_id,
+                node,
+                sorted(cpus),
+            )
+            return
+    raise RuntimeError(f"Could not bind all CUDA worker threads: {unbound}")
 
 
 @cache

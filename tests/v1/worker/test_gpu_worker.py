@@ -15,6 +15,44 @@ from vllm.v1.worker.startup_plan import (
     maybe_save_startup_plan,
 )
 
+
+def test_cuda_worker_binds_logical_gpu_before_creating_cuda_context(monkeypatch):
+    from vllm.platforms import interface
+
+    monkeypatch.setattr(interface, "_assigned_physical_gpu_ids", None)
+    worker = gpu_worker.Worker.__new__(gpu_worker.Worker)
+    worker.device_config = SimpleNamespace(device_type="cuda")
+    worker.local_rank = 0
+    worker.parallel_config = SimpleNamespace(
+        distributed_executor_backend="external_launcher",
+        data_parallel_backend="mp",
+        nnodes_within_dp=1,
+        assigned_physical_gpu_ids=[6],
+    )
+    monkeypatch.setattr(
+        gpu_worker,
+        "current_platform",
+        SimpleNamespace(
+            is_cuda=lambda: True,
+            logical_device_id_to_visible_device_id=lambda rank: 1,
+        ),
+    )
+    called = []
+
+    def bind(logical_gpu):
+        called.append(logical_gpu)
+        raise RuntimeError("binding reached before CUDA context")
+
+    monkeypatch.setattr(gpu_worker, "bind_cuda_worker_to_local_cpus", bind)
+    with (
+        patch.object(gpu_worker.torch.accelerator, "set_device_index") as set_device,
+        pytest.raises(RuntimeError, match="binding reached"),
+    ):
+        worker.init_device()
+    assert called == [0]  # Logical rank 0 maps to physical GPU6, visible ordinal 1.
+    set_device.assert_not_called()
+
+
 # Startup-plan persistence (vllm/v1/worker/startup_plan.py), applied and
 # saved by Worker.determine_available_memory / compile_or_warm_up_model.
 

@@ -10,6 +10,79 @@ from vllm.config import ParallelConfig
 from vllm.utils import numa_utils
 
 
+@pytest.mark.parametrize("allowed", [{0, 1, 5, 7}, {5}])
+def test_required_cuda_locality_binds_native_threads_inside_allowed_cpus(
+    monkeypatch, allowed
+):
+    from vllm import platforms
+
+    queried = []
+
+    def node_for_gpu(gpu):
+        queried.append(gpu)
+        return 3
+
+    monkeypatch.setattr(
+        platforms,
+        "current_platform",
+        SimpleNamespace(get_device_numa_node=node_for_gpu),
+    )
+    monkeypatch.setattr(numa_utils.Path, "read_text", lambda *_: "4-7,12-15")
+    masks = {0: set(allowed), 100: {0, 1}, 101: set(allowed), 102: {0}}
+    threads = [SimpleNamespace(id=i) for i in [100, 101, 103]]
+    polls = 0
+
+    def list_threads():
+        nonlocal polls
+        polls += 1
+        # A native thread appears after the initial thread list was captured.
+        return threads + ([SimpleNamespace(id=102)] if polls > 1 else [])
+
+    def bind(tid, cpus):
+        if tid == 103:
+            raise ProcessLookupError("thread exited")
+        masks[tid] = set(cpus)
+
+    monkeypatch.setattr(
+        numa_utils.psutil, "Process", lambda: SimpleNamespace(threads=list_threads)
+    )
+
+    def affinity(tid):
+        if tid == 103:
+            raise ProcessLookupError("thread exited")
+        return masks[tid]
+
+    monkeypatch.setattr(numa_utils.os, "sched_getaffinity", affinity)
+    monkeypatch.setattr(numa_utils.os, "sched_setaffinity", bind)
+    numa_utils.bind_cuda_worker_to_local_cpus(2)
+    assert queried == [2]
+    assert all(
+        cpus == allowed & {4, 5, 6, 7, 12, 13, 14, 15} for cpus in masks.values()
+    )
+
+
+@pytest.mark.parametrize("node,allowed", [(None, {5}), (3, {0, 1})])
+def test_required_cuda_locality_refuses_unknown_or_excluded_node(
+    monkeypatch, node, allowed
+):
+    from vllm import platforms
+
+    monkeypatch.setattr(
+        platforms,
+        "current_platform",
+        SimpleNamespace(get_device_numa_node=lambda _: node),
+    )
+    monkeypatch.setattr(numa_utils.Path, "read_text", lambda *_: "4-7")
+    monkeypatch.setattr(numa_utils.os, "sched_getaffinity", lambda _: allowed)
+    changed = []
+    monkeypatch.setattr(
+        numa_utils.os, "sched_setaffinity", lambda *a: changed.append(a)
+    )
+    with pytest.raises(RuntimeError, match="NUMA node"):
+        numa_utils.bind_cuda_worker_to_local_cpus(0)
+    assert not changed
+
+
 @pytest.fixture(autouse=True)
 def _disable_pct_by_default(monkeypatch):
     """Force PCT detection OFF unless a test opts in via ``_patch_pct_gates``.

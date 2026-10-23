@@ -79,6 +79,7 @@ from vllm.utils.mem_utils import (
     format_gib,
     memory_profiling,
 )
+from vllm.utils.numa_utils import bind_cuda_worker_to_local_cpus
 from vllm.utils.torch_utils import set_random_seed, set_torch_threads_for_runtime
 from vllm.v1.attention.backends.utils import record_kv_cache_layout
 from vllm.v1.core.sched.output import GrammarOutput, SchedulerOutput
@@ -421,6 +422,8 @@ class Worker(WorkerBase):
             visible_device_index = (
                 current_platform.logical_device_id_to_visible_device_id(self.local_rank)
             )
+            if current_platform.is_cuda():
+                bind_cuda_worker_to_local_cpus(self.local_rank)
             self.device = torch.device(f"cuda:{visible_device_index}")
             torch.accelerator.set_device_index(self.device)
 
