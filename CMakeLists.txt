@@ -392,6 +392,10 @@ if(VLLM_GPU_LANG STREQUAL "HIP")
   target_compile_definitions(_C PRIVATE CUTLASS_ENABLE_DIRECT_CUDA_DRIVER_CALL=1)
 endif() # _C HIP endif
 
+if(VLLM_GPU_LANG STREQUAL "CUDA")
+  include(cmake/yoco_align.cmake)
+endif()
+
 if(VLLM_GPU_LANG STREQUAL "CUDA" OR VLLM_GPU_LANG STREQUAL "HIP")
   #
   # _C_stable_libtorch extension (ops registered via STABLE_TORCH_LIBRARY)

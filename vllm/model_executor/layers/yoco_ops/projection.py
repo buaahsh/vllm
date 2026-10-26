@@ -28,6 +28,12 @@ from vllm.model_executor.layers.linear import RowParallelLinear, UnquantizedLine
 from vllm.model_executor.layers.vocab_parallel_embedding import (
     UnquantizedEmbeddingMethod,
 )
+from vllm.model_executor.layers.yoco_align_linear import (
+    _cublaslt_forward,
+    align_gemm_backend,
+    cublaslt_workspace,
+    use_align_projection_fusion,
+)
 from vllm.platforms import current_platform
 from vllm.triton_utils import HAS_TRITON, tl, triton
 from vllm.utils.platform_utils import num_compute_units
@@ -555,6 +561,34 @@ def _yoco_align_linear(
     weight: torch.Tensor,
     bias: torch.Tensor | None = None,
 ) -> torch.Tensor:
+    if (
+        hidden_states.is_cuda
+        and align_gemm_backend() == "cublaslt_v1"
+        and hidden_states.ndim == weight.ndim == 2
+        and hidden_states.dtype == weight.dtype == torch.bfloat16
+        and hidden_states.stride(1) == weight.stride(1) == 1
+        and hidden_states.stride(0) >= hidden_states.shape[1]
+        and weight.stride(0) >= weight.shape[1]
+    ):
+        budget = cublaslt_workspace(
+            hidden_states.shape[0], weight.shape[0], weight.shape[1]
+        )
+        if budget is not None:
+            if torch.compiler.is_compiling():
+                output = torch.ops.vllm.yoco_align_cublaslt(
+                    hidden_states, weight, budget
+                )
+            else:
+                output = _cublaslt_forward(hidden_states, weight, budget)
+            return output if bias is None else output + bias
+    return _yoco_align_linear_legacy(hidden_states, weight, bias)
+
+
+def _yoco_align_linear_legacy(
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None = None,
+) -> torch.Tensor:
     if not hidden_states.is_cuda:
         return F.linear(hidden_states, weight, bias)
     if (
@@ -639,6 +673,12 @@ def _yoco_align_qkv_linear(
         )
     hidden_states = hidden_states.to(torch.bfloat16)
     packed_weight = packed_weight.to(torch.bfloat16)
+    if use_align_projection_fusion(
+        hidden_states.shape[0], expected_rows, packed_weight.shape[1]
+    ):
+        return _yoco_align_linear(hidden_states, packed_weight).split(
+            (q_size, kv_size, kv_size), dim=-1
+        )
     q_weight, k_weight, v_weight = packed_weight.split(
         (q_size, kv_size, kv_size), dim=0
     )

@@ -91,6 +91,8 @@ if TYPE_CHECKING:
     VLLM_FLOAT32_MATMUL_PRECISION: Literal["highest", "high", "medium"] = "highest"
     VLLM_BATCH_INVARIANT: bool = False
     VLLM_YOCO_ALIGN_MOE_CONFIG: str | None = None
+    VLLM_YOCO_ALIGN_GEMM_BACKEND: str = "legacy"
+    VLLM_YOCO_ALIGN_FUSE_PROJECTIONS: bool = False
     VLLM_TRITON_USE_TD: bool | None = None
     VLLM_GPU_SYNC_CHECK: Literal["warn", "error"] | None = None
     MAX_JOBS: str | None = None
@@ -650,6 +652,13 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Experimental, environment-matched YOCO Align MoE launch configuration.
     # No profile is selected by default; both inference and training use this path.
     "VLLM_YOCO_ALIGN_MOE_CONFIG": lambda: os.getenv("VLLM_YOCO_ALIGN_MOE_CONFIG"),
+    # Shared forward only; never change ATen's training backward configuration.
+    "VLLM_YOCO_ALIGN_GEMM_BACKEND": lambda: os.getenv(
+        "VLLM_YOCO_ALIGN_GEMM_BACKEND", "legacy"
+    ),
+    "VLLM_YOCO_ALIGN_FUSE_PROJECTIONS": lambda: bool(
+        int(os.getenv("VLLM_YOCO_ALIGN_FUSE_PROJECTIONS", "0"))
+    ),
     "VLLM_REPLICATE_EMBED": lambda: (
         os.getenv("VLLM_REPLICATE_EMBED", "0").strip().lower() in ("1", "true")
     ),

@@ -38,6 +38,7 @@ from vllm.model_executor.layers.linear import (
     UnquantizedLinearMethod,
 )
 from vllm.model_executor.layers.quantization import QuantizationConfig
+from vllm.model_executor.layers.yoco_align_linear import use_align_projection_fusion
 from vllm.model_executor.layers.yoco_fast import refresh_yoco_module_cache
 from vllm.model_executor.layers.yoco_ops.norm import RMSNorm as RMSNorm
 from vllm.model_executor.layers.yoco_ops.projection import (
@@ -190,8 +191,13 @@ class YOCOSharedExperts(nn.Module):
             # Python evaluates llm-train's ``swiglu(up_proj(x), gate_proj(x))``
             # arguments left-to-right. Keep that order as well as each BF16
             # GEMM store before the compiled FP32 activation expression.
-            up = _yoco_align_linear(x, up_weight)
-            gate = _yoco_align_linear(x, gate_weight)
+            if use_align_projection_fusion(
+                x.shape[0], weight.shape[0], weight.shape[1]
+            ):
+                gate, up = _yoco_align_linear(x, weight).chunk(2, dim=-1)
+            else:
+                up = _yoco_align_linear(x, up_weight)
+                gate = _yoco_align_linear(x, gate_weight)
             if self.swiglu_limit > 0:
                 x = _yoco_align_shared_expert_swiglu(
                     up,
