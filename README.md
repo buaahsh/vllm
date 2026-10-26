@@ -1,5 +1,50 @@
 <!-- markdownlint-disable MD001 MD041 -->
-# SWA8K 投机解码：PVC checkpoint、导出脚本与启动命令
+# YOCO 开发分支
+
+## Align 前向优化：吞吐提升 14.2%–43.1%（align-update，2026-10-26）
+
+`align-update` 使用受控 cuBLASLt BF16 前向 GEMM，并合并 Q/K/V 和 shared expert 的 gate/up 投影。
+在已验证的完整 32.35B YOCO 模型上，训练端与推理端 forward 逐位一致；
+相对旧 Align，单张 B200 的推理端到端吞吐在并发 1/8/32 时分别提升 **43.1% / 24.4% / 14.2%**。
+
+| 并发 | 旧 Align 耗时（秒） | 优化后耗时（秒） | 端到端输出吞吐提升 | 稳态 decode 吞吐提升 |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 19.554 | 13.666 | **+43.1%** | +44.8% |
+| 8 | 26.968 | 21.686 | **+24.4%** | +29.1% |
+| 32 | 47.008 | 41.146 | **+14.2%** | +21.8% |
+
+**测量条件：** 相同权重与 prompts，8192 输入 / 1024 输出 token，BF16、TP1/EP1、FA2，
+temperature=0、ignore EOS，关闭前缀缓存和投机解码，同步调度、prefill budget=2048、KV cache=32 GiB，decode 使用 CUDA Graph。
+每点预热 2 次、正式测量 3 次，表中耗时取中位数；吞吐提升按 `旧耗时 / 新耗时 - 1` 计算。
+端到端计时包含已加载引擎的调度和 GPU 执行，不含网络、入队或模型加载。
+decode 数据来自独立的预热后 64 步窗口。Prefill 吞吐变化为 -1.1% / -0.7% / -0.1%，基本持平，收益主要来自 decode。
+这些结果是与旧 Align 的固定负载对照，不代表峰值容量或不同硬件上的通用加速比。
+
+**Forward 验证：** 完整模型训练端使用 FP32 参数、BF16 前向，在 `train()` 模式下执行 no-grad forward。
+8K 输入 / 1K 评分位置，packed 与 unpacked 两条路径各比较 158,597,120 个完整词表 logits 元素及同样数量的 FP32 logprob 元素，均为零差异。
+另通过 C1/C8 固定请求与旧版 C1 的逐位比较，以及 C1/C8 全部请求的 eager/CUDA Graph 比较；所有测速生成 token 与旧版相同。
+本轮未验收完整模型 backward 或多卡 TP/EP。
+
+训练端真实尺寸四层 proxy 的 8K forward 从 **109.399 ms 降至 93.570 ms，耗时降低 14.5%**；
+该结果采用 FP32 主权重、BF16 前向及 chunk=1024 的交叉熵重计算，5 次正式测量，排除优化器和数据加载，不能当作完整模型训练步耗时。
+
+实测源码为本仓库 [`e419464d6c`](https://github.com/buaahsh/vllm/commit/e419464d6c753ef72700625f0086003eba4646f4)，
+旧推理基线为 `7c3f32c985`；配套 [llm-train / align-update](https://github.com/msrallm/llm-train/tree/align-update)
+实测源码为 `f9a58e62`，旧训练基线为 `57e39884`。
+环境为 B200/SM100、Torch 2.13.0+cu130、Triton 3.7.1、FA2 2.8.3.post2、cuBLASLt 130101。
+结果对应实验记录 `full-timing-final-v22`、`full-native-forward-v22` 和 `training-timing-v22-summary`。
+
+安装本分支并编译配套的 `vllm._yoco_align_C` 扩展后，在现有 Align 启动命令中增加：
+
+```bash
+export VLLM_YOCO_ALIGN_GEMM_BACKEND=cublaslt_v1
+export VLLM_YOCO_ALIGN_FUSE_PROJECTIONS=1
+```
+
+两个开关默认关闭；当前 cuBLASLt 路径要求 SM100 和上述库版本，未准入形状或布局保留旧 Align 路径。
+下文保留其他功能及历史版本的使用说明与测量记录。
+
+## SWA8K 投机解码：PVC checkpoint、导出脚本与启动命令
 
 本分支 `MTP-DSpark-test` 支持四层草稿模型
 `dspark-shared-kv-swa8k-full20k-20261003/sharedkv4-swa8k-dp16-full20k`。
@@ -11,7 +56,7 @@
 `--additional-config '{"yoco_execution_mode":"fast","yoco_mega_moe":"fp8_group32"}'`
 启用。该路径更改 routed 激活量化分组，默认关闭；适用配置、端到端基准与回归入口见说明。
 
-## 对应的脚本和 PVC 路径
+### 对应的脚本和 PVC 路径
 
 下面所有模型路径都以 **PVC 根目录挂载到 `/mnt/pvc`** 为前提。
 主模型和原始草稿 checkpoint 路径已核对存在；权重不包含在 Git 仓库中。
@@ -33,7 +78,7 @@
 以下命令依次在仓库根目录、同一个 shell 执行。导出需要 PVC 写权限，推理可以只读挂载。
 `VLLM_PYTHON` 指向已安装本分支依赖的 Python 环境；测试 Pod 对应 `/workspace/venv/bin/python`。
 
-## 1. 从 PVC 上的训练 checkpoint 导出
+### 1. 从 PVC 上的训练 checkpoint 导出
 
 ```bash
 export VLLM_PYTHON="$PWD/.venv/bin/python"
@@ -53,7 +98,7 @@ export SWA_DRAFT=/mnt/pvc/lidong1/sharedkv-swa8k-serving-20261006/draft-step-007
 并在导出配置中记录回执范围，不伪造发布回执。有冲突的 `publication.json` 仍会被拒绝。
 若已成功生成上述 `-pvc` 导出目录，可跳过导出命令，保留环境变量后直接执行第 2 步。
 
-## 2. 用主模型和已导出的 SWA8K 草稿启动 vLLM
+### 2. 用主模型和已导出的 SWA8K 草稿启动 vLLM
 
 ```bash
 "$VLLM_PYTHON" examples/offline_inference/spec_decode/serve_yoco_swa8k.py \
@@ -79,7 +124,7 @@ export SWA_DRAFT=/mnt/pvc/lidong1/sharedkv-swa8k-serving-20261006/draft-step-007
 `--spec-tokens 6` 可切换为 K6，Graph 上限随之调整；`--dry-run` 只打印完整启动命令，
 不加载模型或使用 GPU。默认 C8/K8 参数与 PVC 路径短测已跑通的启动配置一致。
 
-## 3. 调用服务
+### 3. 调用服务
 
 服务就绪后调用普通 OpenAI 兼容接口；请求里的 `model` 对应启动参数 `--served-model-name`：
 
