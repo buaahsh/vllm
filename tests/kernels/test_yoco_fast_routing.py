@@ -92,6 +92,51 @@ def test_mega_gate_masks_nonfinite_padding_when_graph_batch_shrinks(rows):
         assert (actual_weights[active:] == 0).all()
 
 
+@pytest.mark.skipif(
+    not current_platform.is_device_capability_family(100), reason="requires SM100"
+)
+def test_mega_gate_and_align_gemm_keep_independent_graph_outputs(monkeypatch):
+    from vllm import envs
+    from vllm.model_executor.layers.yoco_align_linear import align_gemm_backend
+    from vllm.model_executor.layers.yoco_ops.projection import (
+        _yoco_align_linear,
+        _yoco_align_linear_legacy,
+    )
+
+    monkeypatch.setattr(envs, "VLLM_YOCO_ALIGN_GEMM_BACKEND", "cublaslt_v1")
+    align_gemm_backend.cache_clear()
+    try:
+        torch.manual_seed(20261027)
+        x = torch.randn(128, 3072, device="cuda", dtype=torch.bfloat16) / 8
+        gate = torch.randn(128, 3072, device="cuda", dtype=torch.bfloat16) / 32
+        dense = torch.randn(1024, 3072, device="cuda", dtype=torch.bfloat16) / 32
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            for _ in range(3):
+                torch.ops.vllm.yoco_mega_gate(x, gate)
+                _yoco_align_linear(x, dense)
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph, stream=stream):
+                weights, ids = torch.ops.vllm.yoco_mega_gate(x, gate)
+                output = _yoco_align_linear(x, dense)
+        torch.cuda.current_stream().wait_stream(stream)
+        for delta in (0.0, 0.125):
+            x.add_(delta)
+            gate.add_(delta / 8)
+            dense.sub_(delta / 16)
+            graph.replay()
+            expected_weights, expected_ids = torch.ops.vllm.yoco_mega_gate(x, gate)
+            expected_output = _yoco_align_linear_legacy(x, dense)
+            assert torch.equal(weights, expected_weights)
+            assert torch.equal(ids, expected_ids)
+            assert torch.equal(
+                output.view(torch.int16), expected_output.view(torch.int16)
+            )
+    finally:
+        align_gemm_backend.cache_clear()
+
+
 @pytest.mark.parametrize("scale", [0.05, 1.0, 8.0, 100.0])
 def test_fast_logits_topk_matches_high_precision_reference(scale):
     torch.manual_seed(9310)

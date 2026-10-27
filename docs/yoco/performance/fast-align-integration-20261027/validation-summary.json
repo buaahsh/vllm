@@ -1,0 +1,105 @@
+{
+  "branch": "fhb-dev-10-27",
+  "scope": "Integration regression; no new full-model performance or quality acceptance",
+  "sources": {
+    "base": "7c3f32c985b5b98f83ee45ce9311d291a90b0348",
+    "fast_snapshot": "e4de8344c7959565b49062647730c53faf4303d7",
+    "align_update": "30142cfe6f136ed0bcff3dc6a526d0dc37df00ef"
+  },
+  "regressions": {
+    "b200_kernels": {
+      "tests": 170,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "b200_model": {
+      "tests": 121,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "b200_combined_graph": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "a6000_model": {
+      "tests": 121,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "a6000_kernels": {
+      "tests": 170,
+      "failures": 2,
+      "errors": 0,
+      "skipped": 136
+    },
+    "a6000_original_align_clip": {
+      "tests": 2,
+      "failures": 2,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "b200_passed": 292,
+  "runtime": {
+    "vllm_source": "/home/fhb/yoco-fast-align-merge-20261027/vllm/vllm/__init__.py",
+    "torch": "2.13.0+cu130",
+    "gpu": "NVIDIA B200",
+    "capability": [
+      10,
+      0
+    ],
+    "align_extension": "/home/fhb/yoco-fast-align-merge-20261027/vllm/vllm/_yoco_align_C.abi3.so",
+    "align_extension_sha256": "a44ba0954ede17bd975e8850e19de9d78f0239e92381ee6faf51fff2ab16f0b7",
+    "cublaslt_version": 130101,
+    "align_contract": "yoco-bf16-k64-v1",
+    "mega_gate_api2_available": true
+  },
+  "tested_sources": {
+    "checked_files": 5163,
+    "differences": [],
+    "all_match": true
+  },
+  "original_worktrees": {
+    "fast": {
+      "unchanged": true,
+      "differences": [],
+      "checked_files": 23
+    },
+    "align": {
+      "unchanged": true,
+      "differences": [],
+      "checked_files": 0
+    }
+  },
+  "a6000_baseline": {
+    "vllm": "/data/vllm_test/work/yoco-fast-align-merge-20261027/baseline-runtime/vllm/__init__.py",
+    "norm": "/data/vllm_test/work/yoco-align-dev-20261025/vllm/vllm/model_executor/layers/yoco_ops/norm.py",
+    "norm_sha256": "3c709a0e6c8d2f61990ec31dce7a2a3799a082b505378c1a642b63bafa4ea1d7",
+    "reference_commit": "30142cfe6f136ed0bcff3dc6a526d0dc37df00ef"
+  },
+  "a6000_limit": "The two RMSClip failures reproduce on original align-update; both pass on B200. No assertion was weakened.",
+  "integration_test_setup": "Initial capture attempted to initialize DeepGEMM scratch on an unwarmed stream. Warmup and capture now use the same explicit stream; production code unchanged.",
+  "artifact_root": "/data/vllm_test/work/yoco-fast-align-merge-20261027",
+  "static_checks": {
+    "pre_commit_changed_files": "passed",
+    "mypy_python_3_12_all_files": "passed",
+    "source_whitespace": "passed, excluding preserved SVG and unified-diff patch assets"
+  },
+  "pod_identity": {
+    "uid": "9a026fd8-e732-4fcb-b855-85ea6a6358ed",
+    "node": "slc01-cl02-hgx-0347",
+    "phase": "Running",
+    "restart_count": 0,
+    "unchanged": true
+  },
+  "test_gpu_after": {
+    "index": 7,
+    "memory_used_mib": 4,
+    "utilization_percent": 0
+  }
+}
