@@ -1,0 +1,534 @@
+{
+  "completed_profiles": [
+    "baseline-a",
+    "fused-a",
+    "fused-b",
+    "baseline-b"
+  ],
+  "configuration": {
+    "model": "/mnt/pvc/shaohanh/exp/agens/30A3B/merged/balanced-b040-c035-d025-hf",
+    "dtype": "bfloat16",
+    "quantization": "fp8_per_block",
+    "tensor_parallel_size": 1,
+    "max_model_len": 139264,
+    "max_num_seqs": 64,
+    "max_num_batched_tokens": 2048,
+    "gpu_memory_utilization": 0.75,
+    "kv_cache_memory_bytes": 8589934592,
+    "kv_cache_dtype": "auto",
+    "enable_prefix_caching": false,
+    "kv_sharing_fast_prefill": true,
+    "disable_log_stats": false,
+    "worker_extension_cls": "tools.yoco_alignment.benchmark_mega_moe.MegaMoEBenchmarkWorker",
+    "speculative_config": {
+      "model": "/mnt/pvc/lidong1/opd-fast-rollout-20261016/draft-parent-30000",
+      "method": "dspark",
+      "num_speculative_tokens": 8,
+      "draft_sample_method": "probabilistic",
+      "rejection_sample_method": "standard"
+    },
+    "compilation_config": {
+      "cudagraph_mode": "FULL_DECODE_ONLY",
+      "max_cudagraph_capture_size": 576,
+      "cudagraph_capture_sizes": [
+        1,
+        2,
+        4,
+        8,
+        9,
+        16,
+        18,
+        24,
+        32,
+        36,
+        40,
+        48,
+        56,
+        64,
+        72,
+        128,
+        144,
+        192,
+        216,
+        256,
+        288,
+        320,
+        360,
+        384,
+        432,
+        448,
+        504,
+        512,
+        576
+      ]
+    },
+    "additional_config": {
+      "yoco_execution_mode": "fast",
+      "yoco_mega_moe": "fp8_group32"
+    },
+    "async_scheduling": false
+  },
+  "scope": "Single B200 Fast target+draft K8; 1024 input /128 fixed output; end-to-end wall time; no task-accuracy claim",
+  "cases": [
+    {
+      "baseline": {
+        "trials": 6,
+        "tokens": 768,
+        "elapsed_s": 2.4896854516118765,
+        "output_tokens_per_s": 308.4727026471477,
+        "mean_acceptance_length": 4.157894736842105,
+        "draft_acceptance_rate": 0.39473684210526316,
+        "speculative_counters": {
+          "num_drafts": 190,
+          "num_draft_tokens": 1520,
+          "num_accepted_tokens": 600
+        },
+        "samples_s": [
+          0.3766228649765253,
+          0.4611030202358961,
+          0.4083557967096567,
+          0.3754541352391243,
+          0.4603755287826061,
+          0.40777410566806793
+        ]
+      },
+      "fused": {
+        "trials": 6,
+        "tokens": 768,
+        "elapsed_s": 2.8191697727888823,
+        "output_tokens_per_s": 272.4206280206569,
+        "mean_acceptance_length": 3.419642857142857,
+        "draft_acceptance_rate": 0.30245535714285715,
+        "speculative_counters": {
+          "num_drafts": 224,
+          "num_draft_tokens": 1792,
+          "num_accepted_tokens": 542
+        },
+        "samples_s": [
+          0.4650159850716591,
+          0.45657989755272865,
+          0.4877583160996437,
+          0.4651838652789593,
+          0.45683255791664124,
+          0.4877991508692503
+        ]
+      },
+      "concurrency": 1,
+      "throughput_change_percent": -11.687281991927046
+    },
+    {
+      "baseline": {
+        "trials": 6,
+        "tokens": 6144,
+        "elapsed_s": 6.625774530693889,
+        "output_tokens_per_s": 927.2878169243355,
+        "mean_acceptance_length": 3.5822784810126582,
+        "draft_acceptance_rate": 0.3227848101265823,
+        "speculative_counters": {
+          "num_drafts": 1738,
+          "num_draft_tokens": 13904,
+          "num_accepted_tokens": 4488
+        },
+        "samples_s": [
+          1.1614009719341993,
+          1.1538096722215414,
+          1.002758152782917,
+          1.1574947275221348,
+          1.1500911675393581,
+          1.000219838693738
+        ]
+      },
+      "fused": {
+        "trials": 6,
+        "tokens": 6144,
+        "elapsed_s": 6.508711317554116,
+        "output_tokens_per_s": 943.9656638987071,
+        "mean_acceptance_length": 3.5394285714285716,
+        "draft_acceptance_rate": 0.31742857142857145,
+        "speculative_counters": {
+          "num_drafts": 1750,
+          "num_draft_tokens": 14000,
+          "num_accepted_tokens": 4444
+        },
+        "samples_s": [
+          1.102012699469924,
+          1.1324329636991024,
+          1.0208313781768084,
+          1.10009921528399,
+          1.1295407842844725,
+          1.0237942766398191
+        ]
+      },
+      "concurrency": 8,
+      "throughput_change_percent": 1.798562072096388
+    },
+    {
+      "baseline": {
+        "trials": 6,
+        "tokens": 12288,
+        "elapsed_s": 9.58980742841959,
+        "output_tokens_per_s": 1281.360453973691,
+        "mean_acceptance_length": 3.645256334708309,
+        "draft_acceptance_rate": 0.3306570418385386,
+        "speculative_counters": {
+          "num_drafts": 3394,
+          "num_draft_tokens": 27152,
+          "num_accepted_tokens": 8978
+        },
+        "samples_s": [
+          1.5794490948319435,
+          1.6771838143467903,
+          1.5471237804740667,
+          1.574121419340372,
+          1.672728382050991,
+          1.5392009373754263
+        ]
+      },
+      "fused": {
+        "trials": 6,
+        "tokens": 12288,
+        "elapsed_s": 9.337947955355048,
+        "output_tokens_per_s": 1315.9208060217536,
+        "mean_acceptance_length": 3.535958904109589,
+        "draft_acceptance_rate": 0.3169948630136986,
+        "speculative_counters": {
+          "num_drafts": 3504,
+          "num_draft_tokens": 28032,
+          "num_accepted_tokens": 8886
+        },
+        "samples_s": [
+          1.6323798280209303,
+          1.5878083128482103,
+          1.4627255722880363,
+          1.6227671969681978,
+          1.5881664603948593,
+          1.444100584834814
+        ]
+      },
+      "concurrency": 16,
+      "throughput_change_percent": 2.697160813796451
+    },
+    {
+      "baseline": {
+        "trials": 6,
+        "tokens": 18432,
+        "elapsed_s": 12.621800139546394,
+        "output_tokens_per_s": 1460.330523080396,
+        "mean_acceptance_length": 3.587258687258687,
+        "draft_acceptance_rate": 0.3234073359073359,
+        "speculative_counters": {
+          "num_drafts": 5180,
+          "num_draft_tokens": 41440,
+          "num_accepted_tokens": 13402
+        },
+        "samples_s": [
+          2.1896049194037914,
+          2.1894311010837555,
+          1.9621105082333088,
+          2.1671080216765404,
+          2.166361577808857,
+          1.9471840113401413
+        ]
+      },
+      "fused": {
+        "trials": 6,
+        "tokens": 18432,
+        "elapsed_s": 12.379932368174195,
+        "output_tokens_per_s": 1488.8611223260154,
+        "mean_acceptance_length": 3.590468810538551,
+        "draft_acceptance_rate": 0.32380860131731887,
+        "speculative_counters": {
+          "num_drafts": 5162,
+          "num_draft_tokens": 41296,
+          "num_accepted_tokens": 13372
+        },
+        "samples_s": [
+          2.071442050859332,
+          2.121328290551901,
+          2.0022393707185984,
+          2.06033088080585,
+          2.1198534853756428,
+          2.004738289862871
+        ]
+      },
+      "concurrency": 24,
+      "throughput_change_percent": 1.9537083416867551
+    },
+    {
+      "baseline": {
+        "trials": 6,
+        "tokens": 24576,
+        "elapsed_s": 16.01320843026042,
+        "output_tokens_per_s": 1534.7330366073506,
+        "mean_acceptance_length": 3.6627288836385117,
+        "draft_acceptance_rate": 0.33284111045481396,
+        "speculative_counters": {
+          "num_drafts": 6772,
+          "num_draft_tokens": 54176,
+          "num_accepted_tokens": 18032
+        },
+        "samples_s": [
+          2.72108568623662,
+          2.737888917326927,
+          2.5738589968532324,
+          2.71224807202816,
+          2.719716604799032,
+          2.548410153016448
+        ]
+      },
+      "fused": {
+        "trials": 6,
+        "tokens": 24576,
+        "elapsed_s": 15.683371203020215,
+        "output_tokens_per_s": 1567.0100313169462,
+        "mean_acceptance_length": 3.5739507959479018,
+        "draft_acceptance_rate": 0.3217438494934877,
+        "speculative_counters": {
+          "num_drafts": 6910,
+          "num_draft_tokens": 55280,
+          "num_accepted_tokens": 17786
+        },
+        "samples_s": [
+          2.6134728733450174,
+          2.7164120953530073,
+          2.521581841632724,
+          2.6033010687679052,
+          2.71252035908401,
+          2.516082964837551
+        ]
+      },
+      "concurrency": 32,
+      "throughput_change_percent": 2.103101577910027
+    },
+    {
+      "baseline": {
+        "trials": 6,
+        "tokens": 30720,
+        "elapsed_s": 18.875030620023608,
+        "output_tokens_per_s": 1627.5470285812748,
+        "mean_acceptance_length": 3.666035054476551,
+        "draft_acceptance_rate": 0.3332543818095689,
+        "speculative_counters": {
+          "num_drafts": 8444,
+          "num_draft_tokens": 67552,
+          "num_accepted_tokens": 22512
+        },
+        "samples_s": [
+          3.235332991927862,
+          3.171045323833823,
+          3.0855167247354984,
+          3.1914571039378643,
+          3.1170352902263403,
+          3.07464318536222
+        ]
+      },
+      "fused": {
+        "trials": 6,
+        "tokens": 30720,
+        "elapsed_s": 18.668039781972766,
+        "output_tokens_per_s": 1645.5932362896235,
+        "mean_acceptance_length": 3.563925362819627,
+        "draft_acceptance_rate": 0.3204906703524534,
+        "speculative_counters": {
+          "num_drafts": 8682,
+          "num_draft_tokens": 69456,
+          "num_accepted_tokens": 22260
+        },
+        "samples_s": [
+          3.2825491186231375,
+          3.0915220230817795,
+          2.9698452223092318,
+          3.2667829860001802,
+          3.0922584254294634,
+          2.9650820065289736
+        ]
+      },
+      "concurrency": 40,
+      "throughput_change_percent": 1.108797926661409
+    },
+    {
+      "baseline": {
+        "trials": 6,
+        "tokens": 36864,
+        "elapsed_s": 22.65578519552946,
+        "output_tokens_per_s": 1627.134071136681,
+        "mean_acceptance_length": 3.632916340891321,
+        "draft_acceptance_rate": 0.32911454261141515,
+        "speculative_counters": {
+          "num_drafts": 10232,
+          "num_draft_tokens": 81856,
+          "num_accepted_tokens": 26940
+        },
+        "samples_s": [
+          3.837265722453594,
+          3.8796158395707607,
+          3.681054351851344,
+          3.7935531865805387,
+          3.8338019978255033,
+          3.6304940972477198
+        ]
+      },
+      "fused": {
+        "trials": 6,
+        "tokens": 36864,
+        "elapsed_s": 22.05247618444264,
+        "output_tokens_per_s": 1671.6490108265687,
+        "mean_acceptance_length": 3.5788661781720017,
+        "draft_acceptance_rate": 0.3223582722715002,
+        "speculative_counters": {
+          "num_drafts": 10372,
+          "num_draft_tokens": 82976,
+          "num_accepted_tokens": 26748
+        },
+        "samples_s": [
+          3.761156763881445,
+          3.8270878195762634,
+          3.458651876077056,
+          3.7616597544401884,
+          3.8034254424273968,
+          3.44049452804029
+        ]
+      },
+      "concurrency": 48,
+      "throughput_change_percent": 2.7357880631674325
+    },
+    {
+      "baseline": {
+        "trials": 6,
+        "tokens": 43008,
+        "elapsed_s": 26.72141743078828,
+        "output_tokens_per_s": 1609.4954585173466,
+        "mean_acceptance_length": 3.623098779876316,
+        "draft_acceptance_rate": 0.3278873474845395,
+        "speculative_counters": {
+          "num_drafts": 11966,
+          "num_draft_tokens": 95728,
+          "num_accepted_tokens": 31388
+        },
+        "samples_s": [
+          4.4952467530965805,
+          4.609861025586724,
+          4.3319499511271715,
+          4.420361516997218,
+          4.565708762034774,
+          4.29828942194581
+        ]
+      },
+      "fused": {
+        "trials": 6,
+        "tokens": 43008,
+        "elapsed_s": 25.989252334460616,
+        "output_tokens_per_s": 1654.8379093989274,
+        "mean_acceptance_length": 3.575222698779281,
+        "draft_acceptance_rate": 0.3219028373474101,
+        "speculative_counters": {
+          "num_drafts": 12124,
+          "num_draft_tokens": 96992,
+          "num_accepted_tokens": 31222
+        },
+        "samples_s": [
+          4.437417194247246,
+          4.34908183477819,
+          4.2245451882481575,
+          4.423426758497953,
+          4.331671513617039,
+          4.223109845072031
+        ]
+      },
+      "concurrency": 56,
+      "throughput_change_percent": 2.8171841456048563
+    },
+    {
+      "baseline": {
+        "trials": 6,
+        "tokens": 49152,
+        "elapsed_s": 29.944491548463702,
+        "output_tokens_per_s": 1641.4371210962083,
+        "mean_acceptance_length": 3.6444933920704847,
+        "draft_acceptance_rate": 0.3305616740088106,
+        "speculative_counters": {
+          "num_drafts": 13620,
+          "num_draft_tokens": 108960,
+          "num_accepted_tokens": 36018
+        },
+        "samples_s": [
+          5.0840028412640095,
+          5.194454921409488,
+          4.8119692876935005,
+          4.9961556531488895,
+          5.107881527394056,
+          4.750027317553759
+        ]
+      },
+      "fused": {
+        "trials": 6,
+        "tokens": 49152,
+        "elapsed_s": 29.517197396606207,
+        "output_tokens_per_s": 1665.198742942016,
+        "mean_acceptance_length": 3.594739901191514,
+        "draft_acceptance_rate": 0.32434248764893925,
+        "speculative_counters": {
+          "num_drafts": 13764,
+          "num_draft_tokens": 110112,
+          "num_accepted_tokens": 35714
+        },
+        "samples_s": [
+          5.076809568330646,
+          5.012850468978286,
+          4.721338523551822,
+          5.04613471776247,
+          4.994760816916823,
+          4.66530330106616
+        ]
+      },
+      "concurrency": 64,
+      "throughput_change_percent": 1.4476108490795392
+    }
+  ],
+  "same_arm_repeatability": {
+    "baseline": {
+      "paired_batches": 27,
+      "identical_output_batches": 27,
+      "request_pairs": 867,
+      "identical_output_requests": 867
+    },
+    "fused": {
+      "paired_batches": 27,
+      "identical_output_batches": 27,
+      "request_pairs": 867,
+      "identical_output_requests": 867
+    }
+  },
+  "teacher_forced": {
+    "baseline-a": {
+      "teacher_tokens": 128,
+      "mean_nll": 1.7254659404740949
+    },
+    "fused-a": {
+      "teacher_tokens": 128,
+      "mean_nll": 1.7648710765845976
+    },
+    "fused-b": {
+      "teacher_tokens": 128,
+      "mean_nll": 1.7648710765845976
+    },
+    "baseline-b": {
+      "teacher_tokens": 128,
+      "mean_nll": 1.7254659404740949
+    }
+  },
+  "pooled_c16_to_c64": {
+    "baseline": 1576.2906557861165,
+    "fused": 1609.2409557442425,
+    "throughput_change_percent": 2.0903695544457257
+  },
+  "implementation": {
+    "source_base": "7c3f32c985b5b98f83ee45ce9311d291a90b0348",
+    "deep_gemm_base": "1fc9c66975ee322d628b3288534ca0e9ce12a64d",
+    "api_version": 2,
+    "default_enabled_for_compatible_fast": true,
+    "min_rows": 128,
+    "topk": "Unchanged DeepSeek DeepGEMM select_warp_topk / four-element sorting network",
+    "quality_limit": "128-token teacher-forced probe only; MATH-500 not run; no accuracy-equivalence claim"
+  }
+}

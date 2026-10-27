@@ -632,6 +632,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # Default Fast router operands/logits. Separate from residual/Norm precision.
     "VLLM_YOCO_BF16_ROUTER": lambda: bool(int(os.getenv("VLLM_YOCO_BF16_ROUTER", "1"))),
+    # Fast SM100 GEMM + Top-8 fusion when the YOCO DeepGEMM API is available.
+    "VLLM_YOCO_MEGA_GATE": lambda: bool(int(os.getenv("VLLM_YOCO_MEGA_GATE", "1"))),
+    "VLLM_YOCO_MEGA_GATE_MIN_TOKENS": lambda: int(
+        os.getenv("VLLM_YOCO_MEGA_GATE_MIN_TOKENS", "128")
+    ),
     # Fast BF16 residual boundaries and router operands/logits. Kernel-local
     # reductions, FP8 scales and Top-K probabilities retain FP32 arithmetic.
     "VLLM_YOCO_BF16_CHAIN": lambda: bool(int(os.getenv("VLLM_YOCO_BF16_CHAIN", "0"))),

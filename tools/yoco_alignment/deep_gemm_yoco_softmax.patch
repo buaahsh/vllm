@@ -1,0 +1,262 @@
+diff --git a/csrc/apis/mega_gate.hpp b/csrc/apis/mega_gate.hpp
+--- a/csrc/apis/mega_gate.hpp
++++ b/csrc/apis/mega_gate.hpp
+@@ -36,7 +36,7 @@
+  *     num_shared_experts             int
+  *     routed_scaling_factor          float
+  *     ep_rank                        int
+- *     scoring_func                   "sqrtsoftplus"
++ *     scoring_func                   "sqrtsoftplus" or "yoco_softmax" (H3072/E128/K8, INT32 ids)
+  *     mask                           [T] bool | None
+  *     bias                           [E] FP32 | None
+  *     image_bias                     [E] FP32 | None
+@@ -96,7 +96,16 @@
+     DG_HOST_ASSERT(num_topk > 0 and num_topk <= num_routed_experts);
+     DG_HOST_ASSERT(ep_rank >= 0);
+     DG_HOST_ASSERT(std::isfinite(routed_scaling_factor));
+-    DG_HOST_ASSERT(scoring_func == "sqrtsoftplus");
++    const bool yoco_softmax = scoring_func == "yoco_softmax";
++    DG_HOST_ASSERT(scoring_func == "sqrtsoftplus" or yoco_softmax);
++    if (yoco_softmax) {
++        DG_HOST_ASSERT(hidden == 3072 and num_routed_experts == 128 and num_topk == 8);
++        DG_HOST_ASSERT(not use_shared_as_routed and num_shared_experts == 0);
++        DG_HOST_ASSERT(routed_scaling_factor == 1.0f and ep_rank == 0);
++        DG_HOST_ASSERT(not mask and not bias and not image_bias and not image_token_mask);
++        DG_HOST_ASSERT(not fix_routing_mask and not force_random);
++        DG_HOST_ASSERT(not to_physical_map and not logical_count and not unmapped_topk_idx);
++    }
+ 
+     int effective_num_shared_experts = 0;
+     if (use_shared_as_routed) {
+@@ -141,13 +150,15 @@
+     if (force_random.has_value())
+         check_dense(force_random.value(), {num_tokens}, torch::kBool);
+ 
++    // YOCO consumes INT32 ids directly; the original API keeps INT64.
++    const auto index_dtype = yoco_softmax ? torch::kInt : torch::kInt64;
+     torch::Tensor topk_idx, topk_weights;
+     if (out.has_value()) {
+         std::tie(topk_idx, topk_weights) = out.value();
+-        check_dense(topk_idx, {num_tokens, num_physical_topk}, torch::kInt64);
++        check_dense(topk_idx, {num_tokens, num_physical_topk}, index_dtype);
+         check_dense(topk_weights, {num_tokens, num_physical_topk}, torch::kFloat);
+     } else {
+-        topk_idx = torch::empty({num_tokens, num_physical_topk}, x.options().dtype(torch::kInt64));
++        topk_idx = torch::empty({num_tokens, num_physical_topk}, x.options().dtype(index_dtype));
+         topk_weights = torch::empty({num_tokens, num_physical_topk}, x.options().dtype(torch::kFloat));
+     }
+ 
+@@ -160,9 +171,10 @@
+     const mega_gate_layout::RoutingArgs routing_args = {
+         .to_physical_map = to_physical_map ? to_physical_map->data_ptr<int>() : nullptr,
+         .logical_count = logical_count ? logical_count->data_ptr<int>() : nullptr,
+-        .topk_idx = topk_idx.data_ptr<int64_t>(),
++        .topk_idx = yoco_softmax ? nullptr : topk_idx.data_ptr<int64_t>(),
+         .unmapped_topk_idx = unmapped_topk_idx ? unmapped_topk_idx->data_ptr<int64_t>() : nullptr,
+         .topk_weights = topk_weights.data_ptr<float>(),
++        .yoco_topk_idx = yoco_softmax ? topk_idx.data_ptr<int>() : nullptr,
+         .unmapped_topk_idx_stride = unmapped_topk_idx ? unmapped_topk_idx->stride(0) : 0,
+         .num_routed_experts = static_cast<uint32_t>(num_routed_experts),
+         .num_shared_experts = static_cast<uint32_t>(effective_num_shared_experts),
+@@ -171,11 +183,12 @@
+         .routed_scaling_factor = routed_scaling_factor,
+     };
+     sm100_bf16_mega_gate(x, weight, bias, image_bias, image_token_mask, mask, fix_routing_mask, force_random,
+-                         routing_args, get_score_barriers(x.options()), num_tokens, hidden, num_routed_experts, num_topk);
++                         routing_args, get_score_barriers(x.options()), num_tokens, hidden, num_routed_experts, num_topk, yoco_softmax);
+     return {topk_idx, topk_weights};
+ }
+ 
+ static void register_apis(pybind11::module_& m) {
++    m.attr("yoco_mega_gate_version") = 2;
+     m.def("bf16_mega_gate", &bf16_mega_gate,
+           py::arg("x"), py::arg("weight"), py::arg("num_topk"),
+           py::arg("use_shared_as_routed"), py::arg("num_shared_experts"),
+diff --git a/deep_gemm/include/deep_gemm/layout/mega_gate.cuh b/deep_gemm/include/deep_gemm/layout/mega_gate.cuh
+--- a/deep_gemm/include/deep_gemm/layout/mega_gate.cuh
++++ b/deep_gemm/include/deep_gemm/layout/mega_gate.cuh
+@@ -34,6 +34,7 @@
+     int64_t* topk_idx;
+     int64_t* unmapped_topk_idx;
+     float* topk_weights;
++    int* yoco_topk_idx;
+     int64_t unmapped_topk_idx_stride;
+     uint32_t num_routed_experts;
+     uint32_t num_shared_experts;
+diff --git a/csrc/jit_kernels/impls/sm100_bf16_mega_gate.hpp b/csrc/jit_kernels/impls/sm100_bf16_mega_gate.hpp
+--- a/csrc/jit_kernels/impls/sm100_bf16_mega_gate.hpp
++++ b/csrc/jit_kernels/impls/sm100_bf16_mega_gate.hpp
+@@ -22,7 +22,7 @@
+                                  const mega_gate_layout::RoutingArgs& routing_args,
+                                  const torch::Tensor& score_barriers,
+                                  const int& num_tokens, const int& hidden,
+-                                 const int& num_routed_experts, const int& num_topk) {
++                                 const int& num_routed_experts, const int& num_topk, const bool yoco_softmax = false) {
+     const auto num_aligned_experts = align(num_routed_experts, static_cast<int>(mega_gate_layout::kExpertAlignment));
+ 
+     const auto config = get_mega_gate_config(num_tokens, hidden, num_routed_experts, runtime->get_num_sms());
+@@ -41,7 +41,7 @@
+                                                    static_cast<int>(weight.stride(0)), 1, mega_gate_layout::kSwizzleMode);
+ 
+     // Compile
+-    const auto kernel = jit->compile("sm100_bf16_mega_gate", std::format(R"(
++    const auto kernel = jit->compile(yoco_softmax ? "sm100_bf16_yoco_mega_gate_v2" : "sm100_bf16_mega_gate", std::format(R"(
+ #include <deep_gemm/impls/sm100_bf16_mega_gate.cuh>
+ 
+ using namespace deep_gemm;
+@@ -52,7 +52,7 @@
+         {},
+         {}, {}, {},
+         {},
+-        {}, {}, {}, {}, {}, {}, {}, {}
++        {}, {}, {}, {}, {}, {}, {}, {}, {}
+     >);
+ }};
+ )",
+@@ -62,7 +62,7 @@
+         num_topk,
+         num_routed_experts != num_aligned_experts, bias.has_value(), image_token_mask.has_value(),
+         mask.has_value(), fix_routing_mask.has_value(), force_random.has_value(),
+-        routing_args.to_physical_map != nullptr, routing_args.unmapped_topk_idx != nullptr));
++        routing_args.to_physical_map != nullptr, routing_args.unmapped_topk_idx != nullptr, yoco_softmax));
+ 
+     // Launch
+     // The token count only reaches the kernel variants through the gate warpgroup count
+diff --git a/deep_gemm/include/deep_gemm/impls/sm100_bf16_mega_gate.cuh b/deep_gemm/include/deep_gemm/impls/sm100_bf16_mega_gate.cuh
+--- a/deep_gemm/include/deep_gemm/impls/sm100_bf16_mega_gate.cuh
++++ b/deep_gemm/include/deep_gemm/impls/sm100_bf16_mega_gate.cuh
+@@ -28,7 +28,7 @@
+           uint32_t kNumTopk,
+           bool kHasPaddedExperts, bool kHasBias, bool kHasImageTokenMask,
+           bool kHasMask, bool kHasFixRoutingMask, bool kHasForceRandom,
+-          bool kHasPhysicalMap, bool kHasUnmappedTopkIdx>
++          bool kHasPhysicalMap, bool kHasUnmappedTopkIdx, bool kYocoSoftmax = false>
+ CUTLASS_GLOBAL void __launch_bounds__(mega_gate_layout::kNumNonEpilogueThreads + kNumGateThreads, 1)
+ sm100_bf16_mega_gate_impl(const __grid_constant__ cute::TmaDescriptor tensor_map_x,
+                           const __grid_constant__ cute::TmaDescriptor tensor_map_weight,
+@@ -39,6 +39,11 @@
+                           uint32_t num_tokens, uint32_t block_tokens, uint32_t num_stages,
+                           uint32_t num_worker_groups, uint32_t num_token_blocks) {
+ #if (defined(__CUDA_ARCH__) and (__CUDA_ARCH__ >= 1000)) or defined(__CLION_IDE__)
++    DG_STATIC_ASSERT(not kYocoSoftmax or
++                     (SHAPE_K == 3072 and kNumRoutedExperts == 128 and kNumTopk == 8 and
++                      not kHasBias and not kHasImageTokenMask and not kHasMask and
++                      not kHasFixRoutingMask and not kHasForceRandom and
++                      not kHasPhysicalMap and not kHasUnmappedTopkIdx), "Invalid YOCO gate variant");
+     using Allocator = cute::conditional_t<kNumMmaCtas == 1, cute::TMEM::Allocator1Sm, cute::TMEM::Allocator2Sm>;
+ 
+     constexpr uint32_t kNumNonEpilogueWarps = mega_gate_layout::kNumNonEpilogueThreads / 32;
+@@ -291,6 +296,10 @@
+                                         effective_umma_n, expert_group_base_idx,
+                                         mma_cta_rank, gate_warp_idx
+                                     );
++            // CUDA Graph padding may contain non-finite activations. YOCO validates
++            // complete token rows below, rather than trapping on a scratch tile.
++            if constexpr (kYocoSoftmax)
++                gate_is_valid = true;
+             cutlass::arch::NamedBarrier::sync(kNumGateThreads, 0);
+             if (gate_warp_idx == kNumGateWarps - 1 and cute::elect_one_sync()) {
+                 ptx::tcgen05_before_thread_sync();
+@@ -312,6 +321,14 @@
+                     #pragma unroll
+                     for (uint32_t value_idx = 0; value_idx < kNumValues; ++ value_idx)
+                         reinterpret_cast<float*>(&scores)[value_idx] += reinterpret_cast<const float*>(&partial_scores)[value_idx];
++                }
++                // Match the materialized BF16-logit boundary only after all K slices are summed.
++                if constexpr (kYocoSoftmax) {
++                    #pragma unroll
++                    for (uint32_t value_idx = 0; value_idx < kNumValues; ++ value_idx) {
++                        auto& value = reinterpret_cast<float*>(&scores)[value_idx];
++                        value = static_cast<float>(static_cast<cutlass::bfloat16_t>(value));
++                    }
+                 }
+             };
+             const auto load_reduced_score = [&](const uint32_t& global_token_idx, const uint32_t& global_expert_idx) {
+@@ -368,6 +385,17 @@
+                     const auto local_expert_base_idx = expert_wave_idx * kNumExpertsPerLaneVector;
+                     auto& score_values = *reinterpret_cast<float4*>(scores_local + local_expert_base_idx);
+                     load_scores(global_token_idx, global_expert_base_idx, score_values);
++                }
++                if constexpr (kYocoSoftmax) {
++                    auto row_is_finite = true;
++                    #pragma unroll
++                    for (uint32_t value_idx = 0; value_idx < kNumExpertWaves * kNumExpertsPerLaneVector; ++ value_idx)
++                        row_is_finite = row_is_finite and isfinite(scores_local[value_idx]);
++                    if (not __all_sync(0xffffffff, row_is_finite)) {
++                        epilogue::mega_gate::store_token_outputs<kNumTopk, false, true>(
++                            routing_args, global_token_idx, lane_idx, -1, 0.0f, -1);
++                        continue;
++                    }
+                 }
+                 #pragma unroll
+                 for (uint32_t expert_wave_idx = 0; expert_wave_idx < kNumExpertWaves; ++ expert_wave_idx) {
+@@ -418,13 +446,18 @@
+                         unbiased_scores_local, selected_expert_idx);
+                 }
+                 // Without a bias the ranking is on raw scores (sqrt-softplus is monotonic), only the selected ones get activated
+-                if constexpr (not kHasScoringBias) {
++                if constexpr (not kHasScoringBias and not kYocoSoftmax) {
+                     if (lane_idx < kNumTopk)
+                         selected_unbiased_score = epilogue::mega_gate::sqrt_softplus(selected_unbiased_score);
+                 }
+ 
+-                epilogue::mega_gate::store_topk_token<kNumTopk, kHasUnmappedTopkIdx, kHasPhysicalMap>(
+-                    routing_args, routed_logical_count, global_token_idx, lane_idx, selected_expert_idx, selected_unbiased_score);
++                if constexpr (kYocoSoftmax) {
++                    epilogue::mega_gate::store_yoco_softmax_topk_token<kNumTopk>(
++                        routing_args, global_token_idx, lane_idx, selected_expert_idx, selected_unbiased_score);
++                } else {
++                    epilogue::mega_gate::store_topk_token<kNumTopk, kHasUnmappedTopkIdx, kHasPhysicalMap>(
++                        routing_args, routed_logical_count, global_token_idx, lane_idx, selected_expert_idx, selected_unbiased_score);
++                }
+             }
+ 
+             DG_TRAP_ONLY_DEVICE_ASSERT(gate_is_valid);
+diff --git a/deep_gemm/include/deep_gemm/epilogue/sm100_mega_gate.cuh b/deep_gemm/include/deep_gemm/epilogue/sm100_mega_gate.cuh
+--- a/deep_gemm/include/deep_gemm/epilogue/sm100_mega_gate.cuh
++++ b/deep_gemm/include/deep_gemm/epilogue/sm100_mega_gate.cuh
+@@ -169,13 +169,16 @@
+     return selected_value;
+ }
+ 
+-template <uint32_t kNumTopk, bool kHasUnmappedTopkIdx>
++template <uint32_t kNumTopk, bool kHasUnmappedTopkIdx, bool kYocoSoftmax = false>
+ CUTLASS_DEVICE void store_token_outputs(const RoutingArgs& args, const uint32_t& global_token_idx, const uint32_t& lane_idx,
+                                         const int64_t& physical_expert_idx, const float& weight, const int64_t& logical_expert_idx) {
+     const auto num_physical_topk = kNumTopk + args.num_shared_experts;
+     if (lane_idx < num_physical_topk) {
+         const auto output_idx = global_token_idx * num_physical_topk + lane_idx;
+-        args.topk_idx[output_idx] = physical_expert_idx;
++        if constexpr (kYocoSoftmax)
++            args.yoco_topk_idx[output_idx] = static_cast<int>(physical_expert_idx);
++        else
++            args.topk_idx[output_idx] = physical_expert_idx;
+         args.topk_weights[output_idx] = weight;
+     }
+     if constexpr (kHasUnmappedTopkIdx) {
+@@ -213,6 +216,25 @@
+     const auto selected_weight = lane_idx < kNumTopk ? selected_unbiased_score / topk_sum * args.routed_scaling_factor : 1.0f;
+     store_token_outputs<kNumTopk, kHasUnmappedTopkIdx>(args, global_token_idx, lane_idx,
+                                                        physical_expert_idx, selected_weight, selected_expert_idx);
++}
++
++// The warp's first eight lanes hold the selected BF16-rounded logits in rank order.
++template <uint32_t kNumTopk>
++CUTLASS_DEVICE void store_yoco_softmax_topk_token(const RoutingArgs& args,
++                                                 const uint32_t global_token_idx,
++                                                 const uint32_t lane_idx,
++                                                 const int selected_expert_idx,
++                                                 const float selected_logit) {
++    DG_STATIC_ASSERT(kNumTopk == 8, "YOCO selects eight experts");
++    const auto value = lane_idx < kNumTopk ? selected_logit : -cute::numeric_limits<float>::infinity();
++    const auto selected_max = ptx::reduce_max_sync(value);
++    const auto numerator = lane_idx < kNumTopk ? expf(value - selected_max) : 0.0f;
++    const auto denominator = math::warp_reduce_sum<8>(numerator);
++    if (lane_idx < kNumTopk) {
++        const auto output_idx = static_cast<uint64_t>(global_token_idx) * kNumTopk + lane_idx;
++        args.yoco_topk_idx[output_idx] = selected_expert_idx;
++        args.topk_weights[output_idx] = numerator / denominator;
++    }
+ }
+ 
+ template <uint32_t kNumTopk, bool kHasUnmappedTopkIdx, bool kHasPhysicalMap>

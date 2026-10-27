@@ -8,6 +8,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
+from vllm.config.compilation import CompilationConfig
 from vllm.model_executor.layers.fused_moe.experts.yoco_triton import (
     yoco_weighted_swiglu,
 )
@@ -53,10 +54,14 @@ def test_yoco_latent_projections_follow_fast_quantization(
     monkeypatch.setattr(yoco_module, "YOCOSharedExperts", FakeLinear)
     monkeypatch.setattr(yoco_module, "FusedMoEFactory", FakeFusedMoE)
     monkeypatch.setattr(yoco_module, "get_tensor_model_parallel_world_size", lambda: 1)
+    compilation = CompilationConfig()
     monkeypatch.setattr(
         yoco_module,
         "get_current_vllm_config",
-        lambda: SimpleNamespace(kernel_config=SimpleNamespace(moe_backend="triton")),
+        lambda: SimpleNamespace(
+            kernel_config=SimpleNamespace(moe_backend="triton"),
+            compilation_config=compilation,
+        ),
     )
     monkeypatch.setattr(
         yoco_module,
@@ -142,6 +147,11 @@ def test_yoco_latent_projections_follow_fast_quantization(
     assert fast_bf16_module.experts.yoco_policy.triton_fallback_max_tokens == 1
     assert not fast_bf16_module.experts.yoco_policy.align_moe_sum
     assert fast_bf16_module.experts.yoco_policy.fast_moe_sum
+    assert compilation.yoco_router_backends == {
+        "model.layers.0.mlp": "bf16" if bf16_router else "tf32",
+        "model.layers.1.mlp": "align_fp32",
+        "model.layers.2.mlp": "bf16" if bf16_router else "tf32",
+    }
 
 
 def test_yoco_align_shared_expert_restores_separate_gemms(monkeypatch) -> None:

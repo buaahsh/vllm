@@ -6,7 +6,7 @@ import pytest
 import torch
 
 import vllm.platforms
-from vllm.config.compilation import CUDAGraphMode
+from vllm.config.compilation import CompilationConfig, CUDAGraphMode
 from vllm.model_executor.models.config import YOCOForCausalLMConfig
 from vllm.v1.attention.backends.registry import AttentionBackendEnum
 
@@ -70,6 +70,29 @@ def test_bf16_router_has_an_independent_default_and_compile_cache(monkeypatch):
     monkeypatch.setenv("VLLM_YOCO_BF16_ROUTER", "0")
     assert RMSNorm(3072).residual_dtype == torch.float32
     assert envs.compile_factors()["VLLM_YOCO_BF16_ROUTER"] != enabled
+
+
+def test_fast_mega_gate_default_and_threshold_are_part_of_compile_cache(monkeypatch):
+    import vllm.envs as envs
+
+    monkeypatch.delenv("VLLM_YOCO_MEGA_GATE", raising=False)
+    monkeypatch.delenv("VLLM_YOCO_MEGA_GATE_MIN_TOKENS", raising=False)
+    assert envs.VLLM_YOCO_MEGA_GATE
+    assert envs.VLLM_YOCO_MEGA_GATE_MIN_TOKENS == 128
+    baseline = envs.compile_factors()
+    monkeypatch.setenv("VLLM_YOCO_MEGA_GATE", "0")
+    monkeypatch.setenv("VLLM_YOCO_MEGA_GATE_MIN_TOKENS", "256")
+    candidate = envs.compile_factors()
+    for key in ("VLLM_YOCO_MEGA_GATE", "VLLM_YOCO_MEGA_GATE_MIN_TOKENS"):
+        assert baseline[key] != candidate[key]
+
+
+def test_resolved_router_backend_changes_compilation_cache_key():
+    config = CompilationConfig()
+    config.yoco_router_backends["model.layers.0.mlp"] = "bf16"
+    legacy = config.compute_hash()
+    config.yoco_router_backends["model.layers.0.mlp"] = "deep_gemm_yoco_softmax_v2"
+    assert config.compute_hash() != legacy
 
 
 @pytest.mark.parametrize(

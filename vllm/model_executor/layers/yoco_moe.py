@@ -27,8 +27,12 @@ from vllm.config.yoco import (
     get_yoco_mega_moe_mode,
 )
 from vllm.distributed import get_tensor_model_parallel_world_size
+from vllm.logger import init_logger
 from vllm.model_executor.layers.activation import SiluAndMul, SiluAndMulWithClampFP32
 from vllm.model_executor.layers.fused_moe import FusedMoEFactory
+from vllm.model_executor.layers.fused_moe.router.custom_routing_router import (
+    CustomRoutingRouter,
+)
 from vllm.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 from vllm.model_executor.layers.linear import (
     ColumnParallelLinear,
@@ -66,6 +70,8 @@ from vllm.model_executor.models.yoco_config import (
 from vllm.model_executor.models.yoco_diagnostics import create_yoco_route_dumper
 from vllm.platforms import current_platform
 from vllm.triton_utils import HAS_TRITON
+
+logger = init_logger(__name__)
 
 
 @torch.compile
@@ -434,6 +440,10 @@ class YOCOMoE(nn.Module):
         # every decoder-block execution. Keep it non-persistent so checkpoint
         # names and serialization remain unchanged.
         self._route_dumper = create_yoco_route_dumper()
+        self.mega_gate_min_tokens = envs.VLLM_YOCO_MEGA_GATE_MIN_TOKENS
+        self.mega_gate = self._use_mega_gate()
+        if self.mega_gate and self.mega_gate_min_tokens < 1:
+            raise ValueError("VLLM_YOCO_MEGA_GATE_MIN_TOKENS must be positive")
         self.register_buffer("_normalized_gate_weight", None, persistent=False)
         self.register_buffer("_bf16_gate_weight", None, persistent=False)
 
@@ -581,6 +591,8 @@ class YOCOMoE(nn.Module):
             if execution_mode == "align"
             else _yoco_topk_routing
         )
+        if self.mega_gate:
+            routing_function = self._mega_gate_routing
         if (
             execution_mode == "fast"
             and quant_config is not None
@@ -619,6 +631,23 @@ class YOCOMoE(nn.Module):
             moe_backend_override=moe_backend_override,
             prefix=f"{prefix}.experts",
         )
+        if self.mega_gate and self.experts.routed_experts.quant_method.is_monolithic:
+            self.mega_gate = False
+            router = self.experts.router
+            assert isinstance(router, CustomRoutingRouter)
+            router.custom_routing_function = _yoco_topk_routing
+        compilation = getattr(get_current_vllm_config(), "compilation_config", None)
+        if compilation is not None and hasattr(compilation, "yoco_router_backends"):
+            backend = (
+                "deep_gemm_yoco_softmax_v2"
+                if self.mega_gate
+                else (
+                    "align_fp32"
+                    if execution_mode == "align"
+                    else ("bf16" if self.bf16_router else "tf32")
+                )
+            )
+            compilation.yoco_router_backends[prefix] = backend
         if mega_moe:
             from vllm.model_executor.layers.quantization.online.fp8 import (
                 Fp8PerBlockOnlineMoEMethod,
@@ -628,6 +657,59 @@ class YOCOMoE(nn.Module):
                 self.experts.routed_experts.quant_method, Fp8PerBlockOnlineMoEMethod
             ):
                 raise ValueError("YOCO MegaMoE requires online block128 FP8 experts")
+
+    def _use_mega_gate(self) -> bool:
+        if (
+            self.execution_mode != "fast"
+            or not envs.VLLM_YOCO_MEGA_GATE
+            or envs.VLLM_BATCH_INVARIANT
+            or not self.bf16_router
+            or (self.hidden_size, self.num_experts, self.top_k) != (3072, 128, 8)
+            or self._route_dumper is not None
+            or not current_platform.is_device_capability_family(100)
+        ):
+            return False
+        config = get_current_vllm_config()
+        parallel = getattr(config, "parallel_config", None)
+        if (
+            parallel is None
+            or parallel.tensor_parallel_size != 1
+            or parallel.pipeline_parallel_size != 1
+            or parallel.prefill_context_parallel_size != 1
+            or parallel.decode_context_parallel_size != 1
+            or parallel.data_parallel_size != 1
+            or parallel.enable_expert_parallel
+            or parallel.enable_dbo
+        ):
+            return False
+        scheduler = getattr(config, "scheduler_config", None)
+        if scheduler is None:
+            return False
+        width = 1 + (
+            getattr(
+                getattr(config, "speculative_config", None), "num_speculative_tokens", 0
+            )
+            or 0
+        )
+        max_tokens = scheduler.max_num_seqs * width
+        kv_transfer = getattr(config, "kv_transfer_config", None)
+        if (
+            kv_transfer is not None
+            and kv_transfer.is_kv_producer
+            and kv_transfer.kv_role == "kv_producer"
+        ):
+            # Pure Prefill batches are bounded by tokens, not Decode sequences.
+            max_tokens = scheduler.max_num_batched_tokens
+        if max_tokens < self.mega_gate_min_tokens:
+            return False
+        from vllm.utils.deep_gemm import get_deep_gemm_yoco_mega_gate
+
+        try:
+            get_deep_gemm_yoco_mega_gate()
+        except RuntimeError:
+            logger.info_once("YOCO Fast Mega Gate unavailable; using the BF16 router.")
+            return False
+        return True
 
     def initialize_router_weight_cache(self) -> None:
         if self.execution_mode == "align" or self.router_weights_normalized:
@@ -649,6 +731,26 @@ class YOCOMoE(nn.Module):
         else:
             self._bf16_gate_weight = None
 
+    def _mega_gate_routing(
+        self,
+        hidden_states: torch.Tensor,
+        gating_output: torch.Tensor,
+        topk: int,
+        renormalize: bool,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # The runner applies the latent projection before calling this hook.
+        # Carry the original H3072 activations through its router tensor slot;
+        # they stay paired with the latent rows under this TP/PCP/DP1 contract.
+        assert topk == 8 and renormalize
+        assert self._bf16_gate_weight is not None
+        router_input = gating_output
+        if router_input.shape[0] >= self.mega_gate_min_tokens:
+            return torch.ops.vllm.yoco_mega_gate(router_input, self._bf16_gate_weight)
+        logits = torch.ops.vllm.yoco_router_linear_bf16(
+            router_input, self._bf16_gate_weight
+        )
+        return _yoco_topk_routing(hidden_states, logits, topk, renormalize)
+
     def forward(self, hidden_states: torch.Tensor, loop_idx: int = 0) -> torch.Tensor:
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
@@ -659,7 +761,10 @@ class YOCOMoE(nn.Module):
             gate_weight = self._normalized_gate_weight
             normalize_gate_weight = False
 
-        if getattr(self, "bf16_router", False):
+        if getattr(self, "mega_gate", False):
+            # CustomRoutingRouter consumes this as the fused gate input.
+            router_logits = hidden_states.to(torch.bfloat16).contiguous()
+        elif getattr(self, "bf16_router", False):
             assert self._bf16_gate_weight is not None
             # Both GEMM operands and logits are BF16. The small selected
             # Top-K probabilities retain the FP32 backend interface.

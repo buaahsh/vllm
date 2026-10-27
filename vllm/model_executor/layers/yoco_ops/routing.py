@@ -146,6 +146,48 @@ def _yoco_router_linear_bf16_fake(
     return hidden_states.new_empty((*hidden_states.shape[:-1], weight.shape[0]))
 
 
+def _yoco_mega_gate_cuda(
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    from vllm.utils.deep_gemm import get_deep_gemm_yoco_mega_gate
+
+    if (
+        hidden_states.ndim != 2
+        or hidden_states.shape[1] != 3072
+        or weight.shape != (128, 3072)
+        or hidden_states.dtype != torch.bfloat16
+        or weight.dtype != torch.bfloat16
+        or not hidden_states.is_contiguous()
+        or not weight.is_contiguous()
+        or hidden_states.device != weight.device
+    ):
+        raise ValueError("YOCO Mega Gate requires contiguous BF16 [M,3072]/[128,3072]")
+    # DeepGEMM returns ids first; every YOCO routing consumer expects weights first.
+    ids, weights = get_deep_gemm_yoco_mega_gate()(
+        hidden_states,
+        weight,
+        num_topk=8,
+        use_shared_as_routed=False,
+        num_shared_experts=0,
+        routed_scaling_factor=1.0,
+        ep_rank=0,
+        scoring_func="yoco_softmax",
+    )
+    return weights, ids
+
+
+def _yoco_mega_gate_fake(
+    hidden_states: torch.Tensor,
+    weight: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    shape = (hidden_states.shape[0], 8)
+    return (
+        hidden_states.new_empty(shape, dtype=torch.float32),
+        hidden_states.new_empty(shape, dtype=torch.int32),
+    )
+
+
 def _yoco_topk_routing_impl(
     router_logits: torch.Tensor,
     topk: int,
@@ -299,6 +341,11 @@ def _yoco_align_router_linear(
 
 
 if current_platform.is_cuda():
+    direct_register_custom_op(
+        op_name="yoco_mega_gate",
+        op_func=_yoco_mega_gate_cuda,
+        fake_impl=_yoco_mega_gate_fake,
+    )
     direct_register_custom_op(
         op_name="yoco_router_linear_bf16",
         op_func=_yoco_router_linear_bf16_cuda,

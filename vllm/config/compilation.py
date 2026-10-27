@@ -767,6 +767,9 @@ class CompilationConfig:
     """The names of all the MOE layers in the model
     """
 
+    yoco_router_backends: dict[str, str] = field(default_factory=dict, init=False)
+    """Resolved YOCO router implementations included in the compilation cache key."""
+
     # Attention ops; used for piecewise cudagraphs
     # Use PyTorch operator format: "namespace::name"
     _attention_ops: ClassVar[list[str]] = [

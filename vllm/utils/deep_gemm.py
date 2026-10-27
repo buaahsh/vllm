@@ -226,6 +226,22 @@ def get_deep_gemm_mega_moe() -> Any:
     return backend
 
 
+@functools.cache
+def get_deep_gemm_yoco_mega_gate() -> Callable:
+    """Require the YOCO softmax/BF16-logit/INT32 Mega Gate contract."""
+    backend = _import_deep_gemm()
+    extension = getattr(backend, "_C", None)
+    gate = getattr(backend, "bf16_mega_gate", None)
+    if not callable(gate) or getattr(extension, "yoco_mega_gate_version", None) != 2:
+        raise RuntimeError(
+            "YOCO Mega Gate requires the padding-safe DeepGEMM "
+            "yoco_softmax v2 patch; see "
+            "tools/yoco_alignment/deep_gemm_yoco_softmax.patch. "
+            "Rebuild DeepGEMM or set VLLM_YOCO_MEGA_GATE=0."
+        )
+    return gate
+
+
 def _apply_pdl(mod, enable: bool = True) -> None:
     mod_name = getattr(mod, "__name__", str(mod))
     try:

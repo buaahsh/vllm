@@ -117,6 +117,22 @@ class MegaMoEBenchmarkWorker:
             profiler.export_chrome_trace(str(trace_path))
         return dict(
             trace_path=str(trace_path) if trace_path is not None else None,
+            router_ops={
+                row.key: {
+                    "count": row.count,
+                    "self_cpu_time_total_us": row.self_cpu_time_total,
+                    "self_device_time_total_us": row.self_device_time_total,
+                }
+                for row in profiler.key_averages()
+                if any(
+                    name in row.key
+                    for name in (
+                        "yoco_mega_gate",
+                        "sm100_bf16_mega_gate_impl",
+                        "yoco_router_linear_bf16",
+                    )
+                )
+            },
             cpu=profiler.key_averages().table(
                 sort_by="self_cpu_time_total", row_limit=40
             ),
@@ -173,6 +189,27 @@ class MegaMoEBenchmarkWorker:
             torch=str(torch.__version__),
             deep_gemm=dg.__version__,
             deep_gemm_file=dg.__file__,
+            mega_gate_version=getattr(dg._C, "yoco_mega_gate_version", None),
+            router_backend_cache_tags=getattr(
+                config.compilation_config, "yoco_router_backends", {}
+            ),
+            routers=[
+                {
+                    "name": name,
+                    "mega_gate": getattr(block, "mega_gate", False),
+                    "mega_gate_min_tokens": getattr(
+                        block, "mega_gate_min_tokens", None
+                    ),
+                    "bf16_router": block.bf16_router,
+                    "routing_function": getattr(
+                        block.experts.router.custom_routing_function,
+                        "__qualname__",
+                        None,
+                    ),
+                }
+                for name, block in runner.model.named_modules()
+                if isinstance(block, YOCOMoE)
+            ],
             allocated=torch.accelerator.memory_allocated(),
             draft_type=type(runner.speculator).__name__,
             runner=type(runner).__module__,
