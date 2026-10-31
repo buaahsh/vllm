@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """YOCO rotary regression tests."""
 
+import weakref
+
 import pytest
 import torch
 
@@ -11,6 +13,74 @@ from vllm.model_executor.layers.yoco_ops.rotary import (
     _yoco_align_rotary_embedding,
     _yoco_apply_rotary_emb,
 )
+
+
+def test_yoco_rotary_layers_share_exact_fp32_cache() -> None:
+    layers = [
+        YOCORotaryEmbedding(8, length, 10000.0, execution_mode=mode)
+        for length, mode in zip(
+            [128, 131072, 262144] * 3, ["fast", "align"] * 4 + ["fast"]
+        )
+    ]
+    cache = layers[0]._get_cos_sin_cache(torch.device("cpu"))
+    for layer in layers[1:]:
+        assert layer._get_cos_sin_cache(torch.device("cpu")) is cache
+        assert not layer.state_dict()
+
+    assert cache.shape == (1048576, 8)
+    positions = torch.tensor([0, 127, 131071, 131072, 262143, 1048575])
+    inv_freq = 1.0 / (10000.0 ** (torch.arange(0, 8, 2).float() / 8))
+    freqs = torch.einsum("i,j -> ij", positions.float(), inv_freq)
+    expected = torch.cat((freqs.cos(), freqs.sin()), dim=-1)
+    assert cache.dtype == torch.float32
+    torch.testing.assert_close(cache[positions], expected, rtol=0, atol=0)
+
+    # Moving/casting one layer must not alter another layer's shared table.
+    layers[0].to(dtype=torch.bfloat16)
+    assert layers[1].cos_sin_cache is cache
+    assert layers[0]._get_cos_sin_cache(torch.device("cpu")) is cache
+    assert cache.dtype == torch.float32
+
+
+@pytest.mark.parametrize("other", [(16, 128, 10000.0), (8, 128, 1000000.0)])
+def test_yoco_rotary_cache_separates_parameters(other) -> None:
+    rope = YOCORotaryEmbedding(8, 128, 10000.0)
+    different = YOCORotaryEmbedding(*other)
+    cache = rope._get_cos_sin_cache(torch.device("cpu"))
+    other_cache = different._get_cos_sin_cache(torch.device("cpu"))
+    assert cache is not other_cache
+    assert other_cache.shape == (1048576, other[0])
+
+
+def test_yoco_rotary_shared_cache_released_with_layers() -> None:
+    first = YOCORotaryEmbedding(8, 127, 10000.0)
+    second = YOCORotaryEmbedding(8, 127, 10000.0)
+    cache = first._get_cos_sin_cache(torch.device("cpu"))
+    assert second._get_cos_sin_cache(torch.device("cpu")) is cache
+    reference = weakref.ref(cache)
+    del cache, first
+    assert reference() is not None
+    del second
+    assert reference() is None
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_yoco_rotary_shared_cache_ready_on_other_stream() -> None:
+    first = YOCORotaryEmbedding(8, 128, 10000.0)
+    second = YOCORotaryEmbedding(8, 128, 10000.0)
+    device = torch.device("cuda", torch.accelerator.current_device_index())
+    producer = torch.cuda.Stream(device=device)
+    consumer = torch.cuda.Stream(device=device)
+    with torch.cuda.stream(producer):
+        torch.cuda._sleep(100_000_000)
+        cache = first._get_cos_sin_cache(device)
+    with torch.cuda.stream(consumer):
+        shared = second._get_cos_sin_cache(torch.device("cuda"))
+        assert shared is cache
+        observed = shared.clone()
+    consumer.synchronize()
+    torch.testing.assert_close(observed, cache, rtol=0, atol=0)
+    assert first._get_cos_sin_cache(torch.device("cpu")) is not shared
 
 
 @torch.compile
@@ -83,7 +153,8 @@ def test_yoco_rotary_cuda_matches_compiled_fallback(
         [query_heads * head_dim, key_heads * head_dim, key_heads * head_dim],
         dim=-1,
     )
-    positions = torch.arange(num_tokens, device="cuda", dtype=torch.long) * 3
+    positions = 131072 + torch.arange(num_tokens, device="cuda", dtype=torch.long) * 3
+    positions[-1] = 1048575
     rope = YOCORotaryEmbedding(
         head_size=head_dim,
         max_position_embeddings=max(4096, num_tokens * 3),
@@ -207,7 +278,8 @@ def test_yoco_fused_weighted_qk_rms_clip_rotary_matches_native_bf16(
     key_weight = torch.empty(128, device="cuda", dtype=torch.bfloat16).uniform_(
         -2.0, 2.0, generator=generator
     )
-    positions = torch.arange(num_tokens, device="cuda", dtype=torch.long) * 7
+    positions = 131072 + torch.arange(num_tokens, device="cuda", dtype=torch.long) * 7
+    positions[-1] = 1048575
     rope = YOCORotaryEmbedding(
         128,
         max(4096, num_tokens * 7),

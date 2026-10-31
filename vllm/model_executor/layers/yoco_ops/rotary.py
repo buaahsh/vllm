@@ -4,6 +4,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from threading import Lock
+from weakref import WeakValueDictionary
+
 import torch
 from torch import nn
 
@@ -596,8 +600,23 @@ def _yoco_align_rotary_embedding(
     return apply(query), apply(key)
 
 
+YOCO_ROPE_CACHE_LENGTH = 1_048_576
+
+
+@dataclass
+class _YOCORotaryCache:
+    tensor: torch.Tensor
+    ready_event: torch.cuda.Event | None
+
+
+_yoco_rotary_caches: WeakValueDictionary[
+    tuple[int, int, float, torch.device], _YOCORotaryCache
+] = WeakValueDictionary()
+_yoco_rotary_cache_lock = Lock()
+
+
 class YOCORotaryEmbedding(nn.Module):
-    """YOCO RoPE with llm-train's FP32 cos/sin cache semantics."""
+    """Fixed 1M-position YOCO RoPE with llm-train's FP32 cache semantics."""
 
     cos_sin_cache: torch.Tensor | None
 
@@ -612,15 +631,15 @@ class YOCORotaryEmbedding(nn.Module):
         if execution_mode not in ("align", "fast"):
             raise ValueError(f"Unsupported YOCO execution mode: {execution_mode!r}")
         self.head_size = head_size
-        self.max_position_embeddings = max_position_embeddings
+        # Keep the constructor argument for compatibility, but never size the
+        # sliding-window RoPE cache from a checkpoint's context limit.
+        self.max_position_embeddings = YOCO_ROPE_CACHE_LENGTH
         self.base = base
         self.execution_mode = execution_mode
+        self._shared_cache: _YOCORotaryCache | None = None
         self.register_buffer("cos_sin_cache", None, persistent=False)
 
-    def _get_cos_sin_cache(self, device: torch.device) -> torch.Tensor:
-        cache = self.cos_sin_cache
-        if cache is not None and cache.device == device:
-            return cache
+    def _compute_cos_sin_cache(self, device: torch.device) -> torch.Tensor:
         # llm-train constructs RoPE while the default device is CUDA. Generate
         # the FP32 cache on the execution device as well: CPU-generated trig
         # values differ by a few ULPs and can cross BF16/FP8 boundaries.
@@ -643,9 +662,43 @@ class YOCORotaryEmbedding(nn.Module):
             device=device,
         )
         freqs = torch.einsum("i,j -> ij", positions, inv_freq)
-        cache = torch.cat((freqs.cos(), freqs.sin()), dim=-1)
-        self.cos_sin_cache = cache
-        return cache
+        return torch.cat((freqs.cos(), freqs.sin()), dim=-1)
+
+    def _get_cos_sin_cache(self, device: torch.device) -> torch.Tensor:
+        cache = self.cos_sin_cache
+        if cache is not None and cache.device == device:
+            return cache
+
+        device = torch.device(device)
+        if device.type == "cuda" and device.index is None:
+            device = torch.device("cuda", torch.accelerator.current_device_index())
+        cache_key = (self.head_size, self.max_position_embeddings, self.base, device)
+        with _yoco_rotary_cache_lock:
+            shared = _yoco_rotary_caches.get(cache_key)
+            if shared is None:
+                cache = self._compute_cos_sin_cache(device)
+                ready_event = None
+                if device.type == "cuda":
+                    ready_event = torch.cuda.Event()
+                    ready_event.record(torch.cuda.current_stream(device))
+                shared = _YOCORotaryCache(cache, ready_event)
+                _yoco_rotary_caches[cache_key] = shared
+
+        if shared.ready_event is not None:
+            stream = torch.cuda.current_stream(device)
+            stream.wait_event(shared.ready_event)
+            shared.tensor.record_stream(stream)
+        # Modules own the cache; the weak registry does not retain unloaded models.
+        self._shared_cache = shared
+        self.cos_sin_cache = shared.tensor
+        return shared.tensor
+
+    def _apply(self, fn, recurse: bool = True):
+        # Reacquire on the next forward instead of copying/casting a shared FP32
+        # table or retaining its old device allocation through _shared_cache.
+        self.cos_sin_cache = None
+        self._shared_cache = None
+        return super()._apply(fn, recurse=recurse)
 
     def forward(
         self,

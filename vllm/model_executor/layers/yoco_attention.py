@@ -54,6 +54,9 @@ from vllm.model_executor.layers.yoco_ops.projection import (
     _yoco_project_fp8_output as _yoco_project_fp8_output,
 )
 from vllm.model_executor.layers.yoco_ops.rotary import (
+    YOCO_ROPE_CACHE_LENGTH,
+)
+from vllm.model_executor.layers.yoco_ops.rotary import (
     YOCORotaryEmbedding as YOCORotaryEmbedding,
 )
 from vllm.model_executor.models.yoco_config import (
@@ -109,7 +112,6 @@ class YOCOSelfAttention(nn.Module):
             config, "sliding_window_size", "yoco_window_size", default=512
         )
         self.sliding_window = _yoco_runtime_sliding_window(self.training_sliding_window)
-        max_position = _cfg_int(config, "max_position_embeddings", "max_seq_len")
         rope_theta = float(getattr(config, "rope_theta", 10000.0))
 
         tp_size = get_tensor_model_parallel_world_size()
@@ -219,7 +221,7 @@ class YOCOSelfAttention(nn.Module):
 
         self.rotary_emb = YOCORotaryEmbedding(
             head_size=self.head_dim,
-            max_position_embeddings=max_position,
+            max_position_embeddings=YOCO_ROPE_CACHE_LENGTH,
             base=rope_theta,
             execution_mode=execution_mode,
         )
