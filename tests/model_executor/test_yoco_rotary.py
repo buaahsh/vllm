@@ -83,6 +83,36 @@ def test_yoco_rotary_shared_cache_ready_on_other_stream() -> None:
     assert first._get_cos_sin_cache(torch.device("cpu")) is not shared
 
 
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_yoco_rotary_cold_fullgraph_compile_shares_cache(device: str) -> None:
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("requires CUDA")
+
+    class Layers(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.layers = torch.nn.ModuleList(
+                [YOCORotaryEmbedding(128, 128, 12345.0) for _ in range(2)]
+            )
+
+        def forward(self, positions, query, key):
+            for layer in self.layers:
+                query, key = layer(positions, query, key)
+            return query, key
+
+    model = Layers()
+    positions = torch.tensor([0, 131072], dtype=torch.long, device=device)
+    query = torch.randn(2, 128, dtype=torch.bfloat16, device=device)
+    key = torch.randn_like(query)
+    with torch.inference_mode():
+        actual = torch.compile(model, backend="eager", fullgraph=True)(
+            positions, query, key
+        )
+        expected = model(positions, query, key)
+    assert model.layers[0].cos_sin_cache is model.layers[1].cos_sin_cache
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
 @torch.compile
 def _llm_train_rotary_reference(
     cache: torch.Tensor,

@@ -664,6 +664,7 @@ class YOCORotaryEmbedding(nn.Module):
         freqs = torch.einsum("i,j -> ij", positions, inv_freq)
         return torch.cat((freqs.cos(), freqs.sin()), dim=-1)
 
+    @torch.compiler.assume_constant_result
     def _get_cos_sin_cache(self, device: torch.device) -> torch.Tensor:
         cache = self.cos_sin_cache
         if cache is not None and cache.device == device:
