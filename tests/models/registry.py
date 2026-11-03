@@ -1470,6 +1470,10 @@ _MULTIMODAL_EXAMPLE_MODELS = {
         enforce_eager=True,
         tokenizer_mode="mistral",
     ),
+    "YOCOVLForConditionalGeneration": _HfExamplesInfo(
+        "yoco/yoco-vl-kimi-k3",
+        is_available_online=False,
+    ),
     # [Encoder-decoder]
     "CohereAsrForConditionalGeneration": _HfExamplesInfo(
         "CohereLabs/cohere-transcribe-03-2026", trust_remote_code=True
@@ -1856,6 +1860,11 @@ _SPECULATIVE_DECODING_EXAMPLE_MODELS = {
         use_original_num_layers=True,
         # Initialize at least one MoE layer
         hf_overrides={"num_hidden_layers": 4},
+        is_available_online=False,
+    ),
+    "YOCOMTPModel": _HfExamplesInfo(
+        "yoco/yoco-mtp",
+        speculative_model="yoco/yoco-mtp",
         is_available_online=False,
     ),
 }

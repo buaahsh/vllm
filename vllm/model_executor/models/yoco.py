@@ -507,6 +507,23 @@ class YOCOModel(nn.Module, EagleModelMixin):
         self.residual_dtype = _yoco_residual_dtype(self.execution_mode)
 
         self.hidden_size = _cfg_int(config, "hidden_size", "d_model")
+        spec = vllm_config.speculative_config
+        self.capture_mtp_hidden = (
+            spec is not None
+            and spec.method == "mtp"
+            and spec.draft_model_config.hf_config.model_type == "yoco_mtp"
+        )
+        self.register_buffer(
+            "mtp_hidden_states",
+            torch.empty(
+                vllm_config.scheduler_config.max_num_batched_tokens,
+                self.hidden_size,
+                dtype=self.residual_dtype,
+            )
+            if self.capture_mtp_hidden
+            else None,
+            persistent=False,
+        )
         self.vocab_size = _cfg_int(config, "vocab_size")
         self.num_hidden_layers = _cfg_int(config, "num_hidden_layers", "n_layers")
         self.universal_loop = _cfg_int(config, "universal_loop", default=1)
@@ -785,6 +802,10 @@ class YOCOModel(nn.Module, EagleModelMixin):
             )
         return key, value
 
+    def get_mtp_target_hidden_states(self) -> torch.Tensor:
+        assert self.mtp_hidden_states is not None
+        return self.mtp_hidden_states
+
     def project_yoco_kv(
         self,
         hidden_states: torch.Tensor,
@@ -891,7 +912,9 @@ class YOCOModel(nn.Module, EagleModelMixin):
         else:
             norm_output = self.norm(hidden_states, residual)
             assert isinstance(norm_output, tuple)
-            output, _ = norm_output
+            output, hidden_states = norm_output
+        if self.mtp_hidden_states is not None:
+            self.mtp_hidden_states[: hidden_states.shape[0]].copy_(hidden_states)
         if self.aux_hidden_state_layers:
             # YOCO accumulates residuals in FP32; draft projections and the
             # Speculators training inputs use the target's compute dtype.
@@ -927,6 +950,8 @@ class YOCOForCausalLM(nn.Module, SupportsPP, SupportsEagle3, MixtureOfExperts):
         )
         self.execution_mode = self.model.execution_mode
         self._init_moe_metadata()
+        if self.model.capture_mtp_hidden:
+            self.get_mtp_target_hidden_states = self.model.get_mtp_target_hidden_states
         self.bf16_sampling = (
             self.execution_mode == "fast" and envs.VLLM_YOCO_BF16_SAMPLING
         )

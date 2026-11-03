@@ -1786,10 +1786,21 @@ class VllmConfig:
         if self.cache_config.kv_sharing_fast_prefill:
             from vllm.config.yoco import is_yoco_shared_kv_speculation
 
+            # YOCO MTP=1 has Q-only attention and no recurrent draft KV.
+            # Only each request's final prompt state contributes a proposal;
+            # the intermediate prompt states omitted by fast prefill are unused.
+            yoco_q_only_mtp = (
+                self.speculative_config is not None
+                and self.speculative_config.method == "mtp"
+                and self.speculative_config.num_speculative_tokens == 1
+                and self.speculative_config.draft_model_config.hf_config.model_type
+                == "yoco_mtp"
+            )
             if (
                 self.speculative_config is not None
                 and self.speculative_config.use_eagle()
                 and not is_yoco_shared_kv_speculation(self)
+                and not yoco_q_only_mtp
             ):
                 raise ValueError(
                     "Fast prefill optimization for KV sharing is not "

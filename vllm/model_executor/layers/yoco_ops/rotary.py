@@ -664,12 +664,22 @@ class YOCORotaryEmbedding(nn.Module):
         freqs = torch.einsum("i,j -> ij", positions, inv_freq)
         return torch.cat((freqs.cos(), freqs.sin()), dim=-1)
 
-    @torch.compiler.assume_constant_result
     def _get_cos_sin_cache(self, device: torch.device) -> torch.Tensor:
-        cache = self.cos_sin_cache
-        if cache is not None and cache.device == device:
-            return cache
+        if self._cos_sin_cache_ready(device):
+            assert self.cos_sin_cache is not None
+            return self.cos_sin_cache
+        return self._initialize_cos_sin_cache(device)
 
+    @torch.compiler.assume_constant_result
+    def _cos_sin_cache_ready(self, device: torch.device) -> bool:
+        # Do not guard the initial None value: cold initialization replaces it.
+        cache = self.cos_sin_cache
+        return cache is not None and cache.device == device
+
+    @torch.compiler.assume_constant_result
+    def _initialize_cos_sin_cache(self, device: torch.device) -> torch.Tensor:
+        # Only cold initialization is constant. Read the prepared buffer normally
+        # so vLLM lifts it as an input instead of a stitching-graph get_attr.
         device = torch.device(device)
         if device.type == "cuda" and device.index is None:
             device = torch.device("cuda", torch.accelerator.current_device_index())

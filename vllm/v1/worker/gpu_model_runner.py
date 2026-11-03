@@ -1167,7 +1167,7 @@ class GPUModelRunner(
         """Whether this runner is a dedicated YOCO prefill service."""
         kv_transfer_config = self.vllm_config.kv_transfer_config
         return (
-            self.model_config.hf_config.model_type == "yoco"
+            self.model_config.hf_text_config.model_type == "yoco"
             and self.cache_config.kv_sharing_fast_prefill
             and kv_transfer_config is not None
             and kv_transfer_config.kv_role == "kv_producer"
@@ -1185,7 +1185,7 @@ class GPUModelRunner(
         """
         dp_size = self.parallel_config.data_parallel_size
         if (
-            self.model_config.hf_config.model_type != "yoco"
+            self.model_config.hf_text_config.model_type != "yoco"
             or not self.cache_config.kv_sharing_fast_prefill
         ):
             return False
@@ -2575,7 +2575,9 @@ class GPUModelRunner(
             ]
 
         if self.cache_config.kv_sharing_fast_prefill:
-            min_query_len = 8 if self.model_config.hf_config.model_type == "yoco" else 0
+            min_query_len = (
+                8 if self.model_config.hf_text_config.model_type == "yoco" else 0
+            )
             use_fast_prefill = (
                 logits_indices is not None and max_query_len > min_query_len
             )
@@ -4401,7 +4403,7 @@ class GPUModelRunner(
             fast_prefill_num_logits = None
             if self.cache_config.kv_sharing_fast_prefill:
                 min_query_len = (
-                    8 if self.model_config.hf_config.model_type == "yoco" else 0
+                    8 if self.model_config.hf_text_config.model_type == "yoco" else 0
                 )
                 if (
                     logits_indices is not None
@@ -7245,7 +7247,9 @@ class GPUModelRunner(
 
                 if layer_name in self.kv_sharing_fast_prefill_eligible_layers:
                     min_query_len = (
-                        8 if self.model_config.hf_config.model_type == "yoco" else 0
+                        8
+                        if self.model_config.hf_text_config.model_type == "yoco"
+                        else 0
                     )
                     attn_backend = create_fast_prefill_custom_backend(
                         "FastPrefill",
@@ -7589,7 +7593,7 @@ class GPUModelRunner(
             # can therefore use the same logits-only metadata as the following
             # KV-sharing layers, allowing all cross layers to skip prefill-only
             # token computation.
-            if self.model_config.hf_config.model_type == "yoco":
+            if self.model_config.hf_text_config.model_type == "yoco":
                 self.kv_sharing_fast_prefill_eligible_layers.update(
                     self.shared_kv_cache_layers.values()
                 )

@@ -405,9 +405,13 @@ def test_sample_tokens_skips_pp_group_lookup_without_async_scheduling(
     assert output in (EMPTY_MODEL_RUNNER_OUTPUT, None)
 
 
-def test_yoco_kv_only_prefill_batch_detection():
+@pytest.mark.parametrize("model_type", ["yoco", "yoco_vl"])
+def test_yoco_kv_only_prefill_batch_detection(model_type):
     runner = GPUModelRunner.__new__(GPUModelRunner)
-    runner.model_config = SimpleNamespace(hf_config=SimpleNamespace(model_type="yoco"))
+    runner.model_config = SimpleNamespace(
+        hf_config=SimpleNamespace(model_type=model_type),
+        hf_text_config=SimpleNamespace(model_type="yoco"),
+    )
     runner.cache_config = SimpleNamespace(kv_sharing_fast_prefill=True)
     runner.parallel_config = SimpleNamespace(data_parallel_size=1)
     runner.vllm_config = SimpleNamespace(
@@ -462,6 +466,7 @@ def test_dedicated_yoco_producer_dummy_run_uses_kv_only():
     from vllm.v1.worker.gpu_worker import Worker
 
     worker = Worker.__new__(Worker)
+    worker.use_v2_model_runner = False
     worker.model_runner = SimpleNamespace(
         uniform_decode_query_len=1,
         is_yoco_dedicated_kv_producer=Mock(return_value=True),

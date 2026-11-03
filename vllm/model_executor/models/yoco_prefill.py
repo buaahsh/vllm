@@ -174,6 +174,8 @@ def _fast_prefill_forward(
     else:
         out_hidden[logits_indices_padded] = decode_hidden
 
+    if getattr(model, "mtp_hidden_states", None) is not None:
+        model.mtp_hidden_states[: out_hidden.shape[0]].copy_(out_hidden)
     output = model.norm(out_hidden)
     if getattr(model, "aux_hidden_state_layers", ()):
         # Shared-KV reads end - rejected - 1, always one of the selected

@@ -113,6 +113,60 @@ def test_yoco_rotary_cold_fullgraph_compile_shares_cache(device: str) -> None:
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_yoco_rotary_prepared_cache_vllm_compile_and_replay(monkeypatch) -> None:
+    from vllm.compilation.decorators import support_torch_compile
+    from vllm.config import (
+        CompilationConfig,
+        CompilationMode,
+        CUDAGraphMode,
+        VllmConfig,
+        set_current_vllm_config,
+    )
+    from vllm.forward_context import set_forward_context
+
+    monkeypatch.setenv("VLLM_DISABLE_COMPILE_CACHE", "1")
+    monkeypatch.setenv("VLLM_USE_AOT_COMPILE", "1")
+
+    @support_torch_compile(dynamic_arg_dims={"positions": 0, "query": 0, "key": 0})
+    class PreparedRotary(torch.nn.Module):
+        def __init__(self, *, vllm_config: VllmConfig) -> None:
+            super().__init__()
+            self.rope = YOCORotaryEmbedding(128, 128, 10000.0)
+            self.rope._get_cos_sin_cache(torch.device("cuda:0"))
+
+        def forward(
+            self, positions: torch.Tensor, query: torch.Tensor, key: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor]:
+            return self.rope(positions, query, key)
+
+    config = VllmConfig(
+        compilation_config=CompilationConfig(
+            mode=CompilationMode.VLLM_COMPILE,
+            splitting_ops=["vllm::yoco_rotary"],
+            cudagraph_mode=CUDAGraphMode.NONE,
+            use_inductor_graph_partition=False,
+        )
+    )
+    with (
+        set_current_vllm_config(config),
+        torch.inference_mode(),
+        set_forward_context(None, vllm_config=config),
+    ):
+        model = PreparedRotary(vllm_config=config)
+        positions = torch.tensor([0, 131072], dtype=torch.long, device="cuda:0")
+        query = torch.randn(2, 128, dtype=torch.bfloat16, device="cuda:0")
+        key = torch.randn_like(query)
+        model(positions, query, key)
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            actual = model(positions, query, key)
+        positions.copy_(torch.tensor([262143, 1048575], device="cuda:0"))
+        graph.replay()
+        expected = model.rope(positions, query, key)
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
 @torch.compile
 def _llm_train_rotary_reference(
     cache: torch.Tensor,

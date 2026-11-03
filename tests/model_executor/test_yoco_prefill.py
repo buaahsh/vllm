@@ -51,6 +51,7 @@ def test_aux_features_use_final_encoder_pass_and_pre_final_norm(mode):
     model.project_yoco_kv = lambda h: (h, h)
     model.normalize_yoco_kv = lambda k, v: (k, v)
     model.aux_hidden_state_layers = (3, 5, 6)
+    model.mtp_hidden_states = torch.empty(2, 4, dtype=torch.float32)
     result, features = model(None, torch.arange(2), inputs_embeds=torch.ones(2, 4))
     assert len(features) == 3
     for actual, value in zip(features, [13, 22, 28], strict=True):
@@ -58,6 +59,7 @@ def test_aux_features_use_final_encoder_pass_and_pre_final_norm(mode):
             actual, torch.full((2, 4), float(value), dtype=torch.bfloat16)
         )
     torch.testing.assert_close(result, torch.full((2, 4), 56.0, dtype=torch.bfloat16))
+    torch.testing.assert_close(model.mtp_hidden_states, torch.full((2, 4), 28.0))
     model._fourval_export_postnorm = True
     postnorm_result, postnorm_features = model(
         None, torch.arange(2), inputs_embeds=torch.ones(2, 4)
@@ -465,3 +467,33 @@ def test_prefill_gather_preserves_clone_padding_and_dp_context(fail_cross) -> No
             expected[indices[:2]] += 10
             assert torch.equal(output, expected * 0.5)
         assert context.dp_metadata is original_dp
+
+
+def test_mtp_fast_prefill_captures_cross_residual_before_output_norm():
+    from types import SimpleNamespace
+
+    from vllm.model_executor.models.yoco_prefill import _fast_prefill_forward
+
+    hidden = torch.arange(32, dtype=torch.float32).reshape(4, 8)
+    model = SimpleNamespace(
+        self_block=lambda *args: (hidden, torch.zeros(4, 2), torch.zeros(4, 2), None),
+        cross_block=lambda positions, h, *args: h + 10,
+        norm=lambda x: x * 3,
+        fp_positions=torch.empty(4, dtype=torch.long),
+        fp_hidden_states=torch.empty(4, 8),
+        fp_yoco_key=torch.empty(4, 2),
+        fp_yoco_value=torch.empty(4, 2),
+        fuse_fp8_shared_kv=False,
+        mtp_hidden_states=torch.empty(4, 8),
+    )
+    lm = SimpleNamespace(
+        model=model,
+        _get_fast_prefill_indices=lambda: (torch.tensor([1, 3]), 2, None),
+    )
+    context = ForwardContext(no_compile_layers={}, attn_metadata={}, slot_mapping={})
+    with override_forward_context(context):
+        result = _fast_prefill_forward(lm, torch.arange(4), torch.arange(4))
+    expected = hidden.clone()
+    expected[[1, 3]] += 10
+    torch.testing.assert_close(result, expected * 3)
+    torch.testing.assert_close(model.mtp_hidden_states, expected)

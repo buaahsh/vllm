@@ -1169,4 +1169,5 @@ MODELS_CONFIG_MAP: dict[str, type[VerifyAndUpdateConfig]] = {
     "VoyageQwen3BidirectionalEmbedModel": VoyageQwen3BidirectionalEmbedModelConfig,
     "XLMRobertaModel": JinaRobertaModelConfig,
     "YOCOForCausalLM": YOCOForCausalLMConfig,
+    "YOCOVLForConditionalGeneration": YOCOForCausalLMConfig,
 }

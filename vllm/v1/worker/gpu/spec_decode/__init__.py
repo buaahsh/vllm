@@ -40,6 +40,13 @@ def init_speculator(vllm_config: VllmConfig, device: torch.device):
         )
 
         return DSparkSpeculator(vllm_config, device)
+    elif (
+        speculative_config.method == "mtp"
+        and speculative_config.draft_model_config.hf_config.model_type == "yoco_mtp"
+    ):
+        from vllm.v1.worker.gpu.spec_decode.mtp.yoco import YOCOMTPSpeculator
+
+        return YOCOMTPSpeculator(vllm_config, device)
     elif speculative_config.use_gemma4_mtp():
         from vllm.v1.worker.gpu.spec_decode.gemma4.speculator import (
             Gemma4Speculator,

@@ -477,6 +477,7 @@ _MULTIMODAL_MODELS = {
         "KeyeVL1_5ForConditionalGeneration",
     ),
     "KimiVLForConditionalGeneration": ("kimi_vl", "KimiVLForConditionalGeneration"),
+    "YOCOVLForConditionalGeneration": ("yoco_vl", "YOCOVLForConditionalGeneration"),
     "KimiK25ForConditionalGeneration": ("kimi_k25", "KimiK25ForConditionalGeneration"),
     "KimiK3ForConditionalGeneration": (
         "vllm.models.kimi_k3",
@@ -683,6 +684,7 @@ _SPECULATIVE_DECODING_MODELS = {
     "BailingMoeV25MTPModel": ("bailing_moe_mtp", "BailingMoeV25MTPModel"),
     "InklingMTPModel": ("vllm.models.inkling", "InklingMTP"),
     "Gemma4MTPModel": ("gemma4_mtp", "Gemma4MTP"),
+    "YOCOMTPModel": ("yoco_mtp", "YOCOMTPModel"),
     "ErnieMTPModel": ("ernie_mtp", "ErnieMTP"),
     "ExaoneMoeMTP": ("exaone_moe_mtp", "ExaoneMoeMTP"),
     "Exaone4_5_MTP": ("exaone4_5_mtp", "Exaone4_5_MTP"),
