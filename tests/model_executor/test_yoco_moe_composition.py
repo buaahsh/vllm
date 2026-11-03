@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 
 from vllm.config.compilation import CompilationConfig
+from vllm.config.parallel import ParallelConfig
 from vllm.model_executor.layers.fused_moe.experts.yoco_triton import (
     yoco_weighted_swiglu,
 )
@@ -59,6 +60,7 @@ def test_yoco_latent_projections_follow_fast_quantization(
         yoco_module,
         "get_current_vllm_config",
         lambda: SimpleNamespace(
+            parallel_config=ParallelConfig(),
             kernel_config=SimpleNamespace(moe_backend="triton"),
             compilation_config=compilation,
         ),

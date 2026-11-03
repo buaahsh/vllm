@@ -173,7 +173,8 @@ def test_create_legacy_diff_both_lamb_as_v3(tmp_path) -> None:
     assert not config["diff_attention"]
 
 
-def test_yoco_expert_checkpoint_aliases_reload_without_replacing_storage():
+@pytest.mark.parametrize("num_redundant", [0, 2, 6])
+def test_yoco_expert_checkpoint_aliases_reload_without_replacing_storage(num_redundant):
     from types import SimpleNamespace
 
     import pytest
@@ -188,6 +189,7 @@ def test_yoco_expert_checkpoint_aliases_reload_without_replacing_storage():
         moe_intermediate_size=2,
         num_experts=2,
     )
+    causal_lm.num_redundant_experts = num_redundant
     causal_lm.model = torch.nn.Module()
     causal_lm.model.embed_tokens = torch.nn.Embedding(1, 3)
     layer = torch.nn.Module()
@@ -198,8 +200,13 @@ def test_yoco_expert_checkpoint_aliases_reload_without_replacing_storage():
     causal_lm.model.layers = torch.nn.ModuleList([layer])
     causal_lm._rotary_caches_initialized = False
     causal_lm._router_weight_caches_initialized = False
-    routed.w13_weight = torch.nn.Parameter(torch.empty(2, 4, 3), requires_grad=False)
-    routed.w2_weight = torch.nn.Parameter(torch.empty(2, 3, 2), requires_grad=False)
+    num_physical = 2 + num_redundant
+    routed.w13_weight = torch.nn.Parameter(
+        torch.empty(num_physical, 4, 3), requires_grad=False
+    )
+    routed.w2_weight = torch.nn.Parameter(
+        torch.empty(num_physical, 3, 2), requires_grad=False
+    )
 
     def expert_loader(param, weight, name, shard, expert_id):
         target = param[expert_id]
@@ -224,8 +231,14 @@ def test_yoco_expert_checkpoint_aliases_reload_without_replacing_storage():
         assert loaded == {
             prefix + "routed_experts." + key for key in ("w13_weight", "w2_weight")
         }
-        assert torch.equal(routed.w13_weight.flatten(0, 1), w13)
-        assert torch.equal(routed.w2_weight.flatten(0, 1), w2)
+        for physical_id in range(num_physical):
+            logical_id = physical_id % 2
+            assert torch.equal(
+                routed.w13_weight[physical_id], w13.view(2, 4, 3)[logical_id]
+            )
+            assert torch.equal(
+                routed.w2_weight[physical_id], w2.view(2, 3, 2)[logical_id]
+            )
         assert [routed.w13_weight.data_ptr(), routed.w2_weight.data_ptr()] == addresses
         assert causal_lm._yoco_weight_load_report.ignored == ("unused.quant_scale",)
 

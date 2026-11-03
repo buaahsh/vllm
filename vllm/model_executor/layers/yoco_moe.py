@@ -411,6 +411,9 @@ class YOCOMoE(nn.Module):
     ) -> None:
         super().__init__()
         self.execution_mode = execution_mode
+        parallel_config = get_current_vllm_config().parallel_config
+        self.enable_eplb = parallel_config.enable_eplb
+        self.num_redundant_experts = parallel_config.eplb_config.num_redundant_experts
         self.bf16_router = execution_mode == "fast" and (
             envs.VLLM_YOCO_BF16_ROUTER or envs.VLLM_YOCO_BF16_CHAIN
         )
@@ -616,6 +619,8 @@ class YOCOMoE(nn.Module):
         self.experts = FusedMoEFactory(
             shared_experts=self.shared_experts,
             num_experts=self.num_experts,
+            enable_eplb=self.enable_eplb,
+            num_redundant_experts=self.num_redundant_experts,
             top_k=self.top_k,
             hidden_size=expert_hidden_size,
             intermediate_size=self.moe_intermediate_size,

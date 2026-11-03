@@ -29,6 +29,7 @@ from vllm.distributed import (
 )
 from vllm.logger import init_logger
 from vllm.model_executor.layers.attention.attention import Attention
+from vllm.model_executor.layers.fused_moe import MoERunner
 from vllm.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
@@ -88,6 +89,7 @@ from vllm.model_executor.layers.yoco_ops.projection import (
 from vllm.model_executor.models import yoco_prefill, yoco_weights
 from vllm.model_executor.models.interfaces import (
     EagleModelMixin,
+    MixtureOfExperts,
     SupportsEagle3,
     SupportsPP,
 )
@@ -905,13 +907,15 @@ class YOCOModel(nn.Module, EagleModelMixin):
 # --------------------------------------------------------------------------- #
 
 
-class YOCOForCausalLM(nn.Module, SupportsPP, SupportsEagle3):
+class YOCOForCausalLM(nn.Module, SupportsPP, SupportsEagle3, MixtureOfExperts):
     # Self-attention layers ship q/k/v separately; we fuse into qkv_proj.
     packed_modules_mapping = YOCO_PACKED_MODULES_MAPPING
 
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = "") -> None:
         super().__init__()
         config: PretrainedConfig = vllm_config.model_config.hf_config
+        if vllm_config.parallel_config.enable_elastic_ep:
+            raise ValueError("YOCO EPLB currently supports a fixed EP group only")
         self.config = config
         self._yoco_weight_load_report: yoco_weights.YocoWeightLoadReport | None = None
         self.quant_config = _maybe_build_yoco_quant_config(vllm_config.quant_config)
@@ -922,6 +926,7 @@ class YOCOForCausalLM(nn.Module, SupportsPP, SupportsEagle3):
             prefix=maybe_prefix(prefix, "model"),
         )
         self.execution_mode = self.model.execution_mode
+        self._init_moe_metadata()
         self.bf16_sampling = (
             self.execution_mode == "fast" and envs.VLLM_YOCO_BF16_SAMPLING
         )
@@ -975,6 +980,37 @@ class YOCOForCausalLM(nn.Module, SupportsPP, SupportsEagle3):
     # ------------------------------------------------------------------ #
     # standard forward / compute_logits API                              #
     # ------------------------------------------------------------------ #
+    def _init_moe_metadata(self) -> None:
+        # Register each weight-owning layer once, even with universal-loop reuse.
+        self.moe_layers: list[MoERunner] = [
+            layer.mlp.experts
+            for layer in self.model.layers
+            if isinstance(getattr(layer, "mlp", None), YOCOMoE)
+        ]
+        self.expert_weights = []
+        self.num_moe_layers = len(self.moe_layers)
+        # YOCO uses unrestricted top-k routing, not group-limited routing.
+        self.num_expert_groups = 1
+        self.num_shared_experts = 1 if self.moe_layers else 0
+        if self.moe_layers:
+            moe_config = self.moe_layers[0].moe_config
+            self.num_logical_experts = moe_config.num_logical_experts
+            self.num_physical_experts = moe_config.num_experts
+            self.num_local_physical_experts = moe_config.num_local_experts
+        else:
+            self.num_logical_experts = 0
+            self.num_physical_experts = 0
+            self.num_local_physical_experts = 0
+        self.num_routed_experts = self.num_logical_experts
+        self.num_redundant_experts = (
+            self.num_physical_experts - self.num_logical_experts
+        )
+
+    def update_physical_experts_metadata(
+        self, num_physical_experts: int, num_local_physical_experts: int
+    ) -> None:
+        raise NotImplementedError("YOCO EPLB currently supports a fixed EP group only")
+
     def get_input_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.get_input_embeddings(input_ids)
 

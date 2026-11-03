@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 import torch
 
+from vllm.distributed.eplb.eplb_state import EplbState
 from vllm.model_executor.layers.yoco_moe import YOCOMoE as YOCOMoE
 from vllm.model_executor.layers.yoco_moe import YOCOSharedExperts as YOCOSharedExperts
 from vllm.model_executor.layers.yoco_ops.rotary import (
@@ -116,6 +117,11 @@ class _YocoWeightLoader:
             config, "moe_intermediate_size", "moe_ffn_dim"
         )
         self.num_experts = _cfg_int(config, "num_experts", "moe_expert_num")
+        self.physical_to_logical = (
+            EplbState.build_initial_global_physical_to_logical_map(
+                self.num_experts, getattr(model, "num_redundant_experts", 0)
+            )
+        )
         self.loaded: set[str] = set()
         self.ignored: list[str] = []
         self.pipeline_missing: list[str] = []
@@ -162,11 +168,12 @@ class _YocoWeightLoader:
     def load_experts(
         self, name: str, weight: torch.Tensor, param: torch.Tensor
     ) -> None:
-        """Preserve the HF expert order and the existing per-expert shard loaders."""
+        """Load every physical slot from its logical checkpoint expert."""
         loader = cast(Any, param).weight_loader
         if name.endswith(".w13_weight"):
             shards = weight.view(self.num_experts, 2 * self.intermediate_size, -1)
-            for expert_id, expert_weight in enumerate(shards):
+            for expert_id, logical_id in enumerate(self.physical_to_logical):
+                expert_weight = shards[logical_id]
                 loader(
                     param,
                     expert_weight[: self.intermediate_size],
@@ -183,7 +190,8 @@ class _YocoWeightLoader:
                 )
         else:
             shards = weight.view(self.num_experts, -1, self.intermediate_size)
-            for expert_id, expert_weight in enumerate(shards):
+            for expert_id, logical_id in enumerate(self.physical_to_logical):
+                expert_weight = shards[logical_id]
                 loader(param, expert_weight, name, "w2", expert_id)
 
     def load_one(self, source_name: str, weight: torch.Tensor) -> None:
@@ -239,6 +247,15 @@ def refresh_derived_weight_caches(model: YOCOForCausalLM) -> None:
 def load_weights(
     model: YOCOForCausalLM, weights: Iterable[tuple[str, torch.Tensor]]
 ) -> set[str]:
+    if any(
+        layer.eplb_state is not None
+        and layer.eplb_state.logical_to_physical_map is not None
+        for layer in getattr(model, "moe_layers", ())
+    ):
+        raise RuntimeError(
+            "YOCO weight reload after EPLB initialization is unsupported; "
+            "create a new engine to reload"
+        )
     if any(getattr(m, "_yoco_mega_moe", None) is not None for m in model.modules()):
         raise RuntimeError(
             "YOCO MegaMoE uses frozen weights; create a new engine to reload"
