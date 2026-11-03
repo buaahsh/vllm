@@ -31,8 +31,6 @@ class YOCOMTPSpeculator(AutoRegressiveSpeculator):
             or parallel.decode_context_parallel_size != 1
         ):
             raise ValueError("YOCO MTP currently requires PP=PCP=DCP=1")
-        if not vllm_config.model_config.enforce_eager:
-            raise ValueError("YOCO MTP currently requires enforce_eager=True")
         if (
             spec.draft_parallel_config.tensor_parallel_size
             != parallel.tensor_parallel_size
@@ -78,6 +76,9 @@ class YOCOMTPSpeculator(AutoRegressiveSpeculator):
             self.vllm_config,
             model_config=self.speculative_config.draft_model_config,
             parallel_config=self.speculative_config.draft_parallel_config,
+            # Resolve quantization for the draft instead of inheriting the
+            # target's already constructed (possibly FP8) configuration.
+            quant_config=None,
         )
         with set_model_tag("eagle_head"):
             draft = get_model(

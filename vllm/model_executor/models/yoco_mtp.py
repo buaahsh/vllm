@@ -8,6 +8,7 @@ from typing import Any, cast
 import torch
 from torch import nn
 
+from vllm.compilation.decorators import support_torch_compile
 from vllm.config import VllmConfig
 from vllm.model_executor.layers.linear import ColumnParallelLinear
 from vllm.model_executor.layers.logits_processor import LogitsProcessor
@@ -58,6 +59,14 @@ class YOCOMTPBlock(nn.Module):
         return h + self.ffn(self.post_attn_norm(h)).float()
 
 
+@support_torch_compile(
+    dynamic_arg_dims={
+        "input_ids": 0,
+        "positions": 0,
+        "hidden_states": 0,
+        "inputs_embeds": 0,
+    }
+)
 class YOCOMTPModel(nn.Module):
     """The speculator supplies the target output head for lookup and logits."""
 

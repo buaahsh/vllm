@@ -610,3 +610,85 @@ def test_yoco_mtp_metadata_preserves_engine_resolved_kv_layout():
     assert metadata_config.cache_config.get_resolved_kv_cache_layout() == (
         cache.get_resolved_kv_cache_layout()
     )
+
+
+def test_yoco_mtp_load_keeps_bf16_draft_with_fp8_target(tmp_path, monkeypatch):
+    from vllm.config import ModelConfig, ParallelConfig, SpeculativeConfig, VllmConfig
+    from vllm.platforms.interface import DeviceCapability
+    from vllm.transformers_utils.configs.yoco import YOCOConfig, YOCOMTPConfig
+    from vllm.v1.worker.gpu.spec_decode.mtp import yoco as spec_module
+
+    monkeypatch.setattr(
+        vllm.platforms.current_platform,
+        "get_device_capability",
+        lambda *args, **kwargs: DeviceCapability(10, 0),
+    )
+    monkeypatch.setattr(vllm.platforms.current_platform, "device_count", lambda: 1)
+    common = dict(
+        hidden_size=128,
+        num_attention_heads=8,
+        num_key_value_heads=4,
+        vocab_size=256,
+        max_position_embeddings=128,
+    )
+    target_path, draft_path = tmp_path / "target", tmp_path / "draft"
+    YOCOConfig(num_hidden_layers=2, moe_expert_num=8, **common).save_pretrained(
+        target_path
+    )
+    YOCOMTPConfig(num_hidden_layers=1, moe_expert_num=0, **common).save_pretrained(
+        draft_path
+    )
+    target_config = ModelConfig(
+        model=str(target_path), dtype="bfloat16", max_model_len=128, quantization="fp8"
+    )
+    parallel = ParallelConfig()
+    spec = SpeculativeConfig(
+        method="mtp",
+        model=str(draft_path),
+        num_speculative_tokens=1,
+        quantization=None,
+        target_model_config=target_config,
+        target_parallel_config=parallel,
+    )
+    engine = VllmConfig(
+        model_config=target_config, parallel_config=parallel, speculative_config=spec
+    )
+    target_quant = engine.quant_config
+    assert target_quant is not None
+    backend = object()
+    owner = SimpleNamespace(
+        layer_name="target.cross",
+        num_kv_heads=4,
+        head_size=128,
+        get_attn_backend=lambda: backend,
+    )
+    draft_attention = SimpleNamespace(
+        num_kv_heads=4, head_size=128, get_attn_backend=lambda: backend
+    )
+    draft = SimpleNamespace(
+        model=SimpleNamespace(self_attn=SimpleNamespace(attn=draft_attention))
+    )
+
+    def load(*, vllm_config, model_config, load_config):
+        assert vllm_config.quant_config is None
+        assert model_config.quantization is None
+        assert vllm_config.cache_config is engine.cache_config
+        return draft
+
+    monkeypatch.setattr(spec_module, "get_model", load)
+    head = object()
+    target = SimpleNamespace(
+        get_mtp_target_hidden_states=lambda: None,
+        model=SimpleNamespace(
+            first_cross_layer_idx=0,
+            decoder_layers=[SimpleNamespace(self_attn=SimpleNamespace(attn=owner))],
+        ),
+        lm_head=head,
+    )
+    speculator = object.__new__(spec_module.YOCOMTPSpeculator)
+    speculator.vllm_config = engine
+    speculator.speculative_config = spec
+    loaded = speculator.load_draft_model(target, {owner.layer_name})
+    assert loaded.lm_head is head
+    assert draft_attention.kv_sharing_target_layer_name == owner.layer_name
+    assert engine.quant_config is target_quant
