@@ -370,7 +370,7 @@ class YOCOSelfAttention(nn.Module):
             and current_platform.is_cuda()
         )
         if can_fuse_qk_clip_rotary:
-            cache = self.rotary_emb._get_cos_sin_cache(q.device)
+            cache = self.rotary_emb._cos_sin_cache_for(q.device)
             q = q.view(q.shape[0], self.num_heads, self.head_dim)
             k = k.view(k.shape[0], self.num_kv_heads, self.head_dim)
             positions = positions.to(device=q.device, dtype=torch.long)

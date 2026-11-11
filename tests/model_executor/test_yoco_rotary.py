@@ -113,6 +113,103 @@ def test_yoco_rotary_cold_fullgraph_compile_shares_cache(device: str) -> None:
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
+@torch.library.custom_op("yoco_rotary_test::split_marker", mutates_args=())
+def _split_marker(x: torch.Tensor) -> torch.Tensor:
+    return x * 2
+
+
+@_split_marker.register_fake
+def _(x: torch.Tensor) -> torch.Tensor:
+    return torch.empty_like(x)
+
+
+def _vllm_stitching_backend(seen: dict):
+    """split_graph + stitching codegen exactly as VllmBackend.__call__ runs them;
+    non-splitting submodules stand in for PiecewiseBackend as eager callables."""
+    from vllm.compilation.backends import split_graph
+    from vllm.compilation.codegen import (
+        compile_execution_fn,
+        generate_execution_code,
+    )
+
+    class _Piecewise:
+        def __init__(self, gm):
+            self.gm = gm
+
+        def __call__(self, *args):
+            return self.gm(*args)
+
+    def backend(gm: torch.fx.GraphModule, example_inputs):
+        split_gm, items = split_graph(gm, ["yoco_rotary_test::split_marker"])
+        seen["get_attr"] = [
+            n.target for n in split_gm.graph.nodes if n.op == "get_attr"
+        ]
+        for item in items:
+            if not item.is_splitting_graph:
+                split_gm.__dict__[item.submod_name] = _Piecewise(item.graph)
+        code, names, consts = generate_execution_code(split_gm)
+        callables = {n: getattr(split_gm, n) for n, _ in split_gm.named_children()}
+        return compile_execution_fn(code, callables, names, consts)
+
+    return backend
+
+
+@pytest.mark.parametrize("fused_lookup", [False, True])
+@pytest.mark.parametrize("compile_fix", ["1", "0"])
+def test_yoco_rotary_warm_cache_vllm_stitching_codegen(
+    monkeypatch, compile_fix: str, fused_lookup: bool
+) -> None:
+    """FIX-3: warm shared cache + VllmBackend split/codegen (E2E new-r3 failure)."""
+    monkeypatch.setenv("VLLM_YOCO_COMPILE_FIX", compile_fix)
+
+    class Layers(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.layers = torch.nn.ModuleList(
+                [YOCORotaryEmbedding(128, 128, 12345.0) for _ in range(2)]
+            )
+
+        def forward(self, positions, query, key):
+            for layer in self.layers:
+                if fused_lookup:  # yoco_attention fused qk-clip+rotary branch
+                    cache = layer._cos_sin_cache_for(query.device)
+                    cos_sin = cache.index_select(0, positions)[:, None, :]
+                    n = query.shape[0]
+                    query = (query.view(n, -1, 128) * cos_sin.to(query.dtype)).flatten(-2)
+                    key = (key.view(n, -1, 128) * cos_sin.to(key.dtype)).flatten(-2)
+                else:
+                    query, key = layer(positions, query, key)
+                query = torch.ops.yoco_rotary_test.split_marker(query)
+            return query, key
+
+    model = Layers()
+    assert model.layers[0]._compile_fix is (compile_fix == "1")
+    # Warm as yoco_weights._initialize_rotary_caches does before compiled forwards.
+    shared = model.layers[0]._get_cos_sin_cache(torch.device("cpu"))
+    model.layers[1].cos_sin_cache = shared
+    positions = torch.tensor([0, 7, 131072, 1048575], dtype=torch.long)
+    query = torch.randn(4, 256, dtype=torch.bfloat16)
+    key = torch.randn(4, 128, dtype=torch.bfloat16)
+    seen: dict = {}
+    torch._dynamo.reset()
+    with torch.inference_mode():
+        expected = model(positions, query, key)
+        compiled = torch.compile(
+            model, backend=_vllm_stitching_backend(seen), fullgraph=True, dynamic=False
+        )
+        if compile_fix == "0":
+            # Original rl/s6 behaviour: the assume_constant_result lookup is baked
+            # as a get_attr constant that the stitching codegen cannot emit.
+            with pytest.raises(Exception, match="Unsupported node from codegen"):
+                compiled(positions, query, key)
+            assert seen["get_attr"] == ["sub_get_cos_sin_cache"]
+            return
+        actual = compiled(positions, query, key)
+    assert seen["get_attr"] == []
+    assert model.layers[0].cos_sin_cache is shared
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
 @torch.compile
 def _llm_train_rotary_reference(
     cache: torch.Tensor,

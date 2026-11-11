@@ -11,6 +11,7 @@ from weakref import WeakValueDictionary
 import torch
 from torch import nn
 
+import vllm.envs as envs
 from vllm.platforms import current_platform
 from vllm.triton_utils import HAS_TRITON, tl, triton
 from vllm.utils.torch_utils import direct_register_custom_op
@@ -638,6 +639,10 @@ class YOCORotaryEmbedding(nn.Module):
         self.execution_mode = execution_mode
         self._shared_cache: _YOCORotaryCache | None = None
         self.register_buffer("cos_sin_cache", None, persistent=False)
+        # FIX-3 (OPD integrate, 2026-11-11): VLLM_YOCO_COMPILE_FIX=1 (default) makes
+        # traced forwards read the warm cache buffer (see _cos_sin_cache_for).
+        # 0 restores the rl/s6 behaviour (assume_constant_result lookup only).
+        self._compile_fix = envs.VLLM_YOCO_COMPILE_FIX
 
     def _compute_cos_sin_cache(self, device: torch.device) -> torch.Tensor:
         # llm-train constructs RoPE while the default device is CUDA. Generate
@@ -694,6 +699,35 @@ class YOCORotaryEmbedding(nn.Module):
         self.cos_sin_cache = shared.tensor
         return shared.tensor
 
+    def _cos_sin_cache_for(self, device: torch.device) -> torch.Tensor:
+        """Cache lookup used by forward paths (FIX-3, VLLM_YOCO_COMPILE_FIX).
+
+        ``_get_cos_sin_cache`` is an ``assume_constant_result`` function, so Dynamo
+        bakes its tensor result into the graph as a ``get_attr`` constant. vLLM's
+        piecewise stitching codegen (compilation/codegen.py) cannot emit ``get_attr``
+        nodes and fails with ``Unsupported node from codegen:
+        %sub_get_cos_sin_cache``. YOCOForCausalLM.forward fills the shared cache
+        eagerly before the compiled YOCOModel runs, so under compilation we read
+        the warm buffer directly: Dynamo lifts it as a graph input (one placeholder
+        for the shared table), exactly as on 28d82e2. The same tensor is used, so
+        numerics are unchanged. Cold caches still take the original lookup.
+        Warmness is probed through an ``assume_constant_result`` bool so Dynamo
+        never reads (and guards on) a still-``None`` buffer that the cold
+        lookup then fills during tracing.
+        """
+        if (
+            self._compile_fix
+            and torch.compiler.is_compiling()
+            and self._cos_sin_cache_is_warm(device)
+        ):
+            return self.cos_sin_cache
+        return self._get_cos_sin_cache(device)
+
+    @torch.compiler.assume_constant_result
+    def _cos_sin_cache_is_warm(self, device: torch.device) -> bool:
+        cache = self.cos_sin_cache
+        return cache is not None and cache.device == device
+
     def _apply(self, fn, recurse: bool = True):
         # Reacquire on the next forward instead of copying/casting a shared FP32
         # table or retaining its old device allocation through _shared_cache.
@@ -707,7 +741,7 @@ class YOCORotaryEmbedding(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        cache = self._get_cos_sin_cache(query.device)
+        cache = self._cos_sin_cache_for(query.device)
         query = query.view(query.shape[0], -1, self.head_size)
         key = key.view(key.shape[0], -1, self.head_size)
         positions = positions.to(device=query.device, dtype=torch.long)

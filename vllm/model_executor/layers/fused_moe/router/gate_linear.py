@@ -133,6 +133,26 @@ class GateLinear(ReplicatedLinear):
                 and is_available()
             )
 
+        # ---- OPD single-stack cutedsl guard (2026-10-27) ----
+        # See tools/patch_gatelinear_cutedsl_guard.py: under NGC cutlass 4.5.1
+        # vllm's cutedsl modules cannot import; fall back to the exact fp32 /
+        # cuBLAS router paths (tighter numerics, matches the trainer router).
+        if self.allow_specialized_router_gemm or self.allow_bf16x3_router_gemm:
+            try:
+                from vllm.model_executor.kernels.linear.cute_dsl import ll_bf16  # noqa: F401
+                from vllm.model_executor.layers.fused_moe.router import (  # noqa: F401
+                    bf16x3_router_gemm_cutedsl,
+                )
+            except Exception as _opd_e:
+                import logging as _opd_logging
+                _opd_logging.getLogger(__name__).warning(
+                    "GateLinear: vllm CuteDSL kernels unavailable (%r); using exact "
+                    "fp32/cuBLAS router paths.", _opd_e)
+                self.allow_specialized_router_gemm = False
+                self.allow_bf16x3_router_gemm = False
+                self.allow_fp32_router_gemm = False
+                self.allow_ll_bf16_gemm = False
+
     def set_out_dtype(self, out_dtype: torch.dtype) -> None:
         """Set output dtype for the router logits after init.
 

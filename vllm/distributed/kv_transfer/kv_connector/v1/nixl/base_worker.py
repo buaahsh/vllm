@@ -399,7 +399,7 @@ class NixlBaseConnectorWorker:
         kv_cache_config: "KVCacheConfig",
     ):
         self._validate_yoco_cache_aliases = (
-            vllm_config.model_config.hf_config.model_type == "yoco"
+            vllm_config.model_config.hf_text_config.model_type == "yoco"
         )
         nixl_wrapper_cls = NixlWrapper
         if nixl_wrapper_cls is None:

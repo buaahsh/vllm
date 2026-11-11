@@ -639,6 +639,12 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "VLLM_YOCO_MEGA_GATE_MIN_TOKENS": lambda: int(
         os.getenv("VLLM_YOCO_MEGA_GATE_MIN_TOKENS", "128")
     ),
+    # FIX-3 (OPD integrate): traced YOCO RoPE reads the warm cache buffer instead
+    # of the assume_constant_result lookup (get_attr breaks vLLM stitching
+    # codegen under torch.compile). 0 = original rl/s6 behaviour.
+    "VLLM_YOCO_COMPILE_FIX": lambda: bool(
+        int(os.getenv("VLLM_YOCO_COMPILE_FIX", "1"))
+    ),
     # Fast BF16 residual boundaries and router operands/logits. Kernel-local
     # reductions, FP8 scales and Top-K probabilities retain FP32 arithmetic.
     "VLLM_YOCO_BF16_CHAIN": lambda: bool(int(os.getenv("VLLM_YOCO_BF16_CHAIN", "0"))),

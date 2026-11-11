@@ -31,6 +31,11 @@ def _create_event() -> torch.Event:
     return torch.Event()
 
 
+
+import os as _tm_os  # noqa: E402
+
+_TM_DET_SYNC_INDEX = _tm_os.environ.get("VLLM_TM_DET_SYNC_INDEX", "0") == "1"
+
 @dataclass
 class SparseMLAIndexGroup:
     """Layers that consume one sparse-indexer result."""
@@ -123,7 +128,12 @@ class SparseMLAIndexGroup:
         return_valid_counts: bool,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         num_tokens = logical_topk_indices.shape[0]
-        if num_tokens > self.physical_topk_indices.shape[0]:
+        if (
+            num_tokens > self.physical_topk_indices.shape[0]
+            # teacher-migrate T-H08 (diagnostic, env VLLM_TM_DET_SYNC_INDEX=1): convert on the
+            # compute stream (vLLM #66088: side-stream writes can race a later batch's attention)
+            or _TM_DET_SYNC_INDEX
+        ):
             return triton_convert_req_index_to_global_index(
                 req_id_per_token,
                 block_table,

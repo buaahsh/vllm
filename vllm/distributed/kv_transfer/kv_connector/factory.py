@@ -162,6 +162,12 @@ KVConnectorFactory.register_connector(
 )
 
 KVConnectorFactory.register_connector(
+    "FastHiddenStatesConnector",
+    "vllm.distributed.kv_transfer.kv_connector.v1.fast_hidden_states_connector",
+    "FastHiddenStatesConnector",
+)
+
+KVConnectorFactory.register_connector(
     "LMCacheConnectorV1",
     "vllm.distributed.kv_transfer.kv_connector.v1.lmcache_connector",
     "LMCacheConnectorV1",

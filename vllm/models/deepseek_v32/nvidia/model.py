@@ -166,6 +166,40 @@ class DeepseekV32DecoderLayer(torch.nn.Module):
         return hidden_states, residual
 
 
+
+# ---- diagnostic probe (teacher-migrate T-H07; env VLLM_TM_LAYER_TRACE=<dir>, off by default) ----
+import os as _tm_os  # noqa: E402
+
+_TM_LAYER_TRACE = _tm_os.environ.get("VLLM_TM_LAYER_TRACE", "")
+_tm_layer_buf: dict = {"rows": [], "n": 0}
+
+
+def _tm_row_cks(t):
+    v = t.contiguous().view(torch.int16).to(torch.int64)
+    w = (torch.arange(1, v.shape[-1] + 1, device=v.device, dtype=torch.int64) * 2654435761) % 1000003
+    return (v * w).sum(-1)
+
+
+def _tm_layer_trace(idx, h, r):
+    from vllm.distributed import get_tensor_model_parallel_rank
+
+    if get_tensor_model_parallel_rank() != 0 or h.shape[0] < 2049:
+        return
+    c = _tm_row_cks(h if r is None else h + r)
+    _tm_layer_buf["rows"].append((idx, c))
+
+
+def _tm_layer_trace_flush():
+    if not _tm_layer_buf["rows"]:
+        return
+    import numpy as _np
+
+    _tm_os.makedirs(_TM_LAYER_TRACE, exist_ok=True)
+    arr = {f"L{i}": c.cpu().numpy() for i, c in _tm_layer_buf["rows"]}
+    _np.savez(_tm_os.path.join(_TM_LAYER_TRACE, f"layers-{_tm_os.getpid()}-{_tm_layer_buf['n']}.npz"), **arr)
+    _tm_layer_buf["n"] += 1
+    _tm_layer_buf["rows"] = []
+
 class DeepseekV32Model(torch.nn.Module):
     fall_back_to_pt_during_load = False
 
@@ -292,6 +326,8 @@ class DeepseekV32Model(torch.nn.Module):
                 )
             hidden_states, residual = layer(positions, hidden_states, residual, attn_in)
             attn_in = None
+            if _TM_LAYER_TRACE:
+                _tm_layer_trace(idx, hidden_states, residual)
 
         if not get_pp_group().is_last_rank:
             assert not self.use_sequence_parallel, (
@@ -301,8 +337,14 @@ class DeepseekV32Model(torch.nn.Module):
                 {"hidden_states": hidden_states, "residual": residual}
             )
 
+        # OPD teacher (migrated from msrallm teacher_vllm_server/vllm_aux_hidden_patch.py
+        # _patch_v32): the second return of the tail norm fusion IS the final pre-norm
+        # hidden; it is captured when the end-layer sentinel id (== num_hidden_layers)
+        # is requested (extract_hidden_states teacher). Without that id nothing changes.
         if self.use_sequence_parallel:
-            hidden_states, _ = self.norm(hidden_states, residual)
+            hidden_states, _prenorm = self.norm(hidden_states, residual)
+            if self.end_layer in self.aux_hidden_state_layers:
+                aux_hidden_states.append(_prenorm)
             if aux_hidden_states:
                 hidden_size = hidden_states.shape[-1]
                 packed_hidden_states = torch.cat(
@@ -316,9 +358,13 @@ class DeepseekV32Model(torch.nn.Module):
             else:
                 hidden_states = sp_all_gather(hidden_states)[:full_num_tokens]
         else:
-            hidden_states, _ = fused_allreduce_rms_norm(
+            hidden_states, _prenorm = fused_allreduce_rms_norm(
                 hidden_states, residual, self.norm
             )
+            if self.end_layer in self.aux_hidden_state_layers:
+                aux_hidden_states.append(_prenorm)
+        if _TM_LAYER_TRACE:
+            _tm_layer_trace_flush()
         if len(aux_hidden_states) > 0:
             return hidden_states, aux_hidden_states
         return hidden_states

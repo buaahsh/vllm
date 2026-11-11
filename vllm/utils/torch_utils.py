@@ -917,7 +917,20 @@ def get_accelerator_view_from_cpu_tensor(cpu_tensor: torch.Tensor) -> torch.Tens
             cpu_tensor = pinned
         return torch.ops._C.get_xpu_view_from_cpu_tensor(cpu_tensor)
     elif current_platform.is_cuda_alike():
-        return torch.ops._C.get_cuda_view_from_cpu_tensor(cpu_tensor)
+        # OPD torch-2.11 compat: the native op returns a NON-OWNING view (2.11
+        # stable from_blob has no deleter) and its non-pinned path is disabled.
+        # Pin here (mirrors the XPU branch) and keep the source alive for the
+        # view's lifetime -- weakref.finalize reproduces the old deleter exactly.
+        import weakref as _weakref
+
+        if cpu_tensor.numel() != 0 and not cpu_tensor.is_pinned():
+            _contig = cpu_tensor.contiguous()
+            _pinned = torch.empty_like(_contig, pin_memory=True)
+            _pinned.copy_(_contig)
+            cpu_tensor = _pinned
+        _view = torch.ops._C.get_cuda_view_from_cpu_tensor(cpu_tensor)
+        _weakref.finalize(_view, lambda _keep=cpu_tensor: None)
+        return _view
     else:
         raise ValueError(
             f"`get_accelerator_view_from_cpu_tensor` is currently "

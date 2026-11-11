@@ -345,7 +345,7 @@ class Scheduler(SchedulerInterface):
             self.has_mamba_layers and self.cache_config.mamba_cache_mode == "align"
         )
         self.need_yoco_final_prompt_block_split = (
-            self.vllm_config.model_config.hf_config.model_type == "yoco"
+            self.vllm_config.model_config.hf_text_config.model_type == "yoco"
             and self.cache_config.kv_sharing_fast_prefill
             and (
                 self.cache_config.enable_prefix_caching

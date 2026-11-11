@@ -310,15 +310,15 @@ class LMCacheConnectorV1(KVConnectorBase_V1):
         )
         assert vllm_config.kv_transfer_config is not None
         self._yoco_physical_kv_layout: _YocoLMCachePhysicalKVLayout | None = None
-        if vllm_config.model_config.hf_config.model_type == "yoco":
+        if vllm_config.model_config.hf_text_config.model_type == "yoco":
             logical_num_layers = vllm_config.model_config.get_num_layers(
                 vllm_config.parallel_config
             )
             num_cross_layers = int(
-                getattr(vllm_config.model_config.hf_config, "yoco_cross_layers", 0)
+                getattr(vllm_config.model_config.hf_text_config, "yoco_cross_layers", 0)
             )
             universal_loop = int(
-                getattr(vllm_config.model_config.hf_config, "universal_loop", 1)
+                getattr(vllm_config.model_config.hf_text_config, "universal_loop", 1)
             )
             self._yoco_physical_kv_layout = (
                 _YocoLMCachePhysicalKVLayout.from_kv_cache_config(

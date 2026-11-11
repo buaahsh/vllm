@@ -1,3 +1,4 @@
+# OPD single-stack cutedsl guard: two warmup functions import-guarded (patched file)
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """
@@ -77,6 +78,14 @@ def _ll_bf16_router_shapes_from_model(
 
 
 def _warmup_ll_bf16_router_gemm(model: torch.nn.Module) -> None:
+    # OPD single-stack cutedsl guard (see gate_linear.py note)
+    try:
+        from vllm.model_executor.layers.fused_moe.router import (  # noqa: F401
+            bf16x3_router_gemm_cutedsl as _opd_probe,
+        )
+    except Exception as _opd_e:
+        logger.warning("_warmup_ll_bf16_router_gemm skipped: cutedsl unavailable (%r)", _opd_e)
+        return
     from vllm.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
         is_available as is_ll_bf16_gemm_available,
     )
@@ -105,6 +114,14 @@ def _warmup_bf16x3_router_gemm(
     model: torch.nn.Module,
     max_num_tokens: int,
 ) -> None:
+    # OPD single-stack cutedsl guard (see gate_linear.py note)
+    try:
+        from vllm.model_executor.layers.fused_moe.router import (  # noqa: F401
+            bf16x3_router_gemm_cutedsl as _opd_probe,
+        )
+    except Exception as _opd_e:
+        logger.warning("_warmup_bf16x3_router_gemm skipped: cutedsl unavailable (%r)", _opd_e)
+        return
     from vllm.model_executor.layers.fused_moe.router.bf16x3_router_gemm_cutedsl import (  # noqa: E501
         warmup_bf16x3_router_gemm,
     )

@@ -54,6 +54,71 @@ logger = init_logger(__name__)
 MXFP4_BLOCK_SIZE = 32
 
 
+
+# ---- diagnostic probe (teacher-migrate T-H07; env VLLM_TM_DSA_TRACE=<dir>, off by default) ----
+import os as _tm_os  # noqa: E402
+from vllm.model_executor.layers import indexer_topk as _tm_det_topk  # noqa: E402
+
+_TM_DSA_TRACE = _tm_os.environ.get("VLLM_TM_DSA_TRACE", "")
+_tm_dsa_state = {"n": 0, "f": None}
+# deterministic attempt "stable top-k" (teacher-migrate T-D03; env VLLM_TM_SORT_TOPK=1, off by default):
+# topKPerRowPrefill assigns output slots with atomicAdd, so the ORDER of the selected indices varies run to
+# run and the sparse MLA accumulation follows that order. Canonicalise: ascending indices, -1 padding last.
+_TM_SORT_TOPK = _tm_os.environ.get("VLLM_TM_SORT_TOPK", "0") == "1"
+
+
+def _tm_sort_topk_(topk):
+    big = torch.iinfo(topk.dtype).max
+    t = torch.where(topk < 0, torch.full_like(topk, big), topk)
+    t = torch.sort(t, dim=-1).values
+    topk.copy_(torch.where(t == big, torch.full_like(t, -1), t))
+
+
+def _tm_cks(t):
+    t = t.contiguous()
+    v = t.view(torch.uint8) if t.element_size() == 1 else t.view(torch.int16 if t.element_size() == 2 else torch.int32)
+    w = torch.arange(1, v.numel() + 1, device=v.device, dtype=torch.int64) % 1000003
+    return int((v.reshape(-1).to(torch.int64) * w).sum().item())
+
+
+def _tm_dsa_trace(chunk, q, k, w, logits, ks, ke, topk):
+    try:
+        from vllm.distributed import get_tensor_model_parallel_rank
+
+        if get_tensor_model_parallel_rank() != 0:
+            return
+        import json as _j
+
+        valid = []
+        ks_c, ke_c = ks.cpu().tolist(), ke.cpu().tolist()
+        lg = logits.float()
+        for r in range(0, lg.shape[0], max(1, lg.shape[0] // 8)):
+            valid.append(_tm_cks(lg[r, ks_c[r]:ke_c[r]].contiguous()))
+        # boundary statistics for sampled rows: scores around rank topk and exact ties at the k-th score
+        kk = topk.shape[1]
+        bnd = []
+        for r in list(range(2048, min(lg.shape[0], 2304), 32)) + list(range(4096, lg.shape[0], 4096)):
+            seg = lg[r, ks_c[r]:ke_c[r]]
+            if seg.numel() <= kk:
+                continue
+            sv = torch.sort(seg, descending=True).values
+            kth = sv[kk - 1]
+            bnd.append([r, int(seg.numel()), float(kth), int((seg == kth).sum()), float(sv[kk]),
+                        int((sv[:kk] == kth).sum())])
+        rec_extra = {"boundary": bnd}
+        rec = {"n": _tm_dsa_state["n"], "tok": [int(chunk.token_start), int(chunk.token_end)], **rec_extra,
+               "q": _tm_cks(q), "k": _tm_cks(k), "w": _tm_cks(w), "logits_rows": valid,
+               "topk": _tm_cks(topk), "topk_sorted": _tm_cks(torch.sort(topk, dim=-1).values)}
+        _tm_dsa_state["n"] += 1
+        if _tm_dsa_state["f"] is None:
+            _tm_os.makedirs(_TM_DSA_TRACE, exist_ok=True)
+            _tm_dsa_state["f"] = open(_tm_os.path.join(_TM_DSA_TRACE, f"dsa-{_tm_os.getpid()}.jsonl"), "a")
+        _tm_dsa_state["f"].write(_j.dumps(rec) + "\n")
+        _tm_dsa_state["f"].flush()
+    except Exception as e:  # never break the engine
+        import sys as _s
+        _s.stderr.write(f"[tm-dsa-trace] {e!r}\n")
+
 def _assert_cutedsl_dcp_merge_supported(
     logits: torch.Tensor,
     topk_indices: torch.Tensor,
@@ -614,16 +679,27 @@ def sparse_attn_indexer(
                             chunk_candidates,
                             candidate_block_size,
                         )
-                ops.top_k_per_row_prefill(
-                    logits,
-                    cu_seqlen_ks,
-                    cu_seqlen_ke,
-                    topk_indices,
-                    num_rows,
-                    logits.stride(0),
-                    logits.stride(1),
-                    topk_tokens,
-                )
+                if _tm_det_topk.TM_DET_TOPK:
+                    _tm_det_topk.tm_det_topk_prefill(
+                        logits[:num_rows], cu_seqlen_ks, cu_seqlen_ke, topk_indices, topk_tokens
+                    )
+                else:
+                    ops.top_k_per_row_prefill(
+                        logits,
+                        cu_seqlen_ks,
+                        cu_seqlen_ke,
+                        topk_indices,
+                        num_rows,
+                        logits.stride(0),
+                        logits.stride(1),
+                        topk_tokens,
+                    )
+                if _TM_SORT_TOPK:
+                    _tm_sort_topk_(topk_indices)
+                if _TM_DSA_TRACE:
+                    _tm_dsa_trace(chunk, q_slice, k_quant[: chunk.local_total_seq_lens],
+                                  weights[chunk.token_start : chunk.token_end], logits,
+                                  cu_seqlen_ks, cu_seqlen_ke, topk_indices)
 
             if deinterleave_idx is None:
                 # Under the PCP path the top-k already ran over the whole
@@ -755,14 +831,24 @@ def sparse_attn_indexer(
 
         # The backend comes from the layer (config is only readable at model
         # construction); dispatchers are cached per backend.
-        get_indexer_topk(topk_backend)(
-            logits,
-            seq_lens,
-            next_n,
-            topk_indices,
-            topk_tokens,
-            attn_metadata_narrowed.max_seq_len,
-        )
+        if _tm_det_topk.TM_DET_TOPK:
+            # deterministic top-k on FP32 decode logits (teacher-migrate T-F16)
+            _row_ends = _tm_det_topk.SparseIndexerTopk._row_ends(
+                seq_lens, next_n, logits.shape[0]
+            ).contiguous()
+            _tm_det_topk.top_k_per_row_batch_invariant(
+                logits.float().contiguous() if logits.dtype != torch.float32 else logits,
+                _row_ends, topk_indices, topk_tokens,
+            )
+        else:
+            get_indexer_topk(topk_backend)(
+                logits,
+                seq_lens,
+                next_n,
+                topk_indices,
+                topk_tokens,
+                attn_metadata_narrowed.max_seq_len,
+            )
 
         if decode_metadata.global_seq_lens is not None:
             _merge_dcp_topk_global(
